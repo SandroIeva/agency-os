@@ -1402,30 +1402,33 @@ export default function CircularMenu() {
       setAiStatus("speaking");
 
       // Try Fish Audio first, fallback to browser synthesis
+      if (aiStoppedRef.current) return;
       try {
         const ttsResponse = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: aiText }),
         });
-        console.log("Fish Audio status:", ttsResponse.status, ttsResponse.headers.get("content-type"));
+        if (aiStoppedRef.current) return;
         if (ttsResponse.ok) {
           const audioBlob = await ttsResponse.blob();
+          if (aiStoppedRef.current) return;
           const audioUrl = URL.createObjectURL(audioBlob);
           const audio = new Audio(audioUrl);
           audioRef.current = audio;
           audio.onended = () => {
+            if (aiStoppedRef.current) return;
             URL.revokeObjectURL(audioUrl);
             audioRef.current = null;
-            setTimeout(() => { setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript(""); }, 800);
+            setTimeout(() => { if (!aiStoppedRef.current) { setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript(""); } }, 800);
           };
-          audio.onerror = () => { if (aiStoppedRef.current) return; audioRef.current = null; speakWithBrowser(aiText); };
+          audio.onerror = null;
           audio.play();
         } else {
-          speakWithBrowser(aiText);
+          if (!aiStoppedRef.current) speakWithBrowser(aiText);
         }
       } catch (ttsErr) {
-        speakWithBrowser(aiText);
+        if (!aiStoppedRef.current) speakWithBrowser(aiText);
       }
     } catch (e) {
       setAiResponse("I'm having trouble connecting. Try again in a moment.");
@@ -1452,13 +1455,18 @@ export default function CircularMenu() {
   const stopAI = () => {
     aiStoppedRef.current = true;
     if (audioRef.current) {
-      audioRef.current.onended = null;
-      audioRef.current.onerror = null;
-      audioRef.current.pause();
-      audioRef.current.src = "";
-      audioRef.current = null;
+      try {
+        const audio = audioRef.current;
+        audioRef.current = null;
+        audio.onended = null;
+        audio.onerror = null;
+        audio.onpause = null;
+        audio.removeAttribute('src');
+        audio.load();
+        audio.pause();
+      } catch(e) {}
     }
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch(e) {}
     setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript("");
   };
 
