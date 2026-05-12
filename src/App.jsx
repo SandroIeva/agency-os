@@ -1368,6 +1368,7 @@ export default function CircularMenu() {
     setVoiceMode(false);
     setAiSpeaking(true);
     setAiStatus("thinking");
+    aiStoppedRef.current = false;
 
     const userMessage = transcript || "Hello, what can you help me with?";
 
@@ -1418,7 +1419,7 @@ export default function CircularMenu() {
             audioRef.current = null;
             setTimeout(() => { setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript(""); }, 800);
           };
-          audio.onerror = () => { audioRef.current = null; speakWithBrowser(aiText); };
+          audio.onerror = () => { if (aiStoppedRef.current) return; audioRef.current = null; speakWithBrowser(aiText); };
           audio.play();
         } else {
           speakWithBrowser(aiText);
@@ -1434,19 +1435,29 @@ export default function CircularMenu() {
   };
 
   const speakWithBrowser = (text) => {
+    if (aiStoppedRef.current) return;
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.0; utterance.pitch = 1.0; utterance.volume = 0.8;
-      utterance.onend = () => { setTimeout(() => { setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript(""); }, 800); };
+      utterance.onend = () => { if (!aiStoppedRef.current) setTimeout(() => { setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript(""); }, 800); };
       window.speechSynthesis.speak(utterance);
     } else {
-      setTimeout(() => { setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript(""); }, 4000);
+      setTimeout(() => { if (!aiStoppedRef.current) { setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript(""); } }, 4000);
     }
   };
 
+  const aiStoppedRef = useRef(false);
+
   const stopAI = () => {
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; audioRef.current = null; }
+    aiStoppedRef.current = true;
+    if (audioRef.current) {
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
     if (window.speechSynthesis) window.speechSynthesis.cancel();
     setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript("");
   };
