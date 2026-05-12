@@ -1292,6 +1292,7 @@ export default function CircularMenu() {
 
   const getGreeting = () => {
     const h = new Date().getHours();
+    if (h < 5) return "Still up";
     if (h < 12) return "Good Morning";
     if (h < 17) return "Good Afternoon";
     if (h < 21) return "Good Evening";
