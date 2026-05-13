@@ -548,11 +548,14 @@ function KanbanBoard({ onBack, session }) {
   // Always use these columns
   const colEntries = DEFAULT_COLUMNS;
 
-  // Ensure team_member profile exists for current user
+  // Ensure team_member profile exists, then load all data
   useEffect(() => {
     if (!session?.user) return;
-    const ensureProfile = async () => {
+    const init = async () => {
+      setLoading(true);
       const u = session.user;
+
+      // 1. Ensure profile exists
       const { data: existing } = await supabase.from("team_members").select("id").eq("user_id", u.id).single();
       if (!existing) {
         const name = u.user_metadata?.full_name || u.email?.split("@")[0] || "User";
@@ -564,24 +567,20 @@ function KanbanBoard({ onBack, session }) {
           avatar_color: ASSIGNEE_COLORS[Math.floor(Math.random() * ASSIGNEE_COLORS.length)],
         });
       }
-    };
-    ensureProfile();
-  }, [session]);
 
-  // Load tasks + team members
-  useEffect(() => {
-    if (!session?.user) return;
-    const load = async () => {
-      setLoading(true);
-      const { data: taskData } = await supabase.from("tasks").select("*").eq("creator_id", session.user.id).order("position");
+      // 2. Load tasks
+      const { data: taskData } = await supabase.from("tasks").select("*").eq("creator_id", u.id).order("position");
       setTasks(taskData || []);
+
+      // 3. Load team members (after profile is ensured)
       const { data: members } = await supabase.from("team_members").select("*");
       const memberMap = {};
       (members || []).forEach(m => { memberMap[m.user_id] = m; });
       setTeamMembers(memberMap);
+
       setLoading(false);
     };
-    load();
+    init();
   }, [session]);
 
   const projectNames = [...new Set(tasks.map(t => t.project_name).filter(Boolean))];
@@ -606,7 +605,12 @@ function KanbanBoard({ onBack, session }) {
       assignee_id: session.user.id,
       position: tasks.filter(t => t.column_key === taskForm.column_key).length,
     };
-    const { data } = await supabase.from("tasks").insert(taskData).select().single();
+    const { data, error } = await supabase.from("tasks").insert(taskData).select().single();
+    console.log("Task create result:", { data, error, taskData });
+    if (error) {
+      alert("Fehler: " + error.message);
+      return;
+    }
     if (data) {
       setTasks(prev => [...prev, data]);
       resetForm();
@@ -629,8 +633,12 @@ function KanbanBoard({ onBack, session }) {
     resetForm();
   };
 
-  // Delete task
-  const deleteTask = async (taskId) => {
+  // Delete task (with confirmation)
+  const deleteTask = async (taskId, skipConfirm) => {
+    if (!skipConfirm) {
+      const task = tasks.find(t => t.id === taskId);
+      if (!confirm(`"${task?.title || "Task"}" wirklich löschen?`)) return;
+    }
     setTasks(prev => prev.filter(t => t.id !== taskId));
     await supabase.from("tasks").delete().eq("id", taskId);
     if (editingTask?.id === taskId) resetForm();
