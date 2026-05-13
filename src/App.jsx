@@ -541,7 +541,7 @@ function KanbanBoard({ onBack, session }) {
   const [loading, setLoading] = useState(true);
   const [showNewTask, setShowNewTask] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
-  const [taskForm, setTaskForm] = useState({ title: "", description: "", priority: "medium", column_key: "todo", project_name: "" });
+  const [taskForm, setTaskForm] = useState({ title: "", description: "", priority: "medium", column_key: "todo", project_name: "", assignee_id: null });
   const [dragOverCol, setDragOverCol] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const dragItem = useRef(null);
@@ -603,7 +603,7 @@ function KanbanBoard({ onBack, session }) {
       column_key: taskForm.column_key,
       project_name: taskForm.project_name || null,
       creator_id: session.user.id,
-      assignee_id: session.user.id,
+      assignee_id: taskForm.assignee_id || session.user.id,
       position: tasks.filter(t => t.column_key === taskForm.column_key).length,
     };
     const { data, error } = await supabase.from("tasks").insert(taskData).select().single();
@@ -627,6 +627,7 @@ function KanbanBoard({ onBack, session }) {
       priority: taskForm.priority,
       column_key: taskForm.column_key,
       project_name: taskForm.project_name || null,
+      assignee_id: taskForm.assignee_id || session.user.id,
       updated_at: new Date().toISOString(),
     };
     setTasks(prev => prev.map(t => t.id === editingTask.id ? { ...t, ...updates } : t));
@@ -650,7 +651,7 @@ function KanbanBoard({ onBack, session }) {
   const resetForm = () => {
     setShowNewTask(false);
     setEditingTask(null);
-    setTaskForm({ title: "", description: "", priority: "medium", column_key: "todo", project_name: "" });
+    setTaskForm({ title: "", description: "", priority: "medium", column_key: "todo", project_name: "", assignee_id: session?.user?.id || null });
   };
 
   const openEditTask = (task) => {
@@ -661,13 +662,14 @@ function KanbanBoard({ onBack, session }) {
       priority: task.priority || "medium",
       column_key: task.column_key || "todo",
       project_name: task.project_name || "",
+      assignee_id: task.assignee_id || session?.user?.id || null,
     });
     setShowNewTask(true);
   };
 
   const openNewTask = (colKey) => {
     setEditingTask(null);
-    setTaskForm({ title: "", description: "", priority: "medium", column_key: colKey || "todo", project_name: "" });
+    setTaskForm({ title: "", description: "", priority: "medium", column_key: colKey || "todo", project_name: "", assignee_id: session?.user?.id || null });
     setShowNewTask(true);
   };
 
@@ -927,6 +929,49 @@ function KanbanBoard({ onBack, session }) {
               <datalist id="project-suggestions">
                 {projectNames.map(p => <option key={p} value={p} />)}
               </datalist>
+
+              {/* Assignee */}
+              <div>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginBottom: 6 }}>Zugewiesen an</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {Object.values(teamMembers).map(m => (
+                    <motion.div
+                      key={m.user_id}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setTaskForm(prev => ({ ...prev, assignee_id: m.user_id }))}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8,
+                        padding: "6px 12px", borderRadius: 10, cursor: "pointer",
+                        background: taskForm.assignee_id === m.user_id ? (m.avatar_color || "#8B7AFF") + "15" : "rgba(255,255,255,0.03)",
+                        border: `1px solid ${taskForm.assignee_id === m.user_id ? (m.avatar_color || "#8B7AFF") + "35" : "rgba(255,255,255,0.06)"}`,
+                      }}
+                    >
+                      {m.avatar_url ? (
+                        <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 20, height: 20, borderRadius: "50%" }} />
+                      ) : (
+                        <div style={{
+                          width: 20, height: 20, borderRadius: "50%",
+                          background: (m.avatar_color || "#8B7AFF") + "30", color: m.avatar_color || "#8B7AFF",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 9, fontFamily: FONT, fontWeight: 600,
+                        }}>{m.initials}</div>
+                      )}
+                      <span style={{
+                        fontSize: 12, fontFamily: FONT,
+                        color: taskForm.assignee_id === m.user_id ? "#ffffffcc" : "#ffffff50",
+                      }}>{m.display_name}</span>
+                      {taskForm.assignee_id === m.user_id && (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                          <path d="M5 13l4 4L19 7" stroke={m.avatar_color || "#8B7AFF"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </motion.div>
+                  ))}
+                  {Object.keys(teamMembers).length === 0 && (
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff30", padding: "6px 0" }}>Keine Team-Mitglieder gefunden</div>
+                  )}
+                </div>
+              </div>
 
               {/* Priority + Column */}
               <div style={{ display: "flex", gap: 10 }}>
