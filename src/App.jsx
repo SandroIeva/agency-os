@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "./supabase";
 
@@ -843,8 +844,8 @@ function KanbanBoard({ onBack, session }) {
         })}
       </div>
 
-      {/* New / Edit Task Modal */}
-      <AnimatePresence>
+      {/* New / Edit Task Modal — Portal to body so it covers everything */}
+      {createPortal(<AnimatePresence>
         {showNewTask && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -1035,10 +1036,10 @@ function KanbanBoard({ onBack, session }) {
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>, document.body)}
 
-      {/* Custom Delete Confirm Dialog */}
-      <AnimatePresence>
+      {/* Custom Delete Confirm Dialog — Portal to body */}
+      {createPortal(<AnimatePresence>
         {confirmDelete && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -1106,7 +1107,7 @@ function KanbanBoard({ onBack, session }) {
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>, document.body)}
     </motion.div>
   );
 }
