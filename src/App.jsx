@@ -543,6 +543,7 @@ function KanbanBoard({ onBack, session }) {
   const [editingTask, setEditingTask] = useState(null);
   const [taskForm, setTaskForm] = useState({ title: "", description: "", priority: "medium", column_key: "todo", project_name: "" });
   const [dragOverCol, setDragOverCol] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
   const dragItem = useRef(null);
 
   // Always use these columns
@@ -633,15 +634,17 @@ function KanbanBoard({ onBack, session }) {
     resetForm();
   };
 
-  // Delete task (with confirmation)
-  const deleteTask = async (taskId, skipConfirm) => {
-    if (!skipConfirm) {
-      const task = tasks.find(t => t.id === taskId);
-      if (!confirm(`"${task?.title || "Task"}" wirklich löschen?`)) return;
-    }
-    setTasks(prev => prev.filter(t => t.id !== taskId));
-    await supabase.from("tasks").delete().eq("id", taskId);
-    if (editingTask?.id === taskId) resetForm();
+  // Delete task — shows custom confirm dialog
+  const requestDelete = (taskId) => {
+    const task = tasks.find(t => t.id === taskId);
+    setConfirmDelete(task || { id: taskId, title: "Task" });
+  };
+  const confirmDeleteTask = async () => {
+    if (!confirmDelete) return;
+    setTasks(prev => prev.filter(t => t.id !== confirmDelete.id));
+    await supabase.from("tasks").delete().eq("id", confirmDelete.id);
+    if (editingTask?.id === confirmDelete.id) resetForm();
+    setConfirmDelete(null);
   };
 
   const resetForm = () => {
@@ -786,7 +789,7 @@ function KanbanBoard({ onBack, session }) {
                                 <motion.div
                                   whileHover={{ scale: 1.2 }}
                                   whileTap={{ scale: 0.9 }}
-                                  onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }}
+                                  onClick={(e) => { e.stopPropagation(); requestDelete(task.id); }}
                                   style={{ cursor: "pointer", color: "#ffffff20", fontSize: 12, fontFamily: FONT, padding: "0 2px" }}
                                 >✕</motion.div>
                               </div>
@@ -796,7 +799,7 @@ function KanbanBoard({ onBack, session }) {
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                               {member ? (
                                 member.avatar_url ? (
-                                  <img src={member.avatar_url} alt="" style={{ width: 22, height: 22, borderRadius: "50%", border: "1px solid #ffffff15" }} />
+                                  <img src={member.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 22, height: 22, borderRadius: "50%", border: "1px solid #ffffff15" }} />
                                 ) : (
                                   <div style={{
                                     width: 22, height: 22, borderRadius: "50%", background: (member.avatar_color || "#8B7AFF") + "25", color: member.avatar_color || "#8B7AFF",
@@ -872,7 +875,7 @@ function KanbanBoard({ onBack, session }) {
                   <motion.div
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    onClick={() => deleteTask(editingTask.id)}
+                    onClick={() => { resetForm(); requestDelete(editingTask.id); }}
                     style={{
                       fontSize: 11, fontFamily: FONT, color: "#EF4444", cursor: "pointer",
                       padding: "4px 10px", borderRadius: 8, background: "rgba(239,68,68,0.1)",
@@ -983,6 +986,77 @@ function KanbanBoard({ onBack, session }) {
                     color: taskForm.title.trim() ? "#8B7AFF" : "#ffffff30",
                   }}
                 >{editingTask ? "Speichern" : "Task erstellen"}</motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Custom Delete Confirm Dialog */}
+      <AnimatePresence>
+        {confirmDelete && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            onClick={() => setConfirmDelete(null)}
+            style={{
+              position: "absolute", inset: 0, zIndex: 60,
+              background: "rgba(0,0,0,0.55)", backdropFilter: "blur(10px)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 8 }}
+              transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                width: 360, background: "rgba(22, 22, 30, 0.96)",
+                backdropFilter: "blur(40px)", border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 20, padding: "28px 28px 22px", textAlign: "center",
+              }}
+            >
+              {/* Warning icon */}
+              <div style={{
+                width: 48, height: 48, borderRadius: 14, margin: "0 auto 16px",
+                background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.2)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 9v4M12 17h.01" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="#EF4444" strokeWidth="1.5" fill="none" />
+                </svg>
+              </div>
+              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: "#ffffffdd", marginBottom: 8 }}>
+                Task löschen?
+              </div>
+              <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffff50", marginBottom: 24, lineHeight: 1.5 }}>
+                „{confirmDelete.title}" wird unwiderruflich gelöscht.
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => setConfirmDelete(null)}
+                  style={{
+                    flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer",
+                    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
+                    fontSize: 13, fontFamily: FONT, color: "#ffffff70", fontWeight: 500,
+                  }}
+                >Abbrechen</motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={confirmDeleteTask}
+                  style={{
+                    flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer",
+                    background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)",
+                    fontSize: 13, fontFamily: FONT, color: "#EF4444", fontWeight: 600,
+                  }}
+                >Löschen</motion.button>
               </div>
             </motion.div>
           </motion.div>
@@ -3277,7 +3351,7 @@ export default function CircularMenu() {
               <div style={{ padding: "24px 24px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                   {userAvatar ? (
-                    <img src={userAvatar} alt="" style={{ width: 48, height: 48, borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)" }} />
+                    <img src={userAvatar} alt="" referrerPolicy="no-referrer" style={{ width: 48, height: 48, borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)" }} />
                   ) : (
                     <div style={{
                       width: 48, height: 48, borderRadius: 14,
