@@ -852,7 +852,7 @@ function KanbanBoard({ onBack, session }) {
             exit={{ opacity: 0 }}
             onClick={resetForm}
             style={{
-              position: "absolute", inset: 0, zIndex: 50,
+              position: "fixed", inset: 0, zIndex: 100,
               background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)",
               display: "flex", alignItems: "center", justifyContent: "center",
             }}
@@ -1047,7 +1047,7 @@ function KanbanBoard({ onBack, session }) {
             transition={{ duration: 0.15 }}
             onClick={() => setConfirmDelete(null)}
             style={{
-              position: "absolute", inset: 0, zIndex: 60,
+              position: "fixed", inset: 0, zIndex: 110,
               background: "rgba(0,0,0,0.55)", backdropFilter: "blur(10px)",
               display: "flex", alignItems: "center", justifyContent: "center",
             }}
