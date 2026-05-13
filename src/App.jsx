@@ -973,41 +973,41 @@ function KanbanBoard({ onBack, session }) {
                 </div>
               </div>
 
-              {/* Priority + Column */}
-              <div style={{ display: "flex", gap: 10 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginBottom: 6 }}>Priorität</div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    {["high", "medium", "low"].map(p => (
-                      <motion.div key={p} whileTap={{ scale: 0.95 }}
-                        onClick={() => setTaskForm(prev => ({ ...prev, priority: p }))}
-                        style={{
-                          flex: 1, padding: "6px 0", borderRadius: 8, textAlign: "center", cursor: "pointer",
-                          fontSize: 11, fontFamily: FONT,
-                          background: taskForm.priority === p ? priColors[p] + "20" : "rgba(255,255,255,0.03)",
-                          color: taskForm.priority === p ? priColors[p] : "#ffffff40",
-                          border: `1px solid ${taskForm.priority === p ? priColors[p] + "40" : "rgba(255,255,255,0.06)"}`,
-                        }}
-                      >{p === "high" ? "Hoch" : p === "medium" ? "Mittel" : "Niedrig"}</motion.div>
-                    ))}
-                  </div>
+              {/* Priority */}
+              <div>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginBottom: 6 }}>Priorität</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {["high", "medium", "low"].map(p => (
+                    <motion.div key={p} whileTap={{ scale: 0.95 }}
+                      onClick={() => setTaskForm(prev => ({ ...prev, priority: p }))}
+                      style={{
+                        flex: 1, padding: "6px 0", borderRadius: 8, textAlign: "center", cursor: "pointer",
+                        fontSize: 11, fontFamily: FONT,
+                        background: taskForm.priority === p ? priColors[p] + "20" : "rgba(255,255,255,0.03)",
+                        color: taskForm.priority === p ? priColors[p] : "#ffffff40",
+                        border: `1px solid ${taskForm.priority === p ? priColors[p] + "40" : "rgba(255,255,255,0.06)"}`,
+                      }}
+                    >{p === "high" ? "Hoch" : p === "medium" ? "Mittel" : "Niedrig"}</motion.div>
+                  ))}
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginBottom: 6 }}>Spalte</div>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {colEntries.map(c => (
-                      <motion.div key={c.key} whileTap={{ scale: 0.95 }}
-                        onClick={() => setTaskForm(prev => ({ ...prev, column_key: c.key }))}
-                        style={{
-                          flex: 1, padding: "6px 0", borderRadius: 8, textAlign: "center", cursor: "pointer",
-                          fontSize: 10, fontFamily: FONT, minWidth: 50,
-                          background: taskForm.column_key === c.key ? c.color + "20" : "rgba(255,255,255,0.03)",
-                          color: taskForm.column_key === c.key ? c.color : "#ffffff40",
+              </div>
+
+              {/* Column */}
+              <div>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginBottom: 6 }}>Spalte</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {colEntries.map(c => (
+                    <motion.div key={c.key} whileTap={{ scale: 0.95 }}
+                      onClick={() => setTaskForm(prev => ({ ...prev, column_key: c.key }))}
+                      style={{
+                        flex: 1, padding: "6px 0", borderRadius: 8, textAlign: "center", cursor: "pointer",
+                        fontSize: 11, fontFamily: FONT,
+                        background: taskForm.column_key === c.key ? c.color + "20" : "rgba(255,255,255,0.03)",
+                        color: taskForm.column_key === c.key ? c.color : "#ffffff40",
                           border: `1px solid ${taskForm.column_key === c.key ? c.color + "40" : "rgba(255,255,255,0.06)"}`,
                         }}
                       >{c.label}</motion.div>
-                    ))}
-                  </div>
+                  ))}
                 </div>
               </div>
 
