@@ -1716,6 +1716,7 @@ export default function CircularMenu() {
   const [chatTab, setChatTab] = useState("Team");
   const [panelOpen, setPanelOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   // Auth state
   const [session, setSession] = useState(null);
@@ -2909,13 +2910,180 @@ export default function CircularMenu() {
         )}
       </AnimatePresence>
 
+      {/* Profile / Settings Panel */}
+      <AnimatePresence>
+        {profileOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setProfileOpen(false)}
+            style={{
+              position: "absolute", inset: 0, zIndex: 90,
+              background: "rgba(0,0,0,0.4)",
+              backdropFilter: "blur(8px)",
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.95 }}
+              transition={{ duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: "absolute", bottom: 80, left: 24,
+                width: 320,
+                background: "rgba(22, 22, 30, 0.92)",
+                backdropFilter: "blur(40px)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 20, overflow: "hidden",
+              }}
+            >
+              {/* Profile header */}
+              <div style={{ padding: "24px 24px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  {userAvatar ? (
+                    <img src={userAvatar} alt="" style={{ width: 48, height: 48, borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)" }} />
+                  ) : (
+                    <div style={{
+                      width: 48, height: 48, borderRadius: 14,
+                      background: "linear-gradient(135deg, #8B7AFF, #6C5CE7)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 20, fontFamily: FONT, color: "#fff", fontWeight: 600,
+                    }}>{(userName || "?")[0]}</div>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: "#ffffffdd", lineHeight: 1.3 }}>
+                      {userName || "User"}
+                    </div>
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff45", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {userEmail}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Settings items */}
+              <div style={{ padding: "8px 8px" }}>
+                {/* Appearance */}
+                <motion.div
+                  whileHover={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: "12px 16px", borderRadius: 12, cursor: "pointer",
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="4" stroke="#ffffff60" strokeWidth="1.5" />
+                    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="#ffffff60" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffffcc" }}>Appearance</div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff35", marginTop: 1 }}>Dark Mode</div>
+                  </div>
+                  <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff25" }}>Coming soon</div>
+                </motion.div>
+
+                {/* Language */}
+                <motion.div
+                  whileHover={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: "12px 16px", borderRadius: 12, cursor: "pointer",
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="9" stroke="#ffffff60" strokeWidth="1.5" />
+                    <path d="M3 12h18M12 3c-2.5 3-3.5 6-3.5 9s1 6 3.5 9M12 3c2.5 3 3.5 6 3.5 9s-1 6-3.5 9" stroke="#ffffff60" strokeWidth="1.5" />
+                  </svg>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffffcc" }}>Language</div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff35", marginTop: 1 }}>Deutsch / English</div>
+                  </div>
+                  <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff25" }}>Coming soon</div>
+                </motion.div>
+
+                {/* Notifications */}
+                <motion.div
+                  whileHover={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: "12px 16px", borderRadius: 12, cursor: "pointer",
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 22c1.1 0 2-.9 2-2h-4a2 2 0 002 2zM18 16v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" stroke="#ffffff60" strokeWidth="1.5" fill="none" />
+                  </svg>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffffcc" }}>Notifications</div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff35", marginTop: 1 }}>Push & Sound</div>
+                  </div>
+                  <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff25" }}>Coming soon</div>
+                </motion.div>
+
+                {/* Connected Apps */}
+                <motion.div
+                  whileHover={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: "12px 16px", borderRadius: 12, cursor: "pointer",
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="#ffffff60" strokeWidth="1.5" strokeLinecap="round" />
+                    <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="#ffffff60" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffffcc" }}>Connected Apps</div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff35", marginTop: 1 }}>Google, Slack, LLMs</div>
+                  </div>
+                  <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff25" }}>Coming soon</div>
+                </motion.div>
+              </div>
+
+              {/* Logout */}
+              <div style={{ padding: "4px 8px 12px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                <motion.div
+                  onClick={() => { handleLogout(); setProfileOpen(false); }}
+                  whileHover={{ backgroundColor: "rgba(232, 67, 67, 0.08)" }}
+                  whileTap={{ scale: 0.98 }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: "12px 16px", borderRadius: 12, cursor: "pointer",
+                    marginTop: 4,
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" stroke="#E84343" strokeWidth="1.5" strokeLinecap="round" />
+                    <path d="M16 17l5-5-5-5M21 12H9" stroke="#E84343" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <span style={{ fontSize: 13, fontFamily: FONT, color: "#E84343", fontWeight: 500 }}>Logout</span>
+                </motion.div>
+              </div>
+
+              {/* Version */}
+              <div style={{ padding: "0 24px 14px", textAlign: "center" }}>
+                <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff15" }}>Agency OS v0.1.0</div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Bottom bar */}
       <div style={{
         padding: "16px 24px", display: "flex", alignItems: "center",
         position: "relative", zIndex: 20,
       }}>
-        {/* Logo — left third */}
+        {/* Logo — left third (opens Profile) */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", paddingTop: 10 }}>
+          <motion.div
+            onClick={() => setProfileOpen(!profileOpen)}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            style={{ cursor: "pointer" }}
+          >
           <svg width="76" height="48" viewBox="0 0 76 48" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path opacity="0.8" d="M4.64867 13.5494C3.95863 13.5494 3.37755 13.3133 2.90542 12.8594C2.43329 12.4054 2.19722 11.8243 2.19722 11.1343C2.19722 10.4987 2.43329 9.93579 2.90542 9.46366C3.37755 8.99152 3.95863 8.75546 4.64867 8.75546C5.3387 8.75546 5.91979 8.99152 6.39192 9.46366C6.86405 9.93579 7.10011 10.4987 7.10011 11.1343C7.10011 11.8243 6.86405 12.4054 6.39192 12.8594C5.91979 13.3133 5.3387 13.5494 4.64867 13.5494ZM2.66935 35.3037V16.6001H6.53719V35.3037H2.66935ZM11.0486 9.26391H29.3345V12.133L19.0748 35.3037H14.8075L24.7767 12.9138H11.0486V9.26391Z" fill="white" fillOpacity="0.8"/>
             <g opacity="0.8">
@@ -2923,6 +3091,7 @@ export default function CircularMenu() {
               <path d="M51.14 17.0376V17.0454C49.4759 17.0454 48.0853 16.4907 46.9681 15.3735C45.8509 14.2563 45.2962 12.8735 45.2962 11.2173C45.2962 9.56104 45.8509 8.17822 46.9603 7.07666C48.0696 5.9751 49.4603 5.42041 51.1321 5.42041C52.7962 5.42041 54.1868 5.9751 55.2962 7.07666C56.4056 8.17822 56.9603 9.55322 56.9603 11.2095C56.9603 12.8657 56.4056 14.2485 55.2962 15.3657C54.1868 16.4829 52.804 17.0376 51.14 17.0376ZM51.14 15.4438V15.4595C52.3431 15.4595 53.3275 15.0532 54.0853 14.2329C54.8431 13.4126 55.2259 12.4048 55.2259 11.2095C55.2259 10.0376 54.8431 9.04541 54.0775 8.24072C53.3118 7.43604 52.3353 7.02979 51.14 7.02979C49.9368 7.02979 48.9525 7.42822 48.1868 8.23291C47.4212 9.0376 47.0384 10.022 47.0384 11.1938C47.0384 12.3892 47.4212 13.397 48.1868 14.2173C48.9525 15.0376 49.9368 15.4438 51.14 15.4438ZM63.4675 17.0376L63.4206 17.0454C62.1706 17.0454 61.1003 16.7173 60.2018 16.0688C59.3034 15.4204 58.694 14.6157 58.3737 13.6626L60.0143 13.1704C60.2721 13.8501 60.7096 14.4126 61.3268 14.8501C61.944 15.2876 62.6706 15.5063 63.5143 15.5063C64.2565 15.5063 64.8659 15.3267 65.3425 14.9751C65.819 14.6235 66.0612 14.2173 66.0612 13.7563C66.0612 13.3813 65.9284 13.0688 65.655 12.811C65.3815 12.5532 64.9284 12.3267 64.2878 12.1235L61.4753 11.2251C59.7956 10.7017 58.9596 9.7876 58.9596 8.48291C58.9596 7.63916 59.3268 6.9126 60.0612 6.31104C60.7956 5.70947 61.7175 5.40479 62.8268 5.40479C63.9675 5.40479 64.9518 5.67041 65.78 6.20166C66.6081 6.73291 67.194 7.39697 67.5378 8.19385L65.9206 8.67822C65.655 8.15479 65.2565 7.73291 64.7175 7.4126C64.1784 7.09229 63.5534 6.93604 62.8425 6.93604C62.2253 6.93604 61.7175 7.08447 61.319 7.38135C60.9206 7.67822 60.7175 8.02979 60.7175 8.43604C60.7175 8.75635 60.8346 9.02197 61.0612 9.23291C61.2878 9.44385 61.655 9.62354 62.155 9.77197L64.905 10.647C65.8737 10.9517 66.6081 11.3267 67.1003 11.772C67.5925 12.2173 67.8425 12.8345 67.8425 13.6313C67.8425 14.5923 67.4362 15.397 66.6237 16.0532C65.8112 16.7095 64.7565 17.0376 63.4675 17.0376Z" fill="white"/>
             </g>
           </svg>
+          </motion.div>
         </div>
 
         {/* Center buttons — true center */}
