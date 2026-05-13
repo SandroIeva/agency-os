@@ -523,32 +523,112 @@ function AISpeakingSphere() {
 }
 
 // Kanban board data
-const kanbanColumns = [
-  { id: "todo", label: "To Do", color: "#ffffff50" },
-  { id: "progress", label: "In Progress", color: "#F59E0B" },
-  { id: "review", label: "Review", color: "#8B7AFF" },
-  { id: "done", label: "Done", color: "#00B894" },
-];
-const kanbanTasks = [
-  { id: "t1", title: "Brand strategy brief", desc: "Define positioning and messaging pillars", assignee: "S", aColor: "#8B7AFF", priority: "high", col: "progress", project: "Meridian", time: "2h 15m" },
-  { id: "t2", title: "Logo mark exploration v3", desc: "3 directions based on client feedback", assignee: "S", aColor: "#8B7AFF", priority: "high", col: "progress", project: "Meridian", time: "4h 30m" },
-  { id: "t3", title: "Competitor analysis", desc: "Analyze top 5 direct competitors", assignee: "AI", aColor: "#E84393", priority: "medium", col: "review", project: "Meridian", isAI: true },
-  { id: "t4", title: "Color palette finalization", desc: "Primary, secondary, accent colors", assignee: "M", aColor: "#00B894", priority: "medium", col: "todo", project: "Meridian" },
-  { id: "t5", title: "Typography system", desc: "Heading + body fonts, define scale", assignee: "S", aColor: "#8B7AFF", priority: "medium", col: "todo", project: "Meridian" },
-  { id: "t6", title: "Social media templates", desc: "LinkedIn + Instagram templates", assignee: "M", aColor: "#00B894", priority: "low", col: "todo", project: "Meridian" },
-  { id: "t7", title: "Website wireframes", desc: "Homepage, about, services — mobile first", assignee: "S", aColor: "#8B7AFF", priority: "high", col: "todo", project: "Volta" },
-  { id: "t8", title: "Brand guidelines v1", desc: "Complete brand manual", assignee: "S", aColor: "#8B7AFF", priority: "medium", col: "done", project: "Meridian", time: "6h" },
-  { id: "t9", title: "Mood board collection", desc: "Visual references and direction", assignee: "M", aColor: "#00B894", priority: "low", col: "done", project: "Meridian", time: "1h 45m" },
-  { id: "t10", title: "Client onboarding doc", desc: "Questionnaire and process overview", assignee: "S", aColor: "#8B7AFF", priority: "low", col: "review", project: "General" },
-];
 const priColors = { high: "#EF4444", medium: "#F59E0B", low: "#ffffff30" };
+const ASSIGNEE_COLORS = ["#8B7AFF", "#E84393", "#00B894", "#F59E0B", "#5B8DEF", "#E88D67", "#6C5CE7", "#FD79A8"];
 
-function KanbanBoard({ onBack }) {
-  const [tasks, setTasks] = useState(kanbanTasks);
+function KanbanBoard({ onBack, session }) {
+  const [tasks, setTasks] = useState([]);
+  const [columns, setColumns] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [teamMembers, setTeamMembers] = useState({});
   const [filter, setFilter] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [showNewTask, setShowNewTask] = useState(false);
+  const [newTask, setNewTask] = useState({ title: "", description: "", priority: "medium", column_key: "todo", project_name: "" });
+  const [dragOverCol, setDragOverCol] = useState(null);
   const dragItem = useRef(null);
-  const projects = [...new Set(kanbanTasks.map(t => t.project))];
-  const filtered = filter === "all" ? tasks : tasks.filter(t => t.project === filter);
+
+  // Ensure team_member profile exists for current user
+  useEffect(() => {
+    if (!session?.user) return;
+    const ensureProfile = async () => {
+      const u = session.user;
+      const { data: existing } = await supabase.from("team_members").select("id").eq("user_id", u.id).single();
+      if (!existing) {
+        const name = u.user_metadata?.full_name || u.email?.split("@")[0] || "User";
+        await supabase.from("team_members").insert({
+          user_id: u.id,
+          display_name: name,
+          avatar_url: u.user_metadata?.avatar_url || null,
+          initials: name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2),
+          avatar_color: ASSIGNEE_COLORS[Math.floor(Math.random() * ASSIGNEE_COLORS.length)],
+        });
+      }
+    };
+    ensureProfile();
+  }, [session]);
+
+  // Load columns, tasks, projects, team members
+  useEffect(() => {
+    if (!session?.user) return;
+    const load = async () => {
+      setLoading(true);
+      // Columns
+      const { data: cols } = await supabase.from("kanban_columns").select("*").eq("is_default", true).order("position");
+      setColumns(cols || []);
+
+      // Tasks (created by current user for now)
+      const { data: taskData } = await supabase.from("tasks").select("*").eq("creator_id", session.user.id).order("position");
+      setTasks(taskData || []);
+
+      // Projects
+      const { data: projData } = await supabase.from("projects").select("*").eq("owner_id", session.user.id);
+      setProjects(projData || []);
+
+      // Team members (all visible)
+      const { data: members } = await supabase.from("team_members").select("*");
+      const memberMap = {};
+      (members || []).forEach(m => { memberMap[m.user_id] = m; });
+      setTeamMembers(memberMap);
+
+      setLoading(false);
+    };
+    load();
+  }, [session]);
+
+  const projectNames = [...new Set(tasks.map(t => t.project_name).filter(Boolean))];
+  const filtered = filter === "all" ? tasks : tasks.filter(t => t.project_name === filter);
+
+  // Move task to another column
+  const moveTask = async (taskId, newColumnKey) => {
+    // Find the column
+    const col = columns.find(c => c.label.toLowerCase().replace(/\s/g, "") === newColumnKey.replace(/\s/g, "")) || columns.find(c => c.id === newColumnKey);
+    const colLabel = col?.label || newColumnKey;
+
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, column_key: newColumnKey } : t));
+    await supabase.from("tasks").update({ column_key: newColumnKey, updated_at: new Date().toISOString() }).eq("id", taskId);
+  };
+
+  // Create new task
+  const createTask = async () => {
+    if (!newTask.title.trim()) return;
+    const taskData = {
+      title: newTask.title.trim(),
+      description: newTask.description.trim() || null,
+      priority: newTask.priority,
+      column_key: newTask.column_key,
+      project_name: newTask.project_name || null,
+      creator_id: session.user.id,
+      assignee_id: session.user.id,
+      position: tasks.filter(t => t.column_key === newTask.column_key).length,
+    };
+    const { data, error } = await supabase.from("tasks").insert(taskData).select().single();
+    if (data) {
+      setTasks(prev => [...prev, data]);
+      setNewTask({ title: "", description: "", priority: "medium", column_key: "todo", project_name: "" });
+      setShowNewTask(false);
+    }
+  };
+
+  // Delete task
+  const deleteTask = async (taskId) => {
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+    await supabase.from("tasks").delete().eq("id", taskId);
+  };
+
+  // Map column labels to keys for drag/drop
+  const colKeyMap = { "To Do": "todo", "In Progress": "progress", "Review": "review", "Done": "done" };
+  const colEntries = columns.map(c => ({ ...c, key: colKeyMap[c.label] || c.label.toLowerCase().replace(/\s/g, "") }));
 
   return (
     <motion.div
@@ -570,13 +650,13 @@ function KanbanBoard({ onBack }) {
           }}>←</motion.div>
         <div>
           <div style={{ fontSize: 22, fontWeight: 500, color: "#ffffffe6", fontFamily: FONT, letterSpacing: -0.5 }}>Tasks</div>
-          <div style={{ fontSize: 12, color: "#ffffff50", fontFamily: FONT, marginTop: 2 }}>{filtered.length} tasks across {kanbanColumns.length} columns</div>
+          <div style={{ fontSize: 12, color: "#ffffff50", fontFamily: FONT, marginTop: 2 }}>{filtered.length} tasks across {colEntries.length} columns</div>
         </div>
       </div>
 
       {/* Filters */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 32px" }}>
-        {["all", ...projects].map(p => (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 32px", flexWrap: "wrap" }}>
+        {["all", ...projectNames].map(p => (
           <motion.button key={p} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
             onClick={() => setFilter(p)}
             style={{
@@ -585,9 +665,10 @@ function KanbanBoard({ onBack }) {
               border: `1px solid ${filter === p ? "#ffffff18" : "#ffffff0A"}`,
               color: filter === p ? "#ffffffe6" : "#ffffff50",
             }}
-          >{p === "all" ? "All projects" : p}</motion.button>
+          >{p === "all" ? "Alle Projekte" : p}</motion.button>
         ))}
         <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+          onClick={() => setShowNewTask(true)}
           style={{
             fontSize: 12, fontFamily: FONT, fontWeight: 500, padding: "6px 14px", borderRadius: 20, cursor: "pointer",
             background: "#8B7AFF15", border: "1px solid #8B7AFF30", color: "#8B7AFF", marginLeft: "auto",
@@ -595,71 +676,247 @@ function KanbanBoard({ onBack }) {
         >+ New task</motion.button>
       </div>
 
+      {/* Loading state */}
+      {loading && (
+        <motion.div
+          animate={{ opacity: [0.3, 0.7, 0.3] }}
+          transition={{ duration: 1.5, repeat: Infinity }}
+          style={{ padding: 60, textAlign: "center", fontSize: 13, fontFamily: FONT, color: "#ffffff40" }}
+        >Loading tasks...</motion.div>
+      )}
+
       {/* Columns */}
-      <div style={{ display: "flex", gap: 14, padding: "0 32px 24px", flex: 1, overflow: "auto" }}>
-        {kanbanColumns.map(col => {
-          const colTasks = filtered.filter(t => t.col === col.id);
-          return (
-            <div key={col.id}
-              onDragOver={e => e.preventDefault()}
-              onDrop={e => {
-                e.preventDefault();
-                if (dragItem.current) {
-                  setTasks(prev => prev.map(t => t.id === dragItem.current ? { ...t, col: col.id } : t));
-                  dragItem.current = null;
-                }
+      {!loading && (
+        <div style={{ display: "flex", gap: 14, padding: "0 32px 24px", flex: 1, overflow: "auto" }}>
+          {colEntries.map(col => {
+            const colTasks = filtered.filter(t => t.column_key === col.key);
+            return (
+              <div key={col.id}
+                onDragOver={e => { e.preventDefault(); setDragOverCol(col.key); }}
+                onDragLeave={() => setDragOverCol(null)}
+                onDrop={e => {
+                  e.preventDefault();
+                  setDragOverCol(null);
+                  if (dragItem.current) {
+                    moveTask(dragItem.current, col.key);
+                    dragItem.current = null;
+                  }
+                }}
+                style={{
+                  flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
+                  background: dragOverCol === col.key ? "rgba(139,122,255,0.04)" : "transparent",
+                  borderRadius: 16, transition: "background 0.2s",
+                  padding: dragOverCol === col.key ? "8px" : "0",
+                }}>
+                {/* Header */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, padding: "0 4px" }}>
+                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: col.color }} />
+                  <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffffa0", fontWeight: 500 }}>{col.label}</span>
+                  <span style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff30" }}>{colTasks.length}</span>
+                </div>
+                {/* Cards */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minHeight: 80, overflowY: "auto" }}>
+                  <AnimatePresence>
+                    {colTasks.map((task, i) => {
+                      const member = teamMembers[task.assignee_id];
+                      return (
+                        <motion.div key={task.id}
+                          layout
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0], delay: i * 0.03 }}
+                          draggable
+                          onDragStart={() => { dragItem.current = task.id; }}
+                          style={{
+                            background: "#1A1A24", border: "1px solid #ffffff10", borderRadius: 14,
+                            padding: "14px 16px", cursor: "grab",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                            <span style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30", letterSpacing: 0.5 }}>{task.project_name || "General"}</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              {task.is_ai_task && <span style={{ fontSize: 9, fontFamily: FONT, fontWeight: 500, color: "#E84393", padding: "2px 6px", borderRadius: 4, background: "#E8439315", letterSpacing: 0.5 }}>AI</span>}
+                              <div style={{ width: 6, height: 6, borderRadius: "50%", background: priColors[task.priority] }} />
+                              {/* Delete button */}
+                              <motion.div
+                                whileHover={{ scale: 1.2 }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }}
+                                style={{ cursor: "pointer", color: "#ffffff20", fontSize: 12, fontFamily: FONT, padding: "0 2px" }}
+                              >✕</motion.div>
+                            </div>
+                          </div>
+                          <div style={{ fontSize: 14, fontFamily: FONT, color: "#ffffffe6", fontWeight: 500, marginBottom: 4, lineHeight: 1.4 }}>{task.title}</div>
+                          {task.description && <div style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff50", lineHeight: 1.5, marginBottom: 12 }}>{task.description}</div>}
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            {member ? (
+                              member.avatar_url ? (
+                                <img src={member.avatar_url} alt="" style={{ width: 22, height: 22, borderRadius: "50%", border: "1px solid #ffffff15" }} />
+                              ) : (
+                                <div style={{
+                                  width: 22, height: 22, borderRadius: "50%", background: (member.avatar_color || "#8B7AFF") + "25", color: member.avatar_color || "#8B7AFF",
+                                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontFamily: FONT, fontWeight: 600,
+                                }}>{member.initials}</div>
+                              )
+                            ) : (
+                              <div style={{
+                                width: 22, height: 22, borderRadius: "50%", background: "#8B7AFF25", color: "#8B7AFF",
+                                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontFamily: FONT, fontWeight: 600,
+                              }}>?</div>
+                            )}
+                            {task.time_tracked && <span style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30" }}>⏱ {task.time_tracked}</span>}
+                            {task.due_date && <span style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30" }}>{new Date(task.due_date).toLocaleDateString("de-DE", { day: "2-digit", month: "short" })}</span>}
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </AnimatePresence>
+                  {colTasks.length === 0 && (
+                    <div style={{ flex: 1, border: `1px dashed ${dragOverCol === col.key ? "#8B7AFF30" : "#ffffff10"}`, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontFamily: FONT, color: dragOverCol === col.key ? "#8B7AFF60" : "#ffffff20", minHeight: 80, transition: "all 0.2s" }}>
+                      {dragOverCol === col.key ? "Hier ablegen" : "Keine Tasks"}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* New Task Modal */}
+      <AnimatePresence>
+        {showNewTask && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowNewTask(false)}
+            style={{
+              position: "absolute", inset: 0, zIndex: 50,
+              background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                width: 420, background: "rgba(22, 22, 30, 0.95)",
+                backdropFilter: "blur(40px)", border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 20, padding: 28, display: "flex", flexDirection: "column", gap: 16,
               }}
-              style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-              {/* Header */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, padding: "0 4px" }}>
-                <div style={{ width: 7, height: 7, borderRadius: "50%", background: col.color }} />
-                <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffffa0", fontWeight: 500 }}>{col.label}</span>
-                <span style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff30" }}>{colTasks.length}</span>
+            >
+              <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: "#ffffffdd" }}>Neuer Task</div>
+
+              {/* Title */}
+              <input
+                value={newTask.title}
+                onChange={e => setNewTask(p => ({ ...p, title: e.target.value }))}
+                placeholder="Task Titel..."
+                autoFocus
+                style={{
+                  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 12, padding: "12px 16px", fontSize: 14, fontFamily: FONT,
+                  color: "#ffffffdd", outline: "none", caretColor: "#8B7AFF",
+                }}
+              />
+
+              {/* Description */}
+              <textarea
+                value={newTask.description}
+                onChange={e => setNewTask(p => ({ ...p, description: e.target.value }))}
+                placeholder="Beschreibung (optional)..."
+                rows={3}
+                style={{
+                  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 12, padding: "12px 16px", fontSize: 13, fontFamily: FONT,
+                  color: "#ffffffdd", outline: "none", resize: "none", caretColor: "#8B7AFF",
+                }}
+              />
+
+              {/* Project name */}
+              <input
+                value={newTask.project_name}
+                onChange={e => setNewTask(p => ({ ...p, project_name: e.target.value }))}
+                placeholder="Projekt Name (z.B. Meridian)..."
+                list="project-suggestions"
+                style={{
+                  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 12, padding: "10px 16px", fontSize: 13, fontFamily: FONT,
+                  color: "#ffffffdd", outline: "none", caretColor: "#8B7AFF",
+                }}
+              />
+              <datalist id="project-suggestions">
+                {projectNames.map(p => <option key={p} value={p} />)}
+              </datalist>
+
+              {/* Priority + Column */}
+              <div style={{ display: "flex", gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginBottom: 6 }}>Priorität</div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {["high", "medium", "low"].map(p => (
+                      <motion.div key={p} whileTap={{ scale: 0.95 }}
+                        onClick={() => setNewTask(prev => ({ ...prev, priority: p }))}
+                        style={{
+                          flex: 1, padding: "6px 0", borderRadius: 8, textAlign: "center", cursor: "pointer",
+                          fontSize: 11, fontFamily: FONT,
+                          background: newTask.priority === p ? priColors[p] + "20" : "rgba(255,255,255,0.03)",
+                          color: newTask.priority === p ? priColors[p] : "#ffffff40",
+                          border: `1px solid ${newTask.priority === p ? priColors[p] + "40" : "rgba(255,255,255,0.06)"}`,
+                        }}
+                      >{p === "high" ? "Hoch" : p === "medium" ? "Mittel" : "Niedrig"}</motion.div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginBottom: 6 }}>Spalte</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {colEntries.map(c => (
+                      <motion.div key={c.key} whileTap={{ scale: 0.95 }}
+                        onClick={() => setNewTask(prev => ({ ...prev, column_key: c.key }))}
+                        style={{
+                          flex: 1, padding: "6px 0", borderRadius: 8, textAlign: "center", cursor: "pointer",
+                          fontSize: 10, fontFamily: FONT, minWidth: 50,
+                          background: newTask.column_key === c.key ? c.color + "20" : "rgba(255,255,255,0.03)",
+                          color: newTask.column_key === c.key ? c.color : "#ffffff40",
+                          border: `1px solid ${newTask.column_key === c.key ? c.color + "40" : "rgba(255,255,255,0.06)"}`,
+                        }}
+                      >{c.label}</motion.div>
+                    ))}
+                  </div>
+                </div>
               </div>
-              {/* Cards */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minHeight: 80 }}>
-                <AnimatePresence>
-                  {colTasks.map((task, i) => (
-                    <motion.div key={task.id}
-                      layout
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0], delay: i * 0.03 }}
-                      draggable
-                      onDragStart={() => { dragItem.current = task.id; }}
-                      style={{
-                        background: "#1A1A24", border: "1px solid #ffffff10", borderRadius: 14,
-                        padding: "14px 16px", cursor: "grab",
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                        <span style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30", letterSpacing: 0.5 }}>{task.project}</span>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          {task.isAI && <span style={{ fontSize: 9, fontFamily: FONT, fontWeight: 500, color: "#E84393", padding: "2px 6px", borderRadius: 4, background: "#E8439315", letterSpacing: 0.5 }}>AI</span>}
-                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: priColors[task.priority] }} />
-                        </div>
-                      </div>
-                      <div style={{ fontSize: 14, fontFamily: FONT, color: "#ffffffe6", fontWeight: 500, marginBottom: 4, lineHeight: 1.4 }}>{task.title}</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff50", lineHeight: 1.5, marginBottom: 12 }}>{task.desc}</div>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <div style={{
-                          width: 22, height: 22, borderRadius: "50%", background: task.aColor + "25", color: task.aColor,
-                          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontFamily: FONT, fontWeight: 600,
-                        }}>{task.assignee}</div>
-                        {task.time && <span style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30" }}>⏱ {task.time}</span>}
-                      </div>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-                {colTasks.length === 0 && (
-                  <div style={{ flex: 1, border: "1px dashed #ffffff10", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontFamily: FONT, color: "#ffffff20", minHeight: 80 }}>Drop here</div>
-                )}
+
+              {/* Action buttons */}
+              <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                <motion.button whileTap={{ scale: 0.97 }}
+                  onClick={() => setShowNewTask(false)}
+                  style={{
+                    flex: 1, padding: "10px 0", borderRadius: 12, cursor: "pointer",
+                    background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                    fontSize: 13, fontFamily: FONT, color: "#ffffff60",
+                  }}
+                >Abbrechen</motion.button>
+                <motion.button whileTap={{ scale: 0.97 }}
+                  onClick={createTask}
+                  style={{
+                    flex: 1, padding: "10px 0", borderRadius: 12, cursor: "pointer",
+                    background: newTask.title.trim() ? "rgba(139,122,255,0.15)" : "rgba(255,255,255,0.03)",
+                    border: `1px solid ${newTask.title.trim() ? "rgba(139,122,255,0.3)" : "rgba(255,255,255,0.06)"}`,
+                    fontSize: 13, fontFamily: FONT, fontWeight: 500,
+                    color: newTask.title.trim() ? "#8B7AFF" : "#ffffff30",
+                  }}
+                >Task erstellen</motion.button>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -1941,7 +2198,7 @@ export default function CircularMenu() {
 
   const handleWheel = useCallback((e) => {
     // Let views with their own scrolling (files, chat) handle scroll natively
-    if (currentView === "files" || currentView === "chat") {
+    if (currentView === "files" || currentView === "chat" || currentView === "kanban") {
       return;
     }
 
@@ -2208,7 +2465,7 @@ export default function CircularMenu() {
         {/* KANBAN VIEW */}
         <AnimatePresence>
           {currentView === "kanban" && (
-            <KanbanBoard onBack={() => setCurrentView("dashboard")} />
+            <KanbanBoard session={session} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
