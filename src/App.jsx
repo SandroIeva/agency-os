@@ -664,22 +664,267 @@ function KanbanBoard({ onBack }) {
   );
 }
 
-const FILES_DATA = [
-  { id: 1, name: "Daria Mockup", size: "2MB", type: "PNG", color: "#E88D67" },
-  { id: 2, name: "Drone Upper View", size: "2MB", type: "PNG", color: "#5B8DEF" },
-  { id: 3, name: "Background Main", size: "2MB", type: "PNG", color: "#6BC5A0" },
-  { id: 4, name: "Drone Upper View", size: "2MB", type: "PNG", color: "#5B8DEF" },
-  { id: 5, name: "Brand Guidelines v2", size: "4MB", type: "PDF", color: "#8B7AFF" },
-  { id: 6, name: "Hero Banner Final", size: "3MB", type: "PNG", color: "#E84393" },
-  { id: 7, name: "Team Photo Offsite", size: "5MB", type: "JPG", color: "#F59E0B" },
-  { id: 8, name: "Product Screenshot", size: "1MB", type: "PNG", color: "#00B894" },
-  { id: 9, name: "Icon Set Export", size: "800KB", type: "SVG", color: "#FD79A8" },
-  { id: 10, name: "Pitch Deck Cover", size: "2MB", type: "PNG", color: "#6C5CE7" },
-];
+const FILE_TYPE_COLORS = {
+  "application/pdf": "#E84393",
+  "application/vnd.google-apps.document": "#5B8DEF",
+  "application/vnd.google-apps.spreadsheet": "#00B894",
+  "application/vnd.google-apps.presentation": "#F59E0B",
+  "application/vnd.google-apps.folder": "#8B7AFF",
+  "image/png": "#E88D67",
+  "image/jpeg": "#E88D67",
+  "image/svg+xml": "#FD79A8",
+  "video/mp4": "#6C5CE7",
+  "default": "#6BC5A0",
+};
 
-function FilesView({ onBack }) {
+const STATUS_COLORS = {
+  "Neu": "#ffffff40",
+  "In Prüfung": "#F59E0B",
+  "Freigegeben": "#00B894",
+  "Kunden-Sichtbar": "#8B7AFF",
+};
+
+function formatFileSize(bytes) {
+  if (!bytes) return "–";
+  const n = parseInt(bytes);
+  if (n < 1024) return n + " B";
+  if (n < 1048576) return (n / 1024).toFixed(0) + " KB";
+  if (n < 1073741824) return (n / 1048576).toFixed(1) + " MB";
+  return (n / 1073741824).toFixed(1) + " GB";
+}
+
+function getFileExtension(name, mimeType) {
+  if (name && name.includes(".")) return name.split(".").pop().toUpperCase();
+  if (mimeType?.includes("document")) return "DOC";
+  if (mimeType?.includes("spreadsheet")) return "SHEET";
+  if (mimeType?.includes("presentation")) return "SLIDE";
+  if (mimeType?.includes("folder")) return "FOLDER";
+  if (mimeType?.includes("pdf")) return "PDF";
+  if (mimeType?.includes("image")) return "IMG";
+  if (mimeType?.includes("video")) return "VID";
+  return "FILE";
+}
+
+function FilesView({ onBack, session }) {
   const [search, setSearch] = useState("");
-  const filtered = FILES_DATA.filter(f => f.name.toLowerCase().includes(search.toLowerCase()));
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [metadata, setMetadata] = useState({});
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [currentFolder, setCurrentFolder] = useState(null);
+  const [folderPath, setFolderPath] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null);
+  const fileInputRef = useRef(null);
+
+  // Fetch Google Drive files
+  useEffect(() => {
+    const fetchFiles = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const providerToken = session?.provider_token;
+        if (!providerToken) {
+          setError("Kein Google Drive Zugriff. Bitte neu einloggen.");
+          setLoading(false);
+          return;
+        }
+
+        let query = "trashed=false";
+        if (currentFolder) {
+          query += ` and '${currentFolder}' in parents`;
+        } else {
+          query += " and 'root' in parents";
+        }
+
+        const res = await fetch(
+          `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink)&orderBy=folder,name&pageSize=50`,
+          { headers: { Authorization: `Bearer ${providerToken}` } }
+        );
+
+        if (!res.ok) {
+          if (res.status === 401) {
+            setError("Google Drive Token abgelaufen. Bitte neu einloggen.");
+          } else {
+            setError("Fehler beim Laden der Dateien.");
+          }
+          setLoading(false);
+          return;
+        }
+
+        const data = await res.json();
+        setFiles(data.files || []);
+
+        // Fetch metadata from Supabase
+        const fileIds = (data.files || []).map(f => f.id);
+        if (fileIds.length > 0) {
+          const { data: metaData } = await supabase
+            .from("file_metadata")
+            .select("*")
+            .in("google_file_id", fileIds);
+          const metaMap = {};
+          (metaData || []).forEach(m => { metaMap[m.google_file_id] = m; });
+          setMetadata(metaMap);
+        }
+      } catch (err) {
+        setError("Verbindungsfehler.");
+      }
+      setLoading(false);
+    };
+    fetchFiles();
+  }, [session, currentFolder]);
+
+  const filtered = files.filter(f => f.name.toLowerCase().includes(search.toLowerCase()));
+
+  const navigateToFolder = (folder) => {
+    setFolderPath(prev => [...prev, { id: currentFolder, name: folder.name }]);
+    setCurrentFolder(folder.id);
+    setSearch("");
+  };
+
+  const navigateBack = () => {
+    if (folderPath.length > 0) {
+      const prev = [...folderPath];
+      const parent = prev.pop();
+      setFolderPath(prev);
+      setCurrentFolder(parent.id);
+      setSearch("");
+    }
+  };
+
+  const updateStatus = async (fileId, newStatus) => {
+    const existing = metadata[fileId];
+    if (existing) {
+      await supabase.from("file_metadata").update({ status: newStatus, updated_at: new Date().toISOString() }).eq("google_file_id", fileId);
+    } else {
+      await supabase.from("file_metadata").insert({ google_file_id: fileId, user_id: session.user.id, status: newStatus });
+    }
+    setMetadata(prev => ({ ...prev, [fileId]: { ...prev[fileId], google_file_id: fileId, status: newStatus } }));
+  };
+
+  const refreshFiles = () => {
+    setLoading(true);
+    setFiles([]);
+    // Trigger re-fetch by toggling a dummy state
+    setCurrentFolder(prev => prev);
+    // Force useEffect by setting a new object reference
+    const fetchAgain = async () => {
+      setError(null);
+      try {
+        const providerToken = session?.provider_token;
+        if (!providerToken) { setError("Kein Google Drive Zugriff."); setLoading(false); return; }
+        let query = "trashed=false";
+        if (currentFolder) { query += ` and '${currentFolder}' in parents`; }
+        else { query += " and 'root' in parents"; }
+        const res = await fetch(
+          `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink)&orderBy=folder,name&pageSize=50`,
+          { headers: { Authorization: `Bearer ${providerToken}` } }
+        );
+        if (!res.ok) { setError("Fehler beim Laden."); setLoading(false); return; }
+        const data = await res.json();
+        setFiles(data.files || []);
+        const fileIds = (data.files || []).map(f => f.id);
+        if (fileIds.length > 0) {
+          const { data: metaData } = await supabase.from("file_metadata").select("*").in("google_file_id", fileIds);
+          const metaMap = {};
+          (metaData || []).forEach(m => { metaMap[m.google_file_id] = m; });
+          setMetadata(metaMap);
+        }
+      } catch (err) { setError("Verbindungsfehler."); }
+      setLoading(false);
+    };
+    fetchAgain();
+  };
+
+  const handleUpload = async (fileList) => {
+    const providerToken = session?.provider_token;
+    if (!providerToken) { setError("Kein Google Drive Zugriff. Bitte neu einloggen."); return; }
+    setUploading(true);
+    setUploadProgress({ current: 0, total: fileList.length });
+
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+      setUploadProgress({ current: i + 1, total: fileList.length, name: file.name });
+      try {
+        // Build multipart upload request
+        const metadataObj = { name: file.name };
+        if (currentFolder) { metadataObj.parents = [currentFolder]; }
+
+        const form = new FormData();
+        form.append("metadata", new Blob([JSON.stringify(metadataObj)], { type: "application/json" }));
+        form.append("file", file);
+
+        const res = await fetch(
+          "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink",
+          { method: "POST", headers: { Authorization: `Bearer ${providerToken}` }, body: form }
+        );
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          console.error("Upload error:", errData);
+          if (res.status === 403) {
+            setError("Keine Upload-Berechtigung. Bitte neu einloggen für Drive-Zugriff.");
+            break;
+          }
+        } else {
+          const uploaded = await res.json();
+          // Add to local file list
+          setFiles(prev => [uploaded, ...prev]);
+          // Create default metadata in Supabase
+          await supabase.from("file_metadata").insert({
+            google_file_id: uploaded.id,
+            user_id: session.user.id,
+            status: "Neu",
+          }).then(() => {
+            setMetadata(prev => ({ ...prev, [uploaded.id]: { google_file_id: uploaded.id, status: "Neu" } }));
+          });
+        }
+      } catch (err) {
+        console.error("Upload failed:", err);
+        setError(`Upload fehlgeschlagen: ${file.name}`);
+      }
+    }
+    setUploading(false);
+    setUploadProgress(null);
+    // Reset file input
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleCreateFolder = async () => {
+    const providerToken = session?.provider_token;
+    if (!providerToken) { setError("Kein Google Drive Zugriff."); return; }
+    const folderName = prompt("Ordner Name:");
+    if (!folderName) return;
+
+    try {
+      const metadataObj = {
+        name: folderName,
+        mimeType: "application/vnd.google-apps.folder",
+      };
+      if (currentFolder) { metadataObj.parents = [currentFolder]; }
+
+      const res = await fetch(
+        "https://www.googleapis.com/drive/v3/files?fields=id,name,mimeType,size,modifiedTime,webViewLink",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${providerToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(metadataObj),
+        }
+      );
+      if (res.ok) {
+        const folder = await res.json();
+        setFiles(prev => [folder, ...prev]);
+      } else {
+        setError("Ordner konnte nicht erstellt werden.");
+      }
+    } catch (err) {
+      setError("Fehler beim Ordner erstellen.");
+    }
+  };
 
   return (
     <motion.div
@@ -694,19 +939,43 @@ function FilesView({ onBack }) {
       }}
     >
       <div style={{
-        width: "100%", maxWidth: 680, maxHeight: "80%",
+        width: "100%", maxWidth: 720, maxHeight: "85%",
         background: "rgba(22, 22, 30, 0.75)",
         backdropFilter: "blur(40px)",
         border: "1px solid rgba(255,255,255,0.08)",
         borderRadius: 24, overflow: "hidden",
         display: "flex", flexDirection: "column",
       }}>
+        {/* Header with folder path */}
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.03, duration: 0.3 }}
+          style={{ padding: "14px 20px 0", display: "flex", alignItems: "center", gap: 8 }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+            <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke="#8B7AFF" strokeWidth="1.5" fill="none" />
+          </svg>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontFamily: FONT, color: "#ffffff50", overflow: "hidden" }}>
+            <span onClick={() => { setCurrentFolder(null); setFolderPath([]); }} style={{ cursor: "pointer", color: "#ffffff60" }}>Drive</span>
+            {folderPath.map((fp, i) => (
+              <span key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ color: "#ffffff25" }}>/</span>
+                <span onClick={() => {
+                  setCurrentFolder(fp.id);
+                  setFolderPath(prev => prev.slice(0, i));
+                }} style={{ cursor: "pointer", color: "#ffffff60" }}>{fp.name}</span>
+              </span>
+            ))}
+          </div>
+        </motion.div>
+
         {/* Search bar */}
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05, duration: 0.3 }}
-          style={{ padding: "16px 20px 8px" }}
+          style={{ padding: "10px 20px 8px" }}
         >
           <div style={{
             display: "flex", alignItems: "center", gap: 10,
@@ -741,53 +1010,192 @@ function FilesView({ onBack }) {
 
         {/* File list — scrollable */}
         <div style={{
-          padding: "8px 20px 12px", display: "flex", flexDirection: "column", gap: 6,
+          padding: "4px 20px 12px", display: "flex", flexDirection: "column", gap: 4,
           overflowY: "auto", flex: 1, minHeight: 0,
         }}>
-          {filtered.map((file, i) => (
+          {loading && (
             <motion.div
-              key={file.id}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.08 + i * 0.04, duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
-              className="hover-row"
-              style={{
-                display: "flex", alignItems: "center", gap: 14,
-                padding: "12px 14px", borderRadius: 14,
-                background: "rgba(255,255,255,0.03)",
-                border: "1px solid rgba(255,255,255,0.05)",
-                cursor: "pointer", flexShrink: 0,
-              }}
-            >
-              {/* Thumbnail */}
-              <div style={{
-                width: 44, height: 44, borderRadius: 10,
-                background: `linear-gradient(135deg, ${file.color}40, ${file.color}15)`,
-                border: `1px solid ${file.color}30`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                flexShrink: 0,
-              }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <rect x="3" y="3" width="18" height="18" rx="3" stroke={file.color} strokeWidth="1.5" fill="none" />
-                  <circle cx="8.5" cy="8.5" r="2" fill={file.color} opacity="0.6" />
-                  <path d="M3 16l5-5 4 4 3-3 6 6" stroke={file.color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-              {/* Info */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd", lineHeight: 1.3 }}>{file.name}</div>
-                <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginTop: 2 }}>{file.size} · {file.type}</div>
-              </div>
-            </motion.div>
-          ))}
-          {filtered.length === 0 && (
+              animate={{ opacity: [0.3, 0.7, 0.3] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+              style={{ padding: 40, textAlign: "center", fontSize: 13, fontFamily: FONT, color: "#ffffff40" }}
+            >Loading files from Google Drive...</motion.div>
+          )}
+
+          {error && (
+            <div style={{ padding: 32, textAlign: "center", fontSize: 13, fontFamily: FONT, color: "#E84393" }}>
+              {error}
+            </div>
+          )}
+
+          {!loading && !error && filtered.map((file, i) => {
+            const isFolder = file.mimeType === "application/vnd.google-apps.folder";
+            const color = FILE_TYPE_COLORS[file.mimeType] || FILE_TYPE_COLORS.default;
+            const meta = metadata[file.id];
+            const status = meta?.status || "Neu";
+
+            return (
+              <motion.div
+                key={file.id}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.04 + i * 0.025, duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
+                className="hover-row"
+                onClick={() => {
+                  if (isFolder) { navigateToFolder(file); }
+                  else { setSelectedFile(selectedFile?.id === file.id ? null : file); }
+                }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 14,
+                  padding: "12px 14px", borderRadius: 14,
+                  background: selectedFile?.id === file.id ? "rgba(139, 122, 255, 0.08)" : "rgba(255,255,255,0.03)",
+                  border: `1px solid ${selectedFile?.id === file.id ? "rgba(139, 122, 255, 0.15)" : "rgba(255,255,255,0.05)"}`,
+                  cursor: "pointer", flexShrink: 0,
+                }}
+              >
+                {/* Thumbnail */}
+                <div style={{
+                  width: 44, height: 44, borderRadius: 10,
+                  background: file.thumbnailLink && !isFolder
+                    ? `url(${file.thumbnailLink}) center/cover`
+                    : `linear-gradient(135deg, ${color}40, ${color}15)`,
+                  border: `1px solid ${color}30`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  flexShrink: 0, overflow: "hidden",
+                }}>
+                  {(!file.thumbnailLink || isFolder) && (
+                    isFolder ? (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke={color} strokeWidth="1.5" fill={color + "20"} />
+                      </svg>
+                    ) : (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <rect x="3" y="3" width="18" height="18" rx="3" stroke={color} strokeWidth="1.5" fill="none" />
+                        <circle cx="8.5" cy="8.5" r="2" fill={color} opacity="0.6" />
+                        <path d="M3 16l5-5 4 4 3-3 6 6" stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )
+                  )}
+                </div>
+                {/* Info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd", lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{file.name}</div>
+                  <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
+                    {formatFileSize(file.size)} · {getFileExtension(file.name, file.mimeType)}
+                    {!isFolder && (
+                      <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 6, background: STATUS_COLORS[status] + "15", color: STATUS_COLORS[status], border: `1px solid ${STATUS_COLORS[status]}30` }}>{status}</span>
+                    )}
+                  </div>
+                </div>
+                {/* Arrow for folders */}
+                {isFolder && (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <path d="M9 6l6 6-6 6" stroke="#ffffff30" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                )}
+              </motion.div>
+            );
+          })}
+
+          {!loading && !error && filtered.length === 0 && (
             <div style={{ padding: 32, textAlign: "center", fontSize: 13, fontFamily: FONT, color: "#ffffff30" }}>
-              No files found
+              {files.length === 0 ? "Dieser Ordner ist leer" : "Keine Dateien gefunden"}
             </div>
           )}
         </div>
 
-        {/* Bottom bar — back button */}
+        {/* File detail / status panel */}
+        <AnimatePresence>
+          {selectedFile && !selectedFile.mimeType?.includes("folder") && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
+              style={{ borderTop: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}
+            >
+              <div style={{ padding: "12px 20px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40" }}>Status:</span>
+                {["Neu", "In Prüfung", "Freigegeben", "Kunden-Sichtbar"].map(s => (
+                  <motion.div
+                    key={s}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => updateStatus(selectedFile.id, s)}
+                    style={{
+                      padding: "4px 10px", borderRadius: 8, cursor: "pointer",
+                      fontSize: 11, fontFamily: FONT,
+                      background: (metadata[selectedFile.id]?.status || "Neu") === s ? STATUS_COLORS[s] + "25" : "rgba(255,255,255,0.03)",
+                      color: (metadata[selectedFile.id]?.status || "Neu") === s ? STATUS_COLORS[s] : "#ffffff40",
+                      border: `1px solid ${(metadata[selectedFile.id]?.status || "Neu") === s ? STATUS_COLORS[s] + "40" : "rgba(255,255,255,0.05)"}`,
+                    }}
+                  >{s}</motion.div>
+                ))}
+                {selectedFile.webViewLink && (
+                  <motion.a
+                    href={selectedFile.webViewLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    whileHover={{ scale: 1.02 }}
+                    style={{
+                      marginLeft: "auto", padding: "4px 10px", borderRadius: 8,
+                      fontSize: 11, fontFamily: FONT, color: "#8B7AFF",
+                      background: "rgba(139,122,255,0.1)", border: "1px solid rgba(139,122,255,0.2)",
+                      textDecoration: "none",
+                    }}
+                  >In Google Drive öffnen ↗</motion.a>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Upload progress bar */}
+        <AnimatePresence>
+          {uploading && uploadProgress && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              style={{ borderTop: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}
+            >
+              <div style={{ padding: "10px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  style={{ width: 16, height: 16, border: "2px solid rgba(139,122,255,0.3)", borderTop: "2px solid #8B7AFF", borderRadius: "50%" }}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontFamily: FONT, color: "#ffffffcc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    Uploading: {uploadProgress.name}
+                  </div>
+                  <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff40", marginTop: 2 }}>
+                    {uploadProgress.current} / {uploadProgress.total} Dateien
+                  </div>
+                </div>
+                <div style={{
+                  width: 80, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.06)",
+                  overflow: "hidden",
+                }}>
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+                    style={{ height: "100%", background: "#8B7AFF", borderRadius: 2 }}
+                  />
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Hidden file input for upload */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          onChange={(e) => { if (e.target.files?.length) handleUpload(Array.from(e.target.files)); }}
+          style={{ display: "none" }}
+        />
+
+        {/* Bottom bar */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -797,22 +1205,80 @@ function FilesView({ onBack }) {
             display: "flex", alignItems: "center", justifyContent: "space-between",
           }}
         >
-          <motion.div
-            onClick={onBack}
-            className="hover-back"
-            whileTap={{ scale: 0.97 }}
-            style={{
-              display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
-              padding: "6px 14px", borderRadius: 10,
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <path d="M15 18l-6-6 6-6" stroke="#ffffff50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff50" }}>Back</span>
-          </motion.div>
-          <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff25" }}>
-            {filtered.length} {filtered.length === 1 ? "file" : "files"}
+          <div style={{ display: "flex", gap: 8 }}>
+            <motion.div
+              onClick={onBack}
+              className="hover-back"
+              whileTap={{ scale: 0.97 }}
+              style={{
+                display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
+                padding: "6px 14px", borderRadius: 10,
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <path d="M15 18l-6-6 6-6" stroke="#ffffff50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff50" }}>Back</span>
+            </motion.div>
+            {currentFolder && (
+              <motion.div
+                onClick={navigateBack}
+                className="hover-back"
+                whileTap={{ scale: 0.97 }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6, cursor: "pointer",
+                  padding: "6px 14px", borderRadius: 10,
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                  <path d="M15 18l-6-6 6-6" stroke="#ffffff40" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff40" }}>Ordner zurück</span>
+              </motion.div>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff25", marginRight: 4 }}>
+              {filtered.length} {filtered.length === 1 ? "file" : "files"}
+            </div>
+            {/* New Folder button */}
+            <motion.div
+              onClick={handleCreateFolder}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              style={{
+                padding: "5px 10px", borderRadius: 8, cursor: "pointer",
+                fontSize: 11, fontFamily: FONT, color: "#ffffff60",
+                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                display: "flex", alignItems: "center", gap: 5,
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke="#ffffff50" strokeWidth="1.5" fill="none" />
+                <path d="M12 11v4M10 13h4" stroke="#ffffff50" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              Neuer Ordner
+            </motion.div>
+            {/* Upload button */}
+            <motion.div
+              onClick={() => fileInputRef.current?.click()}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              style={{
+                padding: "5px 12px", borderRadius: 8, cursor: uploading ? "not-allowed" : "pointer",
+                fontSize: 11, fontFamily: FONT, color: uploading ? "#ffffff30" : "#8B7AFF",
+                background: uploading ? "rgba(255,255,255,0.02)" : "rgba(139,122,255,0.1)",
+                border: `1px solid ${uploading ? "rgba(255,255,255,0.05)" : "rgba(139,122,255,0.2)"}`,
+                display: "flex", alignItems: "center", gap: 5,
+                opacity: uploading ? 0.5 : 1,
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                <path d="M12 16V4M12 4l-4 4M12 4l4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              Upload
+            </motion.div>
           </div>
         </motion.div>
       </div>
@@ -1280,6 +1746,7 @@ export default function CircularMenu() {
       provider: "google",
       options: {
         redirectTo: window.location.origin,
+        scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive",
       },
     });
     if (error) setAuthError(error.message);
@@ -1742,7 +2209,7 @@ export default function CircularMenu() {
         {/* FILES VIEW */}
         <AnimatePresence>
           {currentView === "files" && (
-            <FilesView onBack={() => {
+            <FilesView session={session} onBack={() => {
               setCurrentView("dashboard");
               setMenuSource("grid");
               setActiveIndex(4);
