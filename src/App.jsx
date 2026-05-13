@@ -935,11 +935,11 @@ function FilesView({ onBack, session }) {
       style={{
         position: "absolute", inset: 0, display: "flex",
         alignItems: "center", justifyContent: "center",
-        padding: 40,
+        padding: "20px 40px 80px",
       }}
     >
       <div style={{
-        width: "100%", maxWidth: 720, maxHeight: "85%",
+        width: "100%", maxWidth: 720, height: "100%",
         background: "rgba(22, 22, 30, 0.75)",
         backdropFilter: "blur(40px)",
         border: "1px solid rgba(255,255,255,0.08)",
