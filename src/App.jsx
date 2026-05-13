@@ -1940,9 +1940,14 @@ export default function CircularMenu() {
   };
 
   const handleWheel = useCallback((e) => {
-    // Always prevent the container from scrolling
+    // Let views with their own scrolling (files, chat) handle scroll natively
+    if (currentView === "files" || currentView === "chat") {
+      return;
+    }
+
+    // Prevent the container from scrolling on dashboard/menu views
     e.preventDefault();
-    // Always reset scrollTop to prevent drift
+    // Reset scrollTop to prevent drift
     if (containerRef.current) containerRef.current.scrollTop = 0;
 
     // Dashboard: scroll down opens panel, scroll up opens tasks
