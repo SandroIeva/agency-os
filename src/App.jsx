@@ -1131,6 +1131,8 @@ function CalendarView({ onBack, session, getProviderToken }) {
   const [linkCopied, setLinkCopied] = useState(false);
   const [attendees, setAttendees] = useState([]);
   const [attendeeInput, setAttendeeInput] = useState("");
+  const [confirmDeleteEvent, setConfirmDeleteEvent] = useState(null);
+  const [deletingEvent, setDeletingEvent] = useState(false);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -1342,6 +1344,31 @@ function CalendarView({ onBack, session, getProviderToken }) {
     setMeetLink(null);
     setLinkCopied(false);
     setShowNewEvent(false);
+  };
+
+  // Delete / cancel a Google Calendar event
+  const deleteGoogleEvent = async (eventObj) => {
+    if (!eventObj?.id || eventObj.type !== "google") return;
+    const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
+    if (!providerToken) return;
+    setDeletingEvent(true);
+    try {
+      const res = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventObj.id}?sendUpdates=all`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${providerToken}` } }
+      );
+      if (res.ok || res.status === 204) {
+        // Remove from local state
+        setGoogleEvents(prev => prev.filter(e => e.id !== eventObj.id));
+        setConfirmDeleteEvent(null);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        console.error("Delete event error:", res.status, err);
+      }
+    } catch (err) {
+      console.error("Delete event error:", err);
+    }
+    setDeletingEvent(false);
   };
 
   // Create or update Google Calendar event
@@ -1560,10 +1587,21 @@ function CalendarView({ onBack, session, getProviderToken }) {
                     style={{
                       padding: "10px 12px", borderRadius: 10, marginBottom: 6,
                       background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)",
-                      borderLeft: `3px solid ${e.color}`,
+                      borderLeft: `3px solid ${e.color}`, position: "relative", group: "event",
                     }}
                   >
-                    <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd", marginBottom: 3 }}>{e.title}</div>
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6 }}>
+                      <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd", marginBottom: 3, flex: 1 }}>{e.title}</div>
+                      {e.type === "google" && (
+                        <motion.div
+                          whileHover={{ scale: 1.15, background: "rgba(232,67,67,0.15)" }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => setConfirmDeleteEvent(e)}
+                          style={{ cursor: "pointer", width: 22, height: 22, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#ffffff30", flexShrink: 0, transition: "all 0.15s" }}
+                          title="Event absagen"
+                        >✕</motion.div>
+                      )}
+                    </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       {e.start && !e.allDay && (
                         <span style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff45" }}>
@@ -1795,6 +1833,68 @@ function CalendarView({ onBack, session, getProviderToken }) {
                 onClick={createGoogleEvent}
                 style={{ cursor: savingEvent ? "wait" : "pointer", padding: "9px 24px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: "#fff", fontWeight: 500, background: savingEvent ? "rgba(139,122,255,0.15)" : "rgba(139,122,255,0.3)", border: "1px solid rgba(139,122,255,0.4)", opacity: (!eventForm.title.trim() || savingEvent) ? 0.5 : 1 }}>
                 {savingEvent ? "Speichern..." : "Termin erstellen"}
+              </motion.div>
+            </div>
+          </motion.div>
+        </motion.div>,
+        document.body
+      )}
+
+      {/* Delete/Cancel Event Confirmation — rendered via Portal */}
+      {confirmDeleteEvent && createPortal(
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={() => !deletingEvent && setConfirmDeleteEvent(null)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center" }}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
+            onClick={e => e.stopPropagation()}
+            style={{ width: 380, background: "rgba(28,26,42,0.95)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 20, padding: "28px 28px 24px", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}
+          >
+            {/* Warning icon */}
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(232,67,67,0.12)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16, fontSize: 22 }}>⚠️</div>
+
+            <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: "#ffffffdd", marginBottom: 8, letterSpacing: -0.3 }}>Event absagen?</div>
+
+            <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffff60", marginBottom: 6, lineHeight: 1.5 }}>
+              Möchtest du dieses Event wirklich löschen?
+            </div>
+
+            {/* Event preview */}
+            <div style={{ padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", marginBottom: 20, borderLeft: `3px solid ${confirmDeleteEvent.color}` }}>
+              <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: "#ffffffcc" }}>{confirmDeleteEvent.title}</div>
+              {confirmDeleteEvent.start && !confirmDeleteEvent.allDay && (
+                <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginTop: 3 }}>
+                  {new Date(confirmDeleteEvent.start).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+                  {confirmDeleteEvent.end && ` – ${new Date(confirmDeleteEvent.end).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`}
+                </div>
+              )}
+              {confirmDeleteEvent.allDay && (
+                <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff35", marginTop: 3 }}>Ganztägig</div>
+              )}
+            </div>
+
+            <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginBottom: 16 }}>
+              Alle Teilnehmer werden per E-Mail benachrichtigt.
+            </div>
+
+            {/* Buttons */}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                onClick={() => !deletingEvent && setConfirmDeleteEvent(null)}
+                style={{ cursor: "pointer", padding: "9px 20px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: "#ffffff60", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                Behalten
+              </motion.div>
+              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                onClick={() => deleteGoogleEvent(confirmDeleteEvent)}
+                style={{ cursor: deletingEvent ? "wait" : "pointer", padding: "9px 24px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: "#fff", fontWeight: 500, background: deletingEvent ? "rgba(232,67,67,0.15)" : "rgba(232,67,67,0.25)", border: "1px solid rgba(232,67,67,0.4)", opacity: deletingEvent ? 0.5 : 1 }}>
+                {deletingEvent ? "Löschen..." : "Event absagen"}
               </motion.div>
             </div>
           </motion.div>
