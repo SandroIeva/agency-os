@@ -1656,7 +1656,7 @@ function CalendarView({ onBack, session, getProviderToken }) {
                       {holiday && (
                         <>
                           <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#F59E0B", flexShrink: 0, marginLeft: 4 }} />
-                          <span style={{ fontSize: 10, fontFamily: FONT, color: "#F59E0B", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{holiday}</span>
+                          <span style={{ fontSize: 11, fontFamily: FONT, color: "#F59E0B", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{holiday}</span>
                         </>
                       )}
                     </div>
