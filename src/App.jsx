@@ -1129,6 +1129,8 @@ function CalendarView({ onBack, session, getProviderToken }) {
   const [meetLoading, setMeetLoading] = useState(false);
   const [tempEventId, setTempEventId] = useState(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [attendees, setAttendees] = useState([]);
+  const [attendeeInput, setAttendeeInput] = useState("");
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -1267,6 +1269,8 @@ function CalendarView({ onBack, session, getProviderToken }) {
     setMeetLink(null);
     setTempEventId(null);
     setLinkCopied(false);
+    setAttendees([]);
+    setAttendeeInput("");
     setShowNewEvent(true);
   };
 
@@ -1348,6 +1352,9 @@ function CalendarView({ onBack, session, getProviderToken }) {
     setSavingEvent(true);
     try {
       const body = { summary: eventForm.title.trim(), description: eventForm.description };
+      if (attendees.length > 0) {
+        body.attendees = attendees.map(email => ({ email }));
+      }
       if (eventForm.allDay) {
         body.start = { date: eventForm.date };
         const nextDay = new Date(eventForm.date);
@@ -1362,7 +1369,9 @@ function CalendarView({ onBack, session, getProviderToken }) {
       let res;
       if (tempEventId) {
         // Update the temp event that was created for the Meet link
-        res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${tempEventId}?conferenceDataVersion=1`, {
+        const patchParams = new URLSearchParams({ conferenceDataVersion: "1" });
+        if (attendees.length > 0) patchParams.set("sendUpdates", "all");
+        res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${tempEventId}?${patchParams.toString()}`, {
           method: "PATCH",
           headers: { Authorization: `Bearer ${providerToken}`, "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -1377,8 +1386,12 @@ function CalendarView({ onBack, session, getProviderToken }) {
             },
           };
         }
-        const conferenceParam = eventForm.withMeet ? "?conferenceDataVersion=1" : "";
-        res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events${conferenceParam}`, {
+        const conferenceParam = eventForm.withMeet ? "?conferenceDataVersion=1" : "?";
+        const params = new URLSearchParams();
+        if (eventForm.withMeet) params.set("conferenceDataVersion", "1");
+        if (attendees.length > 0) params.set("sendUpdates", "all");
+        const qs = params.toString() ? `?${params.toString()}` : "";
+        res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events${qs}`, {
           method: "POST",
           headers: { Authorization: `Bearer ${providerToken}`, "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -1672,6 +1685,69 @@ function CalendarView({ onBack, session, getProviderToken }) {
                 >
                   {linkCopied ? "✓ Kopiert" : "Kopieren"}
                 </motion.div>
+              </motion.div>
+            )}
+
+            {/* Attendees (shown when Meet is on) */}
+            {eventForm.withMeet && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                style={{ marginBottom: 12 }}
+              >
+                <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff40", marginBottom: 6 }}>Teilnehmer</div>
+                {/* Attendee chips */}
+                {attendees.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                    {attendees.map((email, i) => (
+                      <motion.div key={i}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px 4px 12px", borderRadius: 20, background: "rgba(139,122,255,0.1)", border: "1px solid rgba(139,122,255,0.2)", fontSize: 12, fontFamily: FONT, color: "#ffffffcc" }}
+                      >
+                        <span>{email}</span>
+                        <motion.span
+                          whileHover={{ scale: 1.2 }}
+                          onClick={() => setAttendees(a => a.filter((_, idx) => idx !== i))}
+                          style={{ cursor: "pointer", color: "#ffffff40", fontSize: 14, lineHeight: 1 }}
+                        >×</motion.span>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+                {/* Input */}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    value={attendeeInput}
+                    onChange={e => setAttendeeInput(e.target.value)}
+                    onKeyDown={e => {
+                      if ((e.key === "Enter" || e.key === ",") && attendeeInput.trim()) {
+                        e.preventDefault();
+                        const email = attendeeInput.trim().replace(/,$/,"");
+                        if (email && email.includes("@") && !attendees.includes(email)) {
+                          setAttendees(a => [...a, email]);
+                        }
+                        setAttendeeInput("");
+                      }
+                    }}
+                    placeholder="E-Mail eingeben + Enter"
+                    style={{ flex: 1, padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#ffffffdd", fontSize: 12, fontFamily: FONT, outline: "none", boxSizing: "border-box" }}
+                  />
+                  <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      const email = attendeeInput.trim().replace(/,$/,"");
+                      if (email && email.includes("@") && !attendees.includes(email)) {
+                        setAttendees(a => [...a, email]);
+                      }
+                      setAttendeeInput("");
+                    }}
+                    style={{ cursor: "pointer", padding: "8px 14px", borderRadius: 10, fontSize: 12, fontFamily: FONT, color: "#8B7AFF", background: "rgba(139,122,255,0.1)", border: "1px solid rgba(139,122,255,0.2)", whiteSpace: "nowrap" }}
+                  >
+                    Hinzufügen
+                  </motion.div>
+                </div>
               </motion.div>
             )}
 
