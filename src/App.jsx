@@ -1650,27 +1650,27 @@ function CalendarView({ onBack, session, getProviderToken }) {
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
                       <span style={{
-                        fontSize: 12, fontFamily: FONT, fontWeight: todayHighlight ? 600 : 400,
+                        fontSize: 13, fontFamily: FONT, fontWeight: todayHighlight ? 600 : 400,
                         color: todayHighlight ? "#8B7AFF" : weekend ? "#ffffff40" : isSelected ? "#ffffffcc" : "#ffffff70",
                       }}>{dayObj.day}</span>
                       {holiday && (
                         <>
                           <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#F59E0B", flexShrink: 0 }} />
-                          <span style={{ fontSize: 8, fontFamily: FONT, color: "#F59E0B", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{holiday}</span>
+                          <span style={{ fontSize: 10, fontFamily: FONT, color: "#F59E0B", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{holiday}</span>
                         </>
                       )}
                     </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 2, overflow: "hidden", flex: 1 }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3, overflow: "hidden", flex: 1 }}>
                       {events.slice(0, 3).map((e, ei) => (
                         <div key={ei} style={{
-                          fontSize: 9, fontFamily: FONT, color: e.color,
+                          fontSize: 11, fontFamily: FONT, color: e.color,
                           background: e.color + "15", borderRadius: 4,
-                          padding: "1px 4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                          padding: "2px 5px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                           borderLeft: `2px solid ${e.color}`,
                         }}>{e.title}</div>
                       ))}
                       {events.length > 3 && (
-                        <div style={{ fontSize: 9, fontFamily: FONT, color: "#ffffff30" }}>+{events.length - 3} mehr</div>
+                        <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30" }}>+{events.length - 3} mehr</div>
                       )}
                     </div>
                   </motion.div>
