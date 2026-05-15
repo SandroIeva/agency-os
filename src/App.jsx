@@ -1116,7 +1116,7 @@ function KanbanBoard({ onBack, session }) {
 const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const MONTH_NAMES = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
 
-function CalendarView({ onBack, session, getProviderToken }) {
+function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
   const [viewMode, setViewMode] = useState("month"); // "month" | "week" | "day"
@@ -1737,8 +1737,8 @@ function CalendarView({ onBack, session, getProviderToken }) {
                         )}
                         {e.allDay && <div style={{ fontSize: 9, fontFamily: FONT, color: "#ffffff30" }}>Ganztägig</div>}
                         {e.hangoutLink && (
-                          <a href={e.hangoutLink} target="_blank" rel="noopener noreferrer"
-                            style={{ fontSize: 9, fontFamily: FONT, color: "#00B894", textDecoration: "none", marginTop: 2, display: "block" }}>🔗 Meet</a>
+                          <div onClick={(ev) => { ev.stopPropagation(); openMeetCall(e.hangoutLink, e.title); }}
+                            style={{ fontSize: 9, fontFamily: FONT, color: "#00B894", cursor: "pointer", marginTop: 2 }}>🔗 Meet</div>
                         )}
                       </motion.div>
                     ))}
@@ -1825,10 +1825,11 @@ function CalendarView({ onBack, session, getProviderToken }) {
                           {e.location && <span style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30" }}>📍 {e.location}</span>}
                         </div>
                         {e.hangoutLink && (
-                          <motion.a href={e.hangoutLink} target="_blank" rel="noopener noreferrer"
+                          <motion.div
                             whileHover={{ scale: 1.02 }}
-                            style={{ display: "inline-block", fontSize: 11, fontFamily: FONT, color: "#00B894", marginTop: 6, textDecoration: "none", padding: "3px 10px", borderRadius: 6, background: "rgba(0,184,148,0.08)", border: "1px solid rgba(0,184,148,0.15)" }}
-                          >🔗 Google Meet beitreten</motion.a>
+                            onClick={() => openMeetCall(e.hangoutLink, e.title)}
+                            style={{ display: "inline-block", fontSize: 11, fontFamily: FONT, color: "#00B894", marginTop: 6, cursor: "pointer", padding: "3px 10px", borderRadius: 6, background: "rgba(0,184,148,0.08)", border: "1px solid rgba(0,184,148,0.15)" }}
+                          >🔗 Google Meet beitreten</motion.div>
                         )}
                       </div>
                       {/* Delete button for Google events */}
@@ -1928,10 +1929,11 @@ function CalendarView({ onBack, session, getProviderToken }) {
                       <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30", marginTop: 4 }}>📍 {e.location}</div>
                     )}
                     {e.hangoutLink && (
-                      <motion.a href={e.hangoutLink} target="_blank" rel="noopener noreferrer"
+                      <motion.div
                         whileHover={{ scale: 1.02 }}
-                        style={{ display: "inline-block", fontSize: 10, fontFamily: FONT, color: "#00B894", marginTop: 4, textDecoration: "none" }}
-                      >🔗 Google Meet beitreten</motion.a>
+                        onClick={() => openMeetCall(e.hangoutLink, e.title)}
+                        style={{ display: "inline-block", fontSize: 11, fontFamily: FONT, color: "#00B894", marginTop: 6, cursor: "pointer", padding: "3px 10px", borderRadius: 6, background: "rgba(0,184,148,0.08)", border: "1px solid rgba(0,184,148,0.15)" }}
+                      >🔗 Google Meet beitreten</motion.div>
                     )}
                   </motion.div>
                 ))}
@@ -3262,6 +3264,48 @@ export default function CircularMenu() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [activeMeetCall, setActiveMeetCall] = useState(null); // { link, title, windowRef }
+  const meetWindowRef = useRef(null);
+
+  // Open Meet in popup window
+  const openMeetCall = useCallback((link, title) => {
+    // Close existing call window if any
+    if (meetWindowRef.current && !meetWindowRef.current.closed) {
+      meetWindowRef.current.focus();
+      return;
+    }
+    const w = 900, h = 600;
+    const left = (window.screen.width - w) / 2;
+    const top = (window.screen.height - h) / 2;
+    const win = window.open(link, "agencyos-meet", `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no,location=no,status=no`);
+    meetWindowRef.current = win;
+    setActiveMeetCall({ link, title: title || "Google Meet" });
+
+    // Poll to detect when window is closed
+    const check = setInterval(() => {
+      if (!win || win.closed) {
+        clearInterval(check);
+        meetWindowRef.current = null;
+        setActiveMeetCall(null);
+      }
+    }, 1500);
+  }, []);
+
+  // Focus existing meet window
+  const focusMeetCall = useCallback(() => {
+    if (meetWindowRef.current && !meetWindowRef.current.closed) {
+      meetWindowRef.current.focus();
+    }
+  }, []);
+
+  // End meet call
+  const endMeetCall = useCallback(() => {
+    if (meetWindowRef.current && !meetWindowRef.current.closed) {
+      meetWindowRef.current.close();
+    }
+    meetWindowRef.current = null;
+    setActiveMeetCall(null);
+  }, []);
 
   // Auth state
   const [session, setSession] = useState(null);
@@ -3774,7 +3818,7 @@ export default function CircularMenu() {
         {/* CALENDAR VIEW */}
         <AnimatePresence>
           {currentView === "calendar" && (
-            <CalendarView session={session} getProviderToken={getProviderToken} onBack={() => setCurrentView("dashboard")} />
+            <CalendarView session={session} getProviderToken={getProviderToken} openMeetCall={openMeetCall} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
@@ -4477,6 +4521,48 @@ export default function CircularMenu() {
 
             {/* Drag handle at bottom */}
             <div onClick={() => setTasksOpen(false)} style={{ width: 36, height: 4, borderRadius: 2, background: "#ffffff18", margin: "24px auto 0", cursor: "pointer" }} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Active Meet Call Indicator */}
+      <AnimatePresence>
+        {activeMeetCall && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            style={{
+              position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 100,
+              display: "flex", alignItems: "center", gap: 10, padding: "8px 16px",
+              borderRadius: 30, background: "rgba(0,184,148,0.15)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+              border: "1px solid rgba(0,184,148,0.25)", boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+            }}
+          >
+            {/* Pulsing dot */}
+            <div style={{ position: "relative", width: 10, height: 10 }}>
+              <motion.div
+                animate={{ scale: [1, 1.6, 1], opacity: [0.8, 0, 0.8] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+                style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "#00B894" }}
+              />
+              <div style={{ position: "absolute", inset: 2, borderRadius: "50%", background: "#00B894" }} />
+            </div>
+            <span style={{ fontSize: 12, fontFamily: "Inter, system-ui, sans-serif", color: "#00B894", fontWeight: 500 }}>
+              {activeMeetCall.title}
+            </span>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={focusMeetCall}
+              style={{ cursor: "pointer", padding: "3px 10px", borderRadius: 8, fontSize: 11, fontFamily: "Inter, system-ui, sans-serif", color: "#ffffffcc", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)" }}
+            >Öffnen</motion.div>
+            <motion.div
+              whileHover={{ scale: 1.05, background: "rgba(232,67,67,0.2)" }}
+              whileTap={{ scale: 0.95 }}
+              onClick={endMeetCall}
+              style={{ cursor: "pointer", padding: "3px 10px", borderRadius: 8, fontSize: 11, fontFamily: "Inter, system-ui, sans-serif", color: "#E84363", background: "rgba(232,67,67,0.08)", border: "1px solid rgba(232,67,67,0.15)", transition: "all 0.15s" }}
+            >Beenden</motion.div>
           </motion.div>
         )}
       </AnimatePresence>
