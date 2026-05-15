@@ -3316,8 +3316,52 @@ export default function CircularMenu() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem("agencyos-dark-mode");
+    return saved !== null ? JSON.parse(saved) : true; // default dark
+  });
   const [activeMeetCall, setActiveMeetCall] = useState(null); // { link, title, windowRef }
   const meetWindowRef = useRef(null);
+
+  // Persist dark mode preference
+  useEffect(() => { localStorage.setItem("agencyos-dark-mode", JSON.stringify(darkMode)); }, [darkMode]);
+
+  // Theme based on dark/light mode
+  const theme = darkMode ? {
+    bg: "#111117",
+    cardBg: "rgba(22, 22, 30, 0.92)",
+    text: "#ffffffCC",
+    textDim: "#ffffff40",
+    textFaint: "#ffffff25",
+    textSub: "#ffffff60",
+    border: "rgba(255,255,255,0.1)",
+    borderFaint: "rgba(255,255,255,0.06)",
+    hoverBg: "rgba(255,255,255,0.05)",
+    overlay: "rgba(0,0,0,0.4)",
+    accent: "#8B7AFF",
+    accentBg: "rgba(139,122,255,0.15)",
+    accentBorder: "rgba(139,122,255,0.35)",
+    svgFill: "white",
+    svgStroke: "#ffffff60",
+    iconColor: "#717678",
+  } : {
+    bg: "#F5F5F7",
+    cardBg: "rgba(255, 255, 255, 0.92)",
+    text: "#1a1a2eCC",
+    textDim: "#1a1a2e60",
+    textFaint: "#1a1a2e30",
+    textSub: "#1a1a2e80",
+    border: "rgba(0,0,0,0.1)",
+    borderFaint: "rgba(0,0,0,0.06)",
+    hoverBg: "rgba(0,0,0,0.04)",
+    overlay: "rgba(255,255,255,0.5)",
+    accent: "#6C5CE7",
+    accentBg: "rgba(108,92,231,0.1)",
+    accentBorder: "rgba(108,92,231,0.3)",
+    svgFill: "#1a1a2e",
+    svgStroke: "#1a1a2e80",
+    iconColor: "#555555",
+  };
 
   // Open Meet in popup window
   const openMeetCall = useCallback((link, title) => {
@@ -3772,9 +3816,9 @@ export default function CircularMenu() {
 
   return (
     <div ref={containerRef} style={{
-      width: "100%", height: "100vh", background: COLORS.bg, position: "relative",
+      width: "100%", height: "100vh", background: theme.bg, position: "relative",
       overflow: "hidden", display: "flex", flexDirection: "column",
-      userSelect: "none", borderRadius: 12,
+      userSelect: "none", borderRadius: 12, transition: "background-color 0.4s ease",
     }}>
       <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet" />
       <DotGrid />
@@ -4720,7 +4764,7 @@ export default function CircularMenu() {
             onClick={() => setProfileOpen(false)}
             style={{
               position: "absolute", inset: 0, zIndex: 90,
-              background: "rgba(0,0,0,0.4)",
+              background: theme.overlay,
               backdropFilter: "blur(8px)",
             }}
           >
@@ -4733,14 +4777,14 @@ export default function CircularMenu() {
               style={{
                 position: "absolute", bottom: 80, left: 24,
                 width: 320,
-                background: "rgba(22, 22, 30, 0.92)",
+                background: theme.cardBg,
                 backdropFilter: "blur(40px)",
-                border: "1px solid rgba(255,255,255,0.1)",
+                border: `1px solid ${theme.border}`,
                 borderRadius: 20, overflow: "hidden",
               }}
             >
               {/* Profile header */}
-              <div style={{ padding: "24px 24px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+              <div style={{ padding: "24px 24px 20px", borderBottom: `1px solid ${theme.borderFaint}` }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                   {userAvatar ? (
                     <img src={userAvatar} alt="" referrerPolicy="no-referrer" style={{ width: 48, height: 48, borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)" }} />
@@ -4753,10 +4797,10 @@ export default function CircularMenu() {
                     }}>{(userName || "?")[0]}</div>
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: "#ffffffdd", lineHeight: 1.3 }}>
+                    <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, lineHeight: 1.3 }}>
                       {userName || "User"}
                     </div>
-                    <div style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff45", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {userEmail}
                     </div>
                   </div>
@@ -4765,84 +4809,106 @@ export default function CircularMenu() {
 
               {/* Settings items */}
               <div style={{ padding: "8px 8px" }}>
-                {/* Appearance */}
+                {/* Appearance — Dark/Light toggle */}
                 <motion.div
-                  whileHover={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+                  whileHover={{ backgroundColor: theme.hoverBg }}
+                  onClick={() => setDarkMode(!darkMode)}
                   style={{
                     display: "flex", alignItems: "center", gap: 12,
                     padding: "12px 16px", borderRadius: 12, cursor: "pointer",
                   }}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="4" stroke="#ffffff60" strokeWidth="1.5" />
-                    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="#ffffff60" strokeWidth="1.5" strokeLinecap="round" />
+                    {darkMode ? (
+                      <>
+                        <circle cx="12" cy="12" r="4" stroke={theme.svgStroke} strokeWidth="1.5" />
+                        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke={theme.svgStroke} strokeWidth="1.5" strokeLinecap="round" />
+                      </>
+                    ) : (
+                      <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" stroke={theme.svgStroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    )}
                   </svg>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffffcc" }}>Appearance</div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff35", marginTop: 1 }}>Dark Mode</div>
+                    <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>Appearance</div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{darkMode ? "Dark Mode" : "Light Mode"}</div>
                   </div>
-                  <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff25" }}>Coming soon</div>
+                  {/* Toggle switch */}
+                  <div onClick={(e) => { e.stopPropagation(); setDarkMode(!darkMode); }} style={{
+                    width: 40, height: 22, borderRadius: 11, padding: 2,
+                    background: darkMode ? "rgba(139,122,255,0.5)" : "rgba(0,0,0,0.15)",
+                    cursor: "pointer", transition: "background 0.3s ease",
+                    display: "flex", alignItems: "center",
+                  }}>
+                    <motion.div
+                      animate={{ x: darkMode ? 18 : 0 }}
+                      transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                      style={{
+                        width: 18, height: 18, borderRadius: 9,
+                        background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                      }}
+                    />
+                  </div>
                 </motion.div>
 
                 {/* Language */}
                 <motion.div
-                  whileHover={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+                  whileHover={{ backgroundColor: theme.hoverBg }}
                   style={{
                     display: "flex", alignItems: "center", gap: 12,
                     padding: "12px 16px", borderRadius: 12, cursor: "pointer",
                   }}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="9" stroke="#ffffff60" strokeWidth="1.5" />
-                    <path d="M3 12h18M12 3c-2.5 3-3.5 6-3.5 9s1 6 3.5 9M12 3c2.5 3 3.5 6 3.5 9s-1 6-3.5 9" stroke="#ffffff60" strokeWidth="1.5" />
+                    <circle cx="12" cy="12" r="9" stroke={theme.svgStroke} strokeWidth="1.5" />
+                    <path d="M3 12h18M12 3c-2.5 3-3.5 6-3.5 9s1 6 3.5 9M12 3c2.5 3 3.5 6 3.5 9s-1 6-3.5 9" stroke={theme.svgStroke} strokeWidth="1.5" />
                   </svg>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffffcc" }}>Language</div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff35", marginTop: 1 }}>Deutsch / English</div>
+                    <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>Language</div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>Deutsch / English</div>
                   </div>
-                  <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff25" }}>Coming soon</div>
+                  <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>Coming soon</div>
                 </motion.div>
 
                 {/* Notifications */}
                 <motion.div
-                  whileHover={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+                  whileHover={{ backgroundColor: theme.hoverBg }}
                   style={{
                     display: "flex", alignItems: "center", gap: 12,
                     padding: "12px 16px", borderRadius: 12, cursor: "pointer",
                   }}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 22c1.1 0 2-.9 2-2h-4a2 2 0 002 2zM18 16v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" stroke="#ffffff60" strokeWidth="1.5" fill="none" />
+                    <path d="M12 22c1.1 0 2-.9 2-2h-4a2 2 0 002 2zM18 16v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" stroke={theme.svgStroke} strokeWidth="1.5" fill="none" />
                   </svg>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffffcc" }}>Notifications</div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff35", marginTop: 1 }}>Push & Sound</div>
+                    <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>Notifications</div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>Push & Sound</div>
                   </div>
-                  <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff25" }}>Coming soon</div>
+                  <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>Coming soon</div>
                 </motion.div>
 
                 {/* Connected Apps */}
                 <motion.div
-                  whileHover={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+                  whileHover={{ backgroundColor: theme.hoverBg }}
                   style={{
                     display: "flex", alignItems: "center", gap: 12,
                     padding: "12px 16px", borderRadius: 12, cursor: "pointer",
                   }}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="#ffffff60" strokeWidth="1.5" strokeLinecap="round" />
-                    <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="#ffffff60" strokeWidth="1.5" strokeLinecap="round" />
+                    <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke={theme.svgStroke} strokeWidth="1.5" strokeLinecap="round" />
+                    <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke={theme.svgStroke} strokeWidth="1.5" strokeLinecap="round" />
                   </svg>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffffcc" }}>Connected Apps</div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff35", marginTop: 1 }}>Google, Slack, LLMs</div>
+                    <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>Connected Apps</div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>Google, Slack, LLMs</div>
                   </div>
-                  <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff25" }}>Coming soon</div>
+                  <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>Coming soon</div>
                 </motion.div>
               </div>
 
               {/* Logout */}
-              <div style={{ padding: "4px 8px 12px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+              <div style={{ padding: "4px 8px 12px", borderTop: `1px solid ${theme.borderFaint}` }}>
                 <motion.div
                   onClick={() => { handleLogout(); setProfileOpen(false); }}
                   whileHover={{ backgroundColor: "rgba(232, 67, 67, 0.08)" }}
@@ -4863,7 +4929,7 @@ export default function CircularMenu() {
 
               {/* Version */}
               <div style={{ padding: "0 24px 14px", textAlign: "center" }}>
-                <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff15" }}>Agency OS v0.1.0</div>
+                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>Agency OS v0.1.0</div>
               </div>
             </motion.div>
           </motion.div>
