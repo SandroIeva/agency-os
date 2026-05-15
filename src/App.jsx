@@ -1570,9 +1570,9 @@ function CalendarView({ onBack, session, getProviderToken }) {
                   onDoubleClick={() => { if (!dayObj.isOtherMonth) { setSelectedDay(dayObj); openNewEvent(dayObj); } }}
                   style={{
                     padding: "4px 6px", borderRadius: 10, cursor: dayObj.isOtherMonth ? "default" : "pointer",
-                    background: isSelected ? "rgba(139,122,255,0.15)" : todayHighlight ? "rgba(139,122,255,0.08)" : holiday ? "rgba(232,67,67,0.06)" : weekend ? "rgba(255,255,255,0.01)" : "rgba(20,18,30,0.65)",
+                    background: isSelected ? "rgba(139,122,255,0.15)" : todayHighlight ? "rgba(139,122,255,0.08)" : weekend ? "rgba(255,255,255,0.01)" : "rgba(20,18,30,0.65)",
                     backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-                    border: isSelected ? "1px solid rgba(139,122,255,0.3)" : todayHighlight ? "1px solid rgba(139,122,255,0.15)" : holiday ? "1px solid rgba(232,67,67,0.12)" : "1px solid rgba(255,255,255,0.05)",
+                    border: isSelected ? "1px solid rgba(139,122,255,0.3)" : todayHighlight ? "1px solid rgba(139,122,255,0.15)" : "1px solid rgba(255,255,255,0.05)",
                     display: "flex", flexDirection: "column", minHeight: 54, transition: "all 0.15s",
                     opacity: dayObj.isOtherMonth ? 0.25 : 1,
                   }}
@@ -1580,10 +1580,13 @@ function CalendarView({ onBack, session, getProviderToken }) {
                   <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
                     <span style={{
                       fontSize: 12, fontFamily: FONT, fontWeight: todayHighlight ? 600 : 400,
-                      color: todayHighlight ? "#8B7AFF" : holiday ? "#E84363" : weekend ? "#ffffff40" : isSelected ? "#ffffffcc" : "#ffffff70",
+                      color: todayHighlight ? "#8B7AFF" : weekend ? "#ffffff40" : isSelected ? "#ffffffcc" : "#ffffff70",
                     }}>{dayObj.day}</span>
                     {holiday && (
-                      <span style={{ fontSize: 8, fontFamily: FONT, color: "#E84363", opacity: 0.7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{holiday}</span>
+                      <>
+                        <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#F59E0B", flexShrink: 0 }} />
+                        <span style={{ fontSize: 8, fontFamily: FONT, color: "#F59E0B", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{holiday}</span>
+                      </>
                     )}
                   </div>
                   {/* Event dots */}
@@ -1628,8 +1631,9 @@ function CalendarView({ onBack, session, getProviderToken }) {
                   {selectedEvents.length === 0 ? "Keine Termine" : `${selectedEvents.length} ${selectedEvents.length === 1 ? "Termin" : "Termine"}`}
                 </div>
                 {getHoliday(selectedDay) && (
-                  <div style={{ marginTop: 6, padding: "4px 10px", borderRadius: 6, background: "rgba(232,67,99,0.1)", border: "1px solid rgba(232,67,99,0.15)", fontSize: 11, fontFamily: FONT, color: "#E84363", display: "inline-block" }}>
-                    🇩🇪 {getHoliday(selectedDay)}
+                  <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#F59E0B", flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, fontFamily: FONT, color: "#F59E0B" }}>{getHoliday(selectedDay)}</span>
                   </div>
                 )}
               </div>
