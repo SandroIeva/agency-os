@@ -1123,7 +1123,7 @@ function CalendarView({ onBack, session, getProviderToken }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showNewEvent, setShowNewEvent] = useState(false);
-  const [eventForm, setEventForm] = useState({ title: "", date: "", startTime: "09:00", endTime: "10:00", description: "", allDay: false });
+  const [eventForm, setEventForm] = useState({ title: "", date: "", startTime: "09:00", endTime: "10:00", description: "", allDay: false, withMeet: false });
   const [savingEvent, setSavingEvent] = useState(false);
 
   const year = currentDate.getFullYear();
@@ -1259,7 +1259,7 @@ function CalendarView({ onBack, session, getProviderToken }) {
     const dateStr = dayObj
       ? `${y}-${String(m + 1).padStart(2, "0")}-${String(dayObj.day).padStart(2, "0")}`
       : `${year}-${String(month + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    setEventForm({ title: "", date: dateStr, startTime: "09:00", endTime: "10:00", description: "", allDay: false });
+    setEventForm({ title: "", date: dateStr, startTime: "09:00", endTime: "10:00", description: "", allDay: false, withMeet: false });
     setShowNewEvent(true);
   };
 
@@ -1282,7 +1282,17 @@ function CalendarView({ onBack, session, getProviderToken }) {
         body.start = { dateTime: `${eventForm.date}T${eventForm.startTime}:00`, timeZone: tz };
         body.end = { dateTime: `${eventForm.date}T${eventForm.endTime}:00`, timeZone: tz };
       }
-      const res = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
+      // Add Google Meet if toggled
+      if (eventForm.withMeet) {
+        body.conferenceData = {
+          createRequest: {
+            requestId: `meet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            conferenceSolutionKey: { type: "hangoutsMeet" },
+          },
+        };
+      }
+      const conferenceParam = eventForm.withMeet ? "?conferenceDataVersion=1" : "";
+      const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events${conferenceParam}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${providerToken}`, "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -1521,17 +1531,33 @@ function CalendarView({ onBack, session, getProviderToken }) {
               style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#ffffffdd", fontSize: 13, fontFamily: FONT, outline: "none", marginBottom: 12, boxSizing: "border-box", colorScheme: "dark" }}
             />
 
-            {/* All day toggle */}
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                onClick={() => setEventForm(f => ({ ...f, allDay: !f.allDay }))}
-                style={{ width: 36, height: 20, borderRadius: 10, background: eventForm.allDay ? "rgba(139,122,255,0.4)" : "rgba(255,255,255,0.08)", cursor: "pointer", position: "relative", transition: "background 0.2s" }}
-              >
-                <motion.div animate={{ x: eventForm.allDay ? 17 : 2 }} transition={{ duration: 0.2 }}
-                  style={{ width: 16, height: 16, borderRadius: "50%", background: eventForm.allDay ? "#8B7AFF" : "#ffffff50", position: "absolute", top: 2 }} />
-              </motion.div>
-              <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff70" }}>Ganztägig</span>
+            {/* Toggles row */}
+            <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 12 }}>
+              {/* All day toggle */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  onClick={() => setEventForm(f => ({ ...f, allDay: !f.allDay }))}
+                  style={{ width: 36, height: 20, borderRadius: 10, background: eventForm.allDay ? "rgba(139,122,255,0.4)" : "rgba(255,255,255,0.08)", cursor: "pointer", position: "relative", transition: "background 0.2s" }}
+                >
+                  <motion.div animate={{ x: eventForm.allDay ? 17 : 2 }} transition={{ duration: 0.2 }}
+                    style={{ width: 16, height: 16, borderRadius: "50%", background: eventForm.allDay ? "#8B7AFF" : "#ffffff50", position: "absolute", top: 2 }} />
+                </motion.div>
+                <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff70" }}>Ganztägig</span>
+              </div>
+
+              {/* Google Meet toggle */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  onClick={() => setEventForm(f => ({ ...f, withMeet: !f.withMeet }))}
+                  style={{ width: 36, height: 20, borderRadius: 10, background: eventForm.withMeet ? "rgba(0,184,148,0.4)" : "rgba(255,255,255,0.08)", cursor: "pointer", position: "relative", transition: "background 0.2s" }}
+                >
+                  <motion.div animate={{ x: eventForm.withMeet ? 17 : 2 }} transition={{ duration: 0.2 }}
+                    style={{ width: 16, height: 16, borderRadius: "50%", background: eventForm.withMeet ? "#00B894" : "#ffffff50", position: "absolute", top: 2 }} />
+                </motion.div>
+                <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff70" }}>Google Meet</span>
+              </div>
             </div>
 
             {/* Time pickers (hidden when all-day) */}
