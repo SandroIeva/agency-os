@@ -1119,6 +1119,7 @@ const MONTH_NAMES = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli
 function CalendarView({ onBack, session, getProviderToken }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
+  const [viewMode, setViewMode] = useState("month"); // "month" | "week" | "day"
   const [googleEvents, setGoogleEvents] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1302,9 +1303,61 @@ function CalendarView({ onBack, session, getProviderToken }) {
     return !dayObj.isOtherMonth && dayObj.day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
   };
 
-  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
-  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+  // Navigation depends on viewMode
+  const navigatePrev = () => {
+    if (viewMode === "month") setCurrentDate(new Date(year, month - 1, 1));
+    else if (viewMode === "week") { const d = new Date(currentDate); d.setDate(d.getDate() - 7); setCurrentDate(d); }
+    else { const d = new Date(currentDate); d.setDate(d.getDate() - 1); setCurrentDate(d); }
+  };
+  const navigateNext = () => {
+    if (viewMode === "month") setCurrentDate(new Date(year, month + 1, 1));
+    else if (viewMode === "week") { const d = new Date(currentDate); d.setDate(d.getDate() + 7); setCurrentDate(d); }
+    else { const d = new Date(currentDate); d.setDate(d.getDate() + 1); setCurrentDate(d); }
+  };
   const goToday = () => { setCurrentDate(new Date()); setSelectedDay(null); };
+
+  // Week view helpers
+  const getWeekDays = () => {
+    const d = new Date(currentDate);
+    const dayOfWeek = (d.getDay() + 6) % 7; // Monday = 0
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - dayOfWeek);
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(monday);
+      day.setDate(monday.getDate() + i);
+      days.push(day);
+    }
+    return days;
+  };
+
+  // Get events for a Date object
+  const getEventsForDate = (date) => {
+    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    const dayEvents = [];
+    googleEvents.forEach(e => { if ((e.start || "").substring(0, 10) === dateStr) dayEvents.push(e); });
+    tasks.forEach(t => { if ((t.start || "").substring(0, 10) === dateStr) dayEvents.push(t); });
+    return dayEvents;
+  };
+
+  // Get holiday for a Date object
+  const getHolidayForDate = (date) => {
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    return getGermanHolidays(date.getFullYear())[key] || null;
+  };
+
+  // Navigation label
+  const getNavLabel = () => {
+    if (viewMode === "month") return `${MONTH_NAMES[month]} ${year}`;
+    if (viewMode === "week") {
+      const days = getWeekDays();
+      const s = days[0], e = days[6];
+      if (s.getMonth() === e.getMonth()) return `${s.getDate()}. – ${e.getDate()}. ${MONTH_NAMES[s.getMonth()]} ${s.getFullYear()}`;
+      return `${s.getDate()}. ${MONTH_NAMES[s.getMonth()]} – ${e.getDate()}. ${MONTH_NAMES[e.getMonth()]} ${e.getFullYear()}`;
+    }
+    const DAYFULL = ["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"];
+    return `${DAYFULL[currentDate.getDay()]}, ${currentDate.getDate()}. ${MONTH_NAMES[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+  };
 
   const selectedEvents = selectedDay ? getEventsForDay(selectedDay) : [];
 
@@ -1531,87 +1584,274 @@ function CalendarView({ onBack, session, getProviderToken }) {
         </motion.div>
       </div>
 
-      {/* Month navigation */}
+      {/* Navigation + View Switcher */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 32px 8px" }}>
-        <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={prevMonth}
+        <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={navigatePrev}
           style={{ cursor: "pointer", color: "#ffffff50", fontSize: 18, fontFamily: FONT, padding: "4px 8px" }}>‹</motion.div>
-        <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 500, color: "#ffffffcc", minWidth: 160, textAlign: "center" }}>
-          {MONTH_NAMES[month]} {year}
+        <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 500, color: "#ffffffcc", minWidth: 200, textAlign: "center" }}>
+          {getNavLabel()}
         </div>
-        <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={nextMonth}
+        <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={navigateNext}
           style={{ cursor: "pointer", color: "#ffffff50", fontSize: 18, fontFamily: FONT, padding: "4px 8px" }}>›</motion.div>
         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={goToday}
           style={{ marginLeft: 8, cursor: "pointer", fontSize: 11, fontFamily: FONT, color: "#8B7AFF", padding: "4px 12px", borderRadius: 8, background: "rgba(139,122,255,0.1)", border: "1px solid rgba(139,122,255,0.2)" }}>Heute</motion.div>
+        <div style={{ flex: 1 }} />
+        {/* View mode switcher */}
+        <div style={{ display: "flex", gap: 2, background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: 3, border: "1px solid rgba(255,255,255,0.06)" }}>
+          {[{ key: "month", label: "Monat" }, { key: "week", label: "Woche" }, { key: "day", label: "Tag" }].map(v => (
+            <motion.div key={v.key}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => setViewMode(v.key)}
+              style={{
+                cursor: "pointer", padding: "5px 14px", borderRadius: 8, fontSize: 11, fontFamily: FONT, fontWeight: 500,
+                color: viewMode === v.key ? "#fff" : "#ffffff50",
+                background: viewMode === v.key ? "rgba(139,122,255,0.25)" : "transparent",
+                transition: "all 0.15s",
+              }}
+            >{v.label}</motion.div>
+          ))}
+        </div>
       </div>
 
       <div style={{ display: "flex", flex: 1, padding: "0 32px 24px", gap: 20, minHeight: 0 }}>
-        {/* Calendar Grid */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-          {/* Weekday headers */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4, background: "rgba(20,18,30,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "2px 0" }}>
-            {WEEKDAYS.map((d, di) => (
-              <div key={d} style={{ textAlign: "center", fontSize: 11, fontFamily: FONT, color: di >= 5 ? "#ffffff28" : "#ffffff45", padding: "6px 0", fontWeight: 500 }}>{d}</div>
-            ))}
-          </div>
-          {/* Day cells */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, flex: 1 }}>
-            {calendarDays.map((dayObj, i) => {
-              const events = getEventsForDay(dayObj);
-              const isSelected = selectedDay && selectedDay.day === dayObj.day && selectedDay.month === dayObj.month && !dayObj.isOtherMonth;
-              const todayHighlight = isToday(dayObj);
-              const weekend = isWeekend(i);
-              const holiday = !dayObj.isOtherMonth ? getHoliday(dayObj) : null;
-              const isSpecialDay = weekend || holiday;
-              return (
-                <motion.div
-                  key={i}
-                  whileHover={{ scale: 1.02 }}
-                  onClick={() => !dayObj.isOtherMonth && setSelectedDay(dayObj)}
-                  onDoubleClick={() => { if (!dayObj.isOtherMonth) { setSelectedDay(dayObj); openNewEvent(dayObj); } }}
-                  style={{
-                    padding: "4px 6px", borderRadius: 10, cursor: dayObj.isOtherMonth ? "default" : "pointer",
-                    background: isSelected ? "rgba(139,122,255,0.15)" : todayHighlight ? "rgba(139,122,255,0.08)" : weekend ? "rgba(255,255,255,0.01)" : "rgba(20,18,30,0.65)",
-                    backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-                    border: isSelected ? "1px solid rgba(139,122,255,0.3)" : todayHighlight ? "1px solid rgba(139,122,255,0.15)" : "1px solid rgba(255,255,255,0.05)",
-                    display: "flex", flexDirection: "column", minHeight: 54, transition: "all 0.15s",
-                    opacity: dayObj.isOtherMonth ? 0.25 : 1,
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
-                    <span style={{
-                      fontSize: 12, fontFamily: FONT, fontWeight: todayHighlight ? 600 : 400,
-                      color: todayHighlight ? "#8B7AFF" : weekend ? "#ffffff40" : isSelected ? "#ffffffcc" : "#ffffff70",
-                    }}>{dayObj.day}</span>
-                    {holiday && (
-                      <>
-                        <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#F59E0B", flexShrink: 0 }} />
-                        <span style={{ fontSize: 8, fontFamily: FONT, color: "#F59E0B", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{holiday}</span>
-                      </>
-                    )}
-                  </div>
-                  {/* Event dots */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 2, overflow: "hidden", flex: 1 }}>
-                    {events.slice(0, 3).map((e, ei) => (
-                      <div key={ei} style={{
-                        fontSize: 9, fontFamily: FONT, color: e.color,
-                        background: e.color + "15", borderRadius: 4,
-                        padding: "1px 4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                        borderLeft: `2px solid ${e.color}`,
-                      }}>{e.title}</div>
-                    ))}
-                    {events.length > 3 && (
-                      <div style={{ fontSize: 9, fontFamily: FONT, color: "#ffffff30" }}>+{events.length - 3} mehr</div>
-                    )}
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        </div>
 
-        {/* Day detail sidebar */}
+        {/* ===== MONTH VIEW ===== */}
+        {viewMode === "month" && (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+            {/* Weekday headers */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4, background: "rgba(20,18,30,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "2px 0" }}>
+              {WEEKDAYS.map((d, di) => (
+                <div key={d} style={{ textAlign: "center", fontSize: 11, fontFamily: FONT, color: di >= 5 ? "#ffffff28" : "#ffffff45", padding: "6px 0", fontWeight: 500 }}>{d}</div>
+              ))}
+            </div>
+            {/* Day cells */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, flex: 1 }}>
+              {calendarDays.map((dayObj, i) => {
+                const events = getEventsForDay(dayObj);
+                const isSelected = selectedDay && selectedDay.day === dayObj.day && selectedDay.month === dayObj.month && !dayObj.isOtherMonth;
+                const todayHighlight = isToday(dayObj);
+                const weekend = isWeekend(i);
+                const holiday = !dayObj.isOtherMonth ? getHoliday(dayObj) : null;
+                return (
+                  <motion.div
+                    key={i}
+                    whileHover={{ scale: 1.02 }}
+                    onClick={() => { if (!dayObj.isOtherMonth) setSelectedDay(dayObj); }}
+                    onDoubleClick={() => { if (!dayObj.isOtherMonth) { setSelectedDay(dayObj); openNewEvent(dayObj); } }}
+                    style={{
+                      padding: 10, borderRadius: 10, cursor: dayObj.isOtherMonth ? "default" : "pointer",
+                      background: isSelected ? "rgba(139,122,255,0.15)" : todayHighlight ? "rgba(139,122,255,0.08)" : weekend ? "rgba(255,255,255,0.01)" : "rgba(20,18,30,0.65)",
+                      backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+                      border: isSelected ? "1px solid rgba(139,122,255,0.3)" : todayHighlight ? "1px solid rgba(139,122,255,0.15)" : "1px solid rgba(255,255,255,0.05)",
+                      display: "flex", flexDirection: "column", minHeight: 54, transition: "all 0.15s",
+                      opacity: dayObj.isOtherMonth ? 0.25 : 1,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
+                      <span style={{
+                        fontSize: 12, fontFamily: FONT, fontWeight: todayHighlight ? 600 : 400,
+                        color: todayHighlight ? "#8B7AFF" : weekend ? "#ffffff40" : isSelected ? "#ffffffcc" : "#ffffff70",
+                      }}>{dayObj.day}</span>
+                      {holiday && (
+                        <>
+                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#F59E0B", flexShrink: 0 }} />
+                          <span style={{ fontSize: 8, fontFamily: FONT, color: "#F59E0B", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{holiday}</span>
+                        </>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2, overflow: "hidden", flex: 1 }}>
+                      {events.slice(0, 3).map((e, ei) => (
+                        <div key={ei} style={{
+                          fontSize: 9, fontFamily: FONT, color: e.color,
+                          background: e.color + "15", borderRadius: 4,
+                          padding: "1px 4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                          borderLeft: `2px solid ${e.color}`,
+                        }}>{e.title}</div>
+                      ))}
+                      {events.length > 3 && (
+                        <div style={{ fontSize: 9, fontFamily: FONT, color: "#ffffff30" }}>+{events.length - 3} mehr</div>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ===== WEEK VIEW ===== */}
+        {viewMode === "week" && (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+            {/* Weekday headers with dates */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4, background: "rgba(20,18,30,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "6px 0" }}>
+              {getWeekDays().map((d, di) => {
+                const isTd = d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+                return (
+                  <div key={di} style={{ textAlign: "center", fontFamily: FONT }}>
+                    <div style={{ fontSize: 10, color: di >= 5 ? "#ffffff25" : "#ffffff40", fontWeight: 500 }}>{WEEKDAYS[di]}</div>
+                    <div style={{ fontSize: 16, fontWeight: isTd ? 700 : 500, color: isTd ? "#8B7AFF" : di >= 5 ? "#ffffff35" : "#ffffffcc", marginTop: 2 }}>{d.getDate()}</div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* Week day columns */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, flex: 1, overflow: "hidden" }}>
+              {getWeekDays().map((d, di) => {
+                const events = getEventsForDate(d);
+                const hol = getHolidayForDate(d);
+                const isTd = d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+                return (
+                  <div key={di} style={{
+                    padding: 10, borderRadius: 10, display: "flex", flexDirection: "column", gap: 4,
+                    background: isTd ? "rgba(139,122,255,0.06)" : di >= 5 ? "rgba(255,255,255,0.01)" : "rgba(20,18,30,0.65)",
+                    backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+                    border: isTd ? "1px solid rgba(139,122,255,0.15)" : "1px solid rgba(255,255,255,0.05)",
+                    overflowY: "auto",
+                  }}>
+                    {hol && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
+                        <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#F59E0B", flexShrink: 0 }} />
+                        <span style={{ fontSize: 9, fontFamily: FONT, color: "#F59E0B", opacity: 0.8 }}>{hol}</span>
+                      </div>
+                    )}
+                    {events.length === 0 && !hol && (
+                      <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff15", textAlign: "center", marginTop: 12 }}>—</div>
+                    )}
+                    {events.map((e, ei) => (
+                      <motion.div key={ei}
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: ei * 0.03 }}
+                        style={{
+                          padding: "6px 8px", borderRadius: 8, borderLeft: `3px solid ${e.color}`,
+                          background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)",
+                        }}
+                      >
+                        <div style={{ fontSize: 11, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd", marginBottom: 2 }}>{e.title}</div>
+                        {e.start && !e.allDay && (
+                          <div style={{ fontSize: 9, fontFamily: FONT, color: "#ffffff40" }}>
+                            {new Date(e.start).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+                            {e.end && ` – ${new Date(e.end).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`}
+                          </div>
+                        )}
+                        {e.allDay && <div style={{ fontSize: 9, fontFamily: FONT, color: "#ffffff30" }}>Ganztägig</div>}
+                        {e.hangoutLink && (
+                          <a href={e.hangoutLink} target="_blank" rel="noopener noreferrer"
+                            style={{ fontSize: 9, fontFamily: FONT, color: "#00B894", textDecoration: "none", marginTop: 2, display: "block" }}>🔗 Meet</a>
+                        )}
+                      </motion.div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ===== DAY VIEW (List) ===== */}
+        {viewMode === "day" && (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflowY: "auto" }}>
+            {(() => {
+              const dayEvents = getEventsForDate(currentDate);
+              const hol = getHolidayForDate(currentDate);
+              const isWe = currentDate.getDay() === 0 || currentDate.getDay() === 6;
+              return (
+                <>
+                  {/* Day header info */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                    {hol && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.15)" }}>
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#F59E0B" }} />
+                        <span style={{ fontSize: 12, fontFamily: FONT, color: "#F59E0B" }}>{hol}</span>
+                      </div>
+                    )}
+                    {isWe && (
+                      <span style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff30", padding: "5px 12px", borderRadius: 8, background: "rgba(255,255,255,0.02)" }}>Wochenende</span>
+                    )}
+                    <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff40" }}>
+                      {dayEvents.length === 0 ? "Keine Termine" : `${dayEvents.length} ${dayEvents.length === 1 ? "Termin" : "Termine"}`}
+                    </span>
+                  </div>
+
+                  {dayEvents.length === 0 && (
+                    <div style={{ padding: "60px 20px", textAlign: "center" }}>
+                      <div style={{ fontSize: 32, marginBottom: 12 }}>✦</div>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: "#ffffff25" }}>Freier Tag</div>
+                    </div>
+                  )}
+
+                  {/* Event list */}
+                  {dayEvents.map((e, i) => (
+                    <motion.div key={e.id || i}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.05, duration: 0.2 }}
+                      style={{
+                        padding: "16px 20px", borderRadius: 14, marginBottom: 8,
+                        background: "rgba(20,18,30,0.65)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+                        border: "1px solid rgba(255,255,255,0.05)", borderLeft: `4px solid ${e.color}`,
+                        display: "flex", alignItems: "flex-start", gap: 16,
+                      }}
+                    >
+                      {/* Time column */}
+                      <div style={{ minWidth: 65, flexShrink: 0 }}>
+                        {e.start && !e.allDay ? (
+                          <>
+                            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: "#ffffffcc" }}>
+                              {new Date(e.start).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+                            </div>
+                            {e.end && (
+                              <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff35", marginTop: 2 }}>
+                                {new Date(e.end).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff35", padding: "3px 8px", borderRadius: 4, background: "rgba(255,255,255,0.04)", display: "inline-block" }}>Ganztägig</div>
+                        )}
+                      </div>
+                      {/* Details */}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd", marginBottom: 4 }}>{e.title}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          {e.type === "google" && (
+                            <span style={{ fontSize: 10, fontFamily: FONT, color: "#5B8DEF", padding: "2px 8px", borderRadius: 4, background: "rgba(91,141,239,0.1)" }}>Google</span>
+                          )}
+                          {e.type === "task" && (
+                            <span style={{ fontSize: 10, fontFamily: FONT, color: "#8B7AFF", padding: "2px 8px", borderRadius: 4, background: "rgba(139,122,255,0.1)" }}>Task</span>
+                          )}
+                          {e.project && <span style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30" }}>{e.project}</span>}
+                          {e.location && <span style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30" }}>📍 {e.location}</span>}
+                        </div>
+                        {e.hangoutLink && (
+                          <motion.a href={e.hangoutLink} target="_blank" rel="noopener noreferrer"
+                            whileHover={{ scale: 1.02 }}
+                            style={{ display: "inline-block", fontSize: 11, fontFamily: FONT, color: "#00B894", marginTop: 6, textDecoration: "none", padding: "3px 10px", borderRadius: 6, background: "rgba(0,184,148,0.08)", border: "1px solid rgba(0,184,148,0.15)" }}
+                          >🔗 Google Meet beitreten</motion.a>
+                        )}
+                      </div>
+                      {/* Delete button for Google events */}
+                      {e.type === "google" && (
+                        <motion.div
+                          whileHover={{ scale: 1.15, background: "rgba(232,67,67,0.15)" }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => setConfirmDeleteEvent(e)}
+                          style={{ cursor: "pointer", width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "#ffffff25", flexShrink: 0, transition: "all 0.15s" }}
+                          title="Event absagen"
+                        >✕</motion.div>
+                      )}
+                    </motion.div>
+                  ))}
+                </>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* Day detail sidebar (month view only) */}
         <AnimatePresence>
-          {selectedDay && !selectedDay.isOtherMonth && (
+          {viewMode === "month" && selectedDay && !selectedDay.isOtherMonth && (
             <motion.div
               initial={{ opacity: 0, x: 20, width: 0 }}
               animate={{ opacity: 1, x: 0, width: 280 }}
