@@ -1125,6 +1125,10 @@ function CalendarView({ onBack, session, getProviderToken }) {
   const [showNewEvent, setShowNewEvent] = useState(false);
   const [eventForm, setEventForm] = useState({ title: "", date: "", startTime: "09:00", endTime: "10:00", description: "", allDay: false, withMeet: false });
   const [savingEvent, setSavingEvent] = useState(false);
+  const [meetLink, setMeetLink] = useState(null);
+  const [meetLoading, setMeetLoading] = useState(false);
+  const [tempEventId, setTempEventId] = useState(null);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -1260,10 +1264,83 @@ function CalendarView({ onBack, session, getProviderToken }) {
       ? `${y}-${String(m + 1).padStart(2, "0")}-${String(dayObj.day).padStart(2, "0")}`
       : `${year}-${String(month + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     setEventForm({ title: "", date: dateStr, startTime: "09:00", endTime: "10:00", description: "", allDay: false, withMeet: false });
+    setMeetLink(null);
+    setTempEventId(null);
+    setLinkCopied(false);
     setShowNewEvent(true);
   };
 
-  // Create Google Calendar event
+  // Toggle Google Meet — creates a temp event to get the link immediately
+  const toggleMeet = async (enable) => {
+    setEventForm(f => ({ ...f, withMeet: enable }));
+    if (enable) {
+      const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
+      if (!providerToken) return;
+      setMeetLoading(true);
+      try {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const date = eventForm.date || new Date().toISOString().split("T")[0];
+        const tempBody = {
+          summary: eventForm.title || "Neues Meeting",
+          start: { dateTime: `${date}T${eventForm.startTime}:00`, timeZone: tz },
+          end: { dateTime: `${date}T${eventForm.endTime}:00`, timeZone: tz },
+          conferenceData: {
+            createRequest: {
+              requestId: `meet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              conferenceSolutionKey: { type: "hangoutsMeet" },
+            },
+          },
+        };
+        const res = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${providerToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify(tempBody),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const link = data.hangoutLink || data.conferenceData?.entryPoints?.find(ep => ep.entryPointType === "video")?.uri;
+          setMeetLink(link || null);
+          setTempEventId(data.id);
+        }
+      } catch (err) {
+        console.error("Meet link creation error:", err);
+      }
+      setMeetLoading(false);
+    } else {
+      // Toggle off — delete temp event if exists
+      if (tempEventId) {
+        const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
+        if (providerToken) {
+          fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${tempEventId}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${providerToken}` },
+          }).catch(() => {});
+        }
+        setTempEventId(null);
+      }
+      setMeetLink(null);
+      setLinkCopied(false);
+    }
+  };
+
+  // Cancel new event — delete temp Meet event if exists
+  const cancelNewEvent = () => {
+    if (tempEventId) {
+      const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
+      if (providerToken) {
+        fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${tempEventId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${providerToken}` },
+        }).catch(() => {});
+      }
+      setTempEventId(null);
+    }
+    setMeetLink(null);
+    setLinkCopied(false);
+    setShowNewEvent(false);
+  };
+
+  // Create or update Google Calendar event
   const createGoogleEvent = async () => {
     if (!eventForm.title.trim() || !eventForm.date) return;
     const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
@@ -1273,7 +1350,6 @@ function CalendarView({ onBack, session, getProviderToken }) {
       const body = { summary: eventForm.title.trim(), description: eventForm.description };
       if (eventForm.allDay) {
         body.start = { date: eventForm.date };
-        // Google all-day events need end date = next day
         const nextDay = new Date(eventForm.date);
         nextDay.setDate(nextDay.getDate() + 1);
         body.end = { date: nextDay.toISOString().split("T")[0] };
@@ -1282,23 +1358,37 @@ function CalendarView({ onBack, session, getProviderToken }) {
         body.start = { dateTime: `${eventForm.date}T${eventForm.startTime}:00`, timeZone: tz };
         body.end = { dateTime: `${eventForm.date}T${eventForm.endTime}:00`, timeZone: tz };
       }
-      // Add Google Meet if toggled
-      if (eventForm.withMeet) {
-        body.conferenceData = {
-          createRequest: {
-            requestId: `meet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            conferenceSolutionKey: { type: "hangoutsMeet" },
-          },
-        };
+
+      let res;
+      if (tempEventId) {
+        // Update the temp event that was created for the Meet link
+        res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${tempEventId}?conferenceDataVersion=1`, {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${providerToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      } else {
+        // Create new event (no Meet)
+        if (eventForm.withMeet) {
+          body.conferenceData = {
+            createRequest: {
+              requestId: `meet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              conferenceSolutionKey: { type: "hangoutsMeet" },
+            },
+          };
+        }
+        const conferenceParam = eventForm.withMeet ? "?conferenceDataVersion=1" : "";
+        res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events${conferenceParam}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${providerToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
       }
-      const conferenceParam = eventForm.withMeet ? "?conferenceDataVersion=1" : "";
-      const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events${conferenceParam}`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${providerToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
       if (res.ok) {
         setShowNewEvent(false);
+        setMeetLink(null);
+        setTempEventId(null);
+        setLinkCopied(false);
         // Refresh events
         const timeMin = new Date(year, month, 1).toISOString();
         const timeMax = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
@@ -1502,7 +1592,7 @@ function CalendarView({ onBack, session, getProviderToken }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          onClick={() => setShowNewEvent(false)}
+          onClick={cancelNewEvent}
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center" }}
         >
           <motion.div
@@ -1550,15 +1640,40 @@ function CalendarView({ onBack, session, getProviderToken }) {
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <motion.div
                   whileHover={{ scale: 1.05 }}
-                  onClick={() => setEventForm(f => ({ ...f, withMeet: !f.withMeet }))}
-                  style={{ width: 36, height: 20, borderRadius: 10, background: eventForm.withMeet ? "rgba(0,184,148,0.4)" : "rgba(255,255,255,0.08)", cursor: "pointer", position: "relative", transition: "background 0.2s" }}
+                  onClick={() => toggleMeet(!eventForm.withMeet)}
+                  style={{ width: 36, height: 20, borderRadius: 10, background: eventForm.withMeet ? "rgba(0,184,148,0.4)" : "rgba(255,255,255,0.08)", cursor: meetLoading ? "wait" : "pointer", position: "relative", transition: "background 0.2s" }}
                 >
                   <motion.div animate={{ x: eventForm.withMeet ? 17 : 2 }} transition={{ duration: 0.2 }}
                     style={{ width: 16, height: 16, borderRadius: "50%", background: eventForm.withMeet ? "#00B894" : "#ffffff50", position: "absolute", top: 2 }} />
                 </motion.div>
                 <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff70" }}>Google Meet</span>
+                {meetLoading && <span style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40" }}>Erstelle Link...</span>}
               </div>
             </div>
+
+            {/* Meet Link display */}
+            {meetLink && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 10, background: "rgba(0,184,148,0.08)", border: "1px solid rgba(0,184,148,0.2)", display: "flex", alignItems: "center", gap: 10 }}
+              >
+                <span style={{ fontSize: 14 }}>📹</span>
+                <a href={meetLink} target="_blank" rel="noopener noreferrer"
+                  style={{ flex: 1, fontSize: 12, fontFamily: FONT, color: "#00B894", textDecoration: "none", wordBreak: "break-all" }}>
+                  {meetLink}
+                </a>
+                <motion.div
+                  whileHover={{ scale: 1.08 }}
+                  whileTap={{ scale: 0.92 }}
+                  onClick={() => { navigator.clipboard.writeText(meetLink); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); }}
+                  style={{ cursor: "pointer", padding: "5px 12px", borderRadius: 8, fontSize: 11, fontFamily: FONT, fontWeight: 500, color: linkCopied ? "#00B894" : "#ffffffcc", background: linkCopied ? "rgba(0,184,148,0.15)" : "rgba(255,255,255,0.06)", border: `1px solid ${linkCopied ? "rgba(0,184,148,0.3)" : "rgba(255,255,255,0.08)"}`, transition: "all 0.2s", whiteSpace: "nowrap" }}
+                >
+                  {linkCopied ? "✓ Kopiert" : "Kopieren"}
+                </motion.div>
+              </motion.div>
+            )}
 
             {/* Time pickers (hidden when all-day) */}
             {!eventForm.allDay && (
@@ -1596,7 +1711,7 @@ function CalendarView({ onBack, session, getProviderToken }) {
             {/* Buttons */}
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                onClick={() => setShowNewEvent(false)}
+                onClick={cancelNewEvent}
                 style={{ cursor: "pointer", padding: "9px 20px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: "#ffffff60", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
                 Abbrechen
               </motion.div>
