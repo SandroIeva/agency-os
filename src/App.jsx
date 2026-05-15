@@ -1116,7 +1116,7 @@ function KanbanBoard({ onBack, session }) {
 const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const MONTH_NAMES = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
 
-function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
+function CalendarView({ onBack, session, getProviderToken, openMeetCall, onReLogin }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
   const [viewMode, setViewMode] = useState("month"); // "month" | "week" | "day"
@@ -1125,6 +1125,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
   const [googleEvents, setGoogleEvents] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [tokenExpired, setTokenExpired] = useState(false);
   const [showNewEvent, setShowNewEvent] = useState(false);
   const [eventForm, setEventForm] = useState({ title: "", date: "", startTime: "09:00", endTime: "10:00", description: "", allDay: false, withMeet: false });
   const [savingEvent, setSavingEvent] = useState(false);
@@ -1206,7 +1207,6 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
 
       // Google Calendar
       const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
-      console.log("Calendar: provider token available:", !!providerToken);
       if (providerToken) {
         try {
           const res = await fetch(
@@ -1215,7 +1215,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
           );
           if (res.ok) {
             const data = await res.json();
-            console.log("Calendar: fetched", (data.items || []).length, "events");
+            setTokenExpired(false);
             setGoogleEvents((data.items || []).map(e => ({
               id: e.id,
               title: e.summary || "Kein Titel",
@@ -1227,19 +1227,16 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
               location: e.location,
               hangoutLink: e.hangoutLink,
             })));
-          } else {
-            const errData = await res.json().catch(() => ({}));
-            console.error("Calendar API error:", res.status, errData);
-            // Token might be expired — clear stored token so user can re-login
-            if (res.status === 401) {
-              localStorage.removeItem("agencyos-google-token");
-            }
+          } else if (res.status === 401) {
+            localStorage.removeItem("agencyos-google-token");
+            setTokenExpired(true);
+            setGoogleEvents([]);
           }
         } catch (err) {
           console.error("Calendar fetch error:", err);
         }
       } else {
-        console.warn("Calendar: no Google token available — re-login may be needed");
+        setTokenExpired(true);
       }
 
       // Supabase tasks with due_date
@@ -1580,9 +1577,16 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 22, fontWeight: 500, color: "#ffffffe6", fontFamily: FONT, letterSpacing: -0.5 }}>Calendar</div>
           <div style={{ fontSize: 12, color: "#ffffff50", fontFamily: FONT, marginTop: 2 }}>
-            {loading ? "Loading..." : `${googleEvents.length} Events · ${tasks.length} Tasks`}
+            {loading ? "Loading..." : tokenExpired ? "Google Token abgelaufen" : `${googleEvents.length} Events · ${tasks.length} Tasks`}
           </div>
         </div>
+        {tokenExpired && onReLogin && (
+          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+            onClick={onReLogin}
+            style={{ cursor: "pointer", fontSize: 12, fontFamily: FONT, color: "#fff", padding: "8px 18px", borderRadius: 10, background: "rgba(91,141,239,0.25)", border: "1px solid rgba(91,141,239,0.35)", fontWeight: 500, marginRight: 8 }}>
+            Neu verbinden
+          </motion.div>
+        )}
         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
           onClick={() => openNewEvent(selectedDay)}
           style={{ cursor: "pointer", fontSize: 12, fontFamily: FONT, color: "#fff", padding: "8px 18px", borderRadius: 10, background: "rgba(139,122,255,0.25)", border: "1px solid rgba(139,122,255,0.35)", fontWeight: 500, letterSpacing: -0.2 }}>
@@ -3856,7 +3860,7 @@ export default function CircularMenu() {
         {/* CALENDAR VIEW */}
         <AnimatePresence>
           {currentView === "calendar" && (
-            <CalendarView session={session} getProviderToken={getProviderToken} openMeetCall={openMeetCall} onBack={() => setCurrentView("dashboard")} />
+            <CalendarView session={session} getProviderToken={getProviderToken} openMeetCall={openMeetCall} onReLogin={handleGoogleLogin} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
