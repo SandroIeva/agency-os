@@ -1138,6 +1138,37 @@ function CalendarView({ onBack, session, getProviderToken }) {
   const month = currentDate.getMonth();
   const today = new Date();
 
+  // German public holidays (bundesweit)
+  const getGermanHolidays = (y) => {
+    // Easter calculation (Anonymous Gregorian algorithm)
+    const a = y % 19, b = Math.floor(y / 100), c = y % 100;
+    const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4), k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const eMonth = Math.floor((h + l - 7 * m + 114) / 31) - 1;
+    const eDay = ((h + l - 7 * m + 114) % 31) + 1;
+    const easter = new Date(y, eMonth, eDay);
+    const easterOffset = (days) => { const d = new Date(easter); d.setDate(d.getDate() + days); return d; };
+    const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+    return {
+      [fmt(new Date(y, 0, 1))]: "Neujahr",
+      [fmt(easterOffset(-2))]: "Karfreitag",
+      [fmt(easterOffset(0))]: "Ostersonntag",
+      [fmt(easterOffset(1))]: "Ostermontag",
+      [fmt(new Date(y, 4, 1))]: "Tag der Arbeit",
+      [fmt(easterOffset(39))]: "Christi Himmelfahrt",
+      [fmt(easterOffset(49))]: "Pfingstsonntag",
+      [fmt(easterOffset(50))]: "Pfingstmontag",
+      [fmt(new Date(y, 9, 3))]: "Tag der Deutschen Einheit",
+      [fmt(new Date(y, 11, 25))]: "1. Weihnachtstag",
+      [fmt(new Date(y, 11, 26))]: "2. Weihnachtstag",
+    };
+  };
+  const holidays = getGermanHolidays(year);
+
   // Get calendar grid days
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
@@ -1228,6 +1259,23 @@ function CalendarView({ onBack, session, getProviderToken }) {
     };
     load();
   }, [session, year, month]);
+
+  // Get date key for a dayObj (for holiday lookup etc)
+  const getDateKey = (dayObj) => {
+    let y = year, m = dayObj.month;
+    if (m < 0) { m = 11; y--; } else if (m > 11) { m = 0; y++; }
+    return `${y}-${String(m + 1).padStart(2, "0")}-${String(dayObj.day).padStart(2, "0")}`;
+  };
+
+  // Check if a grid index is weekend (5=Saturday, 6=Sunday in Mon-start grid)
+  const isWeekend = (gridIndex) => gridIndex % 7 >= 5;
+
+  // Get holiday name for a dayObj
+  const getHoliday = (dayObj) => {
+    const key = getDateKey(dayObj);
+    // Check current year and adjacent years for month overflow
+    return holidays[key] || getGermanHolidays(year - 1)[key] || getGermanHolidays(year + 1)[key] || null;
+  };
 
   // Get events for a specific day
   const getEventsForDay = (dayObj) => {
@@ -1501,8 +1549,8 @@ function CalendarView({ onBack, session, getProviderToken }) {
         <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
           {/* Weekday headers */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4, background: "rgba(20,18,30,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "2px 0" }}>
-            {WEEKDAYS.map(d => (
-              <div key={d} style={{ textAlign: "center", fontSize: 11, fontFamily: FONT, color: "#ffffff45", padding: "6px 0", fontWeight: 500 }}>{d}</div>
+            {WEEKDAYS.map((d, di) => (
+              <div key={d} style={{ textAlign: "center", fontSize: 11, fontFamily: FONT, color: di >= 5 ? "#ffffff28" : "#ffffff45", padding: "6px 0", fontWeight: 500 }}>{d}</div>
             ))}
           </div>
           {/* Day cells */}
@@ -1511,6 +1559,9 @@ function CalendarView({ onBack, session, getProviderToken }) {
               const events = getEventsForDay(dayObj);
               const isSelected = selectedDay && selectedDay.day === dayObj.day && selectedDay.month === dayObj.month && !dayObj.isOtherMonth;
               const todayHighlight = isToday(dayObj);
+              const weekend = isWeekend(i);
+              const holiday = !dayObj.isOtherMonth ? getHoliday(dayObj) : null;
+              const isSpecialDay = weekend || holiday;
               return (
                 <motion.div
                   key={i}
@@ -1519,18 +1570,22 @@ function CalendarView({ onBack, session, getProviderToken }) {
                   onDoubleClick={() => { if (!dayObj.isOtherMonth) { setSelectedDay(dayObj); openNewEvent(dayObj); } }}
                   style={{
                     padding: "4px 6px", borderRadius: 10, cursor: dayObj.isOtherMonth ? "default" : "pointer",
-                    background: isSelected ? "rgba(139,122,255,0.15)" : todayHighlight ? "rgba(139,122,255,0.08)" : "rgba(20,18,30,0.65)",
+                    background: isSelected ? "rgba(139,122,255,0.15)" : todayHighlight ? "rgba(139,122,255,0.08)" : holiday ? "rgba(232,67,67,0.06)" : weekend ? "rgba(255,255,255,0.01)" : "rgba(20,18,30,0.65)",
                     backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-                    border: isSelected ? "1px solid rgba(139,122,255,0.3)" : todayHighlight ? "1px solid rgba(139,122,255,0.15)" : "1px solid rgba(255,255,255,0.05)",
+                    border: isSelected ? "1px solid rgba(139,122,255,0.3)" : todayHighlight ? "1px solid rgba(139,122,255,0.15)" : holiday ? "1px solid rgba(232,67,67,0.12)" : "1px solid rgba(255,255,255,0.05)",
                     display: "flex", flexDirection: "column", minHeight: 54, transition: "all 0.15s",
                     opacity: dayObj.isOtherMonth ? 0.25 : 1,
                   }}
                 >
-                  <div style={{
-                    fontSize: 12, fontFamily: FONT, fontWeight: todayHighlight ? 600 : 400,
-                    color: todayHighlight ? "#8B7AFF" : isSelected ? "#ffffffcc" : "#ffffff70",
-                    marginBottom: 3,
-                  }}>{dayObj.day}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
+                    <span style={{
+                      fontSize: 12, fontFamily: FONT, fontWeight: todayHighlight ? 600 : 400,
+                      color: todayHighlight ? "#8B7AFF" : holiday ? "#E84363" : weekend ? "#ffffff40" : isSelected ? "#ffffffcc" : "#ffffff70",
+                    }}>{dayObj.day}</span>
+                    {holiday && (
+                      <span style={{ fontSize: 8, fontFamily: FONT, color: "#E84363", opacity: 0.7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{holiday}</span>
+                    )}
+                  </div>
                   {/* Event dots */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 2, overflow: "hidden", flex: 1 }}>
                     {events.slice(0, 3).map((e, ei) => (
@@ -1572,6 +1627,11 @@ function CalendarView({ onBack, session, getProviderToken }) {
                 <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginTop: 2 }}>
                   {selectedEvents.length === 0 ? "Keine Termine" : `${selectedEvents.length} ${selectedEvents.length === 1 ? "Termin" : "Termine"}`}
                 </div>
+                {getHoliday(selectedDay) && (
+                  <div style={{ marginTop: 6, padding: "4px 10px", borderRadius: 6, background: "rgba(232,67,99,0.1)", border: "1px solid rgba(232,67,99,0.15)", fontSize: 11, fontFamily: FONT, color: "#E84363", display: "inline-block" }}>
+                    🇩🇪 {getHoliday(selectedDay)}
+                  </div>
+                )}
               </div>
               <div style={{ flex: 1, overflowY: "auto", padding: "8px 10px" }}>
                 {selectedEvents.length === 0 && (
