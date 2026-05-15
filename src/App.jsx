@@ -4146,7 +4146,7 @@ export default function CircularMenu() {
                   fontSize: 11, fontFamily: FONT, color: "#ffffff40",
                   letterSpacing: 2, marginBottom: 20, fontWeight: 400,
                 }}
-              >{aiStatus === "thinking" ? "THINKING..." : "SPEAKING"}</motion.div>
+              >{aiStatus === "thinking" ? "THINKING..." : ""}</motion.div>
 
               {/* Pulsing glow behind sphere — click to stop */}
               <motion.div
