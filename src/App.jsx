@@ -1116,7 +1116,7 @@ function KanbanBoard({ onBack, session }) {
 const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const MONTH_NAMES = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
 
-function CalendarView({ onBack, session }) {
+function CalendarView({ onBack, session, getProviderToken }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
   const [googleEvents, setGoogleEvents] = useState([]);
@@ -1160,7 +1160,8 @@ function CalendarView({ onBack, session }) {
       const timeMax = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
 
       // Google Calendar
-      const providerToken = session?.provider_token;
+      const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
+      console.log("Calendar: provider token available:", !!providerToken);
       if (providerToken) {
         try {
           const res = await fetch(
@@ -1169,6 +1170,7 @@ function CalendarView({ onBack, session }) {
           );
           if (res.ok) {
             const data = await res.json();
+            console.log("Calendar: fetched", (data.items || []).length, "events");
             setGoogleEvents((data.items || []).map(e => ({
               id: e.id,
               title: e.summary || "Kein Titel",
@@ -1180,10 +1182,19 @@ function CalendarView({ onBack, session }) {
               location: e.location,
               hangoutLink: e.hangoutLink,
             })));
+          } else {
+            const errData = await res.json().catch(() => ({}));
+            console.error("Calendar API error:", res.status, errData);
+            // Token might be expired — clear stored token so user can re-login
+            if (res.status === 401) {
+              localStorage.removeItem("agencyos-google-token");
+            }
           }
         } catch (err) {
           console.error("Calendar fetch error:", err);
         }
+      } else {
+        console.warn("Calendar: no Google token available — re-login may be needed");
       }
 
       // Supabase tasks with due_date
@@ -1443,7 +1454,7 @@ function getFileExtension(name, mimeType) {
   return "FILE";
 }
 
-function FilesView({ onBack, session }) {
+function FilesView({ onBack, session, getProviderToken }) {
   const [search, setSearch] = useState("");
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1462,7 +1473,7 @@ function FilesView({ onBack, session }) {
       setLoading(true);
       setError(null);
       try {
-        const providerToken = session?.provider_token;
+        const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
         if (!providerToken) {
           setError("Kein Google Drive Zugriff. Bitte neu einloggen.");
           setLoading(false);
@@ -1550,7 +1561,7 @@ function FilesView({ onBack, session }) {
     const fetchAgain = async () => {
       setError(null);
       try {
-        const providerToken = session?.provider_token;
+        const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
         if (!providerToken) { setError("Kein Google Drive Zugriff."); setLoading(false); return; }
         let query = "trashed=false";
         if (currentFolder) { query += ` and '${currentFolder}' in parents`; }
@@ -1576,7 +1587,7 @@ function FilesView({ onBack, session }) {
   };
 
   const handleUpload = async (fileList) => {
-    const providerToken = session?.provider_token;
+    const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
     if (!providerToken) { setError("Kein Google Drive Zugriff. Bitte neu einloggen."); return; }
     setUploading(true);
     setUploadProgress({ current: 0, total: fileList.length });
@@ -1630,7 +1641,7 @@ function FilesView({ onBack, session }) {
   };
 
   const handleCreateFolder = async () => {
-    const providerToken = session?.provider_token;
+    const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
     if (!providerToken) { setError("Kein Google Drive Zugriff."); return; }
     const folderName = prompt("Ordner Name:");
     if (!folderName) return;
@@ -2466,14 +2477,25 @@ export default function CircularMenu() {
   const userAvatar = session?.user?.user_metadata?.avatar_url || null;
   const userEmail = session?.user?.email || "";
 
-  // Listen for auth state changes
+  // Helper: get Google provider token (session or localStorage fallback)
+  const getProviderToken = useCallback(() => {
+    return session?.provider_token || localStorage.getItem("agencyos-google-token") || null;
+  }, [session]);
+
+  // Listen for auth state changes — persist provider_token when available
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      if (s?.provider_token) {
+        localStorage.setItem("agencyos-google-token", s.provider_token);
+      }
+      setSession(s);
       setAuthLoading(false);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      if (s?.provider_token) {
+        localStorage.setItem("agencyos-google-token", s.provider_token);
+      }
+      setSession(s);
       setAuthLoading(false);
     });
     return () => subscription.unsubscribe();
@@ -2492,6 +2514,7 @@ export default function CircularMenu() {
   };
 
   const handleLogout = async () => {
+    localStorage.removeItem("agencyos-google-token");
     await supabase.auth.signOut();
     setSession(null);
   };
@@ -2955,14 +2978,14 @@ export default function CircularMenu() {
         {/* CALENDAR VIEW */}
         <AnimatePresence>
           {currentView === "calendar" && (
-            <CalendarView session={session} onBack={() => setCurrentView("dashboard")} />
+            <CalendarView session={session} getProviderToken={getProviderToken} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
         {/* FILES VIEW */}
         <AnimatePresence>
           {currentView === "files" && (
-            <FilesView session={session} onBack={() => {
+            <FilesView session={session} getProviderToken={getProviderToken} onBack={() => {
               setCurrentView("dashboard");
               setMenuSource("grid");
               setActiveIndex(4);
