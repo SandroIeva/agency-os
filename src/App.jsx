@@ -3537,7 +3537,7 @@ export default function CircularMenu() {
           body: JSON.stringify({
             model: "claude-sonnet-4-20250514",
             max_tokens: 200,
-            system: "You are the AI assistant inside Agency OS, a creative agency workspace app. Keep responses short (1-3 sentences), friendly, and helpful. Always respond in English. You know about brand strategy, design, project management, and creative work.",
+            system: "You are the AI assistant inside Agency OS, a creative agency workspace app. Keep responses short (1-3 sentences), friendly, and helpful. Always respond in English. Never use emojis. You know about brand strategy, design, project management, and creative work.",
             messages: [{ role: "user", content: userMessage }],
           }),
         });
