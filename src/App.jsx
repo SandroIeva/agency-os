@@ -1622,7 +1622,7 @@ function CalendarView({ onBack, session, getProviderToken }) {
             {/* Weekday headers */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4, background: "rgba(20,18,30,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "2px 0" }}>
               {WEEKDAYS.map((d, di) => (
-                <div key={d} style={{ textAlign: "center", fontSize: 11, fontFamily: FONT, color: di >= 5 ? "#ffffff28" : "#ffffff45", padding: "6px 0", fontWeight: 500 }}>{d}</div>
+                <div key={d} style={{ textAlign: "center", fontSize: 13, fontFamily: FONT, color: di >= 5 ? "#ffffff28" : "#ffffff45", padding: "6px 0", fontWeight: 500 }}>{d}</div>
               ))}
             </div>
             {/* Day cells */}
@@ -1650,12 +1650,12 @@ function CalendarView({ onBack, session, getProviderToken }) {
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
                       <span style={{
-                        fontSize: 13, fontFamily: FONT, fontWeight: todayHighlight ? 600 : 400,
+                        fontSize: 11, fontFamily: FONT, fontWeight: todayHighlight ? 600 : 400,
                         color: todayHighlight ? "#8B7AFF" : weekend ? "#ffffff40" : isSelected ? "#ffffffcc" : "#ffffff70",
                       }}>{dayObj.day}</span>
                       {holiday && (
                         <>
-                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#F59E0B", flexShrink: 0 }} />
+                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#F59E0B", flexShrink: 0, marginLeft: 4 }} />
                           <span style={{ fontSize: 10, fontFamily: FONT, color: "#F59E0B", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{holiday}</span>
                         </>
                       )}
