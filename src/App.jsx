@@ -1659,9 +1659,9 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
                     onDoubleClick={() => { if (!dayObj.isOtherMonth) { setSelectedDay(dayObj); openNewEvent(dayObj); } }}
                     style={{
                       padding: 10, borderRadius: 10, cursor: dayObj.isOtherMonth ? "default" : "pointer",
-                      background: isSelected ? "rgba(139,122,255,0.15)" : todayHighlight ? "rgba(139,122,255,0.08)" : weekend ? "rgba(255,255,255,0.01)" : "rgba(20,18,30,0.65)",
+                      background: isSelected ? "rgba(139,122,255,0.15)" : todayHighlight ? "rgba(139,122,255,0.08)" : weekend ? "rgba(255,255,255,0.025)" : "rgba(25,23,38,0.92)",
                       backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-                      border: isSelected ? "1px solid rgba(139,122,255,0.3)" : todayHighlight ? "1px solid rgba(139,122,255,0.15)" : "1px solid rgba(255,255,255,0.05)",
+                      border: isSelected ? "1px solid rgba(139,122,255,0.3)" : todayHighlight ? "1px solid rgba(139,122,255,0.15)" : "1px solid transparent",
                       display: "flex", flexDirection: "column", minHeight: 54, transition: "all 0.15s",
                       opacity: dayObj.isOtherMonth ? 0.25 : 1,
                     }}
@@ -1673,8 +1673,8 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
                       }}>{dayObj.day}</span>
                       {holiday && (
                         <>
-                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#F59E0B", flexShrink: 0, marginLeft: 4 }} />
-                          <span style={{ fontSize: 11, fontFamily: FONT, color: "#F59E0B", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{holiday}</span>
+                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#5B8DEF", flexShrink: 0, marginLeft: 4 }} />
+                          <span style={{ fontSize: 11, fontFamily: FONT, color: "#5B8DEF", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{holiday}</span>
                         </>
                       )}
                     </div>
@@ -1735,8 +1735,8 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
                   }}>
                     {hol && (
                       <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
-                        <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#F59E0B", flexShrink: 0 }} />
-                        <span style={{ fontSize: 9, fontFamily: FONT, color: "#F59E0B", opacity: 0.8 }}>{hol}</span>
+                        <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#5B8DEF", flexShrink: 0 }} />
+                        <span style={{ fontSize: 9, fontFamily: FONT, color: "#5B8DEF", opacity: 0.8 }}>{hol}</span>
                       </div>
                     )}
                     {events.length === 0 && !hol && (
@@ -1791,9 +1791,9 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
                   {/* Day header info */}
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
                     {hol && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.15)" }}>
-                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#F59E0B" }} />
-                        <span style={{ fontSize: 12, fontFamily: FONT, color: "#F59E0B" }}>{hol}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 8, background: "rgba(91,141,239,0.08)", border: "1px solid rgba(91,141,239,0.15)" }}>
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#5B8DEF" }} />
+                        <span style={{ fontSize: 12, fontFamily: FONT, color: "#5B8DEF" }}>{hol}</span>
                       </div>
                     )}
                     {isWe && (
@@ -1904,8 +1904,8 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
                 </div>
                 {getHoliday(selectedDay) && (
                   <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#F59E0B", flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, fontFamily: FONT, color: "#F59E0B" }}>{getHoliday(selectedDay)}</span>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#5B8DEF", flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, fontFamily: FONT, color: "#5B8DEF" }}>{getHoliday(selectedDay)}</span>
                   </div>
                 )}
                 </div>
