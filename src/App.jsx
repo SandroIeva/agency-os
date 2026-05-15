@@ -3462,6 +3462,8 @@ export default function CircularMenu() {
     }, () => { /* permission denied — keep dash */ });
   }, []);
   const audioRef = useRef(null);
+  const [highlightWordIndex, setHighlightWordIndex] = useState(-1);
+  const highlightTimerRef = useRef(null);
   const scrollAccum = useRef(0);
   const scrollCooldown = useRef(false);
   const panelCooldown = useRef(false);
@@ -3560,8 +3562,15 @@ export default function CircularMenu() {
           const audioUrl = URL.createObjectURL(audioBlob);
           const audio = new Audio(audioUrl);
           audioRef.current = audio;
+          // Start karaoke highlight once we know the audio duration
+          audio.onloadedmetadata = () => {
+            if (!aiStoppedRef.current && audio.duration && isFinite(audio.duration)) {
+              startKaraokeHighlight(aiText, audio.duration);
+            }
+          };
           audio.onended = () => {
             if (aiStoppedRef.current) return;
+            stopKaraokeHighlight();
             URL.revokeObjectURL(audioUrl);
             audioRef.current = null;
             setTimeout(() => { if (!aiStoppedRef.current) { setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript(""); } }, 800);
@@ -3587,17 +3596,64 @@ export default function CircularMenu() {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.0; utterance.pitch = 1.0; utterance.volume = 0.8;
-      utterance.onend = () => { if (!aiStoppedRef.current) setTimeout(() => { setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript(""); }, 800); };
+      // Use boundary events for precise karaoke sync with browser speech
+      const words = text.split(/\s+/).filter(Boolean);
+      let wordIdx = 0;
+      setHighlightWordIndex(0);
+      utterance.onboundary = (event) => {
+        if (event.name === "word" && !aiStoppedRef.current) {
+          wordIdx++;
+          setHighlightWordIndex(wordIdx);
+        }
+      };
+      utterance.onend = () => {
+        stopKaraokeHighlight();
+        if (!aiStoppedRef.current) setTimeout(() => { setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript(""); }, 800);
+      };
       window.speechSynthesis.speak(utterance);
     } else {
-      setTimeout(() => { if (!aiStoppedRef.current) { setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript(""); } }, 4000);
+      // No speech — just estimate ~150 words/min
+      const words = text.split(/\s+/).filter(Boolean);
+      const estimatedDuration = (words.length / 150) * 60;
+      startKaraokeHighlight(text, Math.max(estimatedDuration, 3));
+      setTimeout(() => { if (!aiStoppedRef.current) { stopKaraokeHighlight(); setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript(""); } }, Math.max(estimatedDuration * 1000, 3000) + 800);
     }
   };
 
   const aiStoppedRef = useRef(false);
 
+  // Karaoke highlight: progressively reveal words synced to audio duration
+  const startKaraokeHighlight = useCallback((text, audioDuration) => {
+    if (highlightTimerRef.current) clearInterval(highlightTimerRef.current);
+    setHighlightWordIndex(0);
+    const words = text.split(/\s+/).filter(Boolean);
+    if (words.length === 0) return;
+    // Estimate: distribute audio duration evenly across words, with slight leading offset
+    const msPerWord = (audioDuration * 1000 * 0.92) / words.length;
+    let currentIdx = 0;
+    highlightTimerRef.current = setInterval(() => {
+      currentIdx++;
+      if (currentIdx >= words.length) {
+        clearInterval(highlightTimerRef.current);
+        highlightTimerRef.current = null;
+        setHighlightWordIndex(words.length);
+        return;
+      }
+      setHighlightWordIndex(currentIdx);
+    }, msPerWord);
+  }, []);
+
+  const stopKaraokeHighlight = useCallback(() => {
+    if (highlightTimerRef.current) {
+      clearInterval(highlightTimerRef.current);
+      highlightTimerRef.current = null;
+    }
+    setHighlightWordIndex(-1);
+  }, []);
+
   const stopAI = () => {
     aiStoppedRef.current = true;
+    stopKaraokeHighlight();
     if (audioRef.current) {
       try {
         const audio = audioRef.current;
@@ -4117,7 +4173,7 @@ export default function CircularMenu() {
                 </motion.div>
               )}
 
-              {/* AI response text */}
+              {/* AI response text — karaoke-style word highlighting */}
               <AnimatePresence>
                 {aiResponse && (
                   <motion.div
@@ -4125,11 +4181,23 @@ export default function CircularMenu() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3, duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
                     style={{
-                      fontSize: 14, fontFamily: FONT, color: "#ffffffAA",
+                      fontSize: 14, fontFamily: FONT,
                       fontWeight: 400, textAlign: "center", maxWidth: 420,
-                      marginTop: 28, lineHeight: 1.6, padding: "0 20px",
+                      marginTop: 28, lineHeight: 1.7, padding: "0 20px",
                     }}
-                  >{aiResponse}</motion.div>
+                  >
+                    {aiResponse.split(/\s+/).filter(Boolean).map((word, i) => {
+                      const isSpoken = highlightWordIndex >= 0 && i <= highlightWordIndex;
+                      const isCurrent = highlightWordIndex >= 0 && i === highlightWordIndex;
+                      return (
+                        <span key={i} style={{
+                          color: isSpoken ? "#ffffffE6" : "#ffffff30",
+                          textShadow: isCurrent ? "0 0 12px rgba(139,122,255,0.5)" : "none",
+                          transition: "color 0.2s ease, text-shadow 0.3s ease",
+                        }}>{word}{" "}</span>
+                      );
+                    })}
+                  </motion.div>
                 )}
               </AnimatePresence>
             </motion.div>
