@@ -1120,6 +1120,8 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
   const [viewMode, setViewMode] = useState("month"); // "month" | "week" | "day"
+  const [navDirection, setNavDirection] = useState(0); // -1 = prev, 1 = next, for animation
+  const [navKey, setNavKey] = useState(0); // force re-render for animation
   const [googleEvents, setGoogleEvents] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1305,16 +1307,20 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
 
   // Navigation depends on viewMode
   const navigatePrev = () => {
+    setNavDirection(-1);
+    setNavKey(k => k + 1);
     if (viewMode === "month") setCurrentDate(new Date(year, month - 1, 1));
     else if (viewMode === "week") { const d = new Date(currentDate); d.setDate(d.getDate() - 7); setCurrentDate(d); }
     else { const d = new Date(currentDate); d.setDate(d.getDate() - 1); setCurrentDate(d); }
   };
   const navigateNext = () => {
+    setNavDirection(1);
+    setNavKey(k => k + 1);
     if (viewMode === "month") setCurrentDate(new Date(year, month + 1, 1));
     else if (viewMode === "week") { const d = new Date(currentDate); d.setDate(d.getDate() + 7); setCurrentDate(d); }
     else { const d = new Date(currentDate); d.setDate(d.getDate() + 1); setCurrentDate(d); }
   };
-  const goToday = () => { setCurrentDate(new Date()); setSelectedDay(null); };
+  const goToday = () => { setNavDirection(0); setNavKey(k => k + 1); setCurrentDate(new Date()); setSelectedDay(null); };
 
   // Week view helpers
   const getWeekDays = () => {
@@ -1588,9 +1594,15 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 32px 8px" }}>
         <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={navigatePrev}
           style={{ cursor: "pointer", color: "#ffffff50", fontSize: 18, fontFamily: FONT, padding: "4px 8px" }}>‹</motion.div>
-        <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 500, color: "#ffffffcc", minWidth: 200, textAlign: "center" }}>
+        <motion.div
+          key={`nav-${navKey}`}
+          initial={{ opacity: 0, y: navDirection * 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
+          style={{ fontSize: 16, fontFamily: FONT, fontWeight: 500, color: "#ffffffcc", minWidth: 200, textAlign: "center" }}
+        >
           {getNavLabel()}
-        </div>
+        </motion.div>
         <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={navigateNext}
           style={{ cursor: "pointer", color: "#ffffff50", fontSize: 18, fontFamily: FONT, padding: "4px 8px" }}>›</motion.div>
         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={goToday}
@@ -1614,11 +1626,17 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
         </div>
       </div>
 
-      <div style={{ display: "flex", flex: 1, padding: "0 32px 24px", gap: 20, minHeight: 0 }}>
+      <div style={{ display: "flex", flex: 1, padding: "0 32px 24px", gap: 20, minHeight: 0, overflow: "hidden" }}>
 
         {/* ===== MONTH VIEW ===== */}
         {viewMode === "month" && (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          <motion.div
+            key={`month-${navKey}`}
+            initial={{ opacity: 0, x: navDirection * 60 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
+            style={{ flex: 1, display: "flex", flexDirection: "column" }}
+          >
             {/* Weekday headers */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4, background: "rgba(20,18,30,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "2px 0" }}>
               {WEEKDAYS.map((d, di) => (
@@ -1677,12 +1695,18 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
                 );
               })}
             </div>
-          </div>
+          </motion.div>
         )}
 
         {/* ===== WEEK VIEW ===== */}
         {viewMode === "week" && (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          <motion.div
+            key={`week-${navKey}`}
+            initial={{ opacity: 0, x: navDirection * 60 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
+            style={{ flex: 1, display: "flex", flexDirection: "column" }}
+          >
             {/* Weekday headers with dates */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4, background: "rgba(20,18,30,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "6px 0" }}>
               {getWeekDays().map((d, di) => {
@@ -1746,12 +1770,18 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
                 );
               })}
             </div>
-          </div>
+          </motion.div>
         )}
 
         {/* ===== DAY VIEW (List) ===== */}
         {viewMode === "day" && (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflowY: "auto" }}>
+          <motion.div
+            key={`day-${navKey}`}
+            initial={{ opacity: 0, x: navDirection * 60 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
+            style={{ flex: 1, display: "flex", flexDirection: "column", overflowY: "auto" }}
+          >
             {(() => {
               const dayEvents = getEventsForDate(currentDate);
               const hol = getHolidayForDate(currentDate);
@@ -1847,7 +1877,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
                 </>
               );
             })()}
-          </div>
+          </motion.div>
         )}
 
         {/* Day detail sidebar (month view only) */}
