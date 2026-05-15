@@ -1112,6 +1112,296 @@ function KanbanBoard({ onBack, session }) {
   );
 }
 
+// ──── Calendar View ────
+const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+const MONTH_NAMES = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+
+function CalendarView({ onBack, session }) {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDay, setSelectedDay] = useState(null);
+  const [googleEvents, setGoogleEvents] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  const today = new Date();
+
+  // Get calendar grid days
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const startOffset = (firstDay.getDay() + 6) % 7; // Monday = 0
+  const daysInMonth = lastDay.getDate();
+
+  const prevMonthDays = new Date(year, month, 0).getDate();
+  const calendarDays = [];
+  // Previous month tail
+  for (let i = startOffset - 1; i >= 0; i--) {
+    calendarDays.push({ day: prevMonthDays - i, month: month - 1, isOtherMonth: true });
+  }
+  // Current month
+  for (let i = 1; i <= daysInMonth; i++) {
+    calendarDays.push({ day: i, month, isOtherMonth: false });
+  }
+  // Next month head
+  const remaining = 42 - calendarDays.length;
+  for (let i = 1; i <= remaining; i++) {
+    calendarDays.push({ day: i, month: month + 1, isOtherMonth: true });
+  }
+
+  // Fetch Google Calendar events + Supabase tasks
+  useEffect(() => {
+    if (!session?.user) return;
+    const load = async () => {
+      setLoading(true);
+
+      // Time range for current month view
+      const timeMin = new Date(year, month, 1).toISOString();
+      const timeMax = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
+
+      // Google Calendar
+      const providerToken = session?.provider_token;
+      if (providerToken) {
+        try {
+          const res = await fetch(
+            `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=100`,
+            { headers: { Authorization: `Bearer ${providerToken}` } }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            setGoogleEvents((data.items || []).map(e => ({
+              id: e.id,
+              title: e.summary || "Kein Titel",
+              start: e.start?.dateTime || e.start?.date,
+              end: e.end?.dateTime || e.end?.date,
+              allDay: !!e.start?.date,
+              color: e.colorId ? ["#7986CB","#33B679","#8E24AA","#E67C73","#F6BF26","#F4511E","#039BE5","#616161","#3F51B5","#0B8043","#D50000"][parseInt(e.colorId)] : "#5B8DEF",
+              type: "google",
+              location: e.location,
+              hangoutLink: e.hangoutLink,
+            })));
+          }
+        } catch (err) {
+          console.error("Calendar fetch error:", err);
+        }
+      }
+
+      // Supabase tasks with due_date
+      const { data: taskData } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("creator_id", session.user.id)
+        .not("due_date", "is", null);
+      setTasks((taskData || []).map(t => ({
+        id: t.id,
+        title: t.title,
+        start: t.due_date,
+        color: priColors[t.priority] || "#8B7AFF",
+        type: "task",
+        priority: t.priority,
+        project: t.project_name,
+      })));
+
+      setLoading(false);
+    };
+    load();
+  }, [session, year, month]);
+
+  // Get events for a specific day
+  const getEventsForDay = (dayObj) => {
+    const dateStr = `${year}-${String(dayObj.month + 1).padStart(2, "0")}-${String(dayObj.day).padStart(2, "0")}`;
+    // Adjust year for prev/next month overflow
+    let y = year;
+    let m = dayObj.month;
+    if (m < 0) { m = 11; y--; } else if (m > 11) { m = 0; y++; }
+    const checkDate = `${y}-${String(m + 1).padStart(2, "0")}-${String(dayObj.day).padStart(2, "0")}`;
+
+    const dayEvents = [];
+    googleEvents.forEach(e => {
+      const eDate = (e.start || "").substring(0, 10);
+      if (eDate === checkDate) dayEvents.push(e);
+    });
+    tasks.forEach(t => {
+      const tDate = (t.start || "").substring(0, 10);
+      if (tDate === checkDate) dayEvents.push(t);
+    });
+    return dayEvents;
+  };
+
+  const isToday = (dayObj) => {
+    return !dayObj.isOtherMonth && dayObj.day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+  };
+
+  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
+  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+  const goToday = () => { setCurrentDate(new Date()); setSelectedDay(null); };
+
+  const selectedEvents = selectedDay ? getEventsForDay(selectedDay) : [];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+      style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", zIndex: 5 }}
+    >
+      {/* Top bar */}
+      <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "24px 32px 0" }}>
+        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={onBack}
+          style={{ width: 32, height: 32, borderRadius: "50%", cursor: "pointer", border: "1px solid #ffffff18", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "#ffffff50", fontFamily: FONT }}>←</motion.div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 22, fontWeight: 500, color: "#ffffffe6", fontFamily: FONT, letterSpacing: -0.5 }}>Calendar</div>
+          <div style={{ fontSize: 12, color: "#ffffff50", fontFamily: FONT, marginTop: 2 }}>
+            {loading ? "Loading..." : `${googleEvents.length} Events · ${tasks.length} Tasks`}
+          </div>
+        </div>
+      </div>
+
+      {/* Month navigation */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 32px 8px" }}>
+        <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={prevMonth}
+          style={{ cursor: "pointer", color: "#ffffff50", fontSize: 18, fontFamily: FONT, padding: "4px 8px" }}>‹</motion.div>
+        <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 500, color: "#ffffffcc", minWidth: 160, textAlign: "center" }}>
+          {MONTH_NAMES[month]} {year}
+        </div>
+        <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={nextMonth}
+          style={{ cursor: "pointer", color: "#ffffff50", fontSize: 18, fontFamily: FONT, padding: "4px 8px" }}>›</motion.div>
+        <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={goToday}
+          style={{ marginLeft: 8, cursor: "pointer", fontSize: 11, fontFamily: FONT, color: "#8B7AFF", padding: "4px 12px", borderRadius: 8, background: "rgba(139,122,255,0.1)", border: "1px solid rgba(139,122,255,0.2)" }}>Heute</motion.div>
+      </div>
+
+      <div style={{ display: "flex", flex: 1, padding: "0 32px 24px", gap: 20, minHeight: 0 }}>
+        {/* Calendar Grid */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          {/* Weekday headers */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4 }}>
+            {WEEKDAYS.map(d => (
+              <div key={d} style={{ textAlign: "center", fontSize: 11, fontFamily: FONT, color: "#ffffff35", padding: "6px 0", fontWeight: 500 }}>{d}</div>
+            ))}
+          </div>
+          {/* Day cells */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, flex: 1 }}>
+            {calendarDays.map((dayObj, i) => {
+              const events = getEventsForDay(dayObj);
+              const isSelected = selectedDay && selectedDay.day === dayObj.day && selectedDay.month === dayObj.month && !dayObj.isOtherMonth;
+              const todayHighlight = isToday(dayObj);
+              return (
+                <motion.div
+                  key={i}
+                  whileHover={{ scale: 1.02 }}
+                  onClick={() => !dayObj.isOtherMonth && setSelectedDay(dayObj)}
+                  style={{
+                    padding: "4px 6px", borderRadius: 10, cursor: dayObj.isOtherMonth ? "default" : "pointer",
+                    background: isSelected ? "rgba(139,122,255,0.12)" : todayHighlight ? "rgba(139,122,255,0.06)" : "rgba(255,255,255,0.02)",
+                    border: isSelected ? "1px solid rgba(139,122,255,0.3)" : todayHighlight ? "1px solid rgba(139,122,255,0.15)" : "1px solid rgba(255,255,255,0.03)",
+                    display: "flex", flexDirection: "column", minHeight: 54, transition: "all 0.15s",
+                    opacity: dayObj.isOtherMonth ? 0.25 : 1,
+                  }}
+                >
+                  <div style={{
+                    fontSize: 12, fontFamily: FONT, fontWeight: todayHighlight ? 600 : 400,
+                    color: todayHighlight ? "#8B7AFF" : isSelected ? "#ffffffcc" : "#ffffff70",
+                    marginBottom: 3,
+                  }}>{dayObj.day}</div>
+                  {/* Event dots */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2, overflow: "hidden", flex: 1 }}>
+                    {events.slice(0, 3).map((e, ei) => (
+                      <div key={ei} style={{
+                        fontSize: 9, fontFamily: FONT, color: e.color,
+                        background: e.color + "15", borderRadius: 4,
+                        padding: "1px 4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                        borderLeft: `2px solid ${e.color}`,
+                      }}>{e.title}</div>
+                    ))}
+                    {events.length > 3 && (
+                      <div style={{ fontSize: 9, fontFamily: FONT, color: "#ffffff30" }}>+{events.length - 3} mehr</div>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Day detail sidebar */}
+        <AnimatePresence>
+          {selectedDay && !selectedDay.isOtherMonth && (
+            <motion.div
+              initial={{ opacity: 0, x: 20, width: 0 }}
+              animate={{ opacity: 1, x: 0, width: 280 }}
+              exit={{ opacity: 0, x: 20, width: 0 }}
+              transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
+              style={{
+                width: 280, flexShrink: 0, background: "rgba(255,255,255,0.03)",
+                border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16,
+                display: "flex", flexDirection: "column", overflow: "hidden",
+              }}
+            >
+              <div style={{ padding: "16px 18px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: "#ffffffdd" }}>
+                  {selectedDay.day}. {MONTH_NAMES[month]}
+                </div>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginTop: 2 }}>
+                  {selectedEvents.length === 0 ? "Keine Termine" : `${selectedEvents.length} ${selectedEvents.length === 1 ? "Termin" : "Termine"}`}
+                </div>
+              </div>
+              <div style={{ flex: 1, overflowY: "auto", padding: "8px 10px" }}>
+                {selectedEvents.length === 0 && (
+                  <div style={{ padding: "24px 8px", textAlign: "center", fontSize: 12, fontFamily: FONT, color: "#ffffff25" }}>
+                    Freier Tag ✦
+                  </div>
+                )}
+                {selectedEvents.map((e, i) => (
+                  <motion.div key={e.id || i}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.04, duration: 0.2 }}
+                    style={{
+                      padding: "10px 12px", borderRadius: 10, marginBottom: 6,
+                      background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)",
+                      borderLeft: `3px solid ${e.color}`,
+                    }}
+                  >
+                    <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd", marginBottom: 3 }}>{e.title}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      {e.start && !e.allDay && (
+                        <span style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff45" }}>
+                          {new Date(e.start).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+                          {e.end && ` – ${new Date(e.end).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`}
+                        </span>
+                      )}
+                      {e.allDay && <span style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff35", padding: "1px 6px", borderRadius: 4, background: "rgba(255,255,255,0.04)" }}>Ganztägig</span>}
+                      {e.type === "google" && (
+                        <span style={{ fontSize: 9, fontFamily: FONT, color: "#5B8DEF", padding: "1px 6px", borderRadius: 4, background: "rgba(91,141,239,0.1)" }}>Google</span>
+                      )}
+                      {e.type === "task" && (
+                        <span style={{ fontSize: 9, fontFamily: FONT, color: "#8B7AFF", padding: "1px 6px", borderRadius: 4, background: "rgba(139,122,255,0.1)" }}>Task</span>
+                      )}
+                      {e.project && (
+                        <span style={{ fontSize: 9, fontFamily: FONT, color: "#ffffff30" }}>{e.project}</span>
+                      )}
+                    </div>
+                    {e.location && (
+                      <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30", marginTop: 4 }}>📍 {e.location}</div>
+                    )}
+                    {e.hangoutLink && (
+                      <motion.a href={e.hangoutLink} target="_blank" rel="noopener noreferrer"
+                        whileHover={{ scale: 1.02 }}
+                        style={{ display: "inline-block", fontSize: 10, fontFamily: FONT, color: "#00B894", marginTop: 4, textDecoration: "none" }}
+                      >🔗 Google Meet beitreten</motion.a>
+                    )}
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.div>
+  );
+}
+
 const FILE_TYPE_COLORS = {
   "application/pdf": "#E84393",
   "application/vnd.google-apps.document": "#5B8DEF",
@@ -2195,7 +2485,7 @@ export default function CircularMenu() {
       provider: "google",
       options: {
         redirectTo: window.location.origin,
-        scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive",
+        scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar.readonly",
       },
     });
     if (error) setAuthError(error.message);
@@ -2389,7 +2679,7 @@ export default function CircularMenu() {
 
   const handleWheel = useCallback((e) => {
     // Let views with their own scrolling (files, chat) handle scroll natively
-    if (currentView === "files" || currentView === "chat" || currentView === "kanban") {
+    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar") {
       return;
     }
 
@@ -2470,6 +2760,8 @@ export default function CircularMenu() {
 
     if (subItem.id === "kanban") {
       setCurrentView("kanban");
+    } else if (subItem.id === "calendar") {
+      setCurrentView("calendar");
     } else if (["images", "videos", "all", "fonts", "raw", "links"].includes(subItem.id)) {
       setCurrentView("files");
     } else if (["team", "clients", "ai", "channels", "calls", "archive"].includes(subItem.id)) {
@@ -2657,6 +2949,13 @@ export default function CircularMenu() {
         <AnimatePresence>
           {currentView === "kanban" && (
             <KanbanBoard session={session} onBack={() => setCurrentView("dashboard")} />
+          )}
+        </AnimatePresence>
+
+        {/* CALENDAR VIEW */}
+        <AnimatePresence>
+          {currentView === "calendar" && (
+            <CalendarView session={session} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
