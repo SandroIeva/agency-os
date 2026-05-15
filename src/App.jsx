@@ -1864,10 +1864,11 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
                 display: "flex", flexDirection: "column", overflow: "hidden",
               }}
             >
-              <div style={{ padding: "16px 18px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: "#ffffffdd" }}>
-                  {selectedDay.day}. {MONTH_NAMES[month]}
-                </div>
+              <div style={{ padding: "16px 18px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+                <div>
+                  <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: "#ffffffdd" }}>
+                    {selectedDay.day}. {MONTH_NAMES[month]}
+                  </div>
                 <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginTop: 2 }}>
                   {selectedEvents.length === 0 ? "Keine Termine" : `${selectedEvents.length} ${selectedEvents.length === 1 ? "Termin" : "Termine"}`}
                 </div>
@@ -1877,6 +1878,13 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall }) {
                     <span style={{ fontSize: 11, fontFamily: FONT, color: "#F59E0B" }}>{getHoliday(selectedDay)}</span>
                   </div>
                 )}
+                </div>
+                <motion.div
+                  whileHover={{ scale: 1.15, background: "rgba(255,255,255,0.08)" }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setSelectedDay(null)}
+                  style={{ cursor: "pointer", width: 24, height: 24, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#ffffff40", flexShrink: 0, transition: "all 0.15s" }}
+                >✕</motion.div>
               </div>
               <div style={{ flex: 1, overflowY: "auto", padding: "8px 10px" }}>
                 {selectedEvents.length === 0 && (
