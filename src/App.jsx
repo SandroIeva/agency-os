@@ -1122,6 +1122,9 @@ function CalendarView({ onBack, session, getProviderToken }) {
   const [googleEvents, setGoogleEvents] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showNewEvent, setShowNewEvent] = useState(false);
+  const [eventForm, setEventForm] = useState({ title: "", date: "", startTime: "09:00", endTime: "10:00", description: "", allDay: false });
+  const [savingEvent, setSavingEvent] = useState(false);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -1249,6 +1252,72 @@ function CalendarView({ onBack, session, getProviderToken }) {
 
   const selectedEvents = selectedDay ? getEventsForDay(selectedDay) : [];
 
+  // Open new event form (pre-fill date if a day is selected)
+  const openNewEvent = (dayObj) => {
+    let y = year, m = dayObj ? dayObj.month : month;
+    if (m < 0) { m = 11; y--; } else if (m > 11) { m = 0; y++; }
+    const dateStr = dayObj
+      ? `${y}-${String(m + 1).padStart(2, "0")}-${String(dayObj.day).padStart(2, "0")}`
+      : `${year}-${String(month + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    setEventForm({ title: "", date: dateStr, startTime: "09:00", endTime: "10:00", description: "", allDay: false });
+    setShowNewEvent(true);
+  };
+
+  // Create Google Calendar event
+  const createGoogleEvent = async () => {
+    if (!eventForm.title.trim() || !eventForm.date) return;
+    const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
+    if (!providerToken) { alert("Kein Google Zugriff. Bitte neu einloggen."); return; }
+    setSavingEvent(true);
+    try {
+      const body = { summary: eventForm.title.trim(), description: eventForm.description };
+      if (eventForm.allDay) {
+        body.start = { date: eventForm.date };
+        // Google all-day events need end date = next day
+        const nextDay = new Date(eventForm.date);
+        nextDay.setDate(nextDay.getDate() + 1);
+        body.end = { date: nextDay.toISOString().split("T")[0] };
+      } else {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        body.start = { dateTime: `${eventForm.date}T${eventForm.startTime}:00`, timeZone: tz };
+        body.end = { dateTime: `${eventForm.date}T${eventForm.endTime}:00`, timeZone: tz };
+      }
+      const res = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${providerToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        setShowNewEvent(false);
+        // Refresh events
+        const timeMin = new Date(year, month, 1).toISOString();
+        const timeMax = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
+        const evRes = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=100`,
+          { headers: { Authorization: `Bearer ${providerToken}` } }
+        );
+        if (evRes.ok) {
+          const data = await evRes.json();
+          setGoogleEvents((data.items || []).map(e => ({
+            id: e.id, title: e.summary || "Kein Titel",
+            start: e.start?.dateTime || e.start?.date, end: e.end?.dateTime || e.end?.date,
+            allDay: !!e.start?.date,
+            color: e.colorId ? ["#7986CB","#33B679","#8E24AA","#E67C73","#F6BF26","#F4511E","#039BE5","#616161","#3F51B5","#0B8043","#D50000"][parseInt(e.colorId)] : "#5B8DEF",
+            type: "google", location: e.location, hangoutLink: e.hangoutLink,
+          })));
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        console.error("Create event error:", res.status, err);
+        if (res.status === 401) localStorage.removeItem("agencyos-google-token");
+        alert("Fehler beim Erstellen: " + (err.error?.message || "Unbekannter Fehler"));
+      }
+    } catch (err) {
+      console.error("Create event error:", err);
+    }
+    setSavingEvent(false);
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -1267,6 +1336,11 @@ function CalendarView({ onBack, session, getProviderToken }) {
             {loading ? "Loading..." : `${googleEvents.length} Events · ${tasks.length} Tasks`}
           </div>
         </div>
+        <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+          onClick={() => openNewEvent(selectedDay)}
+          style={{ cursor: "pointer", fontSize: 12, fontFamily: FONT, color: "#fff", padding: "8px 18px", borderRadius: 10, background: "rgba(139,122,255,0.25)", border: "1px solid rgba(139,122,255,0.35)", fontWeight: 500, letterSpacing: -0.2 }}>
+          + Neuer Termin
+        </motion.div>
       </div>
 
       {/* Month navigation */}
@@ -1286,9 +1360,9 @@ function CalendarView({ onBack, session, getProviderToken }) {
         {/* Calendar Grid */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
           {/* Weekday headers */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4, background: "rgba(20,18,30,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "2px 0" }}>
             {WEEKDAYS.map(d => (
-              <div key={d} style={{ textAlign: "center", fontSize: 11, fontFamily: FONT, color: "#ffffff35", padding: "6px 0", fontWeight: 500 }}>{d}</div>
+              <div key={d} style={{ textAlign: "center", fontSize: 11, fontFamily: FONT, color: "#ffffff45", padding: "6px 0", fontWeight: 500 }}>{d}</div>
             ))}
           </div>
           {/* Day cells */}
@@ -1302,10 +1376,12 @@ function CalendarView({ onBack, session, getProviderToken }) {
                   key={i}
                   whileHover={{ scale: 1.02 }}
                   onClick={() => !dayObj.isOtherMonth && setSelectedDay(dayObj)}
+                  onDoubleClick={() => { if (!dayObj.isOtherMonth) { setSelectedDay(dayObj); openNewEvent(dayObj); } }}
                   style={{
                     padding: "4px 6px", borderRadius: 10, cursor: dayObj.isOtherMonth ? "default" : "pointer",
-                    background: isSelected ? "rgba(139,122,255,0.12)" : todayHighlight ? "rgba(139,122,255,0.06)" : "rgba(255,255,255,0.02)",
-                    border: isSelected ? "1px solid rgba(139,122,255,0.3)" : todayHighlight ? "1px solid rgba(139,122,255,0.15)" : "1px solid rgba(255,255,255,0.03)",
+                    background: isSelected ? "rgba(139,122,255,0.15)" : todayHighlight ? "rgba(139,122,255,0.08)" : "rgba(20,18,30,0.65)",
+                    backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+                    border: isSelected ? "1px solid rgba(139,122,255,0.3)" : todayHighlight ? "1px solid rgba(139,122,255,0.15)" : "1px solid rgba(255,255,255,0.05)",
                     display: "flex", flexDirection: "column", minHeight: 54, transition: "all 0.15s",
                     opacity: dayObj.isOtherMonth ? 0.25 : 1,
                   }}
@@ -1409,6 +1485,105 @@ function CalendarView({ onBack, session, getProviderToken }) {
           )}
         </AnimatePresence>
       </div>
+
+      {/* New Event Modal — rendered via Portal */}
+      {showNewEvent && createPortal(
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={() => setShowNewEvent(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center" }}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
+            onClick={e => e.stopPropagation()}
+            style={{ width: 420, background: "rgba(28,26,42,0.95)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 20, padding: "28px 28px 24px", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}
+          >
+            <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: "#ffffffdd", marginBottom: 20, letterSpacing: -0.3 }}>Neuer Termin</div>
+
+            {/* Title */}
+            <input
+              value={eventForm.title}
+              onChange={e => setEventForm(f => ({ ...f, title: e.target.value }))}
+              placeholder="Titel"
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#ffffffdd", fontSize: 14, fontFamily: FONT, outline: "none", marginBottom: 12, boxSizing: "border-box" }}
+            />
+
+            {/* Date */}
+            <input
+              type="date"
+              value={eventForm.date}
+              onChange={e => setEventForm(f => ({ ...f, date: e.target.value }))}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#ffffffdd", fontSize: 13, fontFamily: FONT, outline: "none", marginBottom: 12, boxSizing: "border-box", colorScheme: "dark" }}
+            />
+
+            {/* All day toggle */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                onClick={() => setEventForm(f => ({ ...f, allDay: !f.allDay }))}
+                style={{ width: 36, height: 20, borderRadius: 10, background: eventForm.allDay ? "rgba(139,122,255,0.4)" : "rgba(255,255,255,0.08)", cursor: "pointer", position: "relative", transition: "background 0.2s" }}
+              >
+                <motion.div animate={{ x: eventForm.allDay ? 17 : 2 }} transition={{ duration: 0.2 }}
+                  style={{ width: 16, height: 16, borderRadius: "50%", background: eventForm.allDay ? "#8B7AFF" : "#ffffff50", position: "absolute", top: 2 }} />
+              </motion.div>
+              <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff70" }}>Ganztägig</span>
+            </div>
+
+            {/* Time pickers (hidden when all-day) */}
+            {!eventForm.allDay && (
+              <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff40", marginBottom: 4 }}>Von</div>
+                  <input
+                    type="time"
+                    value={eventForm.startTime}
+                    onChange={e => setEventForm(f => ({ ...f, startTime: e.target.value }))}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#ffffffdd", fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box", colorScheme: "dark" }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff40", marginBottom: 4 }}>Bis</div>
+                  <input
+                    type="time"
+                    value={eventForm.endTime}
+                    onChange={e => setEventForm(f => ({ ...f, endTime: e.target.value }))}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#ffffffdd", fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box", colorScheme: "dark" }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Description */}
+            <textarea
+              value={eventForm.description}
+              onChange={e => setEventForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="Beschreibung (optional)"
+              rows={3}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#ffffffdd", fontSize: 13, fontFamily: FONT, outline: "none", resize: "vertical", marginBottom: 20, boxSizing: "border-box" }}
+            />
+
+            {/* Buttons */}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                onClick={() => setShowNewEvent(false)}
+                style={{ cursor: "pointer", padding: "9px 20px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: "#ffffff60", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                Abbrechen
+              </motion.div>
+              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                onClick={createGoogleEvent}
+                style={{ cursor: savingEvent ? "wait" : "pointer", padding: "9px 24px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: "#fff", fontWeight: 500, background: savingEvent ? "rgba(139,122,255,0.15)" : "rgba(139,122,255,0.3)", border: "1px solid rgba(139,122,255,0.4)", opacity: (!eventForm.title.trim() || savingEvent) ? 0.5 : 1 }}>
+                {savingEvent ? "Speichern..." : "Termin erstellen"}
+              </motion.div>
+            </div>
+          </motion.div>
+        </motion.div>,
+        document.body
+      )}
     </motion.div>
   );
 }
@@ -2507,7 +2682,7 @@ export default function CircularMenu() {
       provider: "google",
       options: {
         redirectTo: window.location.origin,
-        scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar.readonly",
+        scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events",
       },
     });
     if (error) setAuthError(error.message);
