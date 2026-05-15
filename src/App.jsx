@@ -4182,7 +4182,7 @@ export default function CircularMenu() {
                     transition={{ delay: 0.3, duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
                     style={{
                       fontSize: 14, fontFamily: FONT,
-                      fontWeight: 400, textAlign: "center", maxWidth: 420,
+                      fontWeight: 400, textAlign: "center", maxWidth: 560,
                       marginTop: 28, lineHeight: 1.7, padding: "0 20px",
                     }}
                   >
