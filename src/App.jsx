@@ -3685,31 +3685,66 @@ export default function CircularMenu() {
 
   // ── Local voice command detection (no LLM tokens) ──
   const detectVoiceCommand = (text) => {
-    const t = text.toLowerCase().trim();
-    // Navigation commands — DE + EN
+    const t = text.toLowerCase().trim().replace(/[.,!?]/g, "");
+    // Navigation commands — DE + EN, colloquial, fuzzy
     const navRules = [
-      { patterns: ["kalender", "calendar", "termine", "events"], view: "calendar", response: "Calendar opened." },
-      { patterns: ["kanban", "board", "projekte", "projects", "tasks"], view: "kanban", response: "Kanban board opened." },
-      { patterns: ["dateien", "files", "dokumente", "documents", "drive"], view: "files", response: "Files opened." },
-      { patterns: ["chat", "nachrichten", "messages"], view: "chat", response: "Chat opened." },
-      { patterns: ["einstellungen", "settings"], view: "settings", response: "Settings opened." },
-      { patterns: ["dashboard", "home", "startseite", "start", "zurück", "back"], view: "dashboard", response: "Dashboard opened." },
+      { patterns: [
+        "kalender", "calendar", "termine", "termin", "events", "event",
+        "meine termine", "zeig termine", "öffne kalender", "open calendar",
+        "show calendar", "go to calendar", "geh zum kalender", "wann hab ich",
+        "was steht an", "nächster termin", "schedule", "zeitplan",
+      ], view: "calendar" },
+      { patterns: [
+        "kanban", "board", "projekte", "projekt", "projects", "project",
+        "tasks", "task", "aufgaben", "aufgabe", "todos", "to do",
+        "zeig projekte", "öffne kanban", "open board", "show tasks",
+        "meine aufgaben", "was muss ich", "was liegt an",
+      ], view: "kanban" },
+      { patterns: [
+        "dateien", "datei", "files", "file", "dokumente", "dokument",
+        "documents", "drive", "ordner", "folder", "meine dateien",
+        "zeig dateien", "öffne dateien", "open files", "show files",
+        "meine dokumente", "bilder", "images", "videos", "docs",
+      ], view: "files" },
+      { patterns: [
+        "chat", "chats", "nachrichten", "nachricht", "messages", "message",
+        "kommunikation", "team chat", "öffne chat", "open chat", "show messages",
+        "zeig nachrichten", "wer hat geschrieben",
+      ], view: "chat" },
+      { patterns: [
+        "einstellungen", "settings", "einstellung", "preferences", "config",
+        "konfiguration", "optionen", "options", "öffne einstellungen",
+        "open settings", "show settings",
+      ], view: "settings" },
+      { patterns: [
+        "dashboard", "home", "startseite", "start", "zurück", "back",
+        "hauptseite", "übersicht", "overview", "go home", "geh zurück",
+        "go back", "main", "anfang",
+      ], view: "dashboard" },
     ];
     // Action commands
     const actionRules = [
-      { patterns: ["dark mode", "dunkelmodus", "dunkel", "dark"], action: () => setDarkMode(true), response: "Dark mode activated." },
-      { patterns: ["light mode", "hellmodus", "hell", "light"], action: () => setDarkMode(false), response: "Light mode activated." },
+      { patterns: [
+        "dark mode", "dunkelmodus", "dunkel machen", "mach dunkel",
+        "dunkles design", "nachtmodus", "night mode", "switch to dark",
+        "mach mal dunkel", "dunkler",
+      ], action: () => setDarkMode(true) },
+      { patterns: [
+        "light mode", "hellmodus", "hell machen", "mach hell",
+        "helles design", "tagmodus", "bright mode", "switch to light",
+        "mach mal hell", "heller",
+      ], action: () => setDarkMode(false) },
     ];
-    // Check navigation (require "öffne/open/zeig/show/go to/gehe zu" + keyword, OR just the keyword alone)
+    // Check navigation
     for (const rule of navRules) {
       for (const p of rule.patterns) {
-        if (t.includes(p)) return { view: rule.view, response: rule.response };
+        if (t.includes(p)) return { view: rule.view };
       }
     }
     // Check actions
     for (const rule of actionRules) {
       for (const p of rule.patterns) {
-        if (t.includes(p)) return { action: rule.action, response: rule.response };
+        if (t.includes(p)) return { action: rule.action };
       }
     }
     return null;
