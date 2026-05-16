@@ -3754,27 +3754,26 @@ export default function CircularMenu() {
   const stopVoice = async () => {
     // Stop recognition
     try { if (recognitionRef.current) recognitionRef.current.stop(); } catch(e) {}
-    
-    setVoiceMode(false);
-    setAiSpeaking(true);
-    setAiStatus("thinking");
-    aiStoppedRef.current = false;
 
     const userMessage = transcript || "Hello, what can you help me with?";
 
     // ── Local voice commands — no LLM tokens used ──
     const voiceNav = detectVoiceCommand(userMessage);
     if (voiceNav) {
-      voiceNavActiveRef.current = true;
-      if (voiceNav.view) setCurrentView(voiceNav.view);
-      if (voiceNav.action) voiceNav.action();
+      setVoiceMode(false);
       setAiSpeaking(false);
       setAiStatus("");
       setAiResponse("");
       setTranscript("");
-      setTimeout(() => { voiceNavActiveRef.current = false; }, 100);
+      if (voiceNav.view) setCurrentView(voiceNav.view);
+      if (voiceNav.action) voiceNav.action();
       return;
     }
+
+    setVoiceMode(false);
+    setAiSpeaking(true);
+    setAiStatus("thinking");
+    aiStoppedRef.current = false;
 
     try {
       // Build context-aware system prompt
