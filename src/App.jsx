@@ -539,7 +539,7 @@ const DEFAULT_COLUMNS = [
   { id: "col-done", key: "done", labelKey: "kanban.done", color: "#00B894", position: 3 },
 ];
 
-function KanbanBoard({ onBack, session, theme, darkMode }) {
+function KanbanBoard({ onBack, session, theme, darkMode, t }) {
   const [tasks, setTasks] = useState([]);
   const [teamMembers, setTeamMembers] = useState({});
   const [filter, setFilter] = useState("all");
@@ -1120,7 +1120,7 @@ function KanbanBoard({ onBack, session, theme, darkMode }) {
 const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const MONTH_NAMES = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
 
-function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReLogin, theme, darkMode }) {
+function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReLogin, theme, darkMode, t }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
   const [viewMode, setViewMode] = useState("month"); // "month" | "week" | "day"
@@ -2326,7 +2326,7 @@ function getFileExtension(name, mimeType) {
   return "FILE";
 }
 
-function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, darkMode }) {
+function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, darkMode, t }) {
   const [search, setSearch] = useState("");
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -3120,7 +3120,7 @@ function ConversationView({ conversation, onBack }) {
   );
 }
 
-function ChatView({ onBack, initialTab = "Team" }) {
+function ChatView({ onBack, initialTab = "Team", t }) {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [search, setSearch] = useState("");
   const [activeConversation, setActiveConversation] = useState(null);
@@ -4304,21 +4304,21 @@ export default function CircularMenu() {
         {/* KANBAN VIEW */}
         <AnimatePresence>
           {currentView === "kanban" && (
-            <KanbanBoard session={session} onBack={() => setCurrentView("dashboard")} theme={theme} darkMode={darkMode} />
+            <KanbanBoard session={session} onBack={() => setCurrentView("dashboard")} theme={theme} darkMode={darkMode} t={t} />
           )}
         </AnimatePresence>
 
         {/* CALENDAR VIEW */}
         <AnimatePresence>
           {currentView === "calendar" && (
-            <CalendarView session={session} getProviderToken={getProviderToken} openMeetCall={openMeetCall} autoReLogin={autoReLogin} onBack={() => setCurrentView("dashboard")} theme={theme} darkMode={darkMode} />
+            <CalendarView session={session} getProviderToken={getProviderToken} openMeetCall={openMeetCall} autoReLogin={autoReLogin} onBack={() => setCurrentView("dashboard")} theme={theme} darkMode={darkMode} t={t} />
           )}
         </AnimatePresence>
 
         {/* FILES VIEW */}
         <AnimatePresence>
           {currentView === "files" && (
-            <FilesView session={session} getProviderToken={getProviderToken} autoReLogin={autoReLogin} theme={theme} darkMode={darkMode} onBack={() => {
+            <FilesView session={session} getProviderToken={getProviderToken} autoReLogin={autoReLogin} theme={theme} darkMode={darkMode} t={t} onBack={() => {
               setCurrentView("dashboard");
               setMenuSource("grid");
               setActiveIndex(4);
@@ -4334,6 +4334,7 @@ export default function CircularMenu() {
           {currentView === "chat" && (
             <ChatView
               initialTab={chatTab}
+              t={t}
               onBack={() => {
                 setCurrentView("dashboard");
                 setMenuSource("grid");
