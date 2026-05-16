@@ -128,6 +128,8 @@ const translations = {
   "dash.actLoggedToday": { de: "4h 30m heute erfasst", en: "4h 30m logged today" },
   "dash.priority": { de: "Priorität", en: "Priority" },
   "dash.upcoming": { de: "Geplant", en: "Upcoming" },
+  "dash.all": { de: "Alle", en: "All" },
+  "dash.noTasks": { de: "Keine offenen Aufgaben — alles erledigt!", en: "No open tasks — all done!" },
   "dash.completed": { de: "Erledigt", en: "Completed" },
   "dash.overdue": { de: "Überfällig", en: "Overdue" },
   "dash.wed": { de: "Mi", en: "Wed" },

@@ -3371,6 +3371,7 @@ export default function CircularMenu() {
   const [chatTab, setChatTab] = useState("Team");
   const [panelOpen, setPanelOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
+  const [dashboardTasks, setDashboardTasks] = useState([]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem("agencyos-dark-mode");
@@ -3727,6 +3728,34 @@ export default function CircularMenu() {
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [session, autoReLogin, isTokenFresh]);
+
+  // ── Fetch Kanban tasks for dashboard display ──
+  useEffect(() => {
+    if (!session?.user) return;
+    const loadTasks = async () => {
+      try {
+        const { data } = await supabase
+          .from("tasks")
+          .select("*")
+          .eq("creator_id", session.user.id)
+          .order("position");
+        setDashboardTasks(data || []);
+      } catch (e) {
+        console.warn("Dashboard tasks load failed:", e.message);
+      }
+    };
+    loadTasks();
+
+    // Subscribe to realtime changes so dashboard stays in sync with Kanban
+    const channel = supabase
+      .channel("dashboard-tasks")
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: `creator_id=eq.${session.user.id}` }, () => {
+        loadTasks();
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [session]);
 
   const getGreeting = () => {
     const h = new Date().getHours();
@@ -4935,9 +4964,7 @@ export default function CircularMenu() {
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   {[
-                    { label: t("dash.today"), count: 5, active: true },
-                    { label: t("dash.tomorrow"), count: 3, active: false },
-                    { label: t("dash.week"), count: 12, active: false },
+                    { label: t("dash.all"), count: dashboardTasks.filter(tk => tk.column_key !== "done").length, active: true },
                   ].map(f => (
                     <div key={f.label} style={{
                       padding: "6px 14px", borderRadius: 10, cursor: "pointer",
@@ -4953,137 +4980,152 @@ export default function CircularMenu() {
                 </div>
               </motion.div>
 
-              {/* Task sections */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 20, flex: 1, minHeight: 0 }}>
+              {/* Task sections — real data from Kanban board */}
+              {(() => {
+                // Split tasks by priority, exclude "done" column
+                const activeTasks = dashboardTasks.filter(tk => tk.column_key !== "done");
+                const highTasks = activeTasks.filter(tk => tk.priority === "high");
+                const mediumTasks = activeTasks.filter(tk => tk.priority === "medium");
+                const lowTasks = activeTasks.filter(tk => tk.priority === "low" || !tk.priority);
+                const iconMap = { "todo": "◻", "in_progress": "◎", "review": "◆", "done": "✓" };
+                const colLabel = (key) => {
+                  const map = { "todo": t("kanban.todo"), "in_progress": t("kanban.inProgress"), "review": t("kanban.review") };
+                  return map[key] || key;
+                };
 
-                {/* Priority / Überfällig */}
-                <div>
-                  <motion.div
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.1, duration: 0.3 }}
-                    style={{ fontSize: 10, fontFamily: FONT, color: "#E8436380", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}
-                  >
-                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#E84393" }} />
-                    {t("dash.priority")}
-                  </motion.div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    {[
-                      { task: t("dash.demoTask1"), project: "Meridian", due: t("dash.overdue"), color: "#E84393", icon: "◆" },
-                      { task: t("dash.demoTask2"), project: "Brand Refresh", due: `${t("dash.today")}, 14:00`, color: "#E84393", icon: "◎" },
-                    ].map((tsk, i) => (
-                      <motion.div key={i}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.12 + i * 0.05, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
-                        className="hover-row"
-                        style={{
-                          display: "flex", alignItems: "center", gap: 14,
-                          padding: "13px 16px", borderRadius: 14,
-                          background: darkMode ? "rgba(232, 67, 147, 0.04)" : "rgba(232, 67, 147, 0.05)",
-                          border: darkMode ? "1px solid rgba(232, 67, 147, 0.1)" : "1px solid rgba(232, 67, 147, 0.15)",
-                          cursor: "pointer",
-                        }}
-                      >
-                        <div style={{ width: 22, height: 22, borderRadius: 6, border: `1.5px solid ${tsk.color}60`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <div style={{ fontSize: 9, color: t.color }}>{tsk.icon}</div>
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{tsk.task}</div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff35" : "#1a1a2e55", marginTop: 2 }}>{tsk.project}</div>
-                        </div>
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: t.color + "90", flexShrink: 0 }}>{tsk.due}</div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 20, flex: 1, minHeight: 0, overflowY: "auto" }}>
 
-                {/* Heute */}
-                <div>
-                  <motion.div
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.2, duration: 0.3 }}
-                    style={{ fontSize: 10, fontFamily: FONT, color: "#F59E0B80", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}
-                  >
-                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#F59E0B" }} />
-                    {t("dash.today")}
-                  </motion.div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    {[
-                      { task: t("dash.demoTask3"), project: "Agency OS", due: "15:00", color: "#F59E0B", icon: "◻" },
-                      { task: t("dash.demoTask4"), project: "Volta", due: "16:30", color: "#F59E0B", icon: "◷" },
-                      { task: t("dash.demoTask5"), project: "Brand Refresh", due: "18:00", color: "#F59E0B", icon: "▲" },
-                    ].map((tsk, i) => (
-                      <motion.div key={i}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.22 + i * 0.05, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
-                        className="hover-row"
-                        style={{
-                          display: "flex", alignItems: "center", gap: 14,
-                          padding: "13px 16px", borderRadius: 14,
-                          background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.025)",
-                          border: darkMode ? "1px solid rgba(255,255,255,0.05)" : "1px solid rgba(0,0,0,0.06)",
-                          cursor: "pointer",
-                        }}
-                      >
-                        <div style={{ width: 22, height: 22, borderRadius: 6, border: darkMode ? "1.5px solid #ffffff20" : "1.5px solid #1a1a2e20", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <div style={{ fontSize: 9, color: darkMode ? "#ffffff40" : "#1a1a2e50" }}>{tsk.icon}</div>
+                    {/* Priority / High */}
+                    {highTasks.length > 0 && (
+                      <div>
+                        <motion.div
+                          initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.1, duration: 0.3 }}
+                          style={{ fontSize: 10, fontFamily: FONT, color: "#E8436380", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}
+                        >
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#E84393" }} />
+                          {t("dash.priority")}
+                        </motion.div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          {highTasks.map((tsk, i) => (
+                            <motion.div key={tsk.id}
+                              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.12 + i * 0.05, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
+                              className="hover-row"
+                              onClick={() => { setTasksOpen(false); setCurrentView("kanban"); }}
+                              style={{
+                                display: "flex", alignItems: "center", gap: 14,
+                                padding: "13px 16px", borderRadius: 14,
+                                background: darkMode ? "rgba(232, 67, 147, 0.04)" : "rgba(232, 67, 147, 0.05)",
+                                border: darkMode ? "1px solid rgba(232, 67, 147, 0.1)" : "1px solid rgba(232, 67, 147, 0.15)",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <div style={{ width: 22, height: 22, borderRadius: 6, border: "1.5px solid #E8439360", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <div style={{ fontSize: 9, color: "#E84393" }}>{iconMap[tsk.column_key] || "◻"}</div>
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{tsk.title}</div>
+                                <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff35" : "#1a1a2e55", marginTop: 2 }}>{tsk.project_name || colLabel(tsk.column_key)}</div>
+                              </div>
+                              <div style={{ fontSize: 11, fontFamily: FONT, color: "#E8439390", flexShrink: 0 }}>{colLabel(tsk.column_key)}</div>
+                            </motion.div>
+                          ))}
                         </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{tsk.task}</div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff35" : "#1a1a2e55", marginTop: 2 }}>{tsk.project}</div>
-                        </div>
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e60", flexShrink: 0 }}>{tsk.due}</div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
+                      </div>
+                    )}
 
-                {/* Geplant */}
-                <div>
-                  <motion.div
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.3, duration: 0.3 }}
-                    style={{ fontSize: 10, fontFamily: FONT, color: "#8B7AFF80", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}
-                  >
-                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#8B7AFF" }} />
-                    {t("dash.upcoming")}
-                  </motion.div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    {[
-                      { task: t("dash.demoTask6"), project: "Meridian", due: t("dash.tomorrow"), color: "#8B7AFF", icon: "◆" },
-                      { task: t("dash.demoTask7"), project: "Volta", due: t("dash.wed"), color: "#8B7AFF", icon: "◎" },
-                      { task: t("dash.demoTask8"), project: "Strategy", due: t("dash.thu"), color: "#8B7AFF", icon: "✦" },
-                    ].map((tsk, i) => (
-                      <motion.div key={i}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.32 + i * 0.05, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
-                        className="hover-row"
-                        style={{
-                          display: "flex", alignItems: "center", gap: 14,
-                          padding: "13px 16px", borderRadius: 14,
-                          background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)",
-                          border: darkMode ? "1px solid rgba(255,255,255,0.04)" : "1px solid rgba(0,0,0,0.04)",
-                          cursor: "pointer",
-                        }}
-                      >
-                        <div style={{ width: 22, height: 22, borderRadius: 6, border: darkMode ? "1.5px solid #ffffff15" : "1.5px solid #1a1a2e15", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <div style={{ fontSize: 9, color: darkMode ? "#ffffff30" : "#1a1a2e40" }}>{tsk.icon}</div>
+                    {/* Medium priority */}
+                    {mediumTasks.length > 0 && (
+                      <div>
+                        <motion.div
+                          initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.2, duration: 0.3 }}
+                          style={{ fontSize: 10, fontFamily: FONT, color: "#F59E0B80", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}
+                        >
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#F59E0B" }} />
+                          {t("dash.today")}
+                        </motion.div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          {mediumTasks.map((tsk, i) => (
+                            <motion.div key={tsk.id}
+                              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.22 + i * 0.05, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
+                              className="hover-row"
+                              onClick={() => { setTasksOpen(false); setCurrentView("kanban"); }}
+                              style={{
+                                display: "flex", alignItems: "center", gap: 14,
+                                padding: "13px 16px", borderRadius: 14,
+                                background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.025)",
+                                border: darkMode ? "1px solid rgba(255,255,255,0.05)" : "1px solid rgba(0,0,0,0.06)",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <div style={{ width: 22, height: 22, borderRadius: 6, border: darkMode ? "1.5px solid #ffffff20" : "1.5px solid #1a1a2e20", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <div style={{ fontSize: 9, color: darkMode ? "#ffffff40" : "#1a1a2e50" }}>{iconMap[tsk.column_key] || "◻"}</div>
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{tsk.title}</div>
+                                <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff35" : "#1a1a2e55", marginTop: 2 }}>{tsk.project_name || colLabel(tsk.column_key)}</div>
+                              </div>
+                              <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e60", flexShrink: 0 }}>{colLabel(tsk.column_key)}</div>
+                            </motion.div>
+                          ))}
                         </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffff90" : "#1a1a2eBB", fontWeight: 400 }}>{tsk.task}</div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40", marginTop: 2 }}>{tsk.project}</div>
+                      </div>
+                    )}
+
+                    {/* Low priority / upcoming */}
+                    {lowTasks.length > 0 && (
+                      <div>
+                        <motion.div
+                          initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.3, duration: 0.3 }}
+                          style={{ fontSize: 10, fontFamily: FONT, color: "#8B7AFF80", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}
+                        >
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#8B7AFF" }} />
+                          {t("dash.upcoming")}
+                        </motion.div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          {lowTasks.map((tsk, i) => (
+                            <motion.div key={tsk.id}
+                              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.32 + i * 0.05, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
+                              className="hover-row"
+                              onClick={() => { setTasksOpen(false); setCurrentView("kanban"); }}
+                              style={{
+                                display: "flex", alignItems: "center", gap: 14,
+                                padding: "13px 16px", borderRadius: 14,
+                                background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)",
+                                border: darkMode ? "1px solid rgba(255,255,255,0.04)" : "1px solid rgba(0,0,0,0.04)",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <div style={{ width: 22, height: 22, borderRadius: 6, border: darkMode ? "1.5px solid #ffffff15" : "1.5px solid #1a1a2e15", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <div style={{ fontSize: 9, color: darkMode ? "#ffffff30" : "#1a1a2e40" }}>{iconMap[tsk.column_key] || "◻"}</div>
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffff90" : "#1a1a2eBB", fontWeight: 400 }}>{tsk.title}</div>
+                                <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40", marginTop: 2 }}>{tsk.project_name || colLabel(tsk.column_key)}</div>
+                              </div>
+                              <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", flexShrink: 0 }}>{colLabel(tsk.column_key)}</div>
+                            </motion.div>
+                          ))}
                         </div>
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", flexShrink: 0 }}>{tsk.due}</div>
-                      </motion.div>
-                    ))}
+                      </div>
+                    )}
+
+                    {/* Empty state */}
+                    {activeTasks.length === 0 && (
+                      <div style={{ textAlign: "center", padding: "40px 20px" }}>
+                        <div style={{ fontSize: 28, marginBottom: 12 }}>✓</div>
+                        <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffff60" : "#1a1a2e80" }}>{t("dash.noTasks")}</div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              </div>
+                );
+              })()}
             </div>
 
             {/* Drag handle at bottom */}
