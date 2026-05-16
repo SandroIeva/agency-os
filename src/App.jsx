@@ -3683,6 +3683,38 @@ export default function CircularMenu() {
   const activeItems = menuSource === "plus" ? PLUS_MENU_ITEMS : MENU_ITEMS;
   const itemCount = activeItems.length;
 
+  // ── Local voice command detection (no LLM tokens) ──
+  const detectVoiceCommand = (text) => {
+    const t = text.toLowerCase().trim();
+    // Navigation commands — DE + EN
+    const navRules = [
+      { patterns: ["kalender", "calendar", "termine", "events"], view: "calendar", response: "Calendar opened." },
+      { patterns: ["kanban", "board", "projekte", "projects", "tasks"], view: "kanban", response: "Kanban board opened." },
+      { patterns: ["dateien", "files", "dokumente", "documents", "drive"], view: "files", response: "Files opened." },
+      { patterns: ["chat", "nachrichten", "messages"], view: "chat", response: "Chat opened." },
+      { patterns: ["einstellungen", "settings"], view: "settings", response: "Settings opened." },
+      { patterns: ["dashboard", "home", "startseite", "start", "zurück", "back"], view: "dashboard", response: "Dashboard opened." },
+    ];
+    // Action commands
+    const actionRules = [
+      { patterns: ["dark mode", "dunkelmodus", "dunkel", "dark"], action: () => setDarkMode(true), response: "Dark mode activated." },
+      { patterns: ["light mode", "hellmodus", "hell", "light"], action: () => setDarkMode(false), response: "Light mode activated." },
+    ];
+    // Check navigation (require "öffne/open/zeig/show/go to/gehe zu" + keyword, OR just the keyword alone)
+    for (const rule of navRules) {
+      for (const p of rule.patterns) {
+        if (t.includes(p)) return { view: rule.view, response: rule.response };
+      }
+    }
+    // Check actions
+    for (const rule of actionRules) {
+      for (const p of rule.patterns) {
+        if (t.includes(p)) return { action: rule.action, response: rule.response };
+      }
+    }
+    return null;
+  };
+
   // Start voice recording with Web Speech API
   const startVoice = () => {
     setMenuOpen(false);
@@ -3729,6 +3761,16 @@ export default function CircularMenu() {
     aiStoppedRef.current = false;
 
     const userMessage = transcript || "Hello, what can you help me with?";
+
+    // ── Local voice commands — no LLM tokens used ──
+    const voiceNav = detectVoiceCommand(userMessage);
+    if (voiceNav) {
+      if (voiceNav.view) setCurrentView(voiceNav.view);
+      if (voiceNav.action) voiceNav.action();
+      setAiResponse(voiceNav.response);
+      setAiStatus("idle");
+      return;
+    }
 
     try {
       // Build context-aware system prompt
