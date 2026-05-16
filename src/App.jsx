@@ -3365,6 +3365,8 @@ export default function CircularMenu() {
     const saved = localStorage.getItem("agencyos-dark-mode");
     return saved !== null ? JSON.parse(saved) : true; // default dark
   });
+  const [appLanguage, setAppLanguage] = useState(() => localStorage.getItem("agencyos-language") || "de");
+  useEffect(() => { localStorage.setItem("agencyos-language", appLanguage); }, [appLanguage]);
   // LLM provider state
   const [llmProvider, setLlmProvider] = useState(() => localStorage.getItem("agencyos-llm-provider") || "gemini");
   const [llmKeys, setLlmKeys] = useState(() => {
@@ -3686,62 +3688,83 @@ export default function CircularMenu() {
   // ── Local voice command detection (no LLM tokens) ──
   const detectVoiceCommand = (text) => {
     const t = text.toLowerCase().trim().replace(/[.,!?]/g, "");
-    // Navigation commands — DE + EN, colloquial, fuzzy
+    const isDE = appLanguage === "de";
+
     const navRules = [
-      { patterns: [
-        "kalender", "calendar", "termine", "termin", "events", "event",
-        "meine termine", "zeig termine", "öffne kalender", "open calendar",
-        "show calendar", "go to calendar", "geh zum kalender", "wann hab ich",
-        "was steht an", "nächster termin", "schedule", "zeitplan",
+      { patterns: isDE ? [
+        "kalender", "termine", "termin", "öffne kalender", "zeig termine",
+        "geh zum kalender", "wann hab ich", "was steht an", "nächster termin",
+        "zeitplan", "meine termine", "calendar",
+      ] : [
+        "calendar", "events", "event", "schedule", "open calendar",
+        "show calendar", "go to calendar", "my events", "appointments",
+        "what's next", "next meeting", "termine",
       ], view: "calendar" },
-      { patterns: [
-        "kanban", "board", "projekte", "projekt", "projects", "project",
-        "tasks", "task", "aufgaben", "aufgabe", "todos", "to do",
-        "zeig projekte", "öffne kanban", "open board", "show tasks",
-        "meine aufgaben", "was muss ich", "was liegt an",
+      { patterns: isDE ? [
+        "kanban", "board", "projekte", "projekt", "aufgaben", "aufgabe",
+        "öffne kanban", "zeig projekte", "meine aufgaben", "was muss ich",
+        "was liegt an", "todos", "to do", "tasks",
+      ] : [
+        "kanban", "board", "projects", "project", "tasks", "task",
+        "todos", "to do", "open board", "show tasks", "my tasks",
+        "what's pending", "show projects",
       ], view: "kanban" },
-      { patterns: [
-        "dateien", "datei", "files", "file", "dokumente", "dokument",
-        "documents", "drive", "ordner", "folder", "meine dateien",
-        "zeig dateien", "öffne dateien", "open files", "show files",
-        "meine dokumente", "bilder", "images", "videos", "docs",
+      { patterns: isDE ? [
+        "dateien", "datei", "dokumente", "dokument", "ordner", "drive",
+        "��ffne dateien", "zeig dateien", "meine dateien", "meine dokumente",
+        "bilder", "videos", "docs", "files",
+      ] : [
+        "files", "file", "documents", "document", "drive", "folder",
+        "open files", "show files", "my files", "my documents",
+        "images", "videos", "docs", "dateien",
       ], view: "files" },
-      { patterns: [
-        "chat", "chats", "nachrichten", "nachricht", "messages", "message",
-        "kommunikation", "team chat", "öffne chat", "open chat", "show messages",
-        "zeig nachrichten", "wer hat geschrieben",
+      { patterns: isDE ? [
+        "chat", "chats", "nachrichten", "nachricht", "öffne chat",
+        "zeig nachrichten", "wer hat geschrieben", "kommunikation",
+        "team chat", "messages",
+      ] : [
+        "chat", "chats", "messages", "message", "open chat",
+        "show messages", "who wrote", "communication", "team chat",
+        "nachrichten",
       ], view: "chat" },
-      { patterns: [
-        "einstellungen", "settings", "einstellung", "preferences", "config",
-        "konfiguration", "optionen", "options", "öffne einstellungen",
-        "open settings", "show settings",
+      { patterns: isDE ? [
+        "einstellungen", "einstellung", "optionen", "konfiguration",
+        "öffne einstellungen", "settings", "preferences",
+      ] : [
+        "settings", "preferences", "options", "config", "configuration",
+        "open settings", "show settings", "einstellungen",
       ], view: "settings" },
-      { patterns: [
-        "dashboard", "home", "startseite", "start", "zurück", "back",
-        "hauptseite", "übersicht", "overview", "go home", "geh zurück",
-        "go back", "main", "anfang",
+      { patterns: isDE ? [
+        "dashboard", "home", "startseite", "start", "zurück", "hauptseite",
+        "übersicht", "geh zurück", "anfang", "back",
+      ] : [
+        "dashboard", "home", "back", "go back", "go home", "overview",
+        "main", "start", "zurück",
       ], view: "dashboard" },
     ];
-    // Action commands
+
     const actionRules = [
-      { patterns: [
+      { patterns: isDE ? [
         "dark mode", "dunkelmodus", "dunkel machen", "mach dunkel",
-        "dunkles design", "nachtmodus", "night mode", "switch to dark",
-        "mach mal dunkel", "dunkler",
+        "dunkles design", "nachtmodus", "mach mal dunkel", "dunkler",
+      ] : [
+        "dark mode", "night mode", "switch to dark", "make it dark",
+        "go dark", "darker", "dark theme",
       ], action: () => setDarkMode(true) },
-      { patterns: [
+      { patterns: isDE ? [
         "light mode", "hellmodus", "hell machen", "mach hell",
-        "helles design", "tagmodus", "bright mode", "switch to light",
-        "mach mal hell", "heller",
+        "helles design", "tagmodus", "mach mal hell", "heller",
+      ] : [
+        "light mode", "bright mode", "switch to light", "make it bright",
+        "go light", "lighter", "light theme",
       ], action: () => setDarkMode(false) },
     ];
-    // Check navigation
+
     for (const rule of navRules) {
       for (const p of rule.patterns) {
         if (t.includes(p)) return { view: rule.view };
       }
     }
-    // Check actions
     for (const rule of actionRules) {
       for (const p of rule.patterns) {
         if (t.includes(p)) return { action: rule.action };
@@ -3766,7 +3789,7 @@ export default function CircularMenu() {
       const recognition = new SR();
       recognition.continuous = true;
       recognition.interimResults = true;
-      recognition.lang = "en-US";
+      recognition.lang = appLanguage === "de" ? "de-DE" : "en-US";
       recognitionRef.current = recognition;
 
       recognition.onresult = (event) => {
@@ -5246,9 +5269,22 @@ export default function CircularMenu() {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Language</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Deutsch / English</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>App &amp; Voice language</div>
                     </div>
-                    <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent }}>Coming soon</div>
+                    <div style={{ display: "flex", borderRadius: 20, overflow: "hidden", border: `1px solid ${theme.borderFaint}` }}>
+                      {[{ id: "de", label: "DE" }, { id: "en", label: "EN" }].map(lang => (
+                        <div
+                          key={lang.id}
+                          onClick={() => setAppLanguage(lang.id)}
+                          style={{
+                            padding: "6px 14px", fontSize: 12, fontFamily: FONT, fontWeight: 500,
+                            cursor: "pointer", transition: "all 0.2s ease",
+                            background: appLanguage === lang.id ? (darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)") : "transparent",
+                            color: appLanguage === lang.id ? theme.text : theme.textDim,
+                          }}
+                        >{lang.label}</div>
+                      ))}
+                    </div>
                   </div>
 
                   {/* Notifications */}
