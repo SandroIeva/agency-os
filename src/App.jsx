@@ -1227,43 +1227,51 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               hangoutLink: e.hangoutLink,
             })));
           } else if (res.status === 401) {
-            // Token expired — silently refresh via popup, then retry
+            // Token expired — silently refresh via API, then retry
             if (autoReLogin) {
-              autoReLogin();
-              // Retry after popup refresh completes (poll for new token)
-              let retries = 0;
-              const retryInterval = setInterval(async () => {
-                retries++;
-                const newToken = localStorage.getItem("agencyos-google-token");
-                if (newToken && newToken !== providerToken) {
-                  clearInterval(retryInterval);
-                  const retryRes = await fetch(
-                    `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=100`,
-                    { headers: { Authorization: `Bearer ${newToken}` } }
-                  );
-                  if (retryRes.ok) {
-                    const data = await retryRes.json();
-                    setGoogleEvents((data.items || []).map(e => ({
-                      id: e.id, title: e.summary || "Kein Titel",
-                      start: e.start?.dateTime || e.start?.date, end: e.end?.dateTime || e.end?.date,
-                      allDay: !!e.start?.date,
-                      color: e.colorId ? ["#7986CB","#33B679","#8E24AA","#E67C73","#F6BF26","#F4511E","#039BE5","#616161","#3F51B5","#0B8043","#D50000"][parseInt(e.colorId)] : "#5B8DEF",
-                      type: "google", location: e.location, hangoutLink: e.hangoutLink,
-                    })));
-                  }
-                  setLoading(false);
+              const newToken = await autoReLogin();
+              if (newToken) {
+                const retryRes = await fetch(
+                  `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=100`,
+                  { headers: { Authorization: `Bearer ${newToken}` } }
+                );
+                if (retryRes.ok) {
+                  const data = await retryRes.json();
+                  setGoogleEvents((data.items || []).map(e => ({
+                    id: e.id, title: e.summary || "Kein Titel",
+                    start: e.start?.dateTime || e.start?.date, end: e.end?.dateTime || e.end?.date,
+                    allDay: !!e.start?.date,
+                    color: e.colorId ? ["#7986CB","#33B679","#8E24AA","#E67C73","#F6BF26","#F4511E","#039BE5","#616161","#3F51B5","#0B8043","#D50000"][parseInt(e.colorId)] : "#5B8DEF",
+                    type: "google", location: e.location, hangoutLink: e.hangoutLink,
+                  })));
                 }
-                if (retries >= 20) { clearInterval(retryInterval); setLoading(false); }
-              }, 1500);
-              return;
+              }
             }
           }
         } catch (err) {
           console.error("Calendar fetch error:", err);
         }
       } else {
-        // No token available — silently refresh via popup
-        if (autoReLogin) autoReLogin();
+        // No token available — try silent refresh
+        if (autoReLogin) {
+          const newToken = await autoReLogin();
+          if (newToken) {
+            const retryRes = await fetch(
+              `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=100`,
+              { headers: { Authorization: `Bearer ${newToken}` } }
+            );
+            if (retryRes.ok) {
+              const data = await retryRes.json();
+              setGoogleEvents((data.items || []).map(e => ({
+                id: e.id, title: e.summary || "Kein Titel",
+                start: e.start?.dateTime || e.start?.date, end: e.end?.dateTime || e.end?.date,
+                allDay: !!e.start?.date,
+                color: e.colorId ? ["#7986CB","#33B679","#8E24AA","#E67C73","#F6BF26","#F4511E","#039BE5","#616161","#3F51B5","#0B8043","#D50000"][parseInt(e.colorId)] : "#5B8DEF",
+                type: "google", location: e.location, hangoutLink: e.hangoutLink,
+              })));
+            }
+          }
+        }
       }
 
       // Supabase tasks with due_date
@@ -2333,12 +2341,13 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin }) {
       setLoading(true);
       setError(null);
       try {
-        const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
+        let providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
         if (!providerToken) {
-          if (autoReLogin) { autoReLogin(); return; }
-          setError("Kein Google Drive Zugriff. Bitte neu einloggen.");
-          setLoading(false);
-          return;
+          if (autoReLogin) {
+            const newToken = await autoReLogin();
+            if (newToken) providerToken = newToken;
+            else { setError("Kein Google Drive Zugriff."); setLoading(false); return; }
+          } else { setError("Kein Google Drive Zugriff."); setLoading(false); return; }
         }
 
         let query = "trashed=false";
@@ -2348,18 +2357,24 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin }) {
           query += " and 'root' in parents";
         }
 
-        const res = await fetch(
+        let res = await fetch(
           `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink)&orderBy=folder,name&pageSize=50`,
           { headers: { Authorization: `Bearer ${providerToken}` } }
         );
 
-        if (!res.ok) {
-          if (res.status === 401) {
-            if (autoReLogin) { autoReLogin(); return; }
-            setError("Google Drive Token abgelaufen. Bitte neu einloggen.");
-          } else {
-            setError("Fehler beim Laden der Dateien.");
+        // If 401, silently refresh token and retry
+        if (res.status === 401 && autoReLogin) {
+          const newToken = await autoReLogin();
+          if (newToken) {
+            res = await fetch(
+              `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink)&orderBy=folder,name&pageSize=50`,
+              { headers: { Authorization: `Bearer ${newToken}` } }
+            );
           }
+        }
+
+        if (!res.ok) {
+          setError("Fehler beim Laden der Dateien.");
           setLoading(false);
           return;
         }
@@ -3445,11 +3460,15 @@ export default function CircularMenu() {
     return session?.provider_token || localStorage.getItem("agencyos-google-token") || null;
   }, [session]);
 
-  // Listen for auth state changes — persist provider_token when available
+  // Listen for auth state changes — persist provider_token and refresh_token
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       if (s?.provider_token) {
         localStorage.setItem("agencyos-google-token", s.provider_token);
+        localStorage.setItem("agencyos-google-token-ts", String(Date.now()));
+      }
+      if (s?.provider_refresh_token) {
+        localStorage.setItem("agencyos-google-refresh-token", s.provider_refresh_token);
       }
       setSession(s);
       setAuthLoading(false);
@@ -3457,6 +3476,10 @@ export default function CircularMenu() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
       if (s?.provider_token) {
         localStorage.setItem("agencyos-google-token", s.provider_token);
+        localStorage.setItem("agencyos-google-token-ts", String(Date.now()));
+      }
+      if (s?.provider_refresh_token) {
+        localStorage.setItem("agencyos-google-refresh-token", s.provider_refresh_token);
       }
       setSession(s);
       setAuthLoading(false);
@@ -3471,96 +3494,56 @@ export default function CircularMenu() {
       options: {
         redirectTo: window.location.origin,
         scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events",
+        queryParams: { access_type: "offline", prompt: "consent" },
       },
     });
     if (error) setAuthError(error.message);
   };
 
-  // Auto re-login via popup: opens a small popup for silent OAuth refresh
-  // Since user already authorized the app, Google skips consent — popup redirects back instantly
-  // User stays on their current page with no interruption
-  const autoReLoginRef = useRef(false);
+  // Silent token refresh: uses stored refresh_token via server-side API
+  // No popup, no redirect, no user interaction — completely invisible
+  const refreshingTokenRef = useRef(false);
   const autoReLogin = useCallback(async () => {
     // Prevent concurrent refresh attempts
-    if (autoReLoginRef.current) return;
-    // Cooldown: don't try if we already tried in the last 30 seconds
-    const lastAttempt = localStorage.getItem("agencyos-relogin-ts");
-    if (lastAttempt && Date.now() - parseInt(lastAttempt) < 30000) {
-      console.warn("Token refresh cooldown active, skipping auto re-login");
-      return;
+    if (refreshingTokenRef.current) return null;
+    refreshingTokenRef.current = true;
+
+    const refreshToken = localStorage.getItem("agencyos-google-refresh-token");
+    if (!refreshToken) {
+      console.warn("No refresh token available — user needs to re-login once");
+      refreshingTokenRef.current = false;
+      return null;
     }
-    autoReLoginRef.current = true;
-    localStorage.setItem("agencyos-relogin-ts", String(Date.now()));
-    localStorage.removeItem("agencyos-google-token");
 
     try {
-      // Get OAuth URL without redirecting
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: window.location.origin,
-          scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events",
-          skipBrowserRedirect: true,
-        },
+      const res = await fetch("/api/refresh-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
       });
-      if (error || !data?.url) { autoReLoginRef.current = false; return; }
 
-      // Open popup for silent auth
-      const popup = window.open(data.url, "google-auth-refresh", "width=500,height=600,left=200,top=200");
-      if (!popup) {
-        // Popup blocked — fall back to redirect
-        localStorage.setItem("agencyos-return-state", JSON.stringify({ view: currentView, timestamp: Date.now() }));
-        window.location.href = data.url;
-        return;
-      }
-
-      // Poll popup for redirect back to our origin
-      const pollInterval = setInterval(() => {
-        try {
-          if (popup.closed) {
-            clearInterval(pollInterval);
-            autoReLoginRef.current = false;
-            // After popup closes, Supabase auth state listener will pick up the new session
-            supabase.auth.getSession().then(({ data: { session: s } }) => {
-              if (s?.provider_token) {
-                localStorage.setItem("agencyos-google-token", s.provider_token);
-                setSession(s);
-              }
-            });
-            return;
-          }
-          // Check if popup navigated back to our origin
-          if (popup.location?.origin === window.location.origin) {
-            // Popup redirected back — Supabase will handle the hash
-            popup.close();
-            clearInterval(pollInterval);
-            autoReLoginRef.current = false;
-            // Give Supabase a moment to process the auth callback
-            setTimeout(() => {
-              supabase.auth.getSession().then(({ data: { session: s } }) => {
-                if (s?.provider_token) {
-                  localStorage.setItem("agencyos-google-token", s.provider_token);
-                  setSession(s);
-                }
-              });
-            }, 500);
-          }
-        } catch (e) {
-          // Cross-origin error means popup is still on Google's domain — keep polling
+      if (res.ok) {
+        const data = await res.json();
+        if (data.access_token) {
+          localStorage.setItem("agencyos-google-token", data.access_token);
+          localStorage.setItem("agencyos-google-token-ts", String(Date.now()));
+          refreshingTokenRef.current = false;
+          return data.access_token;
         }
-      }, 300);
-
-      // Timeout: close popup after 30 seconds if still open
-      setTimeout(() => {
-        clearInterval(pollInterval);
-        autoReLoginRef.current = false;
-        if (popup && !popup.closed) popup.close();
-      }, 30000);
+      } else {
+        console.error("Token refresh failed:", res.status);
+        // Refresh token might be revoked — clear it
+        if (res.status === 400 || res.status === 401) {
+          localStorage.removeItem("agencyos-google-refresh-token");
+        }
+      }
     } catch (e) {
-      console.error("Auto re-login error:", e);
-      autoReLoginRef.current = false;
+      console.error("Token refresh error:", e);
     }
-  }, [currentView]);
+
+    refreshingTokenRef.current = false;
+    return null;
+  }, []);
 
   const handleLogout = async () => {
     localStorage.removeItem("agencyos-google-token");
