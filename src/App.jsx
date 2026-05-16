@@ -322,7 +322,7 @@ function AISphere({ darkMode = true }) {
 }
 
 // Real microphone-driven waveform equalizer
-function WaveformEqualizer({ onAudioData }) {
+function WaveformEqualizer({ onAudioData, darkMode = true }) {
   const barsRef = useRef([]);
   const analyserRef = useRef(null);
   const rafRef = useRef(null);
@@ -401,7 +401,9 @@ function WaveformEqualizer({ onAudioData }) {
           ref={el => barsRef.current[i] = el}
           style={{
             width: 3, height: 8, borderRadius: 2,
-            background: `linear-gradient(180deg, rgba(180,130,255,0.9), rgba(100,80,200,0.4))`,
+            background: darkMode
+              ? `linear-gradient(180deg, rgba(180,130,255,0.9), rgba(100,80,200,0.4))`
+              : `linear-gradient(180deg, rgba(108,92,231,1), rgba(80,60,180,0.7))`,
             opacity: 0.3,
             transition: "height 0.06s ease-out, opacity 0.06s ease-out",
           }}
@@ -4278,12 +4280,12 @@ export default function CircularMenu() {
                 animate={{ opacity: [0.5, 1, 0.5] }}
                 transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                 style={{
-                  fontSize: 13, fontFamily: FONT, color: darkMode ? "#ffffff50" : "#1a1a2e50",
+                  fontSize: 13, fontFamily: FONT, color: darkMode ? "#ffffff50" : "#1a1a2e90",
                   letterSpacing: 2, marginBottom: 24, fontWeight: 400,
                 }}
               >LISTENING...</motion.div>
 
-              <WaveformEqualizer />
+              <WaveformEqualizer darkMode={darkMode} />
 
               {/* Live transcript */}
               <AnimatePresence>
@@ -4301,7 +4303,7 @@ export default function CircularMenu() {
               </AnimatePresence>
 
               <div style={{
-                fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40",
+                fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e70",
                 letterSpacing: 1.5, marginTop: 20,
               }}>CLICK TO SEND</div>
             </motion.div>
