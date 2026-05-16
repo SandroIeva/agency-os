@@ -2566,9 +2566,9 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
     >
       <div style={{
         width: "100%", maxWidth: 720, height: "100%",
-        background: "rgba(22, 22, 30, 0.75)",
+        background: theme.cardBg,
         backdropFilter: "blur(40px)",
-        border: "1px solid rgba(255,255,255,0.08)",
+        border: `1px solid ${theme.borderFaint}`,
         borderRadius: 24, overflow: "hidden",
         display: "flex", flexDirection: "column",
       }}>
@@ -2580,17 +2580,17 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
           style={{ padding: "14px 20px 0", display: "flex", alignItems: "center", gap: 8 }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-            <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke="#8B7AFF" strokeWidth="1.5" fill="none" />
+            <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke={theme.accent} strokeWidth="1.5" fill="none" />
           </svg>
-          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontFamily: FONT, color: "#ffffff50", overflow: "hidden" }}>
-            <span onClick={() => { setCurrentFolder(null); setFolderPath([]); }} style={{ cursor: "pointer", color: "#ffffff60" }}>Drive</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontFamily: FONT, color: theme.textDim, overflow: "hidden" }}>
+            <span onClick={() => { setCurrentFolder(null); setFolderPath([]); }} style={{ cursor: "pointer", color: theme.textSub }}>Drive</span>
             {folderPath.map((fp, i) => (
               <span key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <span style={{ color: "#ffffff25" }}>/</span>
+                <span style={{ color: theme.textFaint }}>/</span>
                 <span onClick={() => {
                   setCurrentFolder(fp.id);
                   setFolderPath(prev => prev.slice(0, i));
-                }} style={{ cursor: "pointer", color: "#ffffff60" }}>{fp.name}</span>
+                }} style={{ cursor: "pointer", color: theme.textSub }}>{fp.name}</span>
               </span>
             ))}
           </div>
@@ -2605,13 +2605,13 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
         >
           <div style={{
             display: "flex", alignItems: "center", gap: 10,
-            background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.08)",
+            background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
+            border: `1px solid ${theme.borderFaint}`,
             borderRadius: 14, padding: "10px 14px",
           }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <circle cx="11" cy="11" r="7" stroke="#ffffff40" strokeWidth="1.8" />
-              <path d="M16 16l4.5 4.5" stroke="#ffffff40" strokeWidth="1.8" strokeLinecap="round" />
+              <circle cx="11" cy="11" r="7" stroke={theme.textDim} strokeWidth="1.8" />
+              <path d="M16 16l4.5 4.5" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" />
             </svg>
             <input
               value={search}
@@ -2619,8 +2619,8 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
               placeholder="Search files..."
               style={{
                 flex: 1, background: "none", border: "none", outline: "none",
-                fontSize: 13, fontFamily: FONT, color: "#ffffffdd",
-                caretColor: "#8B7AFF",
+                fontSize: 13, fontFamily: FONT, color: theme.text,
+                caretColor: theme.accent,
               }}
             />
             {search && (
@@ -2628,7 +2628,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 onClick={() => setSearch("")}
-                style={{ cursor: "pointer", color: "#ffffff40", fontSize: 12, fontFamily: FONT }}
+                style={{ cursor: "pointer", color: theme.textDim, fontSize: 12, fontFamily: FONT }}
               >✕</motion.div>
             )}
           </div>
@@ -2643,7 +2643,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
             <motion.div
               animate={{ opacity: [0.3, 0.7, 0.3] }}
               transition={{ duration: 1.5, repeat: Infinity }}
-              style={{ padding: 40, textAlign: "center", fontSize: 13, fontFamily: FONT, color: "#ffffff40" }}
+              style={{ padding: 40, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}
             >Loading files from Google Drive...</motion.div>
           )}
 
@@ -2673,8 +2673,8 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
                 style={{
                   display: "flex", alignItems: "center", gap: 14,
                   padding: "12px 14px", borderRadius: 14,
-                  background: selectedFile?.id === file.id ? "rgba(139, 122, 255, 0.08)" : "rgba(255,255,255,0.03)",
-                  border: `1px solid ${selectedFile?.id === file.id ? "rgba(139, 122, 255, 0.15)" : "rgba(255,255,255,0.05)"}`,
+                  background: selectedFile?.id === file.id ? (theme.accent + "14") : theme.hoverBg,
+                  border: `1px solid ${selectedFile?.id === file.id ? (theme.accent + "26") : theme.borderFaint}`,
                   cursor: "pointer", flexShrink: 0,
                 }}
               >
@@ -2704,8 +2704,8 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
                 </div>
                 {/* Info */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd", lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{file.name}</div>
-                  <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{file.name}</div>
+                  <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
                     {formatFileSize(file.size)} · {getFileExtension(file.name, file.mimeType)}
                     {!isFolder && (
                       <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 6, background: STATUS_COLORS[status] + "15", color: STATUS_COLORS[status], border: `1px solid ${STATUS_COLORS[status]}30` }}>{status}</span>
@@ -2715,7 +2715,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
                 {/* Arrow for folders */}
                 {isFolder && (
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                    <path d="M9 6l6 6-6 6" stroke="#ffffff30" strokeWidth="2" strokeLinecap="round" />
+                    <path d="M9 6l6 6-6 6" stroke={theme.textFaint} strokeWidth="2" strokeLinecap="round" />
                   </svg>
                 )}
               </motion.div>
@@ -2723,7 +2723,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
           })}
 
           {!loading && !error && filtered.length === 0 && (
-            <div style={{ padding: 32, textAlign: "center", fontSize: 13, fontFamily: FONT, color: "#ffffff30" }}>
+            <div style={{ padding: 32, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textFaint }}>
               {files.length === 0 ? "Dieser Ordner ist leer" : "Keine Dateien gefunden"}
             </div>
           )}
@@ -2737,10 +2737,10 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
-              style={{ borderTop: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}
+              style={{ borderTop: `1px solid ${theme.borderFaint}`, overflow: "hidden" }}
             >
               <div style={{ padding: "12px 20px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40" }}>Status:</span>
+                <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>Status:</span>
                 {["Neu", "In Prüfung", "Freigegeben", "Kunden-Sichtbar"].map(s => (
                   <motion.div
                     key={s}
@@ -2749,9 +2749,9 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
                     style={{
                       padding: "4px 10px", borderRadius: 8, cursor: "pointer",
                       fontSize: 11, fontFamily: FONT,
-                      background: (metadata[selectedFile.id]?.status || "Neu") === s ? STATUS_COLORS[s] + "25" : "rgba(255,255,255,0.03)",
-                      color: (metadata[selectedFile.id]?.status || "Neu") === s ? STATUS_COLORS[s] : "#ffffff40",
-                      border: `1px solid ${(metadata[selectedFile.id]?.status || "Neu") === s ? STATUS_COLORS[s] + "40" : "rgba(255,255,255,0.05)"}`,
+                      background: (metadata[selectedFile.id]?.status || "Neu") === s ? STATUS_COLORS[s] + "25" : theme.hoverBg,
+                      color: (metadata[selectedFile.id]?.status || "Neu") === s ? STATUS_COLORS[s] : theme.textDim,
+                      border: `1px solid ${(metadata[selectedFile.id]?.status || "Neu") === s ? STATUS_COLORS[s] + "40" : theme.borderFaint}`,
                     }}
                   >{s}</motion.div>
                 ))}
@@ -2763,8 +2763,8 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
                     whileHover={{ scale: 1.02 }}
                     style={{
                       marginLeft: "auto", padding: "4px 10px", borderRadius: 8,
-                      fontSize: 11, fontFamily: FONT, color: "#8B7AFF",
-                      background: "rgba(139,122,255,0.1)", border: "1px solid rgba(139,122,255,0.2)",
+                      fontSize: 11, fontFamily: FONT, color: theme.accent,
+                      background: theme.accent + "1A", border: `1px solid ${theme.accent}33`,
                       textDecoration: "none",
                     }}
                   >In Google Drive öffnen ↗</motion.a>
@@ -2781,30 +2781,30 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              style={{ borderTop: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}
+              style={{ borderTop: `1px solid ${theme.borderFaint}`, overflow: "hidden" }}
             >
               <div style={{ padding: "10px 20px", display: "flex", alignItems: "center", gap: 12 }}>
                 <motion.div
                   animate={{ rotate: 360 }}
                   transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                  style={{ width: 16, height: 16, border: "2px solid rgba(139,122,255,0.3)", borderTop: "2px solid #8B7AFF", borderRadius: "50%" }}
+                  style={{ width: 16, height: 16, border: `2px solid ${theme.accent}4D`, borderTop: `2px solid ${theme.accent}`, borderRadius: "50%" }}
                 />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontFamily: FONT, color: "#ffffffcc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <div style={{ fontSize: 12, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     Uploading: {uploadProgress.name}
                   </div>
-                  <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff40", marginTop: 2 }}>
+                  <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
                     {uploadProgress.current} / {uploadProgress.total} Dateien
                   </div>
                 </div>
                 <div style={{
-                  width: 80, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.06)",
+                  width: 80, height: 4, borderRadius: 2, background: theme.borderFaint,
                   overflow: "hidden",
                 }}>
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
-                    style={{ height: "100%", background: "#8B7AFF", borderRadius: 2 }}
+                    style={{ height: "100%", background: theme.accent, borderRadius: 2 }}
                   />
                 </div>
               </div>
@@ -2827,7 +2827,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3, duration: 0.3 }}
           style={{
-            padding: "12px 20px", borderTop: "1px solid rgba(255,255,255,0.06)",
+            padding: "12px 20px", borderTop: `1px solid ${theme.borderFaint}`,
             display: "flex", alignItems: "center", justifyContent: "space-between",
           }}
         >
@@ -2842,9 +2842,9 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
               }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                <path d="M15 18l-6-6 6-6" stroke="#ffffff50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M15 18l-6-6 6-6" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff50" }}>Back</span>
+              <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>Back</span>
             </motion.div>
             {currentFolder && (
               <motion.div
@@ -2857,14 +2857,14 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
                 }}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                  <path d="M15 18l-6-6 6-6" stroke="#ffffff40" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M15 18l-6-6 6-6" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round" />
                 </svg>
-                <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff40" }}>Ordner zurück</span>
+                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>Ordner zurück</span>
               </motion.div>
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff25", marginRight: 4 }}>
+            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginRight: 4 }}>
               {filtered.length} {filtered.length === 1 ? "file" : "files"}
             </div>
             {/* New Folder button */}
