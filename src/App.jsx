@@ -4898,185 +4898,377 @@ export default function CircularMenu() {
         )}
       </AnimatePresence>
 
-      {/* Profile / Settings Panel */}
+      {/* SETTINGS VIEW */}
       <AnimatePresence>
-        {profileOpen && (
+        {currentView === "settings" && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={() => setProfileOpen(false)}
+            transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
             style={{
-              position: "absolute", inset: 0, zIndex: 90,
-              background: theme.overlay,
-              backdropFilter: "blur(8px)",
+              position: "absolute", inset: 0, zIndex: 30,
+              background: theme.bg,
+              display: "flex", flexDirection: "column",
+              overflowY: "auto",
             }}
           >
-            <motion.div
-              initial={{ opacity: 0, y: 20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 20, scale: 0.95 }}
-              transition={{ duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                position: "absolute", bottom: 80, left: 24,
-                width: 320,
-                background: theme.cardBg,
-                backdropFilter: "blur(40px)",
-                border: `1px solid ${theme.border}`,
-                borderRadius: 20, overflow: "hidden",
-              }}
-            >
-              {/* Profile header */}
-              <div style={{ padding: "24px 24px 20px", borderBottom: `1px solid ${theme.borderFaint}` }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            {/* Top bar */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "28px 40px 0" }}>
+              <motion.div
+                onClick={() => setCurrentView("dashboard")}
+                whileHover={{ opacity: 0.7 }}
+                whileTap={{ scale: 0.95 }}
+                style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <path d="M15 18l-6-6 6-6" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>Back</span>
+              </motion.div>
+              <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase" }}>Settings</div>
+              <div style={{ width: 60 }} />
+            </div>
+
+            <div style={{ maxWidth: 860, width: "100%", margin: "0 auto", padding: "32px 40px 120px" }}>
+
+              {/* Profile card */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+                style={{
+                  padding: "28px 28px",
+                  borderRadius: 20,
+                  background: theme.cardBg,
+                  border: `1px solid ${theme.border}`,
+                  marginBottom: 24,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
                   {userAvatar ? (
-                    <img src={userAvatar} alt="" referrerPolicy="no-referrer" style={{ width: 48, height: 48, borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)" }} />
+                    <img src={userAvatar} alt="" referrerPolicy="no-referrer" style={{ width: 64, height: 64, borderRadius: 18, border: `1px solid ${theme.border}` }} />
                   ) : (
                     <div style={{
-                      width: 48, height: 48, borderRadius: 14,
+                      width: 64, height: 64, borderRadius: 18,
                       background: "linear-gradient(135deg, #8B7AFF, #6C5CE7)",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 20, fontFamily: FONT, color: "#fff", fontWeight: 600,
+                      fontSize: 26, fontFamily: FONT, color: "#fff", fontWeight: 600,
                     }}>{(userName || "?")[0]}</div>
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, lineHeight: 1.3 }}>
+                    <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, lineHeight: 1.3 }}>
                       {userName || "User"}
                     </div>
-                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {userEmail}
                     </div>
                   </div>
                 </div>
-              </div>
+              </motion.div>
 
-              {/* Settings items */}
-              <div style={{ padding: "8px 8px" }}>
-                {/* Appearance — Dark/Light toggle */}
-                <motion.div
-                  whileHover={{ backgroundColor: theme.hoverBg }}
-                  onClick={() => setDarkMode(!darkMode)}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 12,
-                    padding: "12px 16px", borderRadius: 12, cursor: "pointer",
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    {darkMode ? (
-                      <>
-                        <circle cx="12" cy="12" r="4" stroke={theme.svgStroke} strokeWidth="1.5" />
-                        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke={theme.svgStroke} strokeWidth="1.5" strokeLinecap="round" />
-                      </>
-                    ) : (
-                      <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" stroke={theme.svgStroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    )}
-                  </svg>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>Appearance</div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{darkMode ? "Dark Mode" : "Light Mode"}</div>
-                  </div>
-                  {/* Toggle switch */}
-                  <div onClick={(e) => { e.stopPropagation(); setDarkMode(!darkMode); }} style={{
-                    width: 40, height: 22, borderRadius: 11, padding: 2,
-                    background: darkMode ? "rgba(139,122,255,0.5)" : "rgba(0,0,0,0.15)",
-                    cursor: "pointer", transition: "background 0.3s ease",
-                    display: "flex", alignItems: "center",
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+
+              {/* Left column */}
+              <div>
+
+              {/* Account section */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+              >
+                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>Account</div>
+                <div style={{
+                  borderRadius: 20,
+                  background: theme.cardBg,
+                  border: `1px solid ${theme.border}`,
+                  overflow: "hidden",
+                }}>
+                  {/* Google connection */}
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: "16px 20px",
+                    borderBottom: `1px solid ${theme.borderFaint}`,
                   }}>
-                    <motion.div
-                      animate={{ x: darkMode ? 18 : 0 }}
-                      transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                      style={{
-                        width: 18, height: 18, borderRadius: 9,
-                        background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-                      }}
-                    />
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Google Account</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{session ? "Connected" : "Not connected"}</div>
+                    </div>
+                    <div style={{
+                      width: 8, height: 8, borderRadius: "50%",
+                      background: session ? "#00B894" : "#E84393",
+                    }} />
                   </div>
-                </motion.div>
 
-                {/* Language */}
-                <motion.div
-                  whileHover={{ backgroundColor: theme.hoverBg }}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 12,
-                    padding: "12px 16px", borderRadius: 12, cursor: "pointer",
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="9" stroke={theme.svgStroke} strokeWidth="1.5" />
-                    <path d="M3 12h18M12 3c-2.5 3-3.5 6-3.5 9s1 6 3.5 9M12 3c2.5 3 3.5 6 3.5 9s-1 6-3.5 9" stroke={theme.svgStroke} strokeWidth="1.5" />
-                  </svg>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>Language</div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>Deutsch / English</div>
+                  {/* Subscription */}
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: "16px 20px",
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z" stroke={theme.svgStroke} strokeWidth="1.5" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Plan</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Early Access</div>
+                    </div>
+                    <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, border: `1px solid ${theme.accentBorder}`, fontSize: 11, fontFamily: FONT, color: theme.accent }}>Active</div>
                   </div>
-                  <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>Coming soon</div>
-                </motion.div>
+                </div>
+              </motion.div>
 
-                {/* Notifications */}
-                <motion.div
-                  whileHover={{ backgroundColor: theme.hoverBg }}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 12,
-                    padding: "12px 16px", borderRadius: 12, cursor: "pointer",
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 22c1.1 0 2-.9 2-2h-4a2 2 0 002 2zM18 16v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" stroke={theme.svgStroke} strokeWidth="1.5" fill="none" />
-                  </svg>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>Notifications</div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>Push & Sound</div>
-                  </div>
-                  <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>Coming soon</div>
-                </motion.div>
+              {/* Preferences section */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+                style={{ marginTop: 24 }}
+              >
+                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>Preferences</div>
+                <div style={{
+                  borderRadius: 20,
+                  background: theme.cardBg,
+                  border: `1px solid ${theme.border}`,
+                  overflow: "hidden",
+                }}>
+                  {/* Appearance */}
+                  <motion.div
+                    whileHover={{ backgroundColor: theme.hoverBg }}
+                    onClick={() => setDarkMode(!darkMode)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 14,
+                      padding: "16px 20px", cursor: "pointer",
+                      borderBottom: `1px solid ${theme.borderFaint}`,
+                    }}
+                  >
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        {darkMode ? (
+                          <>
+                            <circle cx="12" cy="12" r="4" stroke={theme.svgStroke} strokeWidth="1.5" />
+                            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke={theme.svgStroke} strokeWidth="1.5" strokeLinecap="round" />
+                          </>
+                        ) : (
+                          <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" stroke={theme.svgStroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        )}
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Appearance</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{darkMode ? "Dark Mode" : "Light Mode"}</div>
+                    </div>
+                    <div onClick={(e) => { e.stopPropagation(); setDarkMode(!darkMode); }} style={{
+                      width: 44, height: 24, borderRadius: 12, padding: 2,
+                      background: darkMode ? "rgba(139,122,255,0.5)" : "rgba(0,0,0,0.15)",
+                      cursor: "pointer", transition: "background 0.3s ease",
+                      display: "flex", alignItems: "center",
+                    }}>
+                      <motion.div
+                        animate={{ x: darkMode ? 20 : 0 }}
+                        transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                        style={{
+                          width: 20, height: 20, borderRadius: 10,
+                          background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                        }}
+                      />
+                    </div>
+                  </motion.div>
 
-                {/* Connected Apps */}
-                <motion.div
-                  whileHover={{ backgroundColor: theme.hoverBg }}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 12,
-                    padding: "12px 16px", borderRadius: 12, cursor: "pointer",
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke={theme.svgStroke} strokeWidth="1.5" strokeLinecap="round" />
-                    <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke={theme.svgStroke} strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>Connected Apps</div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>Google, Slack, LLMs</div>
+                  {/* Language */}
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: "16px 20px",
+                    borderBottom: `1px solid ${theme.borderFaint}`,
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="9" stroke={theme.svgStroke} strokeWidth="1.5" />
+                        <path d="M3 12h18M12 3c-2.5 3-3.5 6-3.5 9s1 6 3.5 9M12 3c2.5 3 3.5 6 3.5 9s-1 6-3.5 9" stroke={theme.svgStroke} strokeWidth="1.5" />
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Language</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Deutsch / English</div>
+                    </div>
+                    <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent }}>Coming soon</div>
                   </div>
-                  <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>Coming soon</div>
-                </motion.div>
-              </div>
+
+                  {/* Notifications */}
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: "16px 20px",
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 22c1.1 0 2-.9 2-2h-4a2 2 0 002 2zM18 16v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" stroke={theme.svgStroke} strokeWidth="1.5" fill="none" />
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Notifications</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Push & Sound</div>
+                    </div>
+                    <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent }}>Coming soon</div>
+                  </div>
+                </div>
+              </motion.div>
+
+              </div>{/* end left column */}
+
+              {/* Right column */}
+              <div>
+
+              {/* Integrations section */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+              >
+                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>Integrations</div>
+                <div style={{
+                  borderRadius: 20,
+                  background: theme.cardBg,
+                  border: `1px solid ${theme.border}`,
+                  overflow: "hidden",
+                }}>
+                  {/* Google Calendar & Drive */}
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: "16px 20px",
+                    borderBottom: `1px solid ${theme.borderFaint}`,
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Google Calendar & Drive</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{session ? "Calendar & files synced" : "Sign in to connect"}</div>
+                    </div>
+                    <div style={{
+                      width: 8, height: 8, borderRadius: "50%",
+                      background: session ? "#00B894" : "#E84393",
+                    }} />
+                  </div>
+
+                  {/* Slack */}
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: "16px 20px",
+                    borderBottom: `1px solid ${theme.borderFaint}`,
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <path d="M14.5 2a2.5 2.5 0 00-2.5 2.5V9h4.5A2.5 2.5 0 0014.5 2zM9.5 2A2.5 2.5 0 007 4.5V9h4.5V4.5A2.5 2.5 0 009.5 2z" fill={theme.svgStroke} fillOpacity="0.5" />
+                        <path d="M22 9.5a2.5 2.5 0 00-2.5-2.5H15v4.5a2.5 2.5 0 002.5 2.5H22V9.5zM22 14.5a2.5 2.5 0 01-2.5 2.5H15V22h4.5a2.5 2.5 0 002.5-2.5V14.5z" fill={theme.svgStroke} fillOpacity="0.3" />
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Slack</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Team messaging</div>
+                    </div>
+                    <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent }}>Coming soon</div>
+                  </div>
+
+                  {/* AI Models */}
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: "16px 20px",
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke={theme.svgStroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>AI Models</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Claude, GPT, Custom</div>
+                    </div>
+                    <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent }}>Coming soon</div>
+                  </div>
+                </div>
+              </motion.div>
+
+              </div>{/* end right column */}
+              </div>{/* end grid */}
 
               {/* Logout */}
-              <div style={{ padding: "4px 8px 12px", borderTop: `1px solid ${theme.borderFaint}` }}>
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+                style={{ marginTop: 32 }}
+              >
                 <motion.div
-                  onClick={() => { handleLogout(); setProfileOpen(false); }}
+                  onClick={() => { handleLogout(); setCurrentView("dashboard"); }}
                   whileHover={{ backgroundColor: "rgba(232, 67, 67, 0.08)" }}
                   whileTap={{ scale: 0.98 }}
                   style={{
-                    display: "flex", alignItems: "center", gap: 12,
-                    padding: "12px 16px", borderRadius: 12, cursor: "pointer",
-                    marginTop: 4,
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                    padding: "14px 20px", borderRadius: 16, cursor: "pointer",
+                    border: "1px solid rgba(232, 67, 67, 0.15)",
                   }}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                     <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" stroke="#E84343" strokeWidth="1.5" strokeLinecap="round" />
                     <path d="M16 17l5-5-5-5M21 12H9" stroke="#E84343" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                  <span style={{ fontSize: 13, fontFamily: FONT, color: "#E84343", fontWeight: 500 }}>Logout</span>
+                  <span style={{ fontSize: 14, fontFamily: FONT, color: "#E84343", fontWeight: 500 }}>Logout</span>
                 </motion.div>
-              </div>
+              </motion.div>
 
               {/* Version */}
-              <div style={{ padding: "0 24px 14px", textAlign: "center" }}>
-                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>Agency OS v0.1.0</div>
+              <div style={{ marginTop: 24, textAlign: "center" }}>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>Agency OS v0.1.0</div>
               </div>
-            </motion.div>
+
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -5089,7 +5281,7 @@ export default function CircularMenu() {
         {/* Logo — left third (opens Profile) */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", paddingTop: 10 }}>
           <motion.div
-            onClick={() => setProfileOpen(!profileOpen)}
+            onClick={() => { if (currentView === "settings") { setCurrentView("dashboard"); } else { setCurrentView("settings"); } }}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             style={{ cursor: "pointer" }}
