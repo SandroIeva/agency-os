@@ -3816,6 +3816,79 @@ export default function CircularMenu() {
     return () => { clearTimeout(timeout); clearInterval(interval); };
   }, [session, ensureValidToken]);
 
+  // ── Build startview cards (tasks + events + placeholders) ──
+  const startviewCards = useMemo(() => {
+    const priorityOrder = { high: 0, medium: 1, low: 2 };
+    const activeTasks = dashboardTasks
+      .filter(tk => tk.column_key !== "done")
+      .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
+
+    const colLabel = (key) => ({ todo: t("kanban.todo"), in_progress: t("kanban.inProgress"), review: t("kanban.review") }[key] || key);
+    const taskCards = activeTasks.slice(0, 4).map(tk => ({
+      icon: tk.priority === "high" ? "⚡" : "◎",
+      iconBg: tk.priority === "high" ? "#C4624A" : "#5A7AB5",
+      name: tk.title,
+      desc: tk.project_name || colLabel(tk.column_key),
+      key: tk.id,
+      onClick: () => setCurrentView("kanban"),
+    }));
+
+    const eventCards = upcomingEvents.map(ev => {
+      const startTime = ev.start ? new Date(ev.start) : null;
+      const timeStr = startTime ? startTime.toLocaleTimeString(appLanguage === "de" ? "de-DE" : "en-US", { hour: "2-digit", minute: "2-digit" }) : "";
+      return {
+        icon: ev.isMeet ? "📹" : "📅",
+        iconBg: ev.isMeet ? "#2D7A6A" : "#4A6FA5",
+        name: ev.title,
+        desc: timeStr + (ev.isMeet ? " · Google Meet" : ""),
+        key: "ev-" + ev.id,
+        onClick: ev.hangoutLink ? () => window.open(ev.hangoutLink, "_blank") : () => setCurrentView("calendar"),
+      };
+    });
+
+    const now = new Date();
+    const soonEvents = eventCards.filter(ec => {
+      const ev = upcomingEvents.find(e => "ev-" + e.id === ec.key);
+      if (!ev?.start) return false;
+      return (new Date(ev.start) - now) >= 0 && (new Date(ev.start) - now) < 60 * 60 * 1000;
+    });
+    const laterEvents = eventCards.filter(ec => !soonEvents.includes(ec));
+    const highTasks = taskCards.filter(tc => tc.priority === "high");
+    const otherTasks = taskCards.filter(tc => tc.priority !== "high");
+    const liveCards = [...soonEvents, ...highTasks, ...laterEvents, ...otherTasks].slice(0, 4);
+
+    const placeholders = [
+      { icon: "🎨", iconBg: "#2D7A6A", name: "Figma", desc: "Complete the Dashboard Design", key: "F" },
+      { icon: "🤖", iconBg: "#C4624A", name: "Claude Code", desc: "Build the new app idea", key: "2" },
+      { icon: "👤", iconBg: "#5A7AB5", name: "Reply to Tom Behrens over Gmail", desc: null, key: "G" },
+      { icon: "✦", iconBg: "#4A9A8A", name: "Research with Perplexity", desc: null, key: "P" },
+    ];
+
+    const cards = [...liveCards];
+    let pIdx = 0;
+    while (cards.length < 4 && pIdx < placeholders.length) {
+      cards.push(placeholders[pIdx]);
+      pIdx++;
+    }
+    return cards;
+  }, [dashboardTasks, upcomingEvents, t, appLanguage]);
+
+  // ── Keyboard shortcuts for startview cards (⌘+1..4) ──
+  useEffect(() => {
+    if (currentView !== "dashboard" || menuOpen || voiceMode || aiSpeaking) return;
+    const handler = (e) => {
+      if (!e.metaKey && !e.ctrlKey) return;
+      const idx = parseInt(e.key) - 1;
+      if (idx >= 0 && idx < startviewCards.length) {
+        e.preventDefault();
+        const card = startviewCards[idx];
+        if (card.onClick) card.onClick();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [currentView, menuOpen, voiceMode, aiSpeaking, startviewCards]);
+
   const getGreeting = () => {
     const h = new Date().getHours();
     if (h < 5) return t("greet.stillUp");
@@ -4527,68 +4600,7 @@ export default function CircularMenu() {
                 maxWidth: 720, alignSelf: "center", width: "100%",
                 marginTop: "auto", marginBottom: 100,
               }}>
-              {(() => {
-                // Build live cards from tasks + events
-                const priorityOrder = { high: 0, medium: 1, low: 2 };
-                const activeTasks = dashboardTasks
-                  .filter(tk => tk.column_key !== "done")
-                  .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
-
-                const colLabel = (key) => ({ todo: t("kanban.todo"), in_progress: t("kanban.inProgress"), review: t("kanban.review") }[key] || key);
-                const taskCards = activeTasks.slice(0, 4).map(tk => ({
-                  icon: tk.priority === "high" ? "⚡" : "◎",
-                  iconBg: tk.priority === "high" ? "#C4624A" : "#5A7AB5",
-                  name: tk.title,
-                  desc: tk.project_name || colLabel(tk.column_key),
-                  key: tk.id,
-                  priority: tk.priority,
-                  onClick: () => setCurrentView("kanban"),
-                }));
-
-                const eventCards = upcomingEvents.map(ev => {
-                  const startTime = ev.start ? new Date(ev.start) : null;
-                  const timeStr = startTime ? startTime.toLocaleTimeString(appLanguage === "de" ? "de-DE" : "en-US", { hour: "2-digit", minute: "2-digit" }) : "";
-                  return {
-                    icon: ev.isMeet ? "📹" : "📅",
-                    iconBg: ev.isMeet ? "#2D7A6A" : "#4A6FA5",
-                    name: ev.title,
-                    desc: timeStr + (ev.isMeet ? " · Google Meet" : ""),
-                    key: "ev-" + ev.id,
-                    onClick: ev.hangoutLink ? () => window.open(ev.hangoutLink, "_blank") : () => setCurrentView("calendar"),
-                  };
-                });
-
-                // Sort: imminent events first, then high-prio tasks, then rest
-                const now = new Date();
-                const soonEvents = eventCards.filter(ec => {
-                  const ev = upcomingEvents.find(e => "ev-" + e.id === ec.key);
-                  if (!ev?.start) return false;
-                  const diff = new Date(ev.start) - now;
-                  return diff >= 0 && diff < 60 * 60 * 1000;
-                });
-                const laterEvents = eventCards.filter(ec => !soonEvents.includes(ec));
-                const highTasks = taskCards.filter(tc => tc.priority === "high");
-                const otherTasks = taskCards.filter(tc => tc.priority !== "high");
-                const liveCards = [...soonEvents, ...highTasks, ...laterEvents, ...otherTasks].slice(0, 4);
-
-                // Placeholder cards to always fill up to 4
-                const placeholders = [
-                  { icon: "🎨", iconBg: "#2D7A6A", name: "Figma", desc: "Complete the Dashboard Design", key: "F" },
-                  { icon: "🤖", iconBg: "#C4624A", name: "Claude Code", desc: "Build the new app idea", key: "2" },
-                  { icon: "👤", iconBg: "#5A7AB5", name: "Reply to Tom Behrens over Gmail", desc: null, key: "G" },
-                  { icon: "✦", iconBg: "#4A9A8A", name: "Research with Perplexity", desc: null, key: "P" },
-                ];
-
-                // Fill remaining slots with placeholders
-                const cards = [...liveCards];
-                let pIdx = 0;
-                while (cards.length < 4 && pIdx < placeholders.length) {
-                  cards.push(placeholders[pIdx]);
-                  pIdx++;
-                }
-
-                return cards;
-              })().map((task, i) => (
+              {startviewCards.map((task, i) => (
                 <motion.div
                   key={task.key}
                   initial={{ opacity: 0, y: 8 }}
@@ -4631,7 +4643,7 @@ export default function CircularMenu() {
                       fontSize: 13, color: theme.textDim, fontFamily: FONT,
                       padding: "5px 8px", borderRadius: 6,
                       background: theme.borderFaint,
-                    }}>{typeof task.key === "string" && task.key.length === 1 ? task.key : (i + 1)}</span>
+                    }}>{i + 1}</span>
                   </div>
                 </motion.div>
               ))}
