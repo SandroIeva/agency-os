@@ -165,6 +165,8 @@ const translations = {
   "settings.claudeKey": { de: "Claude API Key", en: "Claude API Key" },
   "settings.chatgptKey": { de: "ChatGPT API Key", en: "ChatGPT API Key" },
   "settings.save": { de: "Speichern", en: "Save" },
+  "settings.slackSub": { de: "Team-Kommunikation", en: "Team messaging" },
+  "settings.comingSoon": { de: "Demnächst", en: "Coming soon" },
 
   // ── Auth ─────────────────────────────────────
   "auth.signInPrompt": { de: "Anmelden, um auf deinen Workspace zuzugreifen", en: "Sign in to access your workspace" },

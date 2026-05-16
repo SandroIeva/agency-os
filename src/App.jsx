@@ -5678,16 +5678,18 @@ export default function CircularMenu() {
                       background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
                       display: "flex", alignItems: "center", justifyContent: "center",
                     }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                        <path d="M14.5 2a2.5 2.5 0 00-2.5 2.5V9h4.5A2.5 2.5 0 0014.5 2zM9.5 2A2.5 2.5 0 007 4.5V9h4.5V4.5A2.5 2.5 0 009.5 2z" fill={theme.svgStroke} fillOpacity="0.5" />
-                        <path d="M22 9.5a2.5 2.5 0 00-2.5-2.5H15v4.5a2.5 2.5 0 002.5 2.5H22V9.5zM22 14.5a2.5 2.5 0 01-2.5 2.5H15V22h4.5a2.5 2.5 0 002.5-2.5V14.5z" fill={theme.svgStroke} fillOpacity="0.3" />
+                      <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+                        <path d="M3.362 10.11c0 .926-.756 1.681-1.681 1.681S0 11.036 0 10.111.756 8.43 1.68 8.43h1.682zm.846 0c0-.924.756-1.68 1.681-1.68s1.681.756 1.681 1.68v4.21c0 .924-.756 1.68-1.68 1.68a1.685 1.685 0 0 1-1.682-1.68z" fill="#E01E5A"/>
+                        <path d="M5.89 3.362c-.926 0-1.682-.756-1.682-1.681S4.964 0 5.89 0s1.68.756 1.68 1.68v1.682zm0 .846c.924 0 1.68.756 1.68 1.681S6.814 7.57 5.89 7.57H1.68C.757 7.57 0 6.814 0 5.89c0-.926.756-1.682 1.68-1.682z" fill="#36C5F0"/>
+                        <path d="M12.638 5.89c0-.926.755-1.682 1.68-1.682S16 4.964 16 5.889s-.756 1.681-1.68 1.681h-1.681zm-.848 0c0 .924-.755 1.68-1.68 1.68A1.685 1.685 0 0 1 8.43 5.89V1.68C8.43.757 9.186 0 10.11 0c.926 0 1.681.756 1.681 1.68z" fill="#2EB67D"/>
+                        <path d="M10.11 12.638c.926 0 1.682.756 1.682 1.681S11.036 16 10.11 16s-1.681-.756-1.681-1.68v-1.682zm0-.847c-.924 0-1.68-.755-1.68-1.68s.756-1.681 1.68-1.681h4.21c.924 0 1.68.756 1.68 1.68 0 .926-.756 1.681-1.68 1.681z" fill="#ECB22E"/>
                       </svg>
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Slack</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Team messaging</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{t("settings.slackSub")}</div>
                     </div>
-                    <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent }}>Coming soon</div>
+                    <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent }}>{t("settings.comingSoon")}</div>
                   </div>
                 </div>
               </motion.div>
