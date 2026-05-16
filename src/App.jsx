@@ -4599,8 +4599,8 @@ export default function CircularMenu() {
                   style={{
                     display: "flex", alignItems: "center", gap: 18,
                     padding: "16px 24px", borderRadius: 18,
-                    background: task.desc ? theme.hoverBg : "transparent",
-                    border: task.desc ? `1px solid ${theme.borderFaint}` : "1px solid transparent",
+                    background: i < 2 ? theme.hoverBg : "transparent",
+                    border: i < 2 ? `1px solid ${theme.borderFaint}` : "1px solid transparent",
                     cursor: "pointer",
                   }}
                 >
