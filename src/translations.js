@@ -97,10 +97,11 @@ const translations = {
   "greet.morning": { de: "Guten Morgen", en: "Good Morning" },
   "greet.afternoon": { de: "Guten Tag", en: "Good Afternoon" },
   "greet.evening": { de: "Guten Abend", en: "Good Evening" },
-  "greet.night": { de: "Gute Nacht", en: "Good Night" },
+  "greet.night": { de: "Guten Abend", en: "Good Night" },
   "greet.fallbackName": { de: "du", en: "there" },
 
   // ── Dashboard ────────────────────────────────
+  "dash.subtitle": { de: "Was möchtest du tun?", en: "What would you like to do?" },
   "dash.newTask": { de: "Neuer Task", en: "New Task" },
   "dash.askAi": { de: "AI fragen", en: "Ask AI" },
   "dash.newDoc": { de: "Neues Dok.", en: "New Doc" },

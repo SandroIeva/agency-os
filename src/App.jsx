@@ -4370,7 +4370,7 @@ export default function CircularMenu() {
                 <div style={{
                   fontSize: 43, fontWeight: 400, color: theme.textDim,
                   fontFamily: FONT, letterSpacing: -0.5, lineHeight: 1.3,
-                }}>What would you like to do?</div>
+                }}>{t("dash.subtitle")}</div>
               </div>
 
               {/* Tasks */}
