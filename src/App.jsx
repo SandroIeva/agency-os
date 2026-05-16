@@ -3456,9 +3456,19 @@ export default function CircularMenu() {
   const userEmail = session?.user?.email || "";
 
   // Helper: get Google provider token (session or localStorage fallback)
+  // Also proactively refresh if token is older than 50 minutes
   const getProviderToken = useCallback(() => {
-    return session?.provider_token || localStorage.getItem("agencyos-google-token") || null;
-  }, [session]);
+    const sessionToken = session?.provider_token;
+    const storedToken = localStorage.getItem("agencyos-google-token");
+    const tokenTs = parseInt(localStorage.getItem("agencyos-google-token-ts") || "0");
+    const tokenAge = Date.now() - tokenTs;
+    // If token is older than 50 min (Google tokens expire at 60 min), trigger background refresh
+    if (storedToken && tokenAge > 50 * 60 * 1000) {
+      // Don't await — just trigger refresh in background, return current token for now
+      autoReLogin();
+    }
+    return sessionToken || storedToken || null;
+  }, [session, autoReLogin]);
 
   // Listen for auth state changes — persist provider_token and refresh_token
   useEffect(() => {
@@ -3500,45 +3510,103 @@ export default function CircularMenu() {
     if (error) setAuthError(error.message);
   };
 
-  // Silent token refresh: uses stored refresh_token via server-side API
-  // No popup, no redirect, no user interaction — completely invisible
+  // Silent token refresh: tries multiple strategies
+  // 1. Server-side refresh via /api/refresh-token (needs GOOGLE_CLIENT_ID/SECRET env vars)
+  // 2. Supabase session refresh (may return provider_token on some setups)
+  // 3. Silent popup OAuth as last resort
   const refreshingTokenRef = useRef(false);
   const autoReLogin = useCallback(async () => {
     // Prevent concurrent refresh attempts
     if (refreshingTokenRef.current) return null;
     refreshingTokenRef.current = true;
 
+    // Strategy 1: Server-side refresh with stored refresh_token
     const refreshToken = localStorage.getItem("agencyos-google-refresh-token");
-    if (!refreshToken) {
-      console.warn("No refresh token available — user needs to re-login once");
-      refreshingTokenRef.current = false;
-      return null;
+    if (refreshToken) {
+      try {
+        const res = await fetch("/api/refresh-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.access_token) {
+            localStorage.setItem("agencyos-google-token", data.access_token);
+            localStorage.setItem("agencyos-google-token-ts", String(Date.now()));
+            refreshingTokenRef.current = false;
+            return data.access_token;
+          }
+        } else if (res.status === 400 || res.status === 401) {
+          localStorage.removeItem("agencyos-google-refresh-token");
+        }
+      } catch (e) {
+        console.warn("Server refresh failed, trying fallback:", e.message);
+      }
     }
 
+    // Strategy 2: Supabase session refresh — sometimes returns fresh provider_token
     try {
-      const res = await fetch("/api/refresh-token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: refreshToken }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.access_token) {
-          localStorage.setItem("agencyos-google-token", data.access_token);
-          localStorage.setItem("agencyos-google-token-ts", String(Date.now()));
-          refreshingTokenRef.current = false;
-          return data.access_token;
+      const { data: { session: freshSession } } = await supabase.auth.refreshSession();
+      if (freshSession?.provider_token) {
+        localStorage.setItem("agencyos-google-token", freshSession.provider_token);
+        localStorage.setItem("agencyos-google-token-ts", String(Date.now()));
+        if (freshSession.provider_refresh_token) {
+          localStorage.setItem("agencyos-google-refresh-token", freshSession.provider_refresh_token);
         }
-      } else {
-        console.error("Token refresh failed:", res.status);
-        // Refresh token might be revoked — clear it
-        if (res.status === 400 || res.status === 401) {
-          localStorage.removeItem("agencyos-google-refresh-token");
+        setSession(freshSession);
+        refreshingTokenRef.current = false;
+        return freshSession.provider_token;
+      }
+    } catch (e) {
+      console.warn("Supabase session refresh failed:", e.message);
+    }
+
+    // Strategy 3: Silent popup OAuth (user already authorized, no consent screen)
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin,
+          scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events",
+          skipBrowserRedirect: true,
+          queryParams: { prompt: "none" },
+        },
+      });
+      if (!error && data?.url) {
+        const popup = window.open(data.url, "google-auth-refresh", "width=1,height=1,left=-100,top=-100");
+        if (popup) {
+          // Wait for popup to redirect back
+          const token = await new Promise((resolve) => {
+            const timeout = setTimeout(() => { try { popup.close(); } catch(e) {} resolve(null); }, 15000);
+            const poll = setInterval(() => {
+              try {
+                if (popup.closed) { clearInterval(poll); clearTimeout(timeout); resolve(null); return; }
+                if (popup.location?.origin === window.location.origin) {
+                  popup.close(); clearInterval(poll); clearTimeout(timeout);
+                  // Give Supabase a moment to process the callback
+                  setTimeout(async () => {
+                    const { data: { session: s } } = await supabase.auth.getSession();
+                    if (s?.provider_token) {
+                      localStorage.setItem("agencyos-google-token", s.provider_token);
+                      localStorage.setItem("agencyos-google-token-ts", String(Date.now()));
+                      if (s.provider_refresh_token) localStorage.setItem("agencyos-google-refresh-token", s.provider_refresh_token);
+                      setSession(s);
+                      resolve(s.provider_token);
+                    } else {
+                      resolve(null);
+                    }
+                  }, 800);
+                }
+              } catch(e) { /* cross-origin, keep polling */ }
+            }, 300);
+          });
+          refreshingTokenRef.current = false;
+          return token;
         }
       }
     } catch (e) {
-      console.error("Token refresh error:", e);
+      console.warn("Silent popup refresh failed:", e.message);
     }
 
     refreshingTokenRef.current = false;
