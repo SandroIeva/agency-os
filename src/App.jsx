@@ -3767,10 +3767,8 @@ export default function CircularMenu() {
     if (voiceNav) {
       if (voiceNav.view) setCurrentView(voiceNav.view);
       if (voiceNav.action) voiceNav.action();
-      setAiSpeaking(false);
-      setAiStatus("");
-      setAiResponse("");
-      setTranscript("");
+      // Delay sphere hide so the new view is already rendered underneath
+      setTimeout(() => { setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript(""); }, 50);
       return;
     }
 
