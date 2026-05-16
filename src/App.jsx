@@ -152,7 +152,7 @@ function SegmentedRing({ count, activeIndex, radius = 95, stroke = 2, gap = 5, d
             fill="none"
             strokeLinecap="round"
             animate={{
-              stroke: isActive ? (darkMode ? "#ffffff" : "#1a1a2e") : (darkMode ? "#ffffff18" : "#1a1a2e18"),
+              stroke: isActive ? (darkMode ? "#ffffff" : "#555560") : (darkMode ? "#ffffff18" : "#44444820"),
               strokeWidth: isActive ? stroke + 1.5 : stroke,
             }}
             transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
@@ -4422,8 +4422,8 @@ export default function CircularMenu() {
                 <motion.div
                   onClick={() => handleSubClick(sub)}
                   animate={{
-                    background: isHovered ? (darkMode ? "rgba(255,255,255,0.95)" : "rgba(0,0,0,0.85)") : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"),
-                    borderColor: isHovered ? (darkMode ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.3)") : (darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)"),
+                    background: isHovered ? (darkMode ? "rgba(255,255,255,0.95)" : "rgba(42,42,50,0.95)") : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"),
+                    borderColor: isHovered ? (darkMode ? "rgba(255,255,255,0.5)" : "rgba(42,42,50,0.4)") : (darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)"),
                     scale: isHovered ? 1.05 : 1,
                   }}
                   transition={smoothSpring}
@@ -4483,7 +4483,7 @@ export default function CircularMenu() {
               }}
             >
               <svg width={200} height={200}>
-                <circle cx={100} cy={100} r={95} fill="none" stroke={COLORS.ringInactive} strokeWidth={1.5} />
+                <circle cx={100} cy={100} r={95} fill="none" stroke={darkMode ? COLORS.ringInactive : "#44444818"} strokeWidth={1.5} />
               </svg>
             </motion.div>
           )}
@@ -4501,7 +4501,7 @@ export default function CircularMenu() {
                 position: "absolute", top: "50%", left: "50%",
                 transform: "translate(-50%, -50%)",
                 width: 170, height: 170, borderRadius: "50%",
-                background: COLORS.bg, zIndex: 4, pointerEvents: "none",
+                background: darkMode ? COLORS.bg : "#2a2a32", zIndex: 4, pointerEvents: "none",
               }}
             />
           )}
@@ -4531,7 +4531,7 @@ export default function CircularMenu() {
                   exit={{ opacity: 0, position: "absolute" }}
                   transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
                   style={{
-                    fontSize: 14, fontWeight: 500, color: COLORS.text, letterSpacing: 5,
+                    fontSize: 14, fontWeight: 500, color: darkMode ? COLORS.text : "#ffffffCC", letterSpacing: 5,
                     fontFamily: FONT,
                   }}
                 >
