@@ -4328,7 +4328,7 @@ export default function CircularMenu() {
                 animate={{ opacity: aiStatus === "thinking" ? [0.4, 0.8, 0.4] : 0.6 }}
                 transition={{ duration: 1.5, repeat: aiStatus === "thinking" ? Infinity : 0, ease: "easeInOut" }}
                 style={{
-                  fontSize: 11, fontFamily: FONT, color: "#ffffff40",
+                  fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e50",
                   letterSpacing: 2, marginBottom: 20, fontWeight: 400,
                 }}
               >{aiStatus === "thinking" ? "THINKING..." : ""}</motion.div>
@@ -4353,7 +4353,7 @@ export default function CircularMenu() {
               </motion.div>
               {aiStatus === "speaking" && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}
-                  style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff25", letterSpacing: 2, marginTop: 10 }}>
+                  style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40", letterSpacing: 2, marginTop: 10 }}>
                   CLICK TO STOP
                 </motion.div>
               )}
@@ -4376,7 +4376,9 @@ export default function CircularMenu() {
                       const isCurrent = highlightWordIndex >= 0 && i === highlightWordIndex;
                       return (
                         <span key={i} style={{
-                          color: isSpoken ? "#ffffffE6" : "#ffffff30",
+                          color: isSpoken
+                            ? (darkMode ? "#ffffffE6" : "#1a1a2eE6")
+                            : (darkMode ? "#ffffff30" : "#1a1a2e35"),
                           textShadow: isCurrent ? "0 0 12px rgba(139,122,255,0.5)" : "none",
                           transition: "color 0.2s ease, text-shadow 0.3s ease",
                         }}>{word}{" "}</span>
