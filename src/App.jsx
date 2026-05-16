@@ -3372,6 +3372,7 @@ export default function CircularMenu() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [dashboardTasks, setDashboardTasks] = useState([]);
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem("agencyos-dark-mode");
@@ -3729,7 +3730,7 @@ export default function CircularMenu() {
     return () => clearInterval(interval);
   }, [session, autoReLogin, isTokenFresh]);
 
-  // ── Fetch Kanban tasks for dashboard display ──
+  // ── Fetch Kanban tasks for dashboard/startview ──
   useEffect(() => {
     if (!session?.user) return;
     const loadTasks = async () => {
@@ -3756,6 +3757,64 @@ export default function CircularMenu() {
 
     return () => supabase.removeChannel(channel);
   }, [session]);
+
+  // ── Fetch upcoming Google Calendar events for startview ──
+  useEffect(() => {
+    if (!session?.user) return;
+    const loadEvents = async () => {
+      try {
+        const token = await ensureValidToken();
+        if (!token) return;
+        const now = new Date();
+        const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+        const timeMin = now.toISOString();
+        const timeMax = endOfDay.toISOString();
+        const res = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=5`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setUpcomingEvents((data.items || []).map(e => ({
+            id: e.id,
+            title: e.summary || t("calendar.noTitle"),
+            start: e.start?.dateTime || e.start?.date,
+            end: e.end?.dateTime || e.end?.date,
+            hangoutLink: e.hangoutLink,
+            location: e.location,
+            isMeet: !!(e.hangoutLink || e.conferenceData),
+          })));
+        } else if (res.status === 401) {
+          const freshToken = await autoReLogin();
+          if (freshToken) {
+            const retry = await fetch(
+              `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=5`,
+              { headers: { Authorization: `Bearer ${freshToken}` } }
+            );
+            if (retry.ok) {
+              const data = await retry.json();
+              setUpcomingEvents((data.items || []).map(e => ({
+                id: e.id,
+                title: e.summary || t("calendar.noTitle"),
+                start: e.start?.dateTime || e.start?.date,
+                end: e.end?.dateTime || e.end?.date,
+                hangoutLink: e.hangoutLink,
+                location: e.location,
+                isMeet: !!(e.hangoutLink || e.conferenceData),
+              })));
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Calendar events load failed:", e.message);
+      }
+    };
+    // Small delay to let token system initialize
+    const timeout = setTimeout(loadEvents, 500);
+    // Refresh events every 5 minutes
+    const interval = setInterval(loadEvents, 5 * 60 * 1000);
+    return () => { clearTimeout(timeout); clearInterval(interval); };
+  }, [session, ensureValidToken]);
 
   const getGreeting = () => {
     const h = new Date().getHours();
@@ -4462,64 +4521,124 @@ export default function CircularMenu() {
                 }}>{t("dash.subtitle")}</div>
               </div>
 
-              {/* Tasks */}
-              <div style={{
-                display: "flex", flexDirection: "column", gap: 10,
-                maxWidth: 720, alignSelf: "center", width: "100%",
-                marginTop: "auto", marginBottom: 100,
-              }}>
-                {[
-                  { icon: "🎨", iconBg: "#2D7A6A", name: "Figma", desc: "Complete the Dashboard Design", key: "F" },
-                  { icon: "🤖", iconBg: "#C4624A", name: "Claude Code", desc: "Build the new app idea", key: "2" },
-                  { icon: "👤", iconBg: "#5A7AB5", name: "Reply to Tom Behrens over Gmail", desc: null, key: "G" },
-                  { icon: "✦", iconBg: "#4A9A8A", name: "Research with Perplexity", desc: null, key: "P" },
-                ].map((task, i) => (
-                  <motion.div
-                    key={task.key}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0], delay: 0.15 + i * 0.06 }}
-                    className="hover-row"
-                    style={{
-                      display: "flex", alignItems: "center", gap: 18,
-                      padding: "16px 24px", borderRadius: 18,
-                      background: task.desc ? theme.hoverBg : "transparent",
-                      border: task.desc ? `1px solid ${theme.borderFaint}` : "1px solid transparent",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <div style={{
-                      width: 50, height: 50, borderRadius: "50%",
-                      background: task.iconBg, display: "flex", alignItems: "center",
-                      justifyContent: "center", fontSize: 22, flexShrink: 0,
-                    }}>{task.icon}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{
-                        fontSize: 19, fontFamily: FONT, color: theme.text,
-                        fontWeight: 400,
-                      }}>{task.name}</div>
-                      {task.desc && (
-                        <div style={{
+              {/* Live tasks & events from Kanban + Calendar */}
+              {(() => {
+                // Build unified card list: priority tasks first, then upcoming events
+                const priorityOrder = { high: 0, medium: 1, low: 2 };
+                const activeTasks = dashboardTasks
+                  .filter(tk => tk.column_key !== "done")
+                  .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
+
+                const taskCards = activeTasks.slice(0, 4).map(tk => ({
+                  id: "task-" + tk.id,
+                  icon: tk.priority === "high" ? "⚡" : tk.priority === "medium" ? "◎" : "◻",
+                  iconBg: tk.priority === "high" ? "#C4624A" : tk.priority === "medium" ? "#B5872D" : "#5A7AB5",
+                  name: tk.title,
+                  desc: tk.project_name || null,
+                  type: "task",
+                  priority: tk.priority,
+                  badge: tk.priority === "high" ? t("dash.priority") : (tk.column_key === "in_progress" ? t("kanban.inProgress") : null),
+                  badgeColor: tk.priority === "high" ? "#E84393" : "#F59E0B",
+                  onClick: () => setCurrentView("kanban"),
+                }));
+
+                const eventCards = upcomingEvents.map(ev => {
+                  const startTime = ev.start ? new Date(ev.start) : null;
+                  const timeStr = startTime ? startTime.toLocaleTimeString(appLanguage === "de" ? "de-DE" : "en-US", { hour: "2-digit", minute: "2-digit" }) : "";
+                  return {
+                    id: "event-" + ev.id,
+                    icon: ev.isMeet ? "📹" : "📅",
+                    iconBg: ev.isMeet ? "#2D7A6A" : "#4A6FA5",
+                    name: ev.title,
+                    desc: timeStr + (ev.isMeet ? " · Google Meet" : ""),
+                    type: "event",
+                    badge: ev.isMeet ? "Meet" : t("calendar.title"),
+                    badgeColor: ev.isMeet ? "#00B894" : "#5B8DEF",
+                    onClick: ev.hangoutLink
+                      ? () => window.open(ev.hangoutLink, "_blank")
+                      : () => setCurrentView("calendar"),
+                  };
+                });
+
+                // Merge: events that are soon go first, then high-priority tasks, then rest
+                const now = new Date();
+                const soonEvents = eventCards.filter(ec => {
+                  const ev = upcomingEvents.find(e => "event-" + e.id === ec.id);
+                  if (!ev?.start) return false;
+                  const diff = new Date(ev.start) - now;
+                  return diff >= 0 && diff < 60 * 60 * 1000; // within next hour
+                });
+                const laterEvents = eventCards.filter(ec => !soonEvents.includes(ec));
+                const highTasks = taskCards.filter(tc => tc.priority === "high");
+                const otherTasks = taskCards.filter(tc => tc.priority !== "high");
+
+                const allCards = [...soonEvents, ...highTasks, ...laterEvents, ...otherTasks].slice(0, 4);
+
+                return (
+                  <div style={{
+                    display: "flex", flexDirection: "column", gap: 10,
+                    maxWidth: 720, alignSelf: "center", width: "100%",
+                    marginTop: "auto", marginBottom: 100,
+                  }}>
+                    {allCards.length === 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.4, delay: 0.15 }}
+                        style={{
+                          textAlign: "center", padding: "24px",
                           fontSize: 15, fontFamily: FONT, color: theme.textDim,
-                          marginTop: 3,
-                        }}>{task.desc}</div>
-                      )}
-                    </div>
-                    <div style={{ display: "flex", gap: 5 }}>
-                      <span style={{
-                        fontSize: 13, color: theme.textDim, fontFamily: FONT,
-                        padding: "5px 8px", borderRadius: 6,
-                        background: theme.borderFaint,
-                      }}>⌘</span>
-                      <span style={{
-                        fontSize: 13, color: theme.textDim, fontFamily: FONT,
-                        padding: "5px 8px", borderRadius: 6,
-                        background: theme.borderFaint,
-                      }}>{task.key}</span>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
+                        }}
+                      >
+                        {t("dash.noTasks")}
+                      </motion.div>
+                    )}
+                    {allCards.map((card, i) => (
+                      <motion.div
+                        key={card.id}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0], delay: 0.15 + i * 0.06 }}
+                        className="hover-row"
+                        onClick={card.onClick}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 18,
+                          padding: "16px 24px", borderRadius: 18,
+                          background: theme.hoverBg,
+                          border: `1px solid ${theme.borderFaint}`,
+                          cursor: "pointer",
+                        }}
+                      >
+                        <div style={{
+                          width: 50, height: 50, borderRadius: "50%",
+                          background: card.iconBg, display: "flex", alignItems: "center",
+                          justifyContent: "center", fontSize: 22, flexShrink: 0,
+                        }}>{card.icon}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{
+                            fontSize: 19, fontFamily: FONT, color: theme.text,
+                            fontWeight: 400,
+                          }}>{card.name}</div>
+                          {card.desc && (
+                            <div style={{
+                              fontSize: 15, fontFamily: FONT, color: theme.textDim,
+                              marginTop: 3,
+                            }}>{card.desc}</div>
+                          )}
+                        </div>
+                        {card.badge && (
+                          <div style={{
+                            fontSize: 11, fontFamily: FONT, color: card.badgeColor,
+                            padding: "4px 10px", borderRadius: 20,
+                            background: card.badgeColor + "15",
+                            border: `1px solid ${card.badgeColor}30`,
+                            flexShrink: 0,
+                          }}>{card.badge}</div>
+                        )}
+                      </motion.div>
+                    ))}
+                  </div>
+                );
+              })()}
 
             </motion.div>
           )}
