@@ -2322,7 +2322,7 @@ function getFileExtension(name, mimeType) {
   return "FILE";
 }
 
-function FilesView({ onBack, session, getProviderToken, autoReLogin }) {
+function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, darkMode }) {
   const [search, setSearch] = useState("");
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -4073,7 +4073,7 @@ export default function CircularMenu() {
         {/* FILES VIEW */}
         <AnimatePresence>
           {currentView === "files" && (
-            <FilesView session={session} getProviderToken={getProviderToken} autoReLogin={autoReLogin} onBack={() => {
+            <FilesView session={session} getProviderToken={getProviderToken} autoReLogin={autoReLogin} theme={theme} darkMode={darkMode} onBack={() => {
               setCurrentView("dashboard");
               setMenuSource("grid");
               setActiveIndex(4);
