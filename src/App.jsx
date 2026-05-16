@@ -1120,7 +1120,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t }) {
 const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const MONTH_NAMES = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
 
-function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReLogin, theme, darkMode, t }) {
+function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReLogin, ensureValidToken, theme, darkMode, t }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
   const [viewMode, setViewMode] = useState("month"); // "month" | "week" | "day"
@@ -1209,14 +1209,24 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
       const timeMin = new Date(year, month, 1).toISOString();
       const timeMax = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
 
-      // Google Calendar
-      const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
+      // Google Calendar — use ensureValidToken for guaranteed fresh token
+      const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
       if (providerToken) {
         try {
-          const res = await fetch(
+          let res = await fetch(
             `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=100`,
             { headers: { Authorization: `Bearer ${providerToken}` } }
           );
+          // If 401, force one more refresh attempt
+          if (res.status === 401 && autoReLogin) {
+            const freshToken = await autoReLogin();
+            if (freshToken) {
+              res = await fetch(
+                `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=100`,
+                { headers: { Authorization: `Bearer ${freshToken}` } }
+              );
+            }
+          }
           if (res.ok) {
             const data = await res.json();
             setGoogleEvents((data.items || []).map(e => ({
@@ -2326,7 +2336,7 @@ function getFileExtension(name, mimeType) {
   return "FILE";
 }
 
-function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, darkMode, t }) {
+function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValidToken, theme, darkMode, t }) {
   const [search, setSearch] = useState("");
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2345,13 +2355,12 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
       setLoading(true);
       setError(null);
       try {
-        let providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
+        // Use ensureValidToken for guaranteed fresh token
+        let providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
         if (!providerToken) {
-          if (autoReLogin) {
-            const newToken = await autoReLogin();
-            if (newToken) providerToken = newToken;
-            else { setError("Kein Google Drive Zugriff."); setLoading(false); return; }
-          } else { setError("Kein Google Drive Zugriff."); setLoading(false); return; }
+          setError(t ? t("error.noGoogleAccess") : "Kein Google Drive Zugriff.");
+          setLoading(false);
+          return;
         }
 
         let query = "trashed=false";
@@ -2366,8 +2375,9 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
           { headers: { Authorization: `Bearer ${providerToken}` } }
         );
 
-        // If 401, silently refresh token and retry
+        // If 401, token was actually expired — force refresh and retry once
         if (res.status === 401 && autoReLogin) {
+          console.log("[FilesView] 401 — forcing token refresh");
           const newToken = await autoReLogin();
           if (newToken) {
             res = await fetch(
@@ -2378,7 +2388,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
         }
 
         if (!res.ok) {
-          setError("Fehler beim Laden der Dateien.");
+          setError(t ? t("error.loadFailed") : "Fehler beim Laden der Dateien.");
           setLoading(false);
           return;
         }
@@ -3495,18 +3505,35 @@ export default function CircularMenu() {
   const userAvatar = session?.user?.user_metadata?.avatar_url || null;
   const userEmail = session?.user?.email || "";
 
-  // Helper: get Google provider token (session or localStorage fallback)
+  // ── Smart Google Token Management ──────────────────────────────
+  // Stores the latest valid token in a ref for instant synchronous access
+  const googleTokenRef = useRef(localStorage.getItem("agencyos-google-token") || null);
+  const googleTokenTsRef = useRef(parseInt(localStorage.getItem("agencyos-google-token-ts") || "0"));
+
+  // Persist token to both ref and localStorage
+  const storeGoogleToken = useCallback((token) => {
+    if (!token) return;
+    const now = Date.now();
+    googleTokenRef.current = token;
+    googleTokenTsRef.current = now;
+    localStorage.setItem("agencyos-google-token", token);
+    localStorage.setItem("agencyos-google-token-ts", String(now));
+  }, []);
+
+  // Check if stored token is still likely valid (< 50 min old, Google tokens expire at 60 min)
+  const isTokenFresh = useCallback(() => {
+    return googleTokenRef.current && (Date.now() - googleTokenTsRef.current < 50 * 60 * 1000);
+  }, []);
+
+  // Synchronous getter — returns cached token (may be stale, use ensureValidToken for guaranteed fresh)
   const getProviderToken = useCallback(() => {
-    return session?.provider_token || localStorage.getItem("agencyos-google-token") || null;
+    return session?.provider_token || googleTokenRef.current || null;
   }, [session]);
 
   // Listen for auth state changes — persist provider_token and refresh_token
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
-      if (s?.provider_token) {
-        localStorage.setItem("agencyos-google-token", s.provider_token);
-        localStorage.setItem("agencyos-google-token-ts", String(Date.now()));
-      }
+      if (s?.provider_token) storeGoogleToken(s.provider_token);
       if (s?.provider_refresh_token) {
         localStorage.setItem("agencyos-google-refresh-token", s.provider_refresh_token);
       }
@@ -3514,10 +3541,7 @@ export default function CircularMenu() {
       setAuthLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
-      if (s?.provider_token) {
-        localStorage.setItem("agencyos-google-token", s.provider_token);
-        localStorage.setItem("agencyos-google-token-ts", String(Date.now()));
-      }
+      if (s?.provider_token) storeGoogleToken(s.provider_token);
       if (s?.provider_refresh_token) {
         localStorage.setItem("agencyos-google-refresh-token", s.provider_refresh_token);
       }
@@ -3525,7 +3549,7 @@ export default function CircularMenu() {
       setAuthLoading(false);
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [storeGoogleToken]);
 
   // Auto-detect language from Google profile locale (only if user hasn't manually set one)
   useEffect(() => {
@@ -3556,103 +3580,129 @@ export default function CircularMenu() {
   // 2. Supabase session refresh (may return provider_token on some setups)
   // 3. Silent popup OAuth as last resort
   const refreshingTokenRef = useRef(false);
+  const refreshPromiseRef = useRef(null); // Deduplicate concurrent refresh calls
+
   const autoReLogin = useCallback(async () => {
-    // Prevent concurrent refresh attempts
-    if (refreshingTokenRef.current) return null;
+    // If already refreshing, return the same promise (dedup)
+    if (refreshingTokenRef.current && refreshPromiseRef.current) {
+      return refreshPromiseRef.current;
+    }
     refreshingTokenRef.current = true;
 
-    // Strategy 1: Server-side refresh with stored refresh_token
-    const refreshToken = localStorage.getItem("agencyos-google-refresh-token");
-    if (refreshToken) {
-      try {
-        const res = await fetch("/api/refresh-token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refresh_token: refreshToken }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.access_token) {
-            localStorage.setItem("agencyos-google-token", data.access_token);
-            localStorage.setItem("agencyos-google-token-ts", String(Date.now()));
-            refreshingTokenRef.current = false;
-            return data.access_token;
+    const doRefresh = async () => {
+      // Strategy 1: Server-side refresh with stored refresh_token
+      const refreshToken = localStorage.getItem("agencyos-google-refresh-token");
+      if (refreshToken) {
+        try {
+          const res = await fetch("/api/refresh-token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refresh_token: refreshToken }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.access_token) {
+              storeGoogleToken(data.access_token);
+              refreshingTokenRef.current = false;
+              refreshPromiseRef.current = null;
+              return data.access_token;
+            }
+          } else if (res.status === 400 || res.status === 401) {
+            localStorage.removeItem("agencyos-google-refresh-token");
           }
-        } else if (res.status === 400 || res.status === 401) {
-          localStorage.removeItem("agencyos-google-refresh-token");
+        } catch (e) {
+          console.warn("Server refresh failed, trying fallback:", e.message);
+        }
+      }
+
+      // Strategy 2: Supabase session refresh — sometimes returns fresh provider_token
+      try {
+        const { data: { session: freshSession } } = await supabase.auth.refreshSession();
+        if (freshSession?.provider_token) {
+          storeGoogleToken(freshSession.provider_token);
+          if (freshSession.provider_refresh_token) {
+            localStorage.setItem("agencyos-google-refresh-token", freshSession.provider_refresh_token);
+          }
+          setSession(freshSession);
+          refreshingTokenRef.current = false;
+          refreshPromiseRef.current = null;
+          return freshSession.provider_token;
         }
       } catch (e) {
-        console.warn("Server refresh failed, trying fallback:", e.message);
+        console.warn("Supabase session refresh failed:", e.message);
       }
-    }
 
-    // Strategy 2: Supabase session refresh — sometimes returns fresh provider_token
-    try {
-      const { data: { session: freshSession } } = await supabase.auth.refreshSession();
-      if (freshSession?.provider_token) {
-        localStorage.setItem("agencyos-google-token", freshSession.provider_token);
-        localStorage.setItem("agencyos-google-token-ts", String(Date.now()));
-        if (freshSession.provider_refresh_token) {
-          localStorage.setItem("agencyos-google-refresh-token", freshSession.provider_refresh_token);
+      // Strategy 3: Silent popup OAuth (user already authorized, no consent screen)
+      try {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            redirectTo: window.location.origin,
+            scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/generative-language.retriever https://www.googleapis.com/auth/cloud-platform",
+            skipBrowserRedirect: true,
+            queryParams: { prompt: "none" },
+          },
+        });
+        if (!error && data?.url) {
+          const popup = window.open(data.url, "google-auth-refresh", "width=1,height=1,left=-100,top=-100");
+          if (popup) {
+            const token = await new Promise((resolve) => {
+              const timeout = setTimeout(() => { try { popup.close(); } catch(e) {} resolve(null); }, 15000);
+              const poll = setInterval(() => {
+                try {
+                  if (popup.closed) { clearInterval(poll); clearTimeout(timeout); resolve(null); return; }
+                  if (popup.location?.origin === window.location.origin) {
+                    popup.close(); clearInterval(poll); clearTimeout(timeout);
+                    setTimeout(async () => {
+                      const { data: { session: s } } = await supabase.auth.getSession();
+                      if (s?.provider_token) {
+                        storeGoogleToken(s.provider_token);
+                        if (s.provider_refresh_token) localStorage.setItem("agencyos-google-refresh-token", s.provider_refresh_token);
+                        setSession(s);
+                        resolve(s.provider_token);
+                      } else {
+                        resolve(null);
+                      }
+                    }, 800);
+                  }
+                } catch(e) { /* cross-origin, keep polling */ }
+              }, 300);
+            });
+            refreshingTokenRef.current = false;
+            refreshPromiseRef.current = null;
+            return token;
+          }
         }
-        setSession(freshSession);
-        refreshingTokenRef.current = false;
-        return freshSession.provider_token;
+      } catch (e) {
+        console.warn("Silent popup refresh failed:", e.message);
       }
-    } catch (e) {
-      console.warn("Supabase session refresh failed:", e.message);
-    }
 
-    // Strategy 3: Silent popup OAuth (user already authorized, no consent screen)
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: window.location.origin,
-          scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/generative-language.retriever https://www.googleapis.com/auth/cloud-platform",
-          skipBrowserRedirect: true,
-          queryParams: { prompt: "none" },
-        },
-      });
-      if (!error && data?.url) {
-        const popup = window.open(data.url, "google-auth-refresh", "width=1,height=1,left=-100,top=-100");
-        if (popup) {
-          // Wait for popup to redirect back
-          const token = await new Promise((resolve) => {
-            const timeout = setTimeout(() => { try { popup.close(); } catch(e) {} resolve(null); }, 15000);
-            const poll = setInterval(() => {
-              try {
-                if (popup.closed) { clearInterval(poll); clearTimeout(timeout); resolve(null); return; }
-                if (popup.location?.origin === window.location.origin) {
-                  popup.close(); clearInterval(poll); clearTimeout(timeout);
-                  // Give Supabase a moment to process the callback
-                  setTimeout(async () => {
-                    const { data: { session: s } } = await supabase.auth.getSession();
-                    if (s?.provider_token) {
-                      localStorage.setItem("agencyos-google-token", s.provider_token);
-                      localStorage.setItem("agencyos-google-token-ts", String(Date.now()));
-                      if (s.provider_refresh_token) localStorage.setItem("agencyos-google-refresh-token", s.provider_refresh_token);
-                      setSession(s);
-                      resolve(s.provider_token);
-                    } else {
-                      resolve(null);
-                    }
-                  }, 800);
-                }
-              } catch(e) { /* cross-origin, keep polling */ }
-            }, 300);
-          });
-          refreshingTokenRef.current = false;
-          return token;
-        }
-      }
-    } catch (e) {
-      console.warn("Silent popup refresh failed:", e.message);
-    }
+      refreshingTokenRef.current = false;
+      refreshPromiseRef.current = null;
+      return null;
+    };
 
-    refreshingTokenRef.current = false;
-    return null;
-  }, []);
+    refreshPromiseRef.current = doRefresh();
+    return refreshPromiseRef.current;
+  }, [storeGoogleToken]);
+
+  // ── ensureValidToken: async getter that guarantees a fresh token ──
+  // Call this BEFORE any Google API request instead of getProviderToken()
+  const ensureValidToken = useCallback(async () => {
+    // 1. If session has a fresh provider_token, use it
+    if (session?.provider_token) {
+      storeGoogleToken(session.provider_token);
+      return session.provider_token;
+    }
+    // 2. If cached token is still fresh (< 50 min), use it
+    if (isTokenFresh()) {
+      return googleTokenRef.current;
+    }
+    // 3. Token is stale or missing — refresh it
+    console.log("[TokenMgr] Token stale or missing, refreshing...");
+    const newToken = await autoReLogin();
+    return newToken || googleTokenRef.current || null;
+  }, [session, storeGoogleToken, isTokenFresh, autoReLogin]);
 
   const handleLogout = async () => {
     localStorage.removeItem("agencyos-google-token");
@@ -3660,14 +3710,23 @@ export default function CircularMenu() {
     setSession(null);
   };
 
-  // Proactively refresh token if older than 50 min (Google tokens expire at 60 min)
+  // ── Background token refresh: check every 5 min, refresh if > 45 min old ──
   useEffect(() => {
-    const tokenTs = parseInt(localStorage.getItem("agencyos-google-token-ts") || "0");
-    const storedToken = localStorage.getItem("agencyos-google-token");
-    if (storedToken && tokenTs && Date.now() - tokenTs > 50 * 60 * 1000) {
+    if (!session) return;
+    // Immediate check on mount
+    if (!isTokenFresh()) {
+      console.log("[TokenMgr] Token stale on mount, refreshing...");
       autoReLogin();
     }
-  }, [autoReLogin]);
+    // Periodic check every 5 minutes
+    const interval = setInterval(() => {
+      if (!isTokenFresh()) {
+        console.log("[TokenMgr] Periodic refresh triggered");
+        autoReLogin();
+      }
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [session, autoReLogin, isTokenFresh]);
 
   const getGreeting = () => {
     const h = new Date().getHours();
@@ -4311,14 +4370,14 @@ export default function CircularMenu() {
         {/* CALENDAR VIEW */}
         <AnimatePresence>
           {currentView === "calendar" && (
-            <CalendarView session={session} getProviderToken={getProviderToken} openMeetCall={openMeetCall} autoReLogin={autoReLogin} onBack={() => setCurrentView("dashboard")} theme={theme} darkMode={darkMode} t={t} />
+            <CalendarView session={session} getProviderToken={getProviderToken} openMeetCall={openMeetCall} autoReLogin={autoReLogin} ensureValidToken={ensureValidToken} onBack={() => setCurrentView("dashboard")} theme={theme} darkMode={darkMode} t={t} />
           )}
         </AnimatePresence>
 
         {/* FILES VIEW */}
         <AnimatePresence>
           {currentView === "files" && (
-            <FilesView session={session} getProviderToken={getProviderToken} autoReLogin={autoReLogin} theme={theme} darkMode={darkMode} t={t} onBack={() => {
+            <FilesView session={session} getProviderToken={getProviderToken} autoReLogin={autoReLogin} ensureValidToken={ensureValidToken} theme={theme} darkMode={darkMode} t={t} onBack={() => {
               setCurrentView("dashboard");
               setMenuSource("grid");
               setActiveIndex(4);
