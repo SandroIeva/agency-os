@@ -4355,7 +4355,7 @@ export default function CircularMenu() {
               </motion.div>
               {aiStatus === "speaking" && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}
-                  style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40", letterSpacing: 2, marginTop: 10 }}>
+                  style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40", letterSpacing: 2, marginTop: 20 }}>
                   CLICK TO STOP
                 </motion.div>
               )}
