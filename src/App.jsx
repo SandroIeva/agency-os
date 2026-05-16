@@ -3691,20 +3691,23 @@ export default function CircularMenu() {
   // ── ensureValidToken: async getter that guarantees a fresh token ──
   // Call this BEFORE any Google API request instead of getProviderToken()
   const ensureValidToken = useCallback(async () => {
-    // 1. If session has a fresh provider_token, use it
-    if (session?.provider_token) {
-      storeGoogleToken(session.provider_token);
-      return session.provider_token;
-    }
-    // 2. If cached token is still fresh (< 50 min), use it
+    // 1. If cached token is still fresh (< 50 min), use it
     if (isTokenFresh()) {
       return googleTokenRef.current;
     }
+    // 2. Check if current Supabase session has a provider_token
+    try {
+      const { data: { session: s } } = await supabase.auth.getSession();
+      if (s?.provider_token) {
+        storeGoogleToken(s.provider_token);
+        return s.provider_token;
+      }
+    } catch (e) { /* ignore */ }
     // 3. Token is stale or missing — refresh it
     console.log("[TokenMgr] Token stale or missing, refreshing...");
     const newToken = await autoReLogin();
     return newToken || googleTokenRef.current || null;
-  }, [session, storeGoogleToken, isTokenFresh, autoReLogin]);
+  }, [storeGoogleToken, isTokenFresh, autoReLogin]);
 
   const handleLogout = async () => {
     localStorage.removeItem("agencyos-google-token");
@@ -3713,22 +3716,29 @@ export default function CircularMenu() {
   };
 
   // ── Background token refresh: check every 5 min, refresh if > 45 min old ──
+  // Store latest refs to avoid dependency changes crashing React
+  const autoReLoginRef = useRef(autoReLogin);
+  const isTokenFreshRef = useRef(isTokenFresh);
+  useEffect(() => { autoReLoginRef.current = autoReLogin; }, [autoReLogin]);
+  useEffect(() => { isTokenFreshRef.current = isTokenFresh; }, [isTokenFresh]);
+
   useEffect(() => {
     if (!session) return;
     // Immediate check on mount
-    if (!isTokenFresh()) {
+    if (!isTokenFreshRef.current()) {
       console.log("[TokenMgr] Token stale on mount, refreshing...");
-      autoReLogin();
+      autoReLoginRef.current();
     }
     // Periodic check every 5 minutes
     const interval = setInterval(() => {
-      if (!isTokenFresh()) {
+      if (!isTokenFreshRef.current()) {
         console.log("[TokenMgr] Periodic refresh triggered");
-        autoReLogin();
+        autoReLoginRef.current();
       }
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [session, autoReLogin, isTokenFresh]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!session]);
 
   // ── Fetch Kanban tasks for dashboard/startview ──
   useEffect(() => {
@@ -3814,7 +3824,8 @@ export default function CircularMenu() {
     // Refresh events every 5 minutes
     const interval = setInterval(loadEvents, 5 * 60 * 1000);
     return () => { clearTimeout(timeout); clearInterval(interval); };
-  }, [session, ensureValidToken]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]);
 
   // ── Build startview cards (tasks + events + placeholders) ──
   const startviewCards = useMemo(() => {
@@ -3830,6 +3841,7 @@ export default function CircularMenu() {
       name: tk.title,
       desc: tk.project_name || colLabel(tk.column_key),
       key: tk.id,
+      priority: tk.priority,
       onClick: () => setCurrentView("kanban"),
     }));
 
