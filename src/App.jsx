@@ -4554,18 +4554,18 @@ export default function CircularMenu() {
             transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
             style={{
               position: "fixed", bottom: 0, left: 0, right: 0, top: "18%",
-              background: "linear-gradient(180deg, transparent 0%, #111117 6%)",
+              background: darkMode ? "linear-gradient(180deg, transparent 0%, #111117 6%)" : "linear-gradient(180deg, transparent 0%, #F5F5F7 6%)",
               paddingTop: 32, zIndex: 25, overflowY: "hidden",
             }}
           >
             {/* Drag handle */}
-            <div onClick={() => setPanelOpen(false)} style={{ width: 36, height: 4, borderRadius: 2, background: "#ffffff18", margin: "0 auto 24px", cursor: "pointer" }} />
+            <div onClick={() => setPanelOpen(false)} style={{ width: 36, height: 4, borderRadius: 2, background: darkMode ? "#ffffff18" : "#1a1a2e20", margin: "0 auto 24px", cursor: "pointer" }} />
 
             <div style={{ padding: "0 40px 120px", display: "flex", flexDirection: "column", gap: 28 }}>
 
               {/* Stats row */}
               <div>
-                <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>Übersicht</div>
+                <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>Übersicht</div>
                 <div style={{ display: "flex", gap: 10 }}>
                   {[
                     { label: "Offen", value: "8", color: "#8B7AFF" },
@@ -4576,10 +4576,10 @@ export default function CircularMenu() {
                     <motion.div key={stat.label}
                       initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.05, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
-                      style={{ flex: 1, padding: "14px 16px", borderRadius: 14, background: "#16161E", border: "1px solid #ffffff0A" }}
+                      style={{ flex: 1, padding: "14px 16px", borderRadius: 14, background: darkMode ? "#16161E" : "rgba(255,255,255,0.9)", border: darkMode ? "1px solid #ffffff0A" : "1px solid rgba(0,0,0,0.06)" }}
                     >
                       <div style={{ fontSize: 26, fontWeight: 300, fontFamily: FONT, color: stat.color, lineHeight: 1, marginBottom: 5 }}>{stat.value}</div>
-                      <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40" }}>{stat.label}</div>
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e70" }}>{stat.label}</div>
                     </motion.div>
                   ))}
                 </div>
@@ -4587,7 +4587,7 @@ export default function CircularMenu() {
 
               {/* Active projects */}
               <div>
-                <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>Aktive Projekte</div>
+                <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>Aktive Projekte</div>
                 <div style={{ display: "flex", gap: 10 }}>
                   {[
                     { name: "Meridian", progress: 68, color: "#8B7AFF", tasks: "12 Tasks" },
@@ -4597,16 +4597,16 @@ export default function CircularMenu() {
                     <motion.div key={proj.name}
                       initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.1 + i * 0.06, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
-                      style={{ flex: 1, padding: "16px 18px", borderRadius: 14, background: "#16161E", border: "1px solid #ffffff0A", cursor: "pointer" }}
+                      style={{ flex: 1, padding: "16px 18px", borderRadius: 14, background: darkMode ? "#16161E" : "rgba(255,255,255,0.9)", border: darkMode ? "1px solid #ffffff0A" : "1px solid rgba(0,0,0,0.06)", cursor: "pointer" }}
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                        <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffffCC", fontWeight: 500 }}>{proj.name}</div>
+                        <div style={{ fontSize: 13, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 500 }}>{proj.name}</div>
                         <div style={{ fontSize: 12, fontFamily: FONT, color: proj.color }}>{proj.progress}%</div>
                       </div>
-                      <div style={{ height: 3, borderRadius: 2, background: "#ffffff0A", marginBottom: 8 }}>
+                      <div style={{ height: 3, borderRadius: 2, background: darkMode ? "#ffffff0A" : "rgba(0,0,0,0.06)", marginBottom: 8 }}>
                         <motion.div initial={{ width: 0 }} animate={{ width: `${proj.progress}%` }} transition={{ delay: 0.3 + i * 0.1, duration: 0.6, ease: [0.22, 0.68, 0.35, 1.0] }} style={{ height: "100%", borderRadius: 2, background: proj.color }} />
                       </div>
-                      <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff30" }}>{proj.tasks}</div>
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e55" }}>{proj.tasks}</div>
                     </motion.div>
                   ))}
                 </div>
@@ -4614,13 +4614,13 @@ export default function CircularMenu() {
 
               {/* Activity feed */}
               <div>
-                <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>Aktivität</div>
+                <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>Aktivität</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   {[
                     { icon: "◆", color: "#8B7AFF", title: "AI completed competitor analysis", time: "2 min ago", sub: "Meridian — 8 insights ready" },
                     { icon: "✓", color: "#00B894", title: "Brand guidelines v1 marked done", time: "18 min ago", sub: "Sandro · Meridian project" },
                     { icon: "◎", color: "#F59E0B", title: "New message from Maria", time: "34 min ago", sub: "#brand-refresh channel" },
-                    { icon: "⏱", color: "#ffffff50", title: "Time tracked: Logo exploration", time: "1h ago", sub: "4h 30m logged today" },
+                    { icon: "⏱", color: darkMode ? "#ffffff50" : "#1a1a2e60", title: "Time tracked: Logo exploration", time: "1h ago", sub: "4h 30m logged today" },
                   ].map((item, i) => (
                     <motion.div key={i}
                       initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
@@ -4629,10 +4629,10 @@ export default function CircularMenu() {
                     >
                       <div style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0, background: item.color + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: item.color }}>{item.icon}</div>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffffCC", fontWeight: 400 }}>{item.title}</div>
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginTop: 2 }}>{item.sub}</div>
+                        <div style={{ fontSize: 13, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{item.title}</div>
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e60", marginTop: 2 }}>{item.sub}</div>
                       </div>
-                      <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff25" }}>{item.time}</div>
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40" }}>{item.time}</div>
                     </motion.div>
                   ))}
                 </div>
@@ -4640,7 +4640,7 @@ export default function CircularMenu() {
 
               {/* Quick actions */}
               <div>
-                <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>Quick Actions</div>
+                <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>Quick Actions</div>
                 <div style={{ display: "flex", gap: 10 }}>
                   {[
                     { label: "New Task", icon: "＋", color: "#8B7AFF" },
@@ -4651,12 +4651,12 @@ export default function CircularMenu() {
                     <motion.div key={action.label}
                       initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: 0.3 + i * 0.05, duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
-                      whileHover={{ scale: 1.04, background: "#1E1E28" }}
+                      whileHover={{ scale: 1.04, background: darkMode ? "#1E1E28" : "rgba(0,0,0,0.04)" }}
                       whileTap={{ scale: 0.97 }}
-                      style={{ flex: 1, padding: "14px 12px", borderRadius: 14, background: "#16161E", border: "1px solid #ffffff0A", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}
+                      style={{ flex: 1, padding: "14px 12px", borderRadius: 14, background: darkMode ? "#16161E" : "rgba(255,255,255,0.9)", border: darkMode ? "1px solid #ffffff0A" : "1px solid rgba(0,0,0,0.06)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}
                     >
                       <div style={{ fontSize: 18, color: action.color }}>{action.icon}</div>
-                      <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff60" }}>{action.label}</div>
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff60" : "#1a1a2e80" }}>{action.label}</div>
                     </motion.div>
                   ))}
                 </div>
@@ -4677,7 +4677,7 @@ export default function CircularMenu() {
             transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
             style={{
               position: "fixed", top: 0, left: 0, right: 0, bottom: "12%",
-              background: "linear-gradient(0deg, transparent 0%, #111117 6%)",
+              background: darkMode ? "linear-gradient(0deg, transparent 0%, #111117 6%)" : "linear-gradient(0deg, transparent 0%, #F5F5F7 6%)",
               paddingBottom: 32, zIndex: 25, overflowY: "hidden",
               display: "flex", flexDirection: "column",
             }}
@@ -4692,8 +4692,8 @@ export default function CircularMenu() {
                 style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
               >
                 <div>
-                  <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30", letterSpacing: 3, textTransform: "uppercase", marginBottom: 6 }}>Deine Aufgaben</div>
-                  <div style={{ fontSize: 28, fontFamily: FONT, color: "#ffffffCC", fontWeight: 300 }}>Was steht an</div>
+                  <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 6 }}>Deine Aufgaben</div>
+                  <div style={{ fontSize: 28, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 300 }}>Was steht an</div>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   {[
@@ -4703,13 +4703,13 @@ export default function CircularMenu() {
                   ].map(f => (
                     <div key={f.label} style={{
                       padding: "6px 14px", borderRadius: 10, cursor: "pointer",
-                      background: f.active ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.03)",
-                      border: `1px solid ${f.active ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.04)"}`,
-                      fontSize: 12, fontFamily: FONT, color: f.active ? "#ffffffdd" : "#ffffff50",
+                      background: f.active ? (darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)") : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)"),
+                      border: `1px solid ${f.active ? (darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)")}`,
+                      fontSize: 12, fontFamily: FONT, color: f.active ? (darkMode ? "#ffffffdd" : "#1a1a2eDD") : (darkMode ? "#ffffff50" : "#1a1a2e60"),
                       display: "flex", alignItems: "center", gap: 6,
                     }}>
                       {f.label}
-                      <span style={{ fontSize: 10, color: f.active ? "#8B7AFF" : "#ffffff30" }}>{f.count}</span>
+                      <span style={{ fontSize: 10, color: f.active ? (darkMode ? "#8B7AFF" : "#6C5CE7") : (darkMode ? "#ffffff30" : "#1a1a2e40") }}>{f.count}</span>
                     </div>
                   ))}
                 </div>
@@ -4742,8 +4742,8 @@ export default function CircularMenu() {
                         style={{
                           display: "flex", alignItems: "center", gap: 14,
                           padding: "13px 16px", borderRadius: 14,
-                          background: "rgba(232, 67, 147, 0.04)",
-                          border: "1px solid rgba(232, 67, 147, 0.1)",
+                          background: darkMode ? "rgba(232, 67, 147, 0.04)" : "rgba(232, 67, 147, 0.05)",
+                          border: darkMode ? "1px solid rgba(232, 67, 147, 0.1)" : "1px solid rgba(232, 67, 147, 0.15)",
                           cursor: "pointer",
                         }}
                       >
@@ -4751,8 +4751,8 @@ export default function CircularMenu() {
                           <div style={{ fontSize: 9, color: t.color }}>{t.icon}</div>
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontFamily: FONT, color: "#ffffffCC", fontWeight: 400 }}>{t.task}</div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff35", marginTop: 2 }}>{t.project}</div>
+                          <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{t.task}</div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff35" : "#1a1a2e55", marginTop: 2 }}>{t.project}</div>
                         </div>
                         <div style={{ fontSize: 11, fontFamily: FONT, color: t.color + "90", flexShrink: 0 }}>{t.due}</div>
                       </motion.div>
@@ -4785,19 +4785,19 @@ export default function CircularMenu() {
                         style={{
                           display: "flex", alignItems: "center", gap: 14,
                           padding: "13px 16px", borderRadius: 14,
-                          background: "rgba(255,255,255,0.025)",
-                          border: "1px solid rgba(255,255,255,0.05)",
+                          background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.025)",
+                          border: darkMode ? "1px solid rgba(255,255,255,0.05)" : "1px solid rgba(0,0,0,0.06)",
                           cursor: "pointer",
                         }}
                       >
-                        <div style={{ width: 22, height: 22, borderRadius: 6, border: "1.5px solid #ffffff20", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <div style={{ fontSize: 9, color: "#ffffff40" }}>{t.icon}</div>
+                        <div style={{ width: 22, height: 22, borderRadius: 6, border: darkMode ? "1.5px solid #ffffff20" : "1.5px solid #1a1a2e20", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <div style={{ fontSize: 9, color: darkMode ? "#ffffff40" : "#1a1a2e50" }}>{t.icon}</div>
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontFamily: FONT, color: "#ffffffCC", fontWeight: 400 }}>{t.task}</div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff35", marginTop: 2 }}>{t.project}</div>
+                          <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{t.task}</div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff35" : "#1a1a2e55", marginTop: 2 }}>{t.project}</div>
                         </div>
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", flexShrink: 0 }}>{t.due}</div>
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e60", flexShrink: 0 }}>{t.due}</div>
                       </motion.div>
                     ))}
                   </div>
@@ -4828,19 +4828,19 @@ export default function CircularMenu() {
                         style={{
                           display: "flex", alignItems: "center", gap: 14,
                           padding: "13px 16px", borderRadius: 14,
-                          background: "rgba(255,255,255,0.02)",
-                          border: "1px solid rgba(255,255,255,0.04)",
+                          background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)",
+                          border: darkMode ? "1px solid rgba(255,255,255,0.04)" : "1px solid rgba(0,0,0,0.04)",
                           cursor: "pointer",
                         }}
                       >
-                        <div style={{ width: 22, height: 22, borderRadius: 6, border: "1.5px solid #ffffff15", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <div style={{ fontSize: 9, color: "#ffffff30" }}>{t.icon}</div>
+                        <div style={{ width: 22, height: 22, borderRadius: 6, border: darkMode ? "1.5px solid #ffffff15" : "1.5px solid #1a1a2e15", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <div style={{ fontSize: 9, color: darkMode ? "#ffffff30" : "#1a1a2e40" }}>{t.icon}</div>
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontFamily: FONT, color: "#ffffff90", fontWeight: 400 }}>{t.task}</div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff25", marginTop: 2 }}>{t.project}</div>
+                          <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffff90" : "#1a1a2eBB", fontWeight: 400 }}>{t.task}</div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40", marginTop: 2 }}>{t.project}</div>
                         </div>
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff30", flexShrink: 0 }}>{t.due}</div>
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", flexShrink: 0 }}>{t.due}</div>
                       </motion.div>
                     ))}
                   </div>
@@ -4849,7 +4849,7 @@ export default function CircularMenu() {
             </div>
 
             {/* Drag handle at bottom */}
-            <div onClick={() => setTasksOpen(false)} style={{ width: 36, height: 4, borderRadius: 2, background: "#ffffff18", margin: "24px auto 0", cursor: "pointer" }} />
+            <div onClick={() => setTasksOpen(false)} style={{ width: 36, height: 4, borderRadius: 2, background: darkMode ? "#ffffff18" : "#1a1a2e20", margin: "24px auto 0", cursor: "pointer" }} />
           </motion.div>
         )}
       </AnimatePresence>
