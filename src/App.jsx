@@ -3366,7 +3366,7 @@ export default function CircularMenu() {
     return saved !== null ? JSON.parse(saved) : true; // default dark
   });
   // LLM provider state
-  const [llmProvider, setLlmProvider] = useState(() => localStorage.getItem("agencyos-llm-provider") || "claude");
+  const [llmProvider, setLlmProvider] = useState(() => localStorage.getItem("agencyos-llm-provider") || "gemini");
   const [llmKeys, setLlmKeys] = useState(() => {
     try { return JSON.parse(localStorage.getItem("agencyos-llm-keys") || "{}"); } catch { return {}; }
   });
@@ -3508,7 +3508,7 @@ export default function CircularMenu() {
       provider: "google",
       options: {
         redirectTo: window.location.origin,
-        scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events",
+        scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/generative-language.retriever https://www.googleapis.com/auth/cloud-platform",
         queryParams: { access_type: "offline", prompt: "consent" },
       },
     });
@@ -3573,7 +3573,7 @@ export default function CircularMenu() {
         provider: "google",
         options: {
           redirectTo: window.location.origin,
-          scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events",
+          scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/generative-language.retriever https://www.googleapis.com/auth/cloud-platform",
           skipBrowserRedirect: true,
           queryParams: { prompt: "none" },
         },
@@ -3724,8 +3724,9 @@ export default function CircularMenu() {
       let data;
 
       const activeKey = llmKeys[llmProvider];
-      if (activeKey) {
-        // User has their own key — use multi-provider endpoint
+      const googleToken = llmProvider === "gemini" && !activeKey ? getProviderToken() : null;
+      if (activeKey || googleToken) {
+        // User has their own key or Google OAuth token — use multi-provider endpoint
         const response = await fetch("/api/chat-multi", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -3733,7 +3734,8 @@ export default function CircularMenu() {
             message: userMessage,
             systemPrompt,
             provider: llmProvider,
-            apiKey: activeKey,
+            apiKey: activeKey || undefined,
+            oauthToken: googleToken || undefined,
           }),
         });
         data = await response.json();
@@ -5194,15 +5196,15 @@ export default function CircularMenu() {
                 }}>
                   {/* Provider cards */}
                   {[
+                    { id: "gemini", name: "Gemini", sub: "Google", color: "#4285F4",
+                      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#4285F4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+                      placeholder: "AIza..." },
                     { id: "claude", name: "Claude", sub: "Anthropic", color: "#D97757",
                       icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M16.5 3.5L7.5 12l9 8.5" stroke="#D97757" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
                       placeholder: "sk-ant-api03-..." },
                     { id: "openai", name: "ChatGPT", sub: "OpenAI", color: "#10A37F",
                       icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 4v6l4 2" stroke="#10A37F" strokeWidth="1.5" strokeLinecap="round"/></svg>,
                       placeholder: "sk-..." },
-                    { id: "gemini", name: "Gemini", sub: "Google", color: "#4285F4",
-                      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#4285F4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
-                      placeholder: "AIza..." },
                   ].map((p, idx, arr) => {
                     const isActive = llmProvider === p.id;
                     const hasKey = !!llmKeys[p.id];
@@ -5228,10 +5230,12 @@ export default function CircularMenu() {
                           </div>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{p.name}</div>
-                            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{p.sub}</div>
+                            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>
+                              {p.id === "gemini" && session && !hasKey ? "Connected via Google" : p.sub}
+                            </div>
                           </div>
                           {/* Status indicators */}
-                          {hasKey && (
+                          {(hasKey || (p.id === "gemini" && session)) && (
                             <div style={{
                               width: 8, height: 8, borderRadius: "50%",
                               background: status === "invalid" ? "#E84393" : "#00B894",
@@ -5263,7 +5267,7 @@ export default function CircularMenu() {
                                   type="password"
                                   value={llmKeyInputs[p.id] || ""}
                                   onChange={(e) => setLlmKeyInputs(prev => ({ ...prev, [p.id]: e.target.value }))}
-                                  placeholder={hasKey ? "Key saved — enter new to replace" : p.placeholder}
+                                  placeholder={hasKey ? "Key saved — enter new to replace" : (p.id === "gemini" && session ? "Optional — Google OAuth active" : p.placeholder)}
                                   style={{
                                     flex: 1, padding: "10px 14px", borderRadius: 12,
                                     background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",

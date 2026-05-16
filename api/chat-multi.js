@@ -6,10 +6,10 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { message, systemPrompt, provider = "claude", apiKey, model } = req.body;
+  const { message, systemPrompt, provider = "claude", apiKey, oauthToken, model } = req.body;
 
   if (!message) return res.status(400).json({ error: "No message provided" });
-  if (!apiKey) return res.status(400).json({ error: "No API key provided" });
+  if (!apiKey && !oauthToken) return res.status(400).json({ error: "No API key or OAuth token provided" });
 
   try {
     let data;
@@ -88,11 +88,17 @@ export default async function handler(req, res) {
     // ── Gemini (Google) ────────────────────────
     if (provider === "gemini") {
       const geminiModel = model || "gemini-2.0-flash";
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`,
-        {
+      // Support both API key and OAuth token
+      const url = apiKey
+        ? `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`
+        : `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`;
+      const headers = { "Content-Type": "application/json" };
+      if (oauthToken && !apiKey) {
+        headers["Authorization"] = `Bearer ${oauthToken}`;
+      }
+      const response = await fetch(url, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({
             system_instruction: systemPrompt ? { parts: [{ text: systemPrompt }] } : undefined,
             contents: [{ parts: [{ text: message }] }],
