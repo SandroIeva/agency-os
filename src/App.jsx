@@ -1116,7 +1116,7 @@ function KanbanBoard({ onBack, session }) {
 const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const MONTH_NAMES = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
 
-function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReLogin }) {
+function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReLogin, theme, darkMode }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
   const [viewMode, setViewMode] = useState("month"); // "month" | "week" | "day"
@@ -1573,16 +1573,16 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
       {/* Top bar */}
       <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "24px 32px 0" }}>
         <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={onBack}
-          style={{ width: 32, height: 32, borderRadius: "50%", cursor: "pointer", border: "1px solid #ffffff18", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "#ffffff50", fontFamily: FONT }}>←</motion.div>
+          style={{ width: 32, height: 32, borderRadius: "50%", cursor: "pointer", border: `1px solid ${theme.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: theme.textDim, fontFamily: FONT }}>←</motion.div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 22, fontWeight: 500, color: "#ffffffe6", fontFamily: FONT, letterSpacing: -0.5 }}>Calendar</div>
-          <div style={{ fontSize: 12, color: "#ffffff50", fontFamily: FONT, marginTop: 2 }}>
+          <div style={{ fontSize: 22, fontWeight: 500, color: theme.text, fontFamily: FONT, letterSpacing: -0.5 }}>Calendar</div>
+          <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, marginTop: 2 }}>
             {loading ? "Loading..." : `${googleEvents.length} Events · ${tasks.length} Tasks`}
           </div>
         </div>
         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
           onClick={() => openNewEvent(selectedDay)}
-          style={{ cursor: "pointer", fontSize: 12, fontFamily: FONT, color: "#fff", padding: "8px 18px", borderRadius: 10, background: "rgba(139,122,255,0.25)", border: "1px solid rgba(139,122,255,0.35)", fontWeight: 500, letterSpacing: -0.2 }}>
+          style={{ cursor: "pointer", fontSize: 12, fontFamily: FONT, color: darkMode ? "#fff" : "#1a1a2e", padding: "8px 18px", borderRadius: 10, background: darkMode ? "rgba(139,122,255,0.25)" : "rgba(108,92,231,0.15)", border: `1px solid ${darkMode ? "rgba(139,122,255,0.35)" : "rgba(108,92,231,0.3)"}`, fontWeight: 500, letterSpacing: -0.2 }}>
           + Neuer Termin
         </motion.div>
       </div>
@@ -1590,23 +1590,23 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
       {/* Navigation + View Switcher */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 32px 8px" }}>
         <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={navigatePrev}
-          style={{ cursor: "pointer", color: "#ffffff50", fontSize: 18, fontFamily: FONT, padding: "4px 8px" }}>‹</motion.div>
+          style={{ cursor: "pointer", color: theme.textDim, fontSize: 18, fontFamily: FONT, padding: "4px 8px" }}>‹</motion.div>
         <motion.div
           key={`nav-${navKey}`}
           initial={{ opacity: 0, y: navDirection * 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
-          style={{ fontSize: 16, fontFamily: FONT, fontWeight: 500, color: "#ffffffcc", minWidth: 200, textAlign: "center" }}
+          style={{ fontSize: 16, fontFamily: FONT, fontWeight: 500, color: theme.text, minWidth: 200, textAlign: "center" }}
         >
           {getNavLabel()}
         </motion.div>
         <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={navigateNext}
-          style={{ cursor: "pointer", color: "#ffffff50", fontSize: 18, fontFamily: FONT, padding: "4px 8px" }}>›</motion.div>
+          style={{ cursor: "pointer", color: theme.textDim, fontSize: 18, fontFamily: FONT, padding: "4px 8px" }}>›</motion.div>
         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={goToday}
-          style={{ marginLeft: 8, cursor: "pointer", fontSize: 11, fontFamily: FONT, color: "#8B7AFF", padding: "4px 12px", borderRadius: 8, background: "rgba(139,122,255,0.1)", border: "1px solid rgba(139,122,255,0.2)" }}>Heute</motion.div>
+          style={{ marginLeft: 8, cursor: "pointer", fontSize: 11, fontFamily: FONT, color: "#8B7AFF", padding: "4px 12px", borderRadius: 8, background: darkMode ? "rgba(139,122,255,0.1)" : "rgba(108,92,231,0.08)", border: `1px solid ${darkMode ? "rgba(139,122,255,0.2)" : "rgba(108,92,231,0.15)"}` }}>Heute</motion.div>
         <div style={{ flex: 1 }} />
         {/* View mode switcher */}
-        <div style={{ display: "flex", gap: 2, background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: 3, border: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ display: "flex", gap: 2, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", borderRadius: 10, padding: 3, border: `1px solid ${theme.borderFaint}` }}>
           {[{ key: "month", label: "Monat" }, { key: "week", label: "Woche" }, { key: "day", label: "Tag" }].map(v => (
             <motion.div key={v.key}
               whileHover={{ scale: 1.03 }}
@@ -1614,8 +1614,8 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               onClick={() => setViewMode(v.key)}
               style={{
                 cursor: "pointer", padding: "5px 14px", borderRadius: 8, fontSize: 11, fontFamily: FONT, fontWeight: 500,
-                color: viewMode === v.key ? "#fff" : "#ffffff50",
-                background: viewMode === v.key ? "rgba(139,122,255,0.25)" : "transparent",
+                color: viewMode === v.key ? (darkMode ? "#fff" : "#1a1a2e") : theme.textDim,
+                background: viewMode === v.key ? (darkMode ? "rgba(139,122,255,0.25)" : "rgba(108,92,231,0.15)") : "transparent",
                 transition: "all 0.15s",
               }}
             >{v.label}</motion.div>
@@ -1635,9 +1635,9 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             style={{ flex: 1, display: "flex", flexDirection: "column" }}
           >
             {/* Weekday headers */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4, background: "rgba(20,18,30,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "2px 0" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4, background: darkMode ? "rgba(20,18,30,0.5)" : "rgba(0,0,0,0.03)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "2px 0" }}>
               {WEEKDAYS.map((d, di) => (
-                <div key={d} style={{ textAlign: "center", fontSize: 13, fontFamily: FONT, color: di >= 5 ? "#ffffff28" : "#ffffff45", padding: "6px 0", fontWeight: 500 }}>{d}</div>
+                <div key={d} style={{ textAlign: "center", fontSize: 13, fontFamily: FONT, color: di >= 5 ? theme.textFaint : theme.textDim, padding: "6px 0", fontWeight: 500 }}>{d}</div>
               ))}
             </div>
             {/* Day cells */}
@@ -1656,9 +1656,9 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                     onDoubleClick={() => { if (!dayObj.isOtherMonth) { setSelectedDay(dayObj); openNewEvent(dayObj); } }}
                     style={{
                       padding: 10, borderRadius: 10, cursor: dayObj.isOtherMonth ? "default" : "pointer",
-                      background: isSelected ? "rgba(139,122,255,0.15)" : todayHighlight ? "rgba(139,122,255,0.08)" : weekend ? "rgba(255,255,255,0.025)" : "rgba(25,23,38,0.92)",
+                      background: isSelected ? (darkMode ? "rgba(139,122,255,0.15)" : "rgba(108,92,231,0.1)") : todayHighlight ? (darkMode ? "rgba(139,122,255,0.08)" : "rgba(108,92,231,0.06)") : weekend ? (darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.03)") : (darkMode ? "rgba(25,23,38,0.92)" : "rgba(255,255,255,0.85)"),
                       backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-                      border: isSelected ? "1px solid rgba(139,122,255,0.3)" : todayHighlight ? "1px solid rgba(139,122,255,0.15)" : "1px solid transparent",
+                      border: isSelected ? `1px solid ${darkMode ? "rgba(139,122,255,0.3)" : "rgba(108,92,231,0.25)"}` : todayHighlight ? `1px solid ${darkMode ? "rgba(139,122,255,0.15)" : "rgba(108,92,231,0.12)"}` : "1px solid transparent",
                       display: "flex", flexDirection: "column", minHeight: 54, transition: "all 0.15s",
                       opacity: dayObj.isOtherMonth ? 0.25 : 1,
                     }}
@@ -1666,12 +1666,12 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                     <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
                       <span style={{
                         fontSize: 11, fontFamily: FONT, fontWeight: todayHighlight ? 600 : 400,
-                        color: todayHighlight ? "#8B7AFF" : weekend ? "#ffffff40" : isSelected ? "#ffffffcc" : "#ffffff70",
+                        color: todayHighlight ? "#8B7AFF" : weekend ? theme.textDim : isSelected ? theme.text : theme.textSub,
                       }}>{dayObj.day}</span>
                       {holiday && (
                         <>
-                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#ffffffcc", flexShrink: 0, marginLeft: 4 }} />
-                          <span style={{ fontSize: 11, fontFamily: FONT, color: "#ffffffcc", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{holiday}</span>
+                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: theme.text, flexShrink: 0, marginLeft: 4 }} />
+                          <span style={{ fontSize: 11, fontFamily: FONT, color: theme.text, opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{holiday}</span>
                         </>
                       )}
                     </div>
@@ -1685,7 +1685,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                         }}>{e.title}</div>
                       ))}
                       {events.length > 3 && (
-                        <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30" }}>+{events.length - 3} mehr</div>
+                        <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>+{events.length - 3} mehr</div>
                       )}
                     </div>
                   </motion.div>
@@ -1705,13 +1705,13 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             style={{ flex: 1, display: "flex", flexDirection: "column" }}
           >
             {/* Weekday headers with dates */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4, background: "rgba(20,18,30,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "6px 0" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4, background: darkMode ? "rgba(20,18,30,0.5)" : "rgba(0,0,0,0.03)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "6px 0" }}>
               {getWeekDays().map((d, di) => {
                 const isTd = d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
                 return (
                   <div key={di} style={{ textAlign: "center", fontFamily: FONT }}>
-                    <div style={{ fontSize: 10, color: di >= 5 ? "#ffffff25" : "#ffffff40", fontWeight: 500 }}>{WEEKDAYS[di]}</div>
-                    <div style={{ fontSize: 16, fontWeight: isTd ? 700 : 500, color: isTd ? "#8B7AFF" : di >= 5 ? "#ffffff35" : "#ffffffcc", marginTop: 2 }}>{d.getDate()}</div>
+                    <div style={{ fontSize: 10, color: di >= 5 ? theme.textFaint : theme.textDim, fontWeight: 500 }}>{WEEKDAYS[di]}</div>
+                    <div style={{ fontSize: 16, fontWeight: isTd ? 700 : 500, color: isTd ? "#8B7AFF" : di >= 5 ? theme.textFaint : theme.text, marginTop: 2 }}>{d.getDate()}</div>
                   </div>
                 );
               })}
@@ -1725,19 +1725,19 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                 return (
                   <div key={di} style={{
                     padding: 10, borderRadius: 10, display: "flex", flexDirection: "column", gap: 4,
-                    background: isTd ? "rgba(139,122,255,0.06)" : di >= 5 ? "rgba(255,255,255,0.01)" : "rgba(20,18,30,0.65)",
+                    background: isTd ? (darkMode ? "rgba(139,122,255,0.06)" : "rgba(108,92,231,0.05)") : di >= 5 ? (darkMode ? "rgba(255,255,255,0.01)" : "rgba(0,0,0,0.015)") : (darkMode ? "rgba(20,18,30,0.65)" : "rgba(255,255,255,0.7)"),
                     backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-                    border: isTd ? "1px solid rgba(139,122,255,0.15)" : "1px solid rgba(255,255,255,0.05)",
+                    border: isTd ? `1px solid ${darkMode ? "rgba(139,122,255,0.15)" : "rgba(108,92,231,0.12)"}` : `1px solid ${theme.borderFaint}`,
                     overflowY: "auto",
                   }}>
                     {hol && (
                       <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
-                        <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#ffffffcc", flexShrink: 0 }} />
-                        <span style={{ fontSize: 9, fontFamily: FONT, color: "#ffffffcc", opacity: 0.8 }}>{hol}</span>
+                        <span style={{ width: 5, height: 5, borderRadius: "50%", background: theme.text, flexShrink: 0 }} />
+                        <span style={{ fontSize: 9, fontFamily: FONT, color: theme.text, opacity: 0.8 }}>{hol}</span>
                       </div>
                     )}
                     {events.length === 0 && !hol && (
-                      <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff15", textAlign: "center", marginTop: 12 }}>—</div>
+                      <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, textAlign: "center", marginTop: 12 }}>—</div>
                     )}
                     {events.map((e, ei) => (
                       <motion.div key={ei}
@@ -1746,17 +1746,17 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                         transition={{ delay: ei * 0.03 }}
                         style={{
                           padding: "6px 8px", borderRadius: 8, borderLeft: `3px solid ${e.color}`,
-                          background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)",
+                          background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`,
                         }}
                       >
-                        <div style={{ fontSize: 11, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd", marginBottom: 2 }}>{e.title}</div>
+                        <div style={{ fontSize: 11, fontFamily: FONT, fontWeight: 500, color: theme.text, marginBottom: 2 }}>{e.title}</div>
                         {e.start && !e.allDay && (
-                          <div style={{ fontSize: 9, fontFamily: FONT, color: "#ffffff40" }}>
+                          <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textDim }}>
                             {new Date(e.start).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
                             {e.end && ` – ${new Date(e.end).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`}
                           </div>
                         )}
-                        {e.allDay && <div style={{ fontSize: 9, fontFamily: FONT, color: "#ffffff30" }}>Ganztägig</div>}
+                        {e.allDay && <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint }}>Ganztägig</div>}
                         {e.hangoutLink && (
                           <div onClick={(ev) => { ev.stopPropagation(); openMeetCall(e.hangoutLink, e.title); }}
                             style={{ fontSize: 9, fontFamily: FONT, color: "#00B894", cursor: "pointer", marginTop: 2 }}>🔗 Meet</div>
@@ -1788,15 +1788,15 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                   {/* Day header info */}
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
                     {hol && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 8, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
-                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ffffffcc" }} />
-                        <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffffcc" }}>{hol}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 8, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}` }}>
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: theme.text }} />
+                        <span style={{ fontSize: 12, fontFamily: FONT, color: theme.text }}>{hol}</span>
                       </div>
                     )}
                     {isWe && (
-                      <span style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff30", padding: "5px 12px", borderRadius: 8, background: "rgba(255,255,255,0.02)" }}>Wochenende</span>
+                      <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, padding: "5px 12px", borderRadius: 8, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)" }}>Wochenende</span>
                     )}
-                    <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff40" }}>
+                    <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
                       {dayEvents.length === 0 ? "Keine Termine" : `${dayEvents.length} ${dayEvents.length === 1 ? "Termin" : "Termine"}`}
                     </span>
                   </div>
@@ -1804,7 +1804,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                   {dayEvents.length === 0 && (
                     <div style={{ padding: "60px 20px", textAlign: "center" }}>
                       <div style={{ fontSize: 32, marginBottom: 12 }}>✦</div>
-                      <div style={{ fontSize: 14, fontFamily: FONT, color: "#ffffff25" }}>Freier Tag</div>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textFaint }}>Freier Tag</div>
                     </div>
                   )}
 
@@ -1816,8 +1816,8 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                       transition={{ delay: i * 0.05, duration: 0.2 }}
                       style={{
                         padding: "16px 20px", borderRadius: 14, marginBottom: 8,
-                        background: "rgba(20,18,30,0.65)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-                        border: "1px solid rgba(255,255,255,0.05)", borderLeft: `4px solid ${e.color}`,
+                        background: darkMode ? "rgba(20,18,30,0.65)" : "rgba(255,255,255,0.7)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+                        border: `1px solid ${theme.borderFaint}`, borderLeft: `4px solid ${e.color}`,
                         display: "flex", alignItems: "flex-start", gap: 16,
                       }}
                     >
@@ -1825,22 +1825,22 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                       <div style={{ minWidth: 65, flexShrink: 0 }}>
                         {e.start && !e.allDay ? (
                           <>
-                            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: "#ffffffcc" }}>
+                            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
                               {new Date(e.start).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
                             </div>
                             {e.end && (
-                              <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff35", marginTop: 2 }}>
+                              <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 2 }}>
                                 {new Date(e.end).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
                               </div>
                             )}
                           </>
                         ) : (
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff35", padding: "3px 8px", borderRadius: 4, background: "rgba(255,255,255,0.04)", display: "inline-block" }}>Ganztägig</div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, padding: "3px 8px", borderRadius: 4, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", display: "inline-block" }}>Ganztägig</div>
                         )}
                       </div>
                       {/* Details */}
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd", marginBottom: 4 }}>{e.title}</div>
+                        <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 500, color: theme.text, marginBottom: 4 }}>{e.title}</div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           {e.type === "google" && (
                             <span style={{ fontSize: 10, fontFamily: FONT, color: "#5B8DEF", padding: "2px 8px", borderRadius: 4, background: "rgba(91,141,239,0.1)" }}>Google</span>
@@ -1848,8 +1848,8 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                           {e.type === "task" && (
                             <span style={{ fontSize: 10, fontFamily: FONT, color: "#8B7AFF", padding: "2px 8px", borderRadius: 4, background: "rgba(139,122,255,0.1)" }}>Task</span>
                           )}
-                          {e.project && <span style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30" }}>{e.project}</span>}
-                          {e.location && <span style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30" }}>📍 {e.location}</span>}
+                          {e.project && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>{e.project}</span>}
+                          {e.location && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>📍 {e.location}</span>}
                         </div>
                         {e.hangoutLink && (
                           <motion.div
@@ -1865,7 +1865,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                           whileHover={{ scale: 1.15, background: "rgba(232,67,67,0.15)" }}
                           whileTap={{ scale: 0.9 }}
                           onClick={() => setConfirmDeleteEvent(e)}
-                          style={{ cursor: "pointer", width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "#ffffff25", flexShrink: 0, transition: "all 0.15s" }}
+                          style={{ cursor: "pointer", width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: theme.textFaint, flexShrink: 0, transition: "all 0.15s" }}
                           title="Event absagen"
                         >✕</motion.div>
                       )}
@@ -1886,36 +1886,36 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               exit={{ opacity: 0, x: 20, width: 0 }}
               transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
               style={{
-                width: 280, flexShrink: 0, background: "rgba(255,255,255,0.03)",
-                border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16,
+                width: 280, flexShrink: 0, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+                border: `1px solid ${theme.borderFaint}`, borderRadius: 16,
                 display: "flex", flexDirection: "column", overflow: "hidden",
               }}
             >
-              <div style={{ padding: "16px 18px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+              <div style={{ padding: "16px 18px 12px", borderBottom: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
                 <div>
-                  <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: "#ffffffdd" }}>
+                  <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
                     {selectedDay.day}. {MONTH_NAMES[month]}
                   </div>
-                <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginTop: 2 }}>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
                   {selectedEvents.length === 0 ? "Keine Termine" : `${selectedEvents.length} ${selectedEvents.length === 1 ? "Termin" : "Termine"}`}
                 </div>
                 {getHoliday(selectedDay) && (
                   <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ffffffcc", flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, fontFamily: FONT, color: "#ffffffcc" }}>{getHoliday(selectedDay)}</span>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: theme.text, flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, fontFamily: FONT, color: theme.text }}>{getHoliday(selectedDay)}</span>
                   </div>
                 )}
                 </div>
                 <motion.div
-                  whileHover={{ scale: 1.15, background: "rgba(255,255,255,0.08)" }}
+                  whileHover={{ scale: 1.15, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)" }}
                   whileTap={{ scale: 0.9 }}
                   onClick={() => setSelectedDay(null)}
-                  style={{ cursor: "pointer", width: 24, height: 24, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#ffffff40", flexShrink: 0, transition: "all 0.15s" }}
+                  style={{ cursor: "pointer", width: 24, height: 24, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: theme.textDim, flexShrink: 0, transition: "all 0.15s" }}
                 >✕</motion.div>
               </div>
               <div style={{ flex: 1, overflowY: "auto", padding: "8px 10px" }}>
                 {selectedEvents.length === 0 && (
-                  <div style={{ padding: "24px 8px", textAlign: "center", fontSize: 12, fontFamily: FONT, color: "#ffffff25" }}>
+                  <div style={{ padding: "24px 8px", textAlign: "center", fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>
                     Freier Tag ✦
                   </div>
                 )}
@@ -1926,30 +1926,30 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                     transition={{ delay: i * 0.04, duration: 0.2 }}
                     style={{
                       padding: "10px 12px", borderRadius: 10, marginBottom: 6,
-                      background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)",
+                      background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`,
                       borderLeft: `3px solid ${e.color}`, position: "relative", group: "event",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6 }}>
-                      <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd", marginBottom: 3, flex: 1 }}>{e.title}</div>
+                      <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text, marginBottom: 3, flex: 1 }}>{e.title}</div>
                       {e.type === "google" && (
                         <motion.div
                           whileHover={{ scale: 1.15, background: "rgba(232,67,67,0.15)" }}
                           whileTap={{ scale: 0.9 }}
                           onClick={() => setConfirmDeleteEvent(e)}
-                          style={{ cursor: "pointer", width: 22, height: 22, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#ffffff30", flexShrink: 0, transition: "all 0.15s" }}
+                          style={{ cursor: "pointer", width: 22, height: 22, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: theme.textFaint, flexShrink: 0, transition: "all 0.15s" }}
                           title="Event absagen"
                         >✕</motion.div>
                       )}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       {e.start && !e.allDay && (
-                        <span style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff45" }}>
+                        <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>
                           {new Date(e.start).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
                           {e.end && ` – ${new Date(e.end).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`}
                         </span>
                       )}
-                      {e.allDay && <span style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff35", padding: "1px 6px", borderRadius: 4, background: "rgba(255,255,255,0.04)" }}>Ganztägig</span>}
+                      {e.allDay && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, padding: "1px 6px", borderRadius: 4, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>Ganztägig</span>}
                       {e.type === "google" && (
                         <span style={{ fontSize: 9, fontFamily: FONT, color: "#5B8DEF", padding: "1px 6px", borderRadius: 4, background: "rgba(91,141,239,0.1)" }}>Google</span>
                       )}
@@ -1957,11 +1957,11 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                         <span style={{ fontSize: 9, fontFamily: FONT, color: "#8B7AFF", padding: "1px 6px", borderRadius: 4, background: "rgba(139,122,255,0.1)" }}>Task</span>
                       )}
                       {e.project && (
-                        <span style={{ fontSize: 9, fontFamily: FONT, color: "#ffffff30" }}>{e.project}</span>
+                        <span style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint }}>{e.project}</span>
                       )}
                     </div>
                     {e.location && (
-                      <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30", marginTop: 4 }}>📍 {e.location}</div>
+                      <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 4 }}>📍 {e.location}</div>
                     )}
                     {e.hangoutLink && (
                       <motion.div
@@ -1993,16 +1993,16 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
             transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
             onClick={e => e.stopPropagation()}
-            style={{ width: 420, background: "rgba(28,26,42,0.95)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 20, padding: "28px 28px 24px", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}
+            style={{ width: 420, background: darkMode ? "rgba(28,26,42,0.95)" : "rgba(255,255,255,0.97)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, borderRadius: 20, padding: "28px 28px 24px", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}
           >
-            <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: "#ffffffdd", marginBottom: 20, letterSpacing: -0.3 }}>Neuer Termin</div>
+            <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 20, letterSpacing: -0.3 }}>Neuer Termin</div>
 
             {/* Title */}
             <input
               value={eventForm.title}
               onChange={e => setEventForm(f => ({ ...f, title: e.target.value }))}
               placeholder="Titel"
-              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#ffffffdd", fontSize: 14, fontFamily: FONT, outline: "none", marginBottom: 12, boxSizing: "border-box" }}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none", marginBottom: 12, boxSizing: "border-box" }}
             />
 
             {/* Date */}
@@ -2010,7 +2010,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               type="date"
               value={eventForm.date}
               onChange={e => setEventForm(f => ({ ...f, date: e.target.value }))}
-              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#ffffffdd", fontSize: 13, fontFamily: FONT, outline: "none", marginBottom: 12, boxSizing: "border-box", colorScheme: "dark" }}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none", marginBottom: 12, boxSizing: "border-box", colorScheme: darkMode ? "dark" : "light" }}
             />
 
             {/* Toggles row */}
@@ -2020,12 +2020,12 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                 <motion.div
                   whileHover={{ scale: 1.05 }}
                   onClick={() => setEventForm(f => ({ ...f, allDay: !f.allDay }))}
-                  style={{ width: 36, height: 20, borderRadius: 10, background: eventForm.allDay ? "rgba(139,122,255,0.4)" : "rgba(255,255,255,0.08)", cursor: "pointer", position: "relative", transition: "background 0.2s" }}
+                  style={{ width: 36, height: 20, borderRadius: 10, background: eventForm.allDay ? "rgba(139,122,255,0.4)" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"), cursor: "pointer", position: "relative", transition: "background 0.2s" }}
                 >
                   <motion.div animate={{ x: eventForm.allDay ? 17 : 2 }} transition={{ duration: 0.2 }}
-                    style={{ width: 16, height: 16, borderRadius: "50%", background: eventForm.allDay ? "#8B7AFF" : "#ffffff50", position: "absolute", top: 2 }} />
+                    style={{ width: 16, height: 16, borderRadius: "50%", background: eventForm.allDay ? "#8B7AFF" : theme.textDim, position: "absolute", top: 2 }} />
                 </motion.div>
-                <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff70" }}>Ganztägig</span>
+                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub }}>Ganztägig</span>
               </div>
 
               {/* Google Meet toggle */}
@@ -2033,13 +2033,13 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                 <motion.div
                   whileHover={{ scale: 1.05 }}
                   onClick={() => toggleMeet(!eventForm.withMeet)}
-                  style={{ width: 36, height: 20, borderRadius: 10, background: eventForm.withMeet ? "rgba(0,184,148,0.4)" : "rgba(255,255,255,0.08)", cursor: meetLoading ? "wait" : "pointer", position: "relative", transition: "background 0.2s" }}
+                  style={{ width: 36, height: 20, borderRadius: 10, background: eventForm.withMeet ? "rgba(0,184,148,0.4)" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"), cursor: meetLoading ? "wait" : "pointer", position: "relative", transition: "background 0.2s" }}
                 >
                   <motion.div animate={{ x: eventForm.withMeet ? 17 : 2 }} transition={{ duration: 0.2 }}
-                    style={{ width: 16, height: 16, borderRadius: "50%", background: eventForm.withMeet ? "#00B894" : "#ffffff50", position: "absolute", top: 2 }} />
+                    style={{ width: 16, height: 16, borderRadius: "50%", background: eventForm.withMeet ? "#00B894" : theme.textDim, position: "absolute", top: 2 }} />
                 </motion.div>
-                <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff70" }}>Google Meet</span>
-                {meetLoading && <span style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40" }}>Erstelle Link...</span>}
+                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub }}>Google Meet</span>
+                {meetLoading && <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>Erstelle Link...</span>}
               </div>
             </div>
 
@@ -2060,7 +2060,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                   whileHover={{ scale: 1.08 }}
                   whileTap={{ scale: 0.92 }}
                   onClick={() => { navigator.clipboard.writeText(meetLink); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); }}
-                  style={{ cursor: "pointer", padding: "5px 12px", borderRadius: 8, fontSize: 11, fontFamily: FONT, fontWeight: 500, color: linkCopied ? "#00B894" : "#ffffffcc", background: linkCopied ? "rgba(0,184,148,0.15)" : "rgba(255,255,255,0.06)", border: `1px solid ${linkCopied ? "rgba(0,184,148,0.3)" : "rgba(255,255,255,0.08)"}`, transition: "all 0.2s", whiteSpace: "nowrap" }}
+                  style={{ cursor: "pointer", padding: "5px 12px", borderRadius: 8, fontSize: 11, fontFamily: FONT, fontWeight: 500, color: linkCopied ? "#00B894" : theme.text, background: linkCopied ? "rgba(0,184,148,0.15)" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"), border: `1px solid ${linkCopied ? "rgba(0,184,148,0.3)" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)")}`, transition: "all 0.2s", whiteSpace: "nowrap" }}
                 >
                   {linkCopied ? "✓ Kopiert" : "Kopieren"}
                 </motion.div>
@@ -2074,7 +2074,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                 animate={{ opacity: 1, height: "auto" }}
                 style={{ marginBottom: 12 }}
               >
-                <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff40", marginBottom: 6 }}>Teilnehmer</div>
+                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, marginBottom: 6 }}>Teilnehmer</div>
                 {/* Attendee chips */}
                 {attendees.length > 0 && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
@@ -2082,13 +2082,13 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                       <motion.div key={i}
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px 4px 12px", borderRadius: 20, background: "rgba(139,122,255,0.1)", border: "1px solid rgba(139,122,255,0.2)", fontSize: 12, fontFamily: FONT, color: "#ffffffcc" }}
+                        style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px 4px 12px", borderRadius: 20, background: darkMode ? "rgba(139,122,255,0.1)" : "rgba(108,92,231,0.08)", border: `1px solid ${darkMode ? "rgba(139,122,255,0.2)" : "rgba(108,92,231,0.15)"}`, fontSize: 12, fontFamily: FONT, color: theme.text }}
                       >
                         <span>{email}</span>
                         <motion.span
                           whileHover={{ scale: 1.2 }}
                           onClick={() => setAttendees(a => a.filter((_, idx) => idx !== i))}
-                          style={{ cursor: "pointer", color: "#ffffff40", fontSize: 14, lineHeight: 1 }}
+                          style={{ cursor: "pointer", color: theme.textDim, fontSize: 14, lineHeight: 1 }}
                         >×</motion.span>
                       </motion.div>
                     ))}
@@ -2110,7 +2110,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                       }
                     }}
                     placeholder="E-Mail eingeben + Enter"
-                    style={{ flex: 1, padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#ffffffdd", fontSize: 12, fontFamily: FONT, outline: "none", boxSizing: "border-box" }}
+                    style={{ flex: 1, padding: "8px 12px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 12, fontFamily: FONT, outline: "none", boxSizing: "border-box" }}
                   />
                   <motion.div
                     whileHover={{ scale: 1.05 }}
@@ -2122,7 +2122,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                       }
                       setAttendeeInput("");
                     }}
-                    style={{ cursor: "pointer", padding: "8px 14px", borderRadius: 10, fontSize: 12, fontFamily: FONT, color: "#8B7AFF", background: "rgba(139,122,255,0.1)", border: "1px solid rgba(139,122,255,0.2)", whiteSpace: "nowrap" }}
+                    style={{ cursor: "pointer", padding: "8px 14px", borderRadius: 10, fontSize: 12, fontFamily: FONT, color: "#8B7AFF", background: darkMode ? "rgba(139,122,255,0.1)" : "rgba(108,92,231,0.08)", border: `1px solid ${darkMode ? "rgba(139,122,255,0.2)" : "rgba(108,92,231,0.15)"}`, whiteSpace: "nowrap" }}
                   >
                     Hinzufügen
                   </motion.div>
@@ -2134,21 +2134,21 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             {!eventForm.allDay && (
               <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff40", marginBottom: 4 }}>Von</div>
+                  <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, marginBottom: 4 }}>Von</div>
                   <input
                     type="time"
                     value={eventForm.startTime}
                     onChange={e => setEventForm(f => ({ ...f, startTime: e.target.value }))}
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#ffffffdd", fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box", colorScheme: "dark" }}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box", colorScheme: darkMode ? "dark" : "light" }}
                   />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff40", marginBottom: 4 }}>Bis</div>
+                  <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, marginBottom: 4 }}>Bis</div>
                   <input
                     type="time"
                     value={eventForm.endTime}
                     onChange={e => setEventForm(f => ({ ...f, endTime: e.target.value }))}
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#ffffffdd", fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box", colorScheme: "dark" }}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box", colorScheme: darkMode ? "dark" : "light" }}
                   />
                 </div>
               </div>
@@ -2160,19 +2160,19 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               onChange={e => setEventForm(f => ({ ...f, description: e.target.value }))}
               placeholder="Beschreibung (optional)"
               rows={3}
-              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#ffffffdd", fontSize: 13, fontFamily: FONT, outline: "none", resize: "vertical", marginBottom: 20, boxSizing: "border-box" }}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none", resize: "vertical", marginBottom: 20, boxSizing: "border-box" }}
             />
 
             {/* Buttons */}
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                 onClick={cancelNewEvent}
-                style={{ cursor: "pointer", padding: "9px 20px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: "#ffffff60", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                style={{ cursor: "pointer", padding: "9px 20px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: theme.textSub, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}>
                 Abbrechen
               </motion.div>
               <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                 onClick={createGoogleEvent}
-                style={{ cursor: savingEvent ? "wait" : "pointer", padding: "9px 24px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: "#fff", fontWeight: 500, background: savingEvent ? "rgba(139,122,255,0.15)" : "rgba(139,122,255,0.3)", border: "1px solid rgba(139,122,255,0.4)", opacity: (!eventForm.title.trim() || savingEvent) ? 0.5 : 1 }}>
+                style={{ cursor: savingEvent ? "wait" : "pointer", padding: "9px 24px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: darkMode ? "#fff" : "#1a1a2e", fontWeight: 500, background: savingEvent ? (darkMode ? "rgba(139,122,255,0.15)" : "rgba(108,92,231,0.1)") : (darkMode ? "rgba(139,122,255,0.3)" : "rgba(108,92,231,0.2)"), border: `1px solid ${darkMode ? "rgba(139,122,255,0.4)" : "rgba(108,92,231,0.3)"}`, opacity: (!eventForm.title.trim() || savingEvent) ? 0.5 : 1 }}>
                 {savingEvent ? "Speichern..." : "Termin erstellen"}
               </motion.div>
             </div>
@@ -2196,32 +2196,32 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
             transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
             onClick={e => e.stopPropagation()}
-            style={{ width: 380, background: "rgba(28,26,42,0.95)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 20, padding: "28px 28px 24px", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}
+            style={{ width: 380, background: darkMode ? "rgba(28,26,42,0.95)" : "rgba(255,255,255,0.97)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, borderRadius: 20, padding: "28px 28px 24px", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}
           >
             {/* Warning icon */}
             <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(232,67,67,0.12)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16, fontSize: 22 }}>⚠️</div>
 
-            <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: "#ffffffdd", marginBottom: 8, letterSpacing: -0.3 }}>Event absagen?</div>
+            <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8, letterSpacing: -0.3 }}>Event absagen?</div>
 
-            <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffff60", marginBottom: 6, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, marginBottom: 6, lineHeight: 1.5 }}>
               Möchtest du dieses Event wirklich löschen?
             </div>
 
             {/* Event preview */}
-            <div style={{ padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", marginBottom: 20, borderLeft: `3px solid ${confirmDeleteEvent.color}` }}>
-              <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: "#ffffffcc" }}>{confirmDeleteEvent.title}</div>
+            <div style={{ padding: "10px 14px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`, marginBottom: 20, borderLeft: `3px solid ${confirmDeleteEvent.color}` }}>
+              <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{confirmDeleteEvent.title}</div>
               {confirmDeleteEvent.start && !confirmDeleteEvent.allDay && (
-                <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginTop: 3 }}>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>
                   {new Date(confirmDeleteEvent.start).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
                   {confirmDeleteEvent.end && ` – ${new Date(confirmDeleteEvent.end).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`}
                 </div>
               )}
               {confirmDeleteEvent.allDay && (
-                <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff35", marginTop: 3 }}>Ganztägig</div>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 3 }}>Ganztägig</div>
               )}
             </div>
 
-            <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 16 }}>
               Alle Teilnehmer werden per E-Mail benachrichtigt.
             </div>
 
@@ -2229,7 +2229,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                 onClick={() => !deletingEvent && setConfirmDeleteEvent(null)}
-                style={{ cursor: "pointer", padding: "9px 20px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: "#ffffff60", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                style={{ cursor: "pointer", padding: "9px 20px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: theme.textSub, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}>
                 Behalten
               </motion.div>
               <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
@@ -3992,7 +3992,7 @@ export default function CircularMenu() {
         {/* CALENDAR VIEW */}
         <AnimatePresence>
           {currentView === "calendar" && (
-            <CalendarView session={session} getProviderToken={getProviderToken} openMeetCall={openMeetCall} autoReLogin={autoReLogin} onBack={() => setCurrentView("dashboard")} />
+            <CalendarView session={session} getProviderToken={getProviderToken} openMeetCall={openMeetCall} autoReLogin={autoReLogin} onBack={() => setCurrentView("dashboard")} theme={theme} darkMode={darkMode} />
           )}
         </AnimatePresence>
 
