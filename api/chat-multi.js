@@ -89,7 +89,7 @@ export default async function handler(req, res) {
 
     // ── Gemini (Google) ────────────────────────
     if (provider === "gemini") {
-      const geminiModel = model || "gemini-2.0-flash";
+      const geminiModel = model || "gemini-2.5-flash";
       // Support both API key and OAuth token
       const url = apiKey
         ? `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`

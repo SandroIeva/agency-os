@@ -3754,8 +3754,12 @@ export default function CircularMenu() {
         data = await response.json();
 
         if (!data.content?.[0]?.text && data.error) {
+          // Rate limit — show friendly message
+          if (data.statusCode === 429 || response.status === 429) {
+            data = { content: [{ type: "text", text: "Rate limit reached. Please wait a moment and try again." }] };
+          }
           // Token might be expired — try refresh and retry once
-          if (googleToken && autoReLogin) {
+          else if (googleToken && autoReLogin) {
             const freshToken = await autoReLogin();
             if (freshToken) {
               const retryRes = await fetch("/api/chat-multi", {
