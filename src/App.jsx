@@ -5420,7 +5420,15 @@ export default function CircularMenu() {
                                           setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" }));
                                           setLlmKeyStatus(prev => ({ ...prev, [p.id]: "valid" }));
                                         } else {
-                                          setLlmKeyStatus(prev => ({ ...prev, [p.id]: "invalid" }));
+                                          // 429 = rate limited but key format is valid — save it
+                                          const errData = await res.json().catch(() => ({}));
+                                          if (res.status === 429 || errData.statusCode === 429) {
+                                            setLlmKeys(prev => ({ ...prev, [p.id]: key }));
+                                            setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" }));
+                                            setLlmKeyStatus(prev => ({ ...prev, [p.id]: "valid" }));
+                                          } else {
+                                            setLlmKeyStatus(prev => ({ ...prev, [p.id]: "invalid" }));
+                                          }
                                         }
                                       } catch {
                                         setLlmKeyStatus(prev => ({ ...prev, [p.id]: "invalid" }));

@@ -38,6 +38,7 @@ export default async function handler(req, res) {
         return res.status(response.status).json({
           error: data.error?.message || "Claude API error",
           provider: "claude",
+          statusCode: response.status,
         });
       }
 
@@ -74,6 +75,7 @@ export default async function handler(req, res) {
         return res.status(response.status).json({
           error: data.error?.message || "OpenAI API error",
           provider: "openai",
+          statusCode: response.status,
         });
       }
 
@@ -119,6 +121,7 @@ export default async function handler(req, res) {
         return res.status(response.status).json({
           error: data.error?.message || "Gemini API error",
           provider: "gemini",
+          statusCode: response.status,
         });
       }
 
