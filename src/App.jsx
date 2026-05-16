@@ -3767,8 +3767,10 @@ export default function CircularMenu() {
     if (voiceNav) {
       if (voiceNav.view) setCurrentView(voiceNav.view);
       if (voiceNav.action) voiceNav.action();
-      setAiResponse(voiceNav.response);
-      setAiStatus("idle");
+      setAiSpeaking(false);
+      setAiStatus("");
+      setAiResponse("");
+      setTranscript("");
       return;
     }
 
