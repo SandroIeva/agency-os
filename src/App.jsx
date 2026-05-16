@@ -3389,20 +3389,20 @@ export default function CircularMenu() {
   } : {
     bg: "#F5F5F7",
     cardBg: "rgba(255, 255, 255, 0.92)",
-    text: "#1a1a2eCC",
-    textDim: "#1a1a2e60",
-    textFaint: "#1a1a2e30",
-    textSub: "#1a1a2e80",
-    border: "rgba(0,0,0,0.1)",
-    borderFaint: "rgba(0,0,0,0.06)",
+    text: "#1a1a2eDD",
+    textDim: "#1a1a2e88",
+    textFaint: "#1a1a2e55",
+    textSub: "#1a1a2e99",
+    border: "rgba(0,0,0,0.12)",
+    borderFaint: "rgba(0,0,0,0.08)",
     hoverBg: "rgba(0,0,0,0.04)",
     overlay: "rgba(255,255,255,0.5)",
     accent: "#6C5CE7",
     accentBg: "rgba(108,92,231,0.1)",
     accentBorder: "rgba(108,92,231,0.3)",
     svgFill: "#1a1a2e",
-    svgStroke: "#1a1a2e80",
-    iconColor: "#555555",
+    svgStroke: "#1a1a2e99",
+    iconColor: "#444444",
   };
 
   // Open Meet in popup window
