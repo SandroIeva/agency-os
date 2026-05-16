@@ -3365,6 +3365,18 @@ export default function CircularMenu() {
     const saved = localStorage.getItem("agencyos-dark-mode");
     return saved !== null ? JSON.parse(saved) : true; // default dark
   });
+  // LLM provider state
+  const [llmProvider, setLlmProvider] = useState(() => localStorage.getItem("agencyos-llm-provider") || "claude");
+  const [llmKeys, setLlmKeys] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("agencyos-llm-keys") || "{}"); } catch { return {}; }
+  });
+  const [llmKeyInputs, setLlmKeyInputs] = useState({ claude: "", openai: "", gemini: "" });
+  const [llmKeyStatus, setLlmKeyStatus] = useState({}); // { claude: "valid"|"invalid"|"checking" }
+
+  // Persist LLM settings
+  useEffect(() => { localStorage.setItem("agencyos-llm-provider", llmProvider); }, [llmProvider]);
+  useEffect(() => { localStorage.setItem("agencyos-llm-keys", JSON.stringify(llmKeys)); }, [llmKeys]);
+
   const [activeMeetCall, setActiveMeetCall] = useState(null); // { link, title, windowRef }
   const meetWindowRef = useRef(null);
 
@@ -3707,37 +3719,47 @@ export default function CircularMenu() {
     const userMessage = transcript || "Hello, what can you help me with?";
 
     try {
-      // Call Claude via Vercel serverless function (or Artifact proxy as fallback)
+      // Build context-aware system prompt
+      const systemPrompt = buildSystemPrompt({ currentView, userName, provider: llmProvider });
       let data;
-      try {
-        const systemPrompt = buildSystemPrompt({
-          currentView,
-          userName,
-        });
-        // Try local API route first (Vercel deployment)
-        const response = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: userMessage, systemPrompt }),
-        });
-        data = await response.json();
-      } catch (proxyErr) {
-        const systemPrompt = buildSystemPrompt({
-          currentView,
-          userName,
-        });
-        // Fallback: direct API call (works in Claude Artifact environment)
-        const response = await fetch("https://api.anthropic.com/v1/messages", {
+
+      const activeKey = llmKeys[llmProvider];
+      if (activeKey) {
+        // User has their own key — use multi-provider endpoint
+        const response = await fetch("/api/chat-multi", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 200,
-            system: systemPrompt,
-            messages: [{ role: "user", content: userMessage }],
+            message: userMessage,
+            systemPrompt,
+            provider: llmProvider,
+            apiKey: activeKey,
           }),
         });
         data = await response.json();
+      } else {
+        // No user key — fall back to server-side Claude key
+        try {
+          const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: userMessage, systemPrompt }),
+          });
+          data = await response.json();
+        } catch (proxyErr) {
+          // Fallback: direct API call (works in Claude Artifact environment)
+          const response = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "claude-sonnet-4-20250514",
+              max_tokens: 200,
+              system: systemPrompt,
+              messages: [{ role: "user", content: userMessage }],
+            }),
+          });
+          data = await response.json();
+        }
       }
       const aiText = data.content?.[0]?.text || "I'm here to help with your creative projects.";
       setAiResponse(aiText);
@@ -5157,11 +5179,186 @@ export default function CircularMenu() {
               {/* Right column */}
               <div>
 
-              {/* Integrations section */}
+              {/* AI Models section */}
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+              >
+                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>AI Models</div>
+                <div style={{
+                  borderRadius: 20,
+                  background: theme.cardBg,
+                  border: `1px solid ${theme.border}`,
+                  overflow: "hidden",
+                }}>
+                  {/* Provider cards */}
+                  {[
+                    { id: "claude", name: "Claude", sub: "Anthropic", color: "#D97757",
+                      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M16.5 3.5L7.5 12l9 8.5" stroke="#D97757" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+                      placeholder: "sk-ant-api03-..." },
+                    { id: "openai", name: "ChatGPT", sub: "OpenAI", color: "#10A37F",
+                      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 4v6l4 2" stroke="#10A37F" strokeWidth="1.5" strokeLinecap="round"/></svg>,
+                      placeholder: "sk-..." },
+                    { id: "gemini", name: "Gemini", sub: "Google", color: "#4285F4",
+                      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#4285F4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+                      placeholder: "AIza..." },
+                  ].map((p, idx, arr) => {
+                    const isActive = llmProvider === p.id;
+                    const hasKey = !!llmKeys[p.id];
+                    const status = llmKeyStatus[p.id];
+                    return (
+                      <div key={p.id} style={{ borderBottom: idx < arr.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
+                        {/* Provider header row */}
+                        <div
+                          onClick={() => setLlmProvider(p.id)}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 14,
+                            padding: "14px 20px", cursor: "pointer",
+                          }}
+                        >
+                          <div style={{
+                            width: 36, height: 36, borderRadius: 10,
+                            background: isActive ? p.color + "18" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"),
+                            border: isActive ? `1.5px solid ${p.color}40` : "1.5px solid transparent",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            transition: "all 0.2s ease",
+                          }}>
+                            {p.icon}
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{p.name}</div>
+                            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{p.sub}</div>
+                          </div>
+                          {/* Status indicators */}
+                          {hasKey && (
+                            <div style={{
+                              width: 8, height: 8, borderRadius: "50%",
+                              background: status === "invalid" ? "#E84393" : "#00B894",
+                            }} />
+                          )}
+                          {/* Active radio */}
+                          <div style={{
+                            width: 20, height: 20, borderRadius: "50%",
+                            border: `2px solid ${isActive ? p.color : theme.textFaint}`,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            transition: "all 0.2s ease",
+                          }}>
+                            {isActive && <div style={{ width: 10, height: 10, borderRadius: "50%", background: p.color }} />}
+                          </div>
+                        </div>
+
+                        {/* Key input (collapsible — shown when active) */}
+                        <AnimatePresence>
+                          {isActive && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
+                              style={{ overflow: "hidden" }}
+                            >
+                              <div style={{ padding: "0 20px 14px", display: "flex", gap: 8 }}>
+                                <input
+                                  type="password"
+                                  value={llmKeyInputs[p.id] || ""}
+                                  onChange={(e) => setLlmKeyInputs(prev => ({ ...prev, [p.id]: e.target.value }))}
+                                  placeholder={hasKey ? "Key saved — enter new to replace" : p.placeholder}
+                                  style={{
+                                    flex: 1, padding: "10px 14px", borderRadius: 12,
+                                    background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                                    border: `1px solid ${theme.borderFaint}`,
+                                    color: theme.text, fontSize: 12, fontFamily: FONT,
+                                    outline: "none",
+                                  }}
+                                  onFocus={(e) => e.target.style.borderColor = p.color + "60"}
+                                  onBlur={(e) => e.target.style.borderColor = theme.borderFaint}
+                                />
+                                <motion.div
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.95 }}
+                                  onClick={async () => {
+                                    const key = llmKeyInputs[p.id];
+                                    if (!key && !hasKey) return;
+                                    if (key) {
+                                      // Validate key with a test call
+                                      setLlmKeyStatus(prev => ({ ...prev, [p.id]: "checking" }));
+                                      try {
+                                        const res = await fetch("/api/chat-multi", {
+                                          method: "POST",
+                                          headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({
+                                            message: "Say OK",
+                                            provider: p.id,
+                                            apiKey: key,
+                                            systemPrompt: "Respond with just OK",
+                                          }),
+                                        });
+                                        if (res.ok) {
+                                          setLlmKeys(prev => ({ ...prev, [p.id]: key }));
+                                          setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" }));
+                                          setLlmKeyStatus(prev => ({ ...prev, [p.id]: "valid" }));
+                                        } else {
+                                          setLlmKeyStatus(prev => ({ ...prev, [p.id]: "invalid" }));
+                                        }
+                                      } catch {
+                                        setLlmKeyStatus(prev => ({ ...prev, [p.id]: "invalid" }));
+                                      }
+                                    }
+                                  }}
+                                  style={{
+                                    padding: "10px 16px", borderRadius: 12, cursor: "pointer",
+                                    background: p.color + "20", border: `1px solid ${p.color}40`,
+                                    fontSize: 12, fontFamily: FONT, color: p.color, fontWeight: 500,
+                                    display: "flex", alignItems: "center", whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {status === "checking" ? "..." : "Save"}
+                                </motion.div>
+                                {hasKey && (
+                                  <motion.div
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => {
+                                      setLlmKeys(prev => { const n = { ...prev }; delete n[p.id]; return n; });
+                                      setLlmKeyStatus(prev => { const n = { ...prev }; delete n[p.id]; return n; });
+                                    }}
+                                    style={{
+                                      padding: "10px 12px", borderRadius: 12, cursor: "pointer",
+                                      background: "rgba(232,67,67,0.08)", border: "1px solid rgba(232,67,67,0.15)",
+                                      fontSize: 12, fontFamily: FONT, color: "#E84343",
+                                      display: "flex", alignItems: "center",
+                                    }}
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="#E84343" strokeWidth="2" strokeLinecap="round"/></svg>
+                                  </motion.div>
+                                )}
+                              </div>
+                              {status === "invalid" && (
+                                <div style={{ padding: "0 20px 12px", fontSize: 11, fontFamily: FONT, color: "#E84393" }}>
+                                  Invalid API key. Please check and try again.
+                                </div>
+                              )}
+                              {status === "valid" && hasKey && (
+                                <div style={{ padding: "0 20px 12px", fontSize: 11, fontFamily: FONT, color: "#00B894" }}>
+                                  Key verified and saved.
+                                </div>
+                              )}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+
+              {/* Integrations section */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+                style={{ marginTop: 24 }}
               >
                 <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>Integrations</div>
                 <div style={{
@@ -5192,17 +5389,12 @@ export default function CircularMenu() {
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Google Calendar & Drive</div>
                       <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{session ? "Calendar & files synced" : "Sign in to connect"}</div>
                     </div>
-                    <div style={{
-                      width: 8, height: 8, borderRadius: "50%",
-                      background: session ? "#00B894" : "#E84393",
-                    }} />
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: session ? "#00B894" : "#E84393" }} />
                   </div>
-
                   {/* Slack */}
                   <div style={{
                     display: "flex", alignItems: "center", gap: 14,
                     padding: "16px 20px",
-                    borderBottom: `1px solid ${theme.borderFaint}`,
                   }}>
                     <div style={{
                       width: 36, height: 36, borderRadius: 10,
@@ -5217,27 +5409,6 @@ export default function CircularMenu() {
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Slack</div>
                       <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Team messaging</div>
-                    </div>
-                    <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent }}>Coming soon</div>
-                  </div>
-
-                  {/* AI Models */}
-                  <div style={{
-                    display: "flex", alignItems: "center", gap: 14,
-                    padding: "16px 20px",
-                  }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: 10,
-                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke={theme.svgStroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>AI Models</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Claude, GPT, Custom</div>
                     </div>
                     <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent }}>Coming soon</div>
                   </div>
