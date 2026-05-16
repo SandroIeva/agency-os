@@ -95,11 +95,11 @@ function createSoundEngine() {
 
 const sounds = createSoundEngine();
 
-function DotGrid() {
+function DotGrid({ darkMode = true }) {
   const dots = [];
   for (let r = 0; r < 28; r++)
     for (let c = 0; c < 42; c++)
-      dots.push(<circle key={`${r}-${c}`} cx={c * 32 + 16} cy={r * 32 + 16} r={1.2} fill="#ffffff" opacity={0.06} />);
+      dots.push(<circle key={`${r}-${c}`} cx={c * 32 + 16} cy={r * 32 + 16} r={1.2} fill={darkMode ? "#ffffff" : "#000000"} opacity={0.06} />);
   return <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>{dots}</svg>;
 }
 
@@ -127,7 +127,7 @@ function AnimatedBlob() {
   );
 }
 
-function SegmentedRing({ count, activeIndex, radius = 95, stroke = 2, gap = 5 }) {
+function SegmentedRing({ count, activeIndex, radius = 95, stroke = 2, gap = 5, darkMode = true }) {
   const cx = radius + stroke + 4;
   const cy = radius + stroke + 4;
   const size = (radius + stroke + 4) * 2;
@@ -152,7 +152,7 @@ function SegmentedRing({ count, activeIndex, radius = 95, stroke = 2, gap = 5 })
             fill="none"
             strokeLinecap="round"
             animate={{
-              stroke: isActive ? COLORS.ringActive : COLORS.ringInactive,
+              stroke: isActive ? (darkMode ? "#ffffff" : "#1a1a2e") : (darkMode ? "#ffffff18" : "#1a1a2e18"),
               strokeWidth: isActive ? stroke + 1.5 : stroke,
             }}
             transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
@@ -3821,7 +3821,7 @@ export default function CircularMenu() {
       userSelect: "none", borderRadius: 12, transition: "background-color 0.4s ease",
     }}>
       <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet" />
-      <DotGrid />
+      <DotGrid darkMode={darkMode} />
       <AnimatedBlob />
 
       {/* AUTH LOADING */}
@@ -3859,7 +3859,7 @@ export default function CircularMenu() {
               alignItems: "center", justifyContent: "center",
             }}
           >
-            <DotGrid />
+            <DotGrid darkMode={darkMode} />
             <AnimatedBlob />
             <div style={{ position: "relative", zIndex: 2, display: "flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
               {/* Logo */}
@@ -3968,10 +3968,10 @@ export default function CircularMenu() {
             transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
             style={{
               position: "absolute", top: 24, left: "50%", x: "-50%",
-              background: "#ffffff0A", backdropFilter: "blur(30px)", borderRadius: 24,
-              padding: "9px 24px", fontSize: 12, color: COLORS.text, zIndex: 30,
+              background: darkMode ? "#ffffff0A" : "rgba(0,0,0,0.06)", backdropFilter: "blur(30px)", borderRadius: 24,
+              padding: "9px 24px", fontSize: 12, color: theme.text, zIndex: 30,
               fontFamily: FONT, fontWeight: 400, letterSpacing: 1,
-              border: "1px solid #ffffff0A",
+              border: `1px solid ${darkMode ? "#ffffff0A" : "rgba(0,0,0,0.08)"}`,
             }}
           >{selectedItem}</motion.div>
         )}
@@ -4045,11 +4045,11 @@ export default function CircularMenu() {
               {/* Greeting */}
               <div style={{ marginBottom: 12 }}>
                 <div style={{
-                  fontSize: 43, fontWeight: 400, color: "#ffffffCC",
+                  fontSize: 43, fontWeight: 400, color: theme.text,
                   fontFamily: FONT, letterSpacing: -0.5, lineHeight: 1.2,
                 }}>{getGreeting()}, {(userName || "").split(" ")[0] || "there"}</div>
                 <div style={{
-                  fontSize: 43, fontWeight: 400, color: "#ffffff40",
+                  fontSize: 43, fontWeight: 400, color: theme.textDim,
                   fontFamily: FONT, letterSpacing: -0.5, lineHeight: 1.3,
                 }}>What would you like to do?</div>
               </div>
@@ -4075,8 +4075,8 @@ export default function CircularMenu() {
                     style={{
                       display: "flex", alignItems: "center", gap: 18,
                       padding: "16px 24px", borderRadius: 18,
-                      background: task.desc ? "rgba(255,255,255,0.04)" : "transparent",
-                      border: task.desc ? "1px solid rgba(255,255,255,0.06)" : "1px solid transparent",
+                      background: task.desc ? theme.hoverBg : "transparent",
+                      border: task.desc ? `1px solid ${theme.borderFaint}` : "1px solid transparent",
                       cursor: "pointer",
                     }}
                   >
@@ -4087,26 +4087,26 @@ export default function CircularMenu() {
                     }}>{task.icon}</div>
                     <div style={{ flex: 1 }}>
                       <div style={{
-                        fontSize: 19, fontFamily: FONT, color: "#ffffffCC",
+                        fontSize: 19, fontFamily: FONT, color: theme.text,
                         fontWeight: 400,
                       }}>{task.name}</div>
                       {task.desc && (
                         <div style={{
-                          fontSize: 15, fontFamily: FONT, color: "#ffffff50",
+                          fontSize: 15, fontFamily: FONT, color: theme.textDim,
                           marginTop: 3,
                         }}>{task.desc}</div>
                       )}
                     </div>
                     <div style={{ display: "flex", gap: 5 }}>
                       <span style={{
-                        fontSize: 13, color: "#ffffff40", fontFamily: FONT,
+                        fontSize: 13, color: theme.textDim, fontFamily: FONT,
                         padding: "5px 8px", borderRadius: 6,
-                        background: "rgba(255,255,255,0.06)",
+                        background: theme.borderFaint,
                       }}>⌘</span>
                       <span style={{
-                        fontSize: 13, color: "#ffffff40", fontFamily: FONT,
+                        fontSize: 13, color: theme.textDim, fontFamily: FONT,
                         padding: "5px 8px", borderRadius: 6,
-                        background: "rgba(255,255,255,0.06)",
+                        background: theme.borderFaint,
                       }}>{task.key}</span>
                     </div>
                   </motion.div>
@@ -4279,8 +4279,8 @@ export default function CircularMenu() {
                 <motion.div
                   onClick={() => handleSubClick(sub)}
                   animate={{
-                    background: isHovered ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.06)",
-                    borderColor: isHovered ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.12)",
+                    background: isHovered ? (darkMode ? "rgba(255,255,255,0.95)" : "rgba(0,0,0,0.85)") : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"),
+                    borderColor: isHovered ? (darkMode ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.3)") : (darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)"),
                     scale: isHovered ? 1.05 : 1,
                   }}
                   transition={smoothSpring}
@@ -4292,7 +4292,7 @@ export default function CircularMenu() {
                   }}>
                   <motion.span
                     animate={{
-                      color: isHovered ? "#111117" : "rgba(255,255,255,0.6)",
+                      color: isHovered ? (darkMode ? "#111117" : "#ffffff") : theme.textSub,
                     }}
                     transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
                     style={{
@@ -4320,7 +4320,7 @@ export default function CircularMenu() {
                 pointerEvents: "none",
               }}
             >
-              <SegmentedRing count={itemCount} activeIndex={activeIndex} />
+              <SegmentedRing count={itemCount} activeIndex={activeIndex} darkMode={darkMode} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -4950,10 +4950,10 @@ export default function CircularMenu() {
             style={{ cursor: "pointer" }}
           >
           <svg width="76" height="48" viewBox="0 0 76 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path opacity="0.8" d="M4.64867 13.5494C3.95863 13.5494 3.37755 13.3133 2.90542 12.8594C2.43329 12.4054 2.19722 11.8243 2.19722 11.1343C2.19722 10.4987 2.43329 9.93579 2.90542 9.46366C3.37755 8.99152 3.95863 8.75546 4.64867 8.75546C5.3387 8.75546 5.91979 8.99152 6.39192 9.46366C6.86405 9.93579 7.10011 10.4987 7.10011 11.1343C7.10011 11.8243 6.86405 12.4054 6.39192 12.8594C5.91979 13.3133 5.3387 13.5494 4.64867 13.5494ZM2.66935 35.3037V16.6001H6.53719V35.3037H2.66935ZM11.0486 9.26391H29.3345V12.133L19.0748 35.3037H14.8075L24.7767 12.9138H11.0486V9.26391Z" fill="white" fillOpacity="0.8"/>
+            <path opacity="0.8" d="M4.64867 13.5494C3.95863 13.5494 3.37755 13.3133 2.90542 12.8594C2.43329 12.4054 2.19722 11.8243 2.19722 11.1343C2.19722 10.4987 2.43329 9.93579 2.90542 9.46366C3.37755 8.99152 3.95863 8.75546 4.64867 8.75546C5.3387 8.75546 5.91979 8.99152 6.39192 9.46366C6.86405 9.93579 7.10011 10.4987 7.10011 11.1343C7.10011 11.8243 6.86405 12.4054 6.39192 12.8594C5.91979 13.3133 5.3387 13.5494 4.64867 13.5494ZM2.66935 35.3037V16.6001H6.53719V35.3037H2.66935ZM11.0486 9.26391H29.3345V12.133L19.0748 35.3037H14.8075L24.7767 12.9138H11.0486V9.26391Z" fill={darkMode ? "white" : "#1a1a2e"} fillOpacity="0.8"/>
             <g opacity="0.8">
-              <rect x="39.3999" y="0.5" width="36" height="22" rx="11" stroke="white"/>
-              <path d="M51.14 17.0376V17.0454C49.4759 17.0454 48.0853 16.4907 46.9681 15.3735C45.8509 14.2563 45.2962 12.8735 45.2962 11.2173C45.2962 9.56104 45.8509 8.17822 46.9603 7.07666C48.0696 5.9751 49.4603 5.42041 51.1321 5.42041C52.7962 5.42041 54.1868 5.9751 55.2962 7.07666C56.4056 8.17822 56.9603 9.55322 56.9603 11.2095C56.9603 12.8657 56.4056 14.2485 55.2962 15.3657C54.1868 16.4829 52.804 17.0376 51.14 17.0376ZM51.14 15.4438V15.4595C52.3431 15.4595 53.3275 15.0532 54.0853 14.2329C54.8431 13.4126 55.2259 12.4048 55.2259 11.2095C55.2259 10.0376 54.8431 9.04541 54.0775 8.24072C53.3118 7.43604 52.3353 7.02979 51.14 7.02979C49.9368 7.02979 48.9525 7.42822 48.1868 8.23291C47.4212 9.0376 47.0384 10.022 47.0384 11.1938C47.0384 12.3892 47.4212 13.397 48.1868 14.2173C48.9525 15.0376 49.9368 15.4438 51.14 15.4438ZM63.4675 17.0376L63.4206 17.0454C62.1706 17.0454 61.1003 16.7173 60.2018 16.0688C59.3034 15.4204 58.694 14.6157 58.3737 13.6626L60.0143 13.1704C60.2721 13.8501 60.7096 14.4126 61.3268 14.8501C61.944 15.2876 62.6706 15.5063 63.5143 15.5063C64.2565 15.5063 64.8659 15.3267 65.3425 14.9751C65.819 14.6235 66.0612 14.2173 66.0612 13.7563C66.0612 13.3813 65.9284 13.0688 65.655 12.811C65.3815 12.5532 64.9284 12.3267 64.2878 12.1235L61.4753 11.2251C59.7956 10.7017 58.9596 9.7876 58.9596 8.48291C58.9596 7.63916 59.3268 6.9126 60.0612 6.31104C60.7956 5.70947 61.7175 5.40479 62.8268 5.40479C63.9675 5.40479 64.9518 5.67041 65.78 6.20166C66.6081 6.73291 67.194 7.39697 67.5378 8.19385L65.9206 8.67822C65.655 8.15479 65.2565 7.73291 64.7175 7.4126C64.1784 7.09229 63.5534 6.93604 62.8425 6.93604C62.2253 6.93604 61.7175 7.08447 61.319 7.38135C60.9206 7.67822 60.7175 8.02979 60.7175 8.43604C60.7175 8.75635 60.8346 9.02197 61.0612 9.23291C61.2878 9.44385 61.655 9.62354 62.155 9.77197L64.905 10.647C65.8737 10.9517 66.6081 11.3267 67.1003 11.772C67.5925 12.2173 67.8425 12.8345 67.8425 13.6313C67.8425 14.5923 67.4362 15.397 66.6237 16.0532C65.8112 16.7095 64.7565 17.0376 63.4675 17.0376Z" fill="white"/>
+              <rect x="39.3999" y="0.5" width="36" height="22" rx="11" stroke={darkMode ? "white" : "#1a1a2e"}/>
+              <path d="M51.14 17.0376V17.0454C49.4759 17.0454 48.0853 16.4907 46.9681 15.3735C45.8509 14.2563 45.2962 12.8735 45.2962 11.2173C45.2962 9.56104 45.8509 8.17822 46.9603 7.07666C48.0696 5.9751 49.4603 5.42041 51.1321 5.42041C52.7962 5.42041 54.1868 5.9751 55.2962 7.07666C56.4056 8.17822 56.9603 9.55322 56.9603 11.2095C56.9603 12.8657 56.4056 14.2485 55.2962 15.3657C54.1868 16.4829 52.804 17.0376 51.14 17.0376ZM51.14 15.4438V15.4595C52.3431 15.4595 53.3275 15.0532 54.0853 14.2329C54.8431 13.4126 55.2259 12.4048 55.2259 11.2095C55.2259 10.0376 54.8431 9.04541 54.0775 8.24072C53.3118 7.43604 52.3353 7.02979 51.14 7.02979C49.9368 7.02979 48.9525 7.42822 48.1868 8.23291C47.4212 9.0376 47.0384 10.022 47.0384 11.1938C47.0384 12.3892 47.4212 13.397 48.1868 14.2173C48.9525 15.0376 49.9368 15.4438 51.14 15.4438ZM63.4675 17.0376L63.4206 17.0454C62.1706 17.0454 61.1003 16.7173 60.2018 16.0688C59.3034 15.4204 58.694 14.6157 58.3737 13.6626L60.0143 13.1704C60.2721 13.8501 60.7096 14.4126 61.3268 14.8501C61.944 15.2876 62.6706 15.5063 63.5143 15.5063C64.2565 15.5063 64.8659 15.3267 65.3425 14.9751C65.819 14.6235 66.0612 14.2173 66.0612 13.7563C66.0612 13.3813 65.9284 13.0688 65.655 12.811C65.3815 12.5532 64.9284 12.3267 64.2878 12.1235L61.4753 11.2251C59.7956 10.7017 58.9596 9.7876 58.9596 8.48291C58.9596 7.63916 59.3268 6.9126 60.0612 6.31104C60.7956 5.70947 61.7175 5.40479 62.8268 5.40479C63.9675 5.40479 64.9518 5.67041 65.78 6.20166C66.6081 6.73291 67.194 7.39697 67.5378 8.19385L65.9206 8.67822C65.655 8.15479 65.2565 7.73291 64.7175 7.4126C64.1784 7.09229 63.5534 6.93604 62.8425 6.93604C62.2253 6.93604 61.7175 7.08447 61.319 7.38135C60.9206 7.67822 60.7175 8.02979 60.7175 8.43604C60.7175 8.75635 60.8346 9.02197 61.0612 9.23291C61.2878 9.44385 61.655 9.62354 62.155 9.77197L64.905 10.647C65.8737 10.9517 66.6081 11.3267 67.1003 11.772C67.5925 12.2173 67.8425 12.8345 67.8425 13.6313C67.8425 14.5923 67.4362 15.397 66.6237 16.0532C65.8112 16.7095 64.7565 17.0376 63.4675 17.0376Z" fill={darkMode ? "white" : "#1a1a2e"}/>
             </g>
           </svg>
           </motion.div>
@@ -4977,10 +4977,10 @@ export default function CircularMenu() {
               <motion.rect x="0.6" y="0.6" width="50.4" height="50.4" rx="25.2" stroke="white"
                 animate={{ strokeOpacity: menuOpen && menuSource === "grid" ? 0.5 : 0.15 }}
                 transition={gentleTween}
-                strokeWidth="1.2" />
+                strokeWidth="1.2" stroke={darkMode ? "white" : "#1a1a2e"} />
               {[[16.4,16.3],[27.4,16.3],[16.4,27.3],[27.4,27.3]].map(([x,y],i) => (
                 <motion.rect key={i} x={x} y={y} width="7" height="7" rx="1.5"
-                  animate={{ stroke: menuOpen && menuSource === "grid" ? "#ffffff" : "#717678" }}
+                  animate={{ stroke: menuOpen && menuSource === "grid" ? (darkMode ? "#ffffff" : "#1a1a2e") : theme.iconColor }}
                   transition={gentleTween}
                   strokeWidth="2" fill="none" />
               ))}
@@ -4990,8 +4990,8 @@ export default function CircularMenu() {
           {/* Icon2: Mic */}
           <motion.div whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }} transition={smoothSpring} style={{ cursor: "pointer" }} onClick={startVoice}>
             <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
-              <rect x="0.6" y="0.6" width="50.4" height="50.4" rx="25.2" stroke="white" strokeOpacity="0.15" strokeWidth="1.2" />
-              <path d="M26.2839 28.4991C28.0558 28.4991 29.5239 27.0309 29.5239 25.2591V18.7791C29.5239 16.9566 28.0558 15.5391 26.2839 15.5391C24.512 15.5391 23.0439 16.9566 23.0439 18.7791V25.2591C23.0439 27.0309 24.512 28.4991 26.2839 28.4991ZM32.6627 25.2591C32.1564 25.2591 31.7008 25.6134 31.5995 26.1703C31.1439 28.7016 28.967 30.6253 26.2839 30.6253C23.6008 30.6253 21.4239 28.7016 20.9683 26.1703C20.867 25.6134 20.4114 25.2591 19.9052 25.2591C19.247 25.2591 18.7408 25.8159 18.842 26.4741C19.3483 29.7141 21.9302 32.2453 25.2208 32.7009V34.9791C25.2208 35.5359 25.6764 36.0422 26.2839 36.0422C26.8914 36.0422 27.347 35.5359 27.347 34.9791V32.7009C30.6377 32.2453 33.2195 29.7141 33.7258 26.4741C33.8777 25.8159 33.3208 25.2591 32.6627 25.2591Z" fill="#717678"/>
+              <rect x="0.6" y="0.6" width="50.4" height="50.4" rx="25.2" stroke={darkMode ? "white" : "#1a1a2e"} strokeOpacity="0.15" strokeWidth="1.2" />
+              <path d="M26.2839 28.4991C28.0558 28.4991 29.5239 27.0309 29.5239 25.2591V18.7791C29.5239 16.9566 28.0558 15.5391 26.2839 15.5391C24.512 15.5391 23.0439 16.9566 23.0439 18.7791V25.2591C23.0439 27.0309 24.512 28.4991 26.2839 28.4991ZM32.6627 25.2591C32.1564 25.2591 31.7008 25.6134 31.5995 26.1703C31.1439 28.7016 28.967 30.6253 26.2839 30.6253C23.6008 30.6253 21.4239 28.7016 20.9683 26.1703C20.867 25.6134 20.4114 25.2591 19.9052 25.2591C19.247 25.2591 18.7408 25.8159 18.842 26.4741C19.3483 29.7141 21.9302 32.2453 25.2208 32.7009V34.9791C25.2208 35.5359 25.6764 36.0422 26.2839 36.0422C26.8914 36.0422 27.347 35.5359 27.347 34.9791V32.7009C30.6377 32.2453 33.2195 29.7141 33.7258 26.4741C33.8777 25.8159 33.3208 25.2591 32.6627 25.2591Z" fill={theme.iconColor}/>
             </svg>
           </motion.div>
 
@@ -5005,13 +5005,13 @@ export default function CircularMenu() {
             }}
             style={{ cursor: "pointer" }}>
             <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
-              <motion.rect x="0.6" y="0.6" width="50.4" height="50.4" rx="25.2" stroke="white"
+              <motion.rect x="0.6" y="0.6" width="50.4" height="50.4" rx="25.2" stroke={darkMode ? "white" : "#1a1a2e"}
                 animate={{ strokeOpacity: menuOpen && menuSource === "plus" ? 0.5 : 0.15 }}
                 transition={gentleTween}
                 strokeWidth="1.2" />
               <motion.path
                 d="M33.5845 24.5186V26.8564H27.3618V33.1143H24.9888V26.8564H18.7134V24.5186H24.9888V18.2432H27.3618V24.5186H33.5845Z"
-                animate={{ fill: menuOpen && menuSource === "plus" ? "#ffffff" : "#717678" }}
+                animate={{ fill: menuOpen && menuSource === "plus" ? (darkMode ? "#ffffff" : "#1a1a2e") : theme.iconColor }}
                 transition={gentleTween}
               />
             </svg>
