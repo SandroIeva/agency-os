@@ -3671,11 +3671,11 @@ export default function CircularMenu() {
 
   const getGreeting = () => {
     const h = new Date().getHours();
-    if (h < 5) return "Still up";
-    if (h < 12) return "Good Morning";
-    if (h < 17) return "Good Afternoon";
-    if (h < 21) return "Good Evening";
-    return "Good Night";
+    if (h < 5) return t("greet.stillUp");
+    if (h < 12) return t("greet.morning");
+    if (h < 17) return t("greet.afternoon");
+    if (h < 21) return t("greet.evening");
+    return t("greet.night");
   };
   const [voiceMode, setVoiceMode] = useState(false);
   const [aiSpeaking, setAiSpeaking] = useState(false);
@@ -4366,7 +4366,7 @@ export default function CircularMenu() {
                 <div style={{
                   fontSize: 43, fontWeight: 400, color: theme.text,
                   fontFamily: FONT, letterSpacing: -0.5, lineHeight: 1.2,
-                }}>{getGreeting()}, {(userName || "").split(" ")[0] || "there"}</div>
+                }}>{getGreeting()}, {(userName || "").split(" ")[0] || t("greet.fallbackName")}</div>
                 <div style={{
                   fontSize: 43, fontWeight: 400, color: theme.textDim,
                   fontFamily: FONT, letterSpacing: -0.5, lineHeight: 1.3,
@@ -4743,13 +4743,13 @@ export default function CircularMenu() {
 
               {/* Stats row */}
               <div>
-                <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>Übersicht</div>
+                <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>{t("dash.overview")}</div>
                 <div style={{ display: "flex", gap: 10 }}>
                   {[
-                    { label: "Offen", value: "8", color: "#8B7AFF" },
-                    { label: "In Arbeit", value: "3", color: "#F59E0B" },
-                    { label: "Heute fertig", value: "2", color: "#00B894" },
-                    { label: "Nachrichten", value: "4", color: "#E84393" },
+                    { label: t("dash.open"), value: "8", color: "#8B7AFF" },
+                    { label: t("dash.inProgress"), value: "3", color: "#F59E0B" },
+                    { label: t("dash.doneToday"), value: "2", color: "#00B894" },
+                    { label: t("dash.messages"), value: "4", color: "#E84393" },
                   ].map((stat, i) => (
                     <motion.div key={stat.label}
                       initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
@@ -4765,12 +4765,12 @@ export default function CircularMenu() {
 
               {/* Active projects */}
               <div>
-                <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>Aktive Projekte</div>
+                <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>{t("dash.activeProjects")}</div>
                 <div style={{ display: "flex", gap: 10 }}>
                   {[
-                    { name: "Meridian", progress: 68, color: "#8B7AFF", tasks: "12 Tasks" },
-                    { name: "Volta", progress: 34, color: "#00B894", tasks: "7 Tasks" },
-                    { name: "Rebranding", progress: 90, color: "#F59E0B", tasks: "3 Tasks" },
+                    { name: "Meridian", progress: 68, color: "#8B7AFF", tasks: `12 ${t("dash.tasks")}` },
+                    { name: "Volta", progress: 34, color: "#00B894", tasks: `7 ${t("dash.tasks")}` },
+                    { name: "Rebranding", progress: 90, color: "#F59E0B", tasks: `3 ${t("dash.tasks")}` },
                   ].map((proj, i) => (
                     <motion.div key={proj.name}
                       initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
@@ -4792,13 +4792,13 @@ export default function CircularMenu() {
 
               {/* Activity feed */}
               <div>
-                <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>Aktivität</div>
+                <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>{t("dash.activity")}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   {[
-                    { icon: "◆", color: "#8B7AFF", title: "AI completed competitor analysis", time: "2 min ago", sub: "Meridian — 8 insights ready" },
-                    { icon: "✓", color: "#00B894", title: "Brand guidelines v1 marked done", time: "18 min ago", sub: "Sandro · Meridian project" },
-                    { icon: "◎", color: "#F59E0B", title: "New message from Maria", time: "34 min ago", sub: "#brand-refresh channel" },
-                    { icon: "⏱", color: darkMode ? "#ffffff50" : "#1a1a2e60", title: "Time tracked: Logo exploration", time: "1h ago", sub: "4h 30m logged today" },
+                    { icon: "◆", color: "#8B7AFF", title: t("dash.actAiAnalysis"), time: t("dash.act2min"), sub: "Meridian — 8 Insights" },
+                    { icon: "✓", color: "#00B894", title: t("dash.actBrandDone"), time: t("dash.act18min"), sub: "Sandro · Meridian" },
+                    { icon: "◎", color: "#F59E0B", title: t("dash.actNewMessage"), time: t("dash.act34min"), sub: "#brand-refresh" },
+                    { icon: "⏱", color: darkMode ? "#ffffff50" : "#1a1a2e60", title: t("dash.actTimeTracked"), time: t("dash.act1h"), sub: t("dash.actLoggedToday") },
                   ].map((item, i) => (
                     <motion.div key={i}
                       initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
@@ -4905,13 +4905,13 @@ export default function CircularMenu() {
                     style={{ fontSize: 10, fontFamily: FONT, color: "#E8436380", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}
                   >
                     <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#E84393" }} />
-                    Priorität
+                    {t("dash.priority")}
                   </motion.div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     {[
-                      { task: "Client-Präsentation finalisieren", project: "Meridian", due: "Überfällig", color: "#E84393", icon: "◆" },
-                      { task: "Feedback von Lena einarbeiten", project: "Brand Refresh", due: "Heute, 14:00", color: "#E84393", icon: "◎" },
-                    ].map((t, i) => (
+                      { task: t("dash.demoTask1"), project: "Meridian", due: t("dash.overdue"), color: "#E84393", icon: "◆" },
+                      { task: t("dash.demoTask2"), project: "Brand Refresh", due: `${t("dash.today")}, 14:00`, color: "#E84393", icon: "◎" },
+                    ].map((tsk, i) => (
                       <motion.div key={i}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -4925,14 +4925,14 @@ export default function CircularMenu() {
                           cursor: "pointer",
                         }}
                       >
-                        <div style={{ width: 22, height: 22, borderRadius: 6, border: `1.5px solid ${t.color}60`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <div style={{ fontSize: 9, color: t.color }}>{t.icon}</div>
+                        <div style={{ width: 22, height: 22, borderRadius: 6, border: `1.5px solid ${tsk.color}60`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <div style={{ fontSize: 9, color: t.color }}>{tsk.icon}</div>
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{t.task}</div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff35" : "#1a1a2e55", marginTop: 2 }}>{t.project}</div>
+                          <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{tsk.task}</div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff35" : "#1a1a2e55", marginTop: 2 }}>{tsk.project}</div>
                         </div>
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: t.color + "90", flexShrink: 0 }}>{t.due}</div>
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: t.color + "90", flexShrink: 0 }}>{tsk.due}</div>
                       </motion.div>
                     ))}
                   </div>
@@ -4947,14 +4947,14 @@ export default function CircularMenu() {
                     style={{ fontSize: 10, fontFamily: FONT, color: "#F59E0B80", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}
                   >
                     <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#F59E0B" }} />
-                    Heute
+                    {t("dash.today")}
                   </motion.div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     {[
-                      { task: "Dashboard Komponenten bauen", project: "Agency OS", due: "15:00", color: "#F59E0B", icon: "◻" },
-                      { task: "Meeting mit Tom vorbereiten", project: "Volta", due: "16:30", color: "#F59E0B", icon: "◷" },
-                      { task: "Social Media Assets exportieren", project: "Brand Refresh", due: "18:00", color: "#F59E0B", icon: "▲" },
-                    ].map((t, i) => (
+                      { task: t("dash.demoTask3"), project: "Agency OS", due: "15:00", color: "#F59E0B", icon: "◻" },
+                      { task: t("dash.demoTask4"), project: "Volta", due: "16:30", color: "#F59E0B", icon: "◷" },
+                      { task: t("dash.demoTask5"), project: "Brand Refresh", due: "18:00", color: "#F59E0B", icon: "▲" },
+                    ].map((tsk, i) => (
                       <motion.div key={i}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -4969,13 +4969,13 @@ export default function CircularMenu() {
                         }}
                       >
                         <div style={{ width: 22, height: 22, borderRadius: 6, border: darkMode ? "1.5px solid #ffffff20" : "1.5px solid #1a1a2e20", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <div style={{ fontSize: 9, color: darkMode ? "#ffffff40" : "#1a1a2e50" }}>{t.icon}</div>
+                          <div style={{ fontSize: 9, color: darkMode ? "#ffffff40" : "#1a1a2e50" }}>{tsk.icon}</div>
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{t.task}</div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff35" : "#1a1a2e55", marginTop: 2 }}>{t.project}</div>
+                          <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{tsk.task}</div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff35" : "#1a1a2e55", marginTop: 2 }}>{tsk.project}</div>
                         </div>
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e60", flexShrink: 0 }}>{t.due}</div>
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e60", flexShrink: 0 }}>{tsk.due}</div>
                       </motion.div>
                     ))}
                   </div>
@@ -4990,14 +4990,14 @@ export default function CircularMenu() {
                     style={{ fontSize: 10, fontFamily: FONT, color: "#8B7AFF80", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}
                   >
                     <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#8B7AFF" }} />
-                    Geplant
+                    {t("dash.upcoming")}
                   </motion.div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     {[
-                      { task: "Wireframes für Onboarding Flow", project: "Meridian", due: "Morgen", color: "#8B7AFF", icon: "◆" },
-                      { task: "Design Review vorbereiten", project: "Volta", due: "Mi", color: "#8B7AFF", icon: "◎" },
-                      { task: "Competitor Analysis abschließen", project: "Strategy", due: "Do", color: "#8B7AFF", icon: "✦" },
-                    ].map((t, i) => (
+                      { task: t("dash.demoTask6"), project: "Meridian", due: t("dash.tomorrow"), color: "#8B7AFF", icon: "◆" },
+                      { task: t("dash.demoTask7"), project: "Volta", due: t("dash.wed"), color: "#8B7AFF", icon: "◎" },
+                      { task: t("dash.demoTask8"), project: "Strategy", due: t("dash.thu"), color: "#8B7AFF", icon: "✦" },
+                    ].map((tsk, i) => (
                       <motion.div key={i}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -5012,13 +5012,13 @@ export default function CircularMenu() {
                         }}
                       >
                         <div style={{ width: 22, height: 22, borderRadius: 6, border: darkMode ? "1.5px solid #ffffff15" : "1.5px solid #1a1a2e15", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <div style={{ fontSize: 9, color: darkMode ? "#ffffff30" : "#1a1a2e40" }}>{t.icon}</div>
+                          <div style={{ fontSize: 9, color: darkMode ? "#ffffff30" : "#1a1a2e40" }}>{tsk.icon}</div>
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffff90" : "#1a1a2eBB", fontWeight: 400 }}>{t.task}</div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40", marginTop: 2 }}>{t.project}</div>
+                          <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffff90" : "#1a1a2eBB", fontWeight: 400 }}>{tsk.task}</div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40", marginTop: 2 }}>{tsk.project}</div>
                         </div>
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", flexShrink: 0 }}>{t.due}</div>
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", flexShrink: 0 }}>{tsk.due}</div>
                       </motion.div>
                     ))}
                   </div>
