@@ -3365,8 +3365,8 @@ export default function CircularMenu() {
     const saved = localStorage.getItem("agencyos-dark-mode");
     return saved !== null ? JSON.parse(saved) : true; // default dark
   });
-  const [appLanguage, setAppLanguage] = useState(() => localStorage.getItem("agencyos-language") || "de");
-  useEffect(() => { localStorage.setItem("agencyos-language", appLanguage); }, [appLanguage]);
+  const [appLanguage, setAppLanguage] = useState(() => localStorage.getItem("agencyos-language") || "");
+  useEffect(() => { if (appLanguage) localStorage.setItem("agencyos-language", appLanguage); }, [appLanguage]);
   // LLM provider state
   const [llmProvider, setLlmProvider] = useState(() => localStorage.getItem("agencyos-llm-provider") || "gemini");
   const [llmKeys, setLlmKeys] = useState(() => {
@@ -3515,6 +3515,17 @@ export default function CircularMenu() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Auto-detect language from Google profile locale (only if user hasn't manually set one)
+  useEffect(() => {
+    if (session && !localStorage.getItem("agencyos-language")) {
+      const locale = session.user?.user_metadata?.locale || session.user?.user_metadata?.language || "";
+      const lang = locale.startsWith("de") ? "de" : "en";
+      setAppLanguage(lang);
+    } else if (!appLanguage) {
+      setAppLanguage("de"); // fallback default
+    }
+  }, [session]);
 
   const handleGoogleLogin = async () => {
     setAuthError(null);
@@ -5269,22 +5280,26 @@ export default function CircularMenu() {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Language</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>App &amp; Voice language</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>App &amp; Voice</div>
                     </div>
-                    <div style={{ display: "flex", borderRadius: 20, overflow: "hidden", border: `1px solid ${theme.borderFaint}` }}>
-                      {[{ id: "de", label: "DE" }, { id: "en", label: "EN" }].map(lang => (
-                        <div
-                          key={lang.id}
-                          onClick={() => setAppLanguage(lang.id)}
-                          style={{
-                            padding: "6px 14px", fontSize: 12, fontFamily: FONT, fontWeight: 500,
-                            cursor: "pointer", transition: "all 0.2s ease",
-                            background: appLanguage === lang.id ? (darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)") : "transparent",
-                            color: appLanguage === lang.id ? theme.text : theme.textDim,
-                          }}
-                        >{lang.label}</div>
-                      ))}
-                    </div>
+                    <select
+                      value={appLanguage}
+                      onChange={(e) => setAppLanguage(e.target.value)}
+                      style={{
+                        padding: "6px 28px 6px 12px", borderRadius: 12,
+                        background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
+                        border: `1px solid ${theme.borderFaint}`,
+                        color: theme.text, fontSize: 13, fontFamily: FONT,
+                        cursor: "pointer", outline: "none",
+                        appearance: "none", WebkitAppearance: "none",
+                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(darkMode ? "#ffffff60" : "#1a1a2e60")}' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+                        backgroundRepeat: "no-repeat",
+                        backgroundPosition: "right 8px center",
+                      }}
+                    >
+                      <option value="de">Deutsch</option>
+                      <option value="en">English</option>
+                    </select>
                   </div>
 
                   {/* Notifications */}
