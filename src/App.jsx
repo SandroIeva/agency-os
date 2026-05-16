@@ -163,7 +163,7 @@ function SegmentedRing({ count, activeIndex, radius = 95, stroke = 2, gap = 5, d
   );
 }
 
-function AISphere() {
+function AISphere({ darkMode = true }) {
   const containerRef = useRef(null);
   const [ready, setReady] = useState(false);
 
@@ -235,12 +235,12 @@ function AISphere() {
         float n2 = fbm(pos + vec3(0.0, t * 0.7, t * 0.25));
         float n3 = fbm(pos * 0.9 + vec3(-t * 0.4, t * 0.35, 0.0));
 
-        // Blend colors — balanced pink-purple-blue, not too bright, not too pale
-        vec3 rose = vec3(0.82, 0.28, 0.48);
-        vec3 purple = vec3(0.52, 0.25, 0.72);
-        vec3 deepblue = vec3(0.2, 0.35, 0.78);
-        vec3 teal = vec3(0.3, 0.6, 0.68);
-        vec3 mauve = vec3(0.72, 0.3, 0.6);
+        // Blend colors — adjusted per theme
+        vec3 rose = vec3(${darkMode ? "0.82, 0.28, 0.48" : "0.95, 0.35, 0.55"});
+        vec3 purple = vec3(${darkMode ? "0.52, 0.25, 0.72" : "0.62, 0.32, 0.88"});
+        vec3 deepblue = vec3(${darkMode ? "0.2, 0.35, 0.78" : "0.3, 0.5, 0.95"});
+        vec3 teal = vec3(${darkMode ? "0.3, 0.6, 0.68" : "0.2, 0.75, 0.82"});
+        vec3 mauve = vec3(${darkMode ? "0.72, 0.3, 0.6" : "0.85, 0.38, 0.72"});
 
         vec3 color = mix(rose, purple, smoothstep(0.28, 0.72, n1));
         color = mix(color, deepblue, smoothstep(0.32, 0.68, n2));
@@ -267,7 +267,7 @@ function AISphere() {
 
         // Slight vignette at edges for depth
         float edge = smoothstep(0.0, 0.5, dot(vNormal, viewDir));
-        final *= 0.4 + edge * 0.6;
+        final *= ${darkMode ? "0.4" : "0.55"} + edge * ${darkMode ? "0.6" : "0.5"};
 
         gl_FragColor = vec4(final, 1.0);
       }
@@ -309,7 +309,7 @@ function AISphere() {
     animate();
 
     return () => { cancelAnimationFrame(raf); renderer.dispose(); };
-  }, [ready]);
+  }, [ready, darkMode]);
 
   return (
     <motion.div
@@ -412,7 +412,7 @@ function WaveformEqualizer({ onAudioData }) {
 }
 
 // AI Speaking Sphere — the sphere animates in the center while "responding"
-function AISpeakingSphere() {
+function AISpeakingSphere({ darkMode = true }) {
   const containerRef = useRef(null);
   const [ready, setReady] = useState(false);
 
@@ -467,11 +467,11 @@ function AISpeakingSphere() {
         float n1 = fbm(pos + vec3(t, 0.0, 0.0));
         float n2 = fbm(pos + vec3(0.0, t*0.7, t*0.25));
         float n3 = fbm(pos*0.9 + vec3(-t*0.4, t*0.35, 0.0));
-        vec3 rose = vec3(0.82, 0.28, 0.48);
-        vec3 purple = vec3(0.52, 0.25, 0.72);
-        vec3 deepblue = vec3(0.2, 0.35, 0.78);
-        vec3 teal = vec3(0.3, 0.6, 0.68);
-        vec3 mauve = vec3(0.72, 0.3, 0.6);
+        vec3 rose = vec3(${darkMode ? "0.82, 0.28, 0.48" : "0.95, 0.35, 0.55"});
+        vec3 purple = vec3(${darkMode ? "0.52, 0.25, 0.72" : "0.62, 0.32, 0.88"});
+        vec3 deepblue = vec3(${darkMode ? "0.2, 0.35, 0.78" : "0.3, 0.5, 0.95"});
+        vec3 teal = vec3(${darkMode ? "0.3, 0.6, 0.68" : "0.2, 0.75, 0.82"});
+        vec3 mauve = vec3(${darkMode ? "0.72, 0.3, 0.6" : "0.85, 0.38, 0.72"});
         vec3 color = mix(rose, purple, smoothstep(0.28, 0.72, n1));
         color = mix(color, deepblue, smoothstep(0.32, 0.68, n2));
         color = mix(color, teal, smoothstep(0.38, 0.72, n3));
@@ -484,7 +484,7 @@ function AISpeakingSphere() {
         float rim = smoothstep(0.4, 1.0, 1.0 - max(dot(vNormal, viewDir), 0.0)) * 0.35;
         vec3 final = color * diffuse + vec3(1.0) * spec + color * rim * 0.5;
         float edge = smoothstep(0.0, 0.5, dot(vNormal, viewDir));
-        final *= 0.4 + edge * 0.6;
+        final *= ${darkMode ? "0.4" : "0.55"} + edge * ${darkMode ? "0.6" : "0.5"};
         gl_FragColor = vec4(final, 1.0);
       }
     `;
@@ -518,7 +518,7 @@ function AISpeakingSphere() {
     };
     animate();
     return () => { cancelAnimationFrame(raf); renderer.dispose(); };
-  }, [ready]);
+  }, [ready, darkMode]);
 
   return <div ref={containerRef} style={{ width: 200, height: 200, borderRadius: "50%", overflow: "hidden" }} />;
 }
@@ -4282,7 +4282,7 @@ export default function CircularMenu() {
                 whileTap={{ scale: 0.95 }}
                 style={{ borderRadius: "50%", cursor: "pointer" }}
               >
-                <AISpeakingSphere />
+                <AISpeakingSphere darkMode={darkMode} />
               </motion.div>
               {aiStatus === "speaking" && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}
@@ -5095,7 +5095,7 @@ export default function CircularMenu() {
         {/* Sphere — right third */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
           <div style={{ cursor: "pointer" }} onClick={startVoice}>
-            <AISphere />
+            <AISphere darkMode={darkMode} />
           </div>
         </div>
       </div>
