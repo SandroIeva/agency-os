@@ -3765,10 +3765,14 @@ export default function CircularMenu() {
     // ── Local voice commands — no LLM tokens used ──
     const voiceNav = detectVoiceCommand(userMessage);
     if (voiceNav) {
+      voiceNavActiveRef.current = true;
       if (voiceNav.view) setCurrentView(voiceNav.view);
       if (voiceNav.action) voiceNav.action();
-      // Delay sphere hide so the new view is already rendered underneath
-      setTimeout(() => { setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript(""); }, 50);
+      setAiSpeaking(false);
+      setAiStatus("");
+      setAiResponse("");
+      setTranscript("");
+      setTimeout(() => { voiceNavActiveRef.current = false; }, 100);
       return;
     }
 
@@ -3900,6 +3904,7 @@ export default function CircularMenu() {
   };
 
   const aiStoppedRef = useRef(false);
+  const voiceNavActiveRef = useRef(false);
 
   // Karaoke highlight: progressively reveal words synced to audio duration
   const startKaraokeHighlight = useCallback((text, audioDuration) => {
@@ -4403,13 +4408,13 @@ export default function CircularMenu() {
         </AnimatePresence>
 
         {/* AI SPEAKING VIEW — sphere animates in center */}
-        <AnimatePresence>
+        <AnimatePresence mode="sync">
           {aiSpeaking && (
             <motion.div
               initial={{ opacity: 0, scale: 0.5 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              transition={{ type: "spring", stiffness: 100, damping: 18, mass: 0.8 }}
+              exit={voiceNavActiveRef.current ? { opacity: 0 } : { opacity: 0, scale: 0.8 }}
+              transition={voiceNavActiveRef.current ? { duration: 0 } : { type: "spring", stiffness: 100, damping: 18, mass: 0.8 }}
               style={{
                 position: "absolute", inset: 0,
                 display: "flex", flexDirection: "column",
