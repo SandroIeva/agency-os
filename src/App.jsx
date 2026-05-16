@@ -1227,15 +1227,42 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               hangoutLink: e.hangoutLink,
             })));
           } else if (res.status === 401) {
-            // Token expired — automatically refresh via silent OAuth redirect
-            if (autoReLogin) autoReLogin();
-            return;
+            // Token expired — silently refresh via popup, then retry
+            if (autoReLogin) {
+              autoReLogin();
+              // Retry after popup refresh completes (poll for new token)
+              let retries = 0;
+              const retryInterval = setInterval(async () => {
+                retries++;
+                const newToken = localStorage.getItem("agencyos-google-token");
+                if (newToken && newToken !== providerToken) {
+                  clearInterval(retryInterval);
+                  const retryRes = await fetch(
+                    `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=100`,
+                    { headers: { Authorization: `Bearer ${newToken}` } }
+                  );
+                  if (retryRes.ok) {
+                    const data = await retryRes.json();
+                    setGoogleEvents((data.items || []).map(e => ({
+                      id: e.id, title: e.summary || "Kein Titel",
+                      start: e.start?.dateTime || e.start?.date, end: e.end?.dateTime || e.end?.date,
+                      allDay: !!e.start?.date,
+                      color: e.colorId ? ["#7986CB","#33B679","#8E24AA","#E67C73","#F6BF26","#F4511E","#039BE5","#616161","#3F51B5","#0B8043","#D50000"][parseInt(e.colorId)] : "#5B8DEF",
+                      type: "google", location: e.location, hangoutLink: e.hangoutLink,
+                    })));
+                  }
+                  setLoading(false);
+                }
+                if (retries >= 20) { clearInterval(retryInterval); setLoading(false); }
+              }, 1500);
+              return;
+            }
           }
         } catch (err) {
           console.error("Calendar fetch error:", err);
         }
       } else {
-        // No token available — auto-refresh
+        // No token available — silently refresh via popup
         if (autoReLogin) autoReLogin();
       }
 
@@ -3449,26 +3476,90 @@ export default function CircularMenu() {
     if (error) setAuthError(error.message);
   };
 
-  // Auto re-login: saves current view state, then silently redirects to Google OAuth
-  // Since user already authorized the app, no consent screen is shown — just a quick redirect back
+  // Auto re-login via popup: opens a small popup for silent OAuth refresh
+  // Since user already authorized the app, Google skips consent — popup redirects back instantly
+  // User stays on their current page with no interruption
+  const autoReLoginRef = useRef(false);
   const autoReLogin = useCallback(async () => {
-    // Cooldown: don't redirect if we already tried in the last 30 seconds (prevents loops)
+    // Prevent concurrent refresh attempts
+    if (autoReLoginRef.current) return;
+    // Cooldown: don't try if we already tried in the last 30 seconds
     const lastAttempt = localStorage.getItem("agencyos-relogin-ts");
     if (lastAttempt && Date.now() - parseInt(lastAttempt) < 30000) {
       console.warn("Token refresh cooldown active, skipping auto re-login");
       return;
     }
+    autoReLoginRef.current = true;
     localStorage.setItem("agencyos-relogin-ts", String(Date.now()));
-    // Save current view so we return to it after redirect
-    localStorage.setItem("agencyos-return-state", JSON.stringify({ view: currentView, timestamp: Date.now() }));
     localStorage.removeItem("agencyos-google-token");
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: window.location.origin,
-        scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events",
-      },
-    });
+
+    try {
+      // Get OAuth URL without redirecting
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin,
+          scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events",
+          skipBrowserRedirect: true,
+        },
+      });
+      if (error || !data?.url) { autoReLoginRef.current = false; return; }
+
+      // Open popup for silent auth
+      const popup = window.open(data.url, "google-auth-refresh", "width=500,height=600,left=200,top=200");
+      if (!popup) {
+        // Popup blocked — fall back to redirect
+        localStorage.setItem("agencyos-return-state", JSON.stringify({ view: currentView, timestamp: Date.now() }));
+        window.location.href = data.url;
+        return;
+      }
+
+      // Poll popup for redirect back to our origin
+      const pollInterval = setInterval(() => {
+        try {
+          if (popup.closed) {
+            clearInterval(pollInterval);
+            autoReLoginRef.current = false;
+            // After popup closes, Supabase auth state listener will pick up the new session
+            supabase.auth.getSession().then(({ data: { session: s } }) => {
+              if (s?.provider_token) {
+                localStorage.setItem("agencyos-google-token", s.provider_token);
+                setSession(s);
+              }
+            });
+            return;
+          }
+          // Check if popup navigated back to our origin
+          if (popup.location?.origin === window.location.origin) {
+            // Popup redirected back — Supabase will handle the hash
+            popup.close();
+            clearInterval(pollInterval);
+            autoReLoginRef.current = false;
+            // Give Supabase a moment to process the auth callback
+            setTimeout(() => {
+              supabase.auth.getSession().then(({ data: { session: s } }) => {
+                if (s?.provider_token) {
+                  localStorage.setItem("agencyos-google-token", s.provider_token);
+                  setSession(s);
+                }
+              });
+            }, 500);
+          }
+        } catch (e) {
+          // Cross-origin error means popup is still on Google's domain — keep polling
+        }
+      }, 300);
+
+      // Timeout: close popup after 30 seconds if still open
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        autoReLoginRef.current = false;
+        if (popup && !popup.closed) popup.close();
+      }, 30000);
+    } catch (e) {
+      console.error("Auto re-login error:", e);
+      autoReLoginRef.current = false;
+    }
   }, [currentView]);
 
   const handleLogout = async () => {
