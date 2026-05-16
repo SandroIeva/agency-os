@@ -12,7 +12,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { message } = req.body;
+  const { message, systemPrompt } = req.body;
+
+  const defaultPrompt = "You are the AI assistant inside Agency OS, a creative agency workspace app. Keep responses short (1-3 sentences), friendly, and helpful. Never use emojis. You know about brand strategy, design, project management, and creative work.";
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -25,7 +27,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 200,
-        system: "You are the AI assistant inside Agency OS, a creative agency workspace app. Keep responses short (1-3 sentences), friendly, and helpful. Always respond in English. Never use emojis. You know about brand strategy, design, project management, and creative work.",
+        system: systemPrompt || defaultPrompt,
         messages: [{ role: "user", content: message }],
       }),
     });

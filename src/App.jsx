@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "./supabase";
+import { buildSystemPrompt } from "./systemPrompt";
 
 const COLORS = {
   bg: "#111117",
@@ -3709,14 +3710,22 @@ export default function CircularMenu() {
       // Call Claude via Vercel serverless function (or Artifact proxy as fallback)
       let data;
       try {
+        const systemPrompt = buildSystemPrompt({
+          currentView,
+          userName,
+        });
         // Try local API route first (Vercel deployment)
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: userMessage }),
+          body: JSON.stringify({ message: userMessage, systemPrompt }),
         });
         data = await response.json();
       } catch (proxyErr) {
+        const systemPrompt = buildSystemPrompt({
+          currentView,
+          userName,
+        });
         // Fallback: direct API call (works in Claude Artifact environment)
         const response = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
@@ -3724,7 +3733,7 @@ export default function CircularMenu() {
           body: JSON.stringify({
             model: "claude-sonnet-4-20250514",
             max_tokens: 200,
-            system: "You are the AI assistant inside Agency OS, a creative agency workspace app. Keep responses short (1-3 sentences), friendly, and helpful. Always respond in English. Never use emojis. You know about brand strategy, design, project management, and creative work.",
+            system: systemPrompt,
             messages: [{ role: "user", content: userMessage }],
           }),
         });
