@@ -4534,11 +4534,12 @@ export default function CircularMenu() {
                   .filter(tk => tk.column_key !== "done")
                   .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
 
+                const colLabel = (key) => ({ todo: t("kanban.todo"), in_progress: t("kanban.inProgress"), review: t("kanban.review") }[key] || key);
                 const taskCards = activeTasks.slice(0, 4).map(tk => ({
                   icon: tk.priority === "high" ? "⚡" : "◎",
                   iconBg: tk.priority === "high" ? "#C4624A" : "#5A7AB5",
                   name: tk.title,
-                  desc: tk.project_name || null,
+                  desc: tk.project_name || colLabel(tk.column_key),
                   key: tk.id,
                   priority: tk.priority,
                   onClick: () => setCurrentView("kanban"),
