@@ -3810,7 +3810,7 @@ export default function CircularMenu() {
             stopKaraokeHighlight();
             URL.revokeObjectURL(audioUrl);
             audioRef.current = null;
-            setTimeout(() => { if (!aiStoppedRef.current) { setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript(""); } }, 800);
+            if (!aiStoppedRef.current) { setAiStatus("idle"); }
           };
           audio.onerror = null;
           audio.play();
@@ -3823,7 +3823,7 @@ export default function CircularMenu() {
     } catch (e) {
       setAiResponse("I'm having trouble connecting. Try again in a moment.");
       setAiStatus("speaking");
-      setTimeout(() => { setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript(""); }, 3000);
+      setAiStatus("idle");
     }
   };
 
@@ -3845,7 +3845,7 @@ export default function CircularMenu() {
       };
       utterance.onend = () => {
         stopKaraokeHighlight();
-        if (!aiStoppedRef.current) setTimeout(() => { setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript(""); }, 800);
+        if (!aiStoppedRef.current) { setAiStatus("idle"); }
       };
       window.speechSynthesis.speak(utterance);
     } else {
@@ -3853,7 +3853,7 @@ export default function CircularMenu() {
       const words = text.split(/\s+/).filter(Boolean);
       const estimatedDuration = (words.length / 150) * 60;
       startKaraokeHighlight(text, Math.max(estimatedDuration, 3));
-      setTimeout(() => { if (!aiStoppedRef.current) { stopKaraokeHighlight(); setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript(""); } }, Math.max(estimatedDuration * 1000, 3000) + 800);
+      setTimeout(() => { if (!aiStoppedRef.current) { stopKaraokeHighlight(); setAiStatus("idle"); } }, Math.max(estimatedDuration * 1000, 3000) + 800);
     }
   };
 
@@ -4403,10 +4403,10 @@ export default function CircularMenu() {
               >
                 <AISpeakingSphere darkMode={darkMode} />
               </motion.div>
-              {aiStatus === "speaking" && (
+              {(aiStatus === "speaking" || aiStatus === "idle") && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}
                   style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40", letterSpacing: 2, marginTop: 20 }}>
-                  CLICK TO STOP
+                  {aiStatus === "speaking" ? "CLICK TO STOP" : "CLICK TO CLOSE"}
                 </motion.div>
               )}
 
