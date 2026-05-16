@@ -3373,6 +3373,18 @@ export default function CircularMenu() {
   const [llmKeyInputs, setLlmKeyInputs] = useState({ claude: "", openai: "", gemini: "" });
   const [llmKeyStatus, setLlmKeyStatus] = useState({}); // { claude: "valid"|"invalid"|"checking" }
 
+  // Voice selection state
+  const VOICE_OPTIONS = [
+    { id: "6ab4c6b0f37f4243a99046478647be94", name: "Alex", gender: "male" },
+    { id: "5dcc50822a864e9d943d9bcde0d70e10", name: "Sarah", gender: "female" },
+    { id: "860323c9e1354f6ea14079788b0bca0d", name: "James", gender: "male" },
+  ];
+  const [selectedVoice, setSelectedVoice] = useState(() => localStorage.getItem("agencyos-voice-id") || VOICE_OPTIONS[0].id);
+  const [voicePreviewPlaying, setVoicePreviewPlaying] = useState(null); // voice id currently playing
+  const voicePreviewRef = useRef(null);
+
+  useEffect(() => { localStorage.setItem("agencyos-voice-id", selectedVoice); }, [selectedVoice]);
+
   // Persist LLM settings
   useEffect(() => { localStorage.setItem("agencyos-llm-provider", llmProvider); }, [llmProvider]);
   useEffect(() => { localStorage.setItem("agencyos-llm-keys", JSON.stringify(llmKeys)); }, [llmKeys]);
@@ -3773,7 +3785,7 @@ export default function CircularMenu() {
         const ttsResponse = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: aiText }),
+          body: JSON.stringify({ text: aiText, voiceId: selectedVoice }),
         });
         if (aiStoppedRef.current) return;
         if (ttsResponse.ok) {
@@ -5173,6 +5185,110 @@ export default function CircularMenu() {
                     </div>
                     <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent }}>Coming soon</div>
                   </div>
+                </div>
+              </motion.div>
+
+              {/* Voice section */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+                style={{ marginTop: 24 }}
+              >
+                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>AI Voice</div>
+                <div style={{
+                  borderRadius: 20,
+                  background: theme.cardBg,
+                  border: `1px solid ${theme.border}`,
+                  overflow: "hidden",
+                }}>
+                  {VOICE_OPTIONS.map((voice, idx) => {
+                    const isSelected = selectedVoice === voice.id;
+                    const isPlaying = voicePreviewPlaying === voice.id;
+                    return (
+                      <div key={voice.id} style={{
+                        display: "flex", alignItems: "center", gap: 14,
+                        padding: "14px 20px", cursor: "pointer",
+                        borderBottom: idx < VOICE_OPTIONS.length - 1 ? `1px solid ${theme.borderFaint}` : "none",
+                      }}
+                        onClick={() => setSelectedVoice(voice.id)}
+                      >
+                        {/* Play preview button */}
+                        <motion.div
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            // Stop current preview if playing
+                            if (voicePreviewRef.current) {
+                              voicePreviewRef.current.pause();
+                              voicePreviewRef.current = null;
+                            }
+                            if (isPlaying) {
+                              setVoicePreviewPlaying(null);
+                              return;
+                            }
+                            setVoicePreviewPlaying(voice.id);
+                            try {
+                              const res = await fetch("/api/tts", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  text: "Hi, I am your AI assistant in Agency OS. How can I help you today?",
+                                  voiceId: voice.id,
+                                }),
+                              });
+                              if (res.ok) {
+                                const blob = await res.blob();
+                                const url = URL.createObjectURL(blob);
+                                const audio = new Audio(url);
+                                voicePreviewRef.current = audio;
+                                audio.onended = () => { setVoicePreviewPlaying(null); voicePreviewRef.current = null; };
+                                audio.play();
+                              } else {
+                                setVoicePreviewPlaying(null);
+                              }
+                            } catch {
+                              setVoicePreviewPlaying(null);
+                            }
+                          }}
+                          style={{
+                            width: 36, height: 36, borderRadius: 10,
+                            background: isPlaying ? (theme.accent + "20") : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"),
+                            border: isPlaying ? `1.5px solid ${theme.accent}40` : "1.5px solid transparent",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            transition: "all 0.2s ease",
+                          }}
+                        >
+                          {isPlaying ? (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill={theme.accent}>
+                              <rect x="6" y="4" width="4" height="16" rx="1" />
+                              <rect x="14" y="4" width="4" height="16" rx="1" />
+                            </svg>
+                          ) : (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill={theme.textDim}>
+                              <path d="M8 5v14l11-7z" />
+                            </svg>
+                          )}
+                        </motion.div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{voice.name}</div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>
+                            {voice.gender === "male" ? "Male" : "Female"}
+                          </div>
+                        </div>
+                        {/* Selected radio */}
+                        <div style={{
+                          width: 20, height: 20, borderRadius: "50%",
+                          border: `2px solid ${isSelected ? theme.accent : theme.textFaint}`,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          transition: "all 0.2s ease",
+                        }}>
+                          {isSelected && <div style={{ width: 10, height: 10, borderRadius: "50%", background: theme.accent }} />}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </motion.div>
 

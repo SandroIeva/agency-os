@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { text } = req.body;
+  const { text, voiceId } = req.body;
   if (!text) return res.status(400).json({ error: "No text provided" });
 
   const apiKey = process.env.FISH_API_KEY;
@@ -21,7 +21,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         text,
-        reference_id: "6ab4c6b0f37f4243a99046478647be94",
+        reference_id: voiceId || "6ab4c6b0f37f4243a99046478647be94",
         format: "mp3",
         mp3_bitrate: 128,
         normalize: true,
