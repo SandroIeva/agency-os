@@ -5267,7 +5267,7 @@ export default function CircularMenu() {
                                   type="password"
                                   value={llmKeyInputs[p.id] || ""}
                                   onChange={(e) => setLlmKeyInputs(prev => ({ ...prev, [p.id]: e.target.value }))}
-                                  placeholder={hasKey ? "Key saved — enter new to replace" : (p.id === "gemini" && session ? "Optional — Google OAuth active" : p.placeholder)}
+                                  placeholder={hasKey ? "Key saved — enter new to replace" : (p.id === "gemini" ? "Gemini API Key (optional)" : p.id === "claude" ? "Claude API Key" : "ChatGPT API Key")}
                                   style={{
                                     flex: 1, padding: "10px 14px", borderRadius: 12,
                                     background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
