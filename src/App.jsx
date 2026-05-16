@@ -3456,19 +3456,9 @@ export default function CircularMenu() {
   const userEmail = session?.user?.email || "";
 
   // Helper: get Google provider token (session or localStorage fallback)
-  // Also proactively refresh if token is older than 50 minutes
   const getProviderToken = useCallback(() => {
-    const sessionToken = session?.provider_token;
-    const storedToken = localStorage.getItem("agencyos-google-token");
-    const tokenTs = parseInt(localStorage.getItem("agencyos-google-token-ts") || "0");
-    const tokenAge = Date.now() - tokenTs;
-    // If token is older than 50 min (Google tokens expire at 60 min), trigger background refresh
-    if (storedToken && tokenAge > 50 * 60 * 1000) {
-      // Don't await — just trigger refresh in background, return current token for now
-      autoReLogin();
-    }
-    return sessionToken || storedToken || null;
-  }, [session, autoReLogin]);
+    return session?.provider_token || localStorage.getItem("agencyos-google-token") || null;
+  }, [session]);
 
   // Listen for auth state changes — persist provider_token and refresh_token
   useEffect(() => {
@@ -3618,6 +3608,15 @@ export default function CircularMenu() {
     await supabase.auth.signOut();
     setSession(null);
   };
+
+  // Proactively refresh token if older than 50 min (Google tokens expire at 60 min)
+  useEffect(() => {
+    const tokenTs = parseInt(localStorage.getItem("agencyos-google-token-ts") || "0");
+    const storedToken = localStorage.getItem("agencyos-google-token");
+    if (storedToken && tokenTs && Date.now() - tokenTs > 50 * 60 * 1000) {
+      autoReLogin();
+    }
+  }, [autoReLogin]);
 
   const getGreeting = () => {
     const h = new Date().getHours();
