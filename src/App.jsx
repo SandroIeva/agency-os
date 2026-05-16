@@ -876,7 +876,7 @@ function KanbanBoard({ onBack, session, theme, darkMode }) {
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
-                  {editingTask ? "Task bearbeiten" : "Neuer Task"}
+                  {editingTask ? t("task.editTask") : t("task.newTask")}
                 </div>
                 {editingTask && (
                   <motion.div
@@ -888,7 +888,7 @@ function KanbanBoard({ onBack, session, theme, darkMode }) {
                       padding: "4px 10px", borderRadius: 8, background: "rgba(239,68,68,0.1)",
                       border: "1px solid rgba(239,68,68,0.2)",
                     }}
-                  >Löschen</motion.div>
+                  >{t("common.delete")}</motion.div>
                 )}
               </div>
 
@@ -896,7 +896,7 @@ function KanbanBoard({ onBack, session, theme, darkMode }) {
               <input
                 value={taskForm.title}
                 onChange={e => setTaskForm(p => ({ ...p, title: e.target.value }))}
-                placeholder="Task Titel..."
+                placeholder={t("task.title")}
                 autoFocus
                 onKeyDown={e => { if (e.key === "Enter" && taskForm.title.trim()) { editingTask ? updateTask() : createTask(); } }}
                 style={{
@@ -910,7 +910,7 @@ function KanbanBoard({ onBack, session, theme, darkMode }) {
               <textarea
                 value={taskForm.description}
                 onChange={e => setTaskForm(p => ({ ...p, description: e.target.value }))}
-                placeholder="Beschreibung (optional)..."
+                placeholder={t("task.description")}
                 rows={3}
                 style={{
                   background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`,
@@ -923,7 +923,7 @@ function KanbanBoard({ onBack, session, theme, darkMode }) {
               <input
                 value={taskForm.project_name}
                 onChange={e => setTaskForm(p => ({ ...p, project_name: e.target.value }))}
-                placeholder="Projekt Name (z.B. Meridian)..."
+                placeholder={t("task.projectName")}
                 list="project-suggestions"
                 style={{
                   background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`,
@@ -1025,7 +1025,7 @@ function KanbanBoard({ onBack, session, theme, darkMode }) {
                     background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`,
                     fontSize: 13, fontFamily: FONT, color: theme.textSub,
                   }}
-                >Abbrechen</motion.button>
+                >{t("common.cancel")}</motion.button>
                 <motion.button whileTap={{ scale: 0.97 }}
                   onClick={editingTask ? updateTask : createTask}
                   style={{
@@ -1035,7 +1035,7 @@ function KanbanBoard({ onBack, session, theme, darkMode }) {
                     fontSize: 13, fontFamily: FONT, fontWeight: 500,
                     color: taskForm.title.trim() ? theme.accent : theme.textFaint,
                   }}
-                >{editingTask ? "Speichern" : "Task erstellen"}</motion.button>
+                >{editingTask ? t("task.save") : t("task.create")}</motion.button>
               </div>
             </motion.div>
           </motion.div>
@@ -1096,7 +1096,7 @@ function KanbanBoard({ onBack, session, theme, darkMode }) {
                     background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`,
                     fontSize: 13, fontFamily: FONT, color: theme.textSub, fontWeight: 500,
                   }}
-                >Abbrechen</motion.button>
+                >{t("common.cancel")}</motion.button>
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.97 }}
@@ -1106,7 +1106,7 @@ function KanbanBoard({ onBack, session, theme, darkMode }) {
                     background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)",
                     fontSize: 13, fontFamily: FONT, color: "#EF4444", fontWeight: 600,
                   }}
-                >Löschen</motion.button>
+                >{t("common.delete")}</motion.button>
               </div>
             </motion.div>
           </motion.div>
@@ -1622,7 +1622,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
           onClick={() => openNewEvent(selectedDay)}
           style={{ cursor: "pointer", fontSize: 12, fontFamily: FONT, color: theme.accent, padding: "6px 14px", borderRadius: 20, background: theme.accent + "15", border: `1px solid ${theme.accent}30`, fontWeight: 500 }}>
-          + Neuer Termin
+          + {t("cal.newEvent")}
         </motion.div>
       </div>
 
@@ -1836,7 +1836,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                       <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, padding: "5px 12px", borderRadius: 8, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)" }}>Wochenende</span>
                     )}
                     <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
-                      {dayEvents.length === 0 ? "Keine Termine" : `${dayEvents.length} ${dayEvents.length === 1 ? "Termin" : "Termine"}`}
+                      {dayEvents.length === 0 ? t("cal.noEvents") : `${dayEvents.length} ${dayEvents.length === 1 ? t("cal.event") : t("cal.events")}`}
                     </span>
                   </div>
 
@@ -1936,7 +1936,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                     {selectedDay.day}. {MONTH_NAMES[month]}
                   </div>
                 <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
-                  {selectedEvents.length === 0 ? "Keine Termine" : `${selectedEvents.length} ${selectedEvents.length === 1 ? "Termin" : "Termine"}`}
+                  {selectedEvents.length === 0 ? t("cal.noEvents") : `${selectedEvents.length} ${selectedEvents.length === 1 ? t("cal.event") : t("cal.events")}`}
                 </div>
                 {getHoliday(selectedDay) && (
                   <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
@@ -2034,13 +2034,13 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             onClick={e => e.stopPropagation()}
             style={{ width: 420, background: darkMode ? "rgba(28,26,42,0.95)" : "rgba(255,255,255,0.97)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, borderRadius: 20, padding: "28px 28px 24px", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}
           >
-            <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 20, letterSpacing: -0.3 }}>Neuer Termin</div>
+            <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 20, letterSpacing: -0.3 }}>{t("cal.newEvent")}</div>
 
             {/* Title */}
             <input
               value={eventForm.title}
               onChange={e => setEventForm(f => ({ ...f, title: e.target.value }))}
-              placeholder="Titel"
+              placeholder={t("cal.title")}
               style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none", marginBottom: 12, boxSizing: "border-box" }}
             />
 
@@ -2148,7 +2148,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                         setAttendeeInput("");
                       }
                     }}
-                    placeholder="E-Mail eingeben + Enter"
+                    placeholder={t("cal.addGuest")}
                     style={{ flex: 1, padding: "8px 12px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 12, fontFamily: FONT, outline: "none", boxSizing: "border-box" }}
                   />
                   <motion.div
@@ -2197,7 +2197,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             <textarea
               value={eventForm.description}
               onChange={e => setEventForm(f => ({ ...f, description: e.target.value }))}
-              placeholder="Beschreibung (optional)"
+              placeholder={t("cal.description")}
               rows={3}
               style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none", resize: "vertical", marginBottom: 20, boxSizing: "border-box" }}
             />
@@ -2207,12 +2207,12 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                 onClick={cancelNewEvent}
                 style={{ cursor: "pointer", padding: "9px 20px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: theme.textSub, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}>
-                Abbrechen
+                {t("common.cancel")}
               </motion.div>
               <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                 onClick={createGoogleEvent}
                 style={{ cursor: savingEvent ? "wait" : "pointer", padding: "9px 24px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: darkMode ? "#fff" : "#1a1a2e", fontWeight: 500, background: savingEvent ? (darkMode ? "rgba(139,122,255,0.15)" : "rgba(108,92,231,0.1)") : (darkMode ? "rgba(139,122,255,0.3)" : "rgba(108,92,231,0.2)"), border: `1px solid ${darkMode ? "rgba(139,122,255,0.4)" : "rgba(108,92,231,0.3)"}`, opacity: (!eventForm.title.trim() || savingEvent) ? 0.5 : 1 }}>
-                {savingEvent ? "Speichern..." : "Termin erstellen"}
+                {savingEvent ? t("cal.saving") : t("cal.createEvent")}
               </motion.div>
             </div>
           </motion.div>
@@ -2240,7 +2240,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             {/* Warning icon */}
             <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(232,67,67,0.12)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16, fontSize: 22 }}>⚠️</div>
 
-            <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8, letterSpacing: -0.3 }}>Event absagen?</div>
+            <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8, letterSpacing: -0.3 }}>{t("cal.cancelEvent")}</div>
 
             <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, marginBottom: 6, lineHeight: 1.5 }}>
               Möchtest du dieses Event wirklich löschen?
@@ -2274,7 +2274,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                 onClick={() => deleteGoogleEvent(confirmDeleteEvent)}
                 style={{ cursor: deletingEvent ? "wait" : "pointer", padding: "9px 24px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: "#fff", fontWeight: 500, background: deletingEvent ? "rgba(232,67,67,0.15)" : "rgba(232,67,67,0.25)", border: "1px solid rgba(232,67,67,0.4)", opacity: deletingEvent ? 0.5 : 1 }}>
-                {deletingEvent ? "Löschen..." : "Event absagen"}
+                {deletingEvent ? t("cal.deleting") : t("cal.cancelEventBtn")}
               </motion.div>
             </div>
           </motion.div>
@@ -3210,7 +3210,7 @@ function ChatView({ onBack, initialTab = "Team" }) {
                   <input
                     value={search}
                     onChange={e => setSearch(e.target.value)}
-                    placeholder="Search conversations..."
+                    placeholder={t("chat.search")}
                     style={{
                       flex: 1, background: "none", border: "none", outline: "none",
                       fontSize: 13, fontFamily: FONT, color: "#ffffffdd",
@@ -5328,8 +5328,8 @@ export default function CircularMenu() {
                       </svg>
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Notifications</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Push & Sound</div>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{t("settings.notifications")}</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{t("settings.notificationsSub")}</div>
                     </div>
                     <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent }}>Coming soon</div>
                   </div>
