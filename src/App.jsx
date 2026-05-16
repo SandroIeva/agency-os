@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "./supabase";
 import { buildSystemPrompt } from "./systemPrompt";
+import { getTranslation } from "./translations";
 
 const COLORS = {
   bg: "#111117",
@@ -13,19 +14,19 @@ const COLORS = {
   ringActive: "#ffffff",
 };
 
-const MENU_ITEMS = [
-  { id: "chat", label: "CHAT", sub: [{ id: "team", label: "Team" }, { id: "clients", label: "Clients" }, { id: "ai", label: "AI" }, { id: "channels", label: "Channels" }, { id: "calls", label: "Calls" }, { id: "archive", label: "Archive" }] },
-  { id: "plan", label: "PLAN", sub: [{ id: "kanban", label: "Kanban" }, { id: "timeline", label: "Timeline" }, { id: "tasks", label: "Tasks" }, { id: "calendar", label: "Calendar" }] },
-  { id: "brand", label: "BRAND", sub: [{ id: "assets", label: "Assets" }, { id: "identity", label: "Identity" }, { id: "knowledge", label: "Intelligence" }, { id: "personas", label: "Personas" }, { id: "competitor", label: "Analyze" }, { id: "guidelines", label: "Guidelines" }] },
-  { id: "docs", label: "PROJECTS", sub: [{ id: "notes", label: "Notes" }, { id: "briefs", label: "Briefs" }, { id: "wiki", label: "Wiki" }, { id: "templates", label: "Templates" }, { id: "proposals", label: "Proposals" }, { id: "reports", label: "Reports" }] },
-  { id: "files", label: "FILES", sub: [{ id: "images", label: "Images" }, { id: "videos", label: "Videos" }, { id: "all", label: "Docs" }, { id: "fonts", label: "Fonts" }, { id: "links", label: "Links" }] },
-  { id: "agents", label: "AGENTS", sub: [{ id: "dev", label: "Dev" }, { id: "design", label: "Design" }, { id: "strategy", label: "Strategy" }, { id: "finance", label: "Finance" }, { id: "marketing", label: "Marketing" }, { id: "sales", label: "Sales" }] },
+const MENU_ITEMS_DEF = [
+  { id: "chat", labelKey: "menu.chat", sub: [{ id: "team", labelKey: "sub.team" }, { id: "clients", labelKey: "sub.clients" }, { id: "ai", labelKey: "sub.ai" }, { id: "channels", labelKey: "sub.channels" }, { id: "calls", labelKey: "sub.calls" }, { id: "archive", labelKey: "sub.archive" }] },
+  { id: "plan", labelKey: "menu.plan", sub: [{ id: "kanban", labelKey: "sub.kanban" }, { id: "timeline", labelKey: "sub.timeline" }, { id: "tasks", labelKey: "sub.tasks" }, { id: "calendar", labelKey: "sub.calendar" }] },
+  { id: "brand", labelKey: "menu.brand", sub: [{ id: "assets", labelKey: "sub.assets" }, { id: "identity", labelKey: "sub.identity" }, { id: "knowledge", labelKey: "sub.intelligence" }, { id: "personas", labelKey: "sub.personas" }, { id: "competitor", labelKey: "sub.analyze" }, { id: "guidelines", labelKey: "sub.guidelines" }] },
+  { id: "docs", labelKey: "menu.projects", sub: [{ id: "notes", labelKey: "sub.notes" }, { id: "briefs", labelKey: "sub.briefs" }, { id: "wiki", labelKey: "sub.wiki" }, { id: "templates", labelKey: "sub.templates" }, { id: "proposals", labelKey: "sub.proposals" }, { id: "reports", labelKey: "sub.reports" }] },
+  { id: "files", labelKey: "menu.files", sub: [{ id: "images", labelKey: "sub.images" }, { id: "videos", labelKey: "sub.videos" }, { id: "all", labelKey: "sub.docs" }, { id: "fonts", labelKey: "sub.fonts" }, { id: "links", labelKey: "sub.links" }] },
+  { id: "agents", labelKey: "menu.agents", sub: [{ id: "dev", labelKey: "sub.dev" }, { id: "design", labelKey: "sub.design" }, { id: "strategy", labelKey: "sub.strategy" }, { id: "finance", labelKey: "sub.finance" }, { id: "marketing", labelKey: "sub.marketing" }, { id: "sales", labelKey: "sub.sales" }] },
 ];
 
-const PLUS_MENU_ITEMS = [
-  { id: "create", label: "CREATE", sub: [{ id: "project", label: "Project" }, { id: "brief", label: "Brief" }, { id: "document", label: "Document" }] },
-  { id: "task", label: "TASK", sub: [{ id: "todo", label: "To-Do" }, { id: "reminder", label: "Reminder" }, { id: "note", label: "Note" }] },
-  { id: "ideate", label: "IDEATE", sub: [{ id: "brainstorm", label: "Brainstorm" }, { id: "moodboard", label: "Moodboard" }, { id: "concept", label: "Concept" }] },
+const PLUS_MENU_ITEMS_DEF = [
+  { id: "create", labelKey: "plus.create", sub: [{ id: "project", labelKey: "plus.project" }, { id: "brief", labelKey: "plus.brief" }, { id: "document", labelKey: "plus.document" }] },
+  { id: "task", labelKey: "plus.task", sub: [{ id: "todo", labelKey: "plus.todo" }, { id: "reminder", labelKey: "plus.reminder" }, { id: "note", labelKey: "plus.note" }] },
+  { id: "ideate", labelKey: "plus.ideate", sub: [{ id: "brainstorm", labelKey: "plus.brainstorm" }, { id: "moodboard", labelKey: "plus.moodboard" }, { id: "concept", labelKey: "plus.concept" }] },
 ];
 
 const FONT = "'Geist', -apple-system, sans-serif";
@@ -532,10 +533,10 @@ const ASSIGNEE_COLORS = ["#8B7AFF", "#E84393", "#00B894", "#F59E0B", "#5B8DEF", 
 
 // Hardcoded fallback columns — always visible even if Supabase fails
 const DEFAULT_COLUMNS = [
-  { id: "col-todo", key: "todo", label: "To Do", color: "#ffffff50", position: 0 },
-  { id: "col-progress", key: "progress", label: "In Progress", color: "#F59E0B", position: 1 },
-  { id: "col-review", key: "review", label: "Review", color: "#8B7AFF", position: 2 },
-  { id: "col-done", key: "done", label: "Done", color: "#00B894", position: 3 },
+  { id: "col-todo", key: "todo", labelKey: "kanban.todo", color: "#ffffff50", position: 0 },
+  { id: "col-progress", key: "progress", labelKey: "kanban.inProgress", color: "#F59E0B", position: 1 },
+  { id: "col-review", key: "review", labelKey: "kanban.review", color: "#8B7AFF", position: 2 },
+  { id: "col-done", key: "done", labelKey: "kanban.done", color: "#00B894", position: 3 },
 ];
 
 function KanbanBoard({ onBack, session, theme, darkMode }) {
@@ -750,7 +751,7 @@ function KanbanBoard({ onBack, session, theme, darkMode }) {
               {/* Column Header */}
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, padding: "0 4px" }}>
                 <div style={{ width: 7, height: 7, borderRadius: "50%", background: col.color }} />
-                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub, fontWeight: 500 }}>{col.label}</span>
+                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub, fontWeight: 500 }}>{t(col.labelKey)}</span>
                 <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>{colTasks.length}</span>
                 <motion.div
                   whileHover={{ scale: 1.15, color: theme.accent }}
@@ -1645,7 +1646,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
         <div style={{ flex: 1 }} />
         {/* View mode switcher */}
         <div style={{ display: "flex", gap: 2, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", borderRadius: 10, padding: 3, border: `1px solid ${theme.borderFaint}` }}>
-          {[{ key: "month", label: "Monat" }, { key: "week", label: "Woche" }, { key: "day", label: "Tag" }].map(v => (
+          {[{ key: "month", labelKey: "cal.month" }, { key: "week", labelKey: "cal.week" }, { key: "day", labelKey: "cal.day" }].map(v => (
             <motion.div key={v.key}
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
@@ -1656,7 +1657,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                 background: viewMode === v.key ? (darkMode ? "rgba(139,122,255,0.25)" : "rgba(108,92,231,0.15)") : "transparent",
                 transition: "all 0.15s",
               }}
-            >{v.label}</motion.div>
+            >{t(v.labelKey)}</motion.div>
           ))}
         </div>
       </div>
@@ -2619,7 +2620,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search files..."
+              placeholder={t("files.search")}
               style={{
                 flex: 1, background: "none", border: "none", outline: "none",
                 fontSize: 13, fontFamily: FONT, color: theme.text,
@@ -2727,7 +2728,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
 
           {!loading && !error && filtered.length === 0 && (
             <div style={{ padding: 32, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textFaint }}>
-              {files.length === 0 ? "Dieser Ordner ist leer" : "Keine Dateien gefunden"}
+              {files.length === 0 ? t("files.empty") : t("files.noResults")}
             </div>
           )}
         </div>
@@ -3367,6 +3368,16 @@ export default function CircularMenu() {
   });
   const [appLanguage, setAppLanguage] = useState(() => localStorage.getItem("agencyos-language") || "");
   useEffect(() => { if (appLanguage) localStorage.setItem("agencyos-language", appLanguage); }, [appLanguage]);
+  const t = useCallback((key, vars) => getTranslation(key, appLanguage || "de", vars), [appLanguage]);
+  // Translated menu items
+  const MENU_ITEMS = useMemo(() => MENU_ITEMS_DEF.map(item => ({
+    ...item, label: t(item.labelKey),
+    sub: item.sub.map(s => ({ ...s, label: t(s.labelKey) })),
+  })), [t]);
+  const PLUS_MENU_ITEMS = useMemo(() => PLUS_MENU_ITEMS_DEF.map(item => ({
+    ...item, label: t(item.labelKey),
+    sub: item.sub.map(s => ({ ...s, label: t(s.labelKey) })),
+  })), [t]);
   // LLM provider state
   const [llmProvider, setLlmProvider] = useState(() => localStorage.getItem("agencyos-llm-provider") || "gemini");
   const [llmKeys, setLlmKeys] = useState(() => {
@@ -3870,7 +3881,7 @@ export default function CircularMenu() {
         if (!data.content?.[0]?.text && data.error) {
           // Rate limit — show friendly message
           if (data.statusCode === 429 || response.status === 429) {
-            data = { content: [{ type: "text", text: "Rate limit reached. Please wait a moment and try again." }] };
+            data = { content: [{ type: "text", text: t("ai.rateLimited") }] };
           }
           // Token might be expired — try refresh and retry once
           else if (googleToken && autoReLogin) {
@@ -3892,9 +3903,9 @@ export default function CircularMenu() {
         }
       } else {
         // No provider connected
-        data = { content: [{ type: "text", text: "Please connect an AI provider in Settings to use the assistant." }] };
+        data = { content: [{ type: "text", text: t("ai.noProvider") }] };
       }
-      const aiText = data.content?.[0]?.text || "I'm here to help with your creative projects.";
+      const aiText = data.content?.[0]?.text || t("ai.fallback");
       setAiResponse(aiText);
       setAiStatus("speaking");
 
@@ -3935,7 +3946,7 @@ export default function CircularMenu() {
         if (!aiStoppedRef.current) speakWithBrowser(aiText);
       }
     } catch (e) {
-      setAiResponse("I'm having trouble connecting. Try again in a moment.");
+      setAiResponse(t("ai.error"));
       setAiStatus("speaking");
       setAiStatus("idle");
     }
@@ -4198,7 +4209,7 @@ export default function CircularMenu() {
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.55, duration: 0.5 }}
                 style={{ fontSize: 14, color: "#ffffff40", fontFamily: FONT, marginBottom: 40 }}
-              >Sign in to access your workspace</motion.div>
+              >{t("auth.signInPrompt")}</motion.div>
 
               <motion.button
                 initial={{ opacity: 0, y: 8 }}
@@ -4222,7 +4233,7 @@ export default function CircularMenu() {
                   <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
                   <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
                 </svg>
-                Sign in with Google
+                {t("auth.signInGoogle")}
               </motion.button>
 
               {authError && (
@@ -4470,7 +4481,7 @@ export default function CircularMenu() {
               <div style={{
                 fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e70",
                 letterSpacing: 1.5, marginTop: 20,
-              }}>CLICK TO SEND</div>
+              }}>{t("ai.clickToSend")}</div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -4498,7 +4509,7 @@ export default function CircularMenu() {
                   fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e50",
                   letterSpacing: 2, marginBottom: 20, fontWeight: 400,
                 }}
-              >{aiStatus === "thinking" ? "THINKING..." : ""}</motion.div>
+              >{aiStatus === "thinking" ? t("ai.thinking") : ""}</motion.div>
 
               {/* Pulsing glow behind sphere — click to stop */}
               <motion.div
@@ -4521,7 +4532,7 @@ export default function CircularMenu() {
               {(aiStatus === "speaking" || aiStatus === "idle") && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}
                   style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40", letterSpacing: 2, marginTop: 20 }}>
-                  {aiStatus === "speaking" ? "CLICK TO STOP" : "CLICK TO CLOSE"}
+                  {aiStatus === "speaking" ? t("ai.clickToStop") : t("ai.clickToClose")}
                 </motion.div>
               )}
 
@@ -4810,10 +4821,10 @@ export default function CircularMenu() {
                 <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>Quick Actions</div>
                 <div style={{ display: "flex", gap: 10 }}>
                   {[
-                    { label: "New Task", icon: "＋", color: "#8B7AFF" },
-                    { label: "Ask AI", icon: "✦", color: "#E84393" },
-                    { label: "New Doc", icon: "◻", color: "#00B894" },
-                    { label: "Schedule", icon: "◷", color: "#F59E0B" },
+                    { label: t("dash.newTask"), icon: "＋", color: "#8B7AFF" },
+                    { label: t("dash.askAi"), icon: "✦", color: "#E84393" },
+                    { label: t("dash.newDoc"), icon: "◻", color: "#00B894" },
+                    { label: t("dash.schedule"), icon: "◷", color: "#F59E0B" },
                   ].map((action, i) => (
                     <motion.div key={action.label}
                       initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
@@ -4864,9 +4875,9 @@ export default function CircularMenu() {
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   {[
-                    { label: "Heute", count: 5, active: true },
-                    { label: "Morgen", count: 3, active: false },
-                    { label: "Woche", count: 12, active: false },
+                    { label: t("dash.today"), count: 5, active: true },
+                    { label: t("dash.tomorrow"), count: 3, active: false },
+                    { label: t("dash.week"), count: 12, active: false },
                   ].map(f => (
                     <div key={f.label} style={{
                       padding: "6px 14px", borderRadius: 10, cursor: "pointer",
@@ -5208,7 +5219,7 @@ export default function CircularMenu() {
                 transition={{ delay: 0.15, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
                 style={{ marginTop: 24 }}
               >
-                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>Preferences</div>
+                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>{t("settings.preferences")}</div>
                 <div style={{
                   borderRadius: 20,
                   background: theme.cardBg,
@@ -5243,7 +5254,7 @@ export default function CircularMenu() {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Appearance</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{darkMode ? "Dark Mode" : "Light Mode"}</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{darkMode ? t("settings.darkMode") : t("settings.lightMode")}</div>
                     </div>
                     <div onClick={(e) => { e.stopPropagation(); setDarkMode(!darkMode); }} style={{
                       width: 44, height: 24, borderRadius: 12, padding: 2,
@@ -5279,8 +5290,8 @@ export default function CircularMenu() {
                       </svg>
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Language</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>App &amp; Voice</div>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{t("settings.language")}</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{t("settings.languageSub")}</div>
                     </div>
                     <select
                       value={appLanguage}
@@ -5332,7 +5343,7 @@ export default function CircularMenu() {
                 transition={{ delay: 0.2, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
                 style={{ marginTop: 24 }}
               >
-                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>AI Voice</div>
+                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>{t("settings.aiVoice")}</div>
                 <div style={{
                   borderRadius: 20,
                   background: theme.cardBg,
@@ -5440,7 +5451,7 @@ export default function CircularMenu() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
               >
-                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>AI Models</div>
+                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>{t("settings.aiModels")}</div>
                 <div style={{
                   borderRadius: 20,
                   background: theme.cardBg,
@@ -5484,7 +5495,7 @@ export default function CircularMenu() {
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{p.name}</div>
                             <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>
-                              {p.id === "gemini" && session && !hasKey ? "Connected via Google" : p.sub}
+                              {p.id === "gemini" && session && !hasKey ? t("settings.connectedViaGoogle") : p.sub}
                             </div>
                           </div>
                           {/* Status indicators */}
@@ -5520,7 +5531,7 @@ export default function CircularMenu() {
                                   type="password"
                                   value={llmKeyInputs[p.id] || ""}
                                   onChange={(e) => setLlmKeyInputs(prev => ({ ...prev, [p.id]: e.target.value }))}
-                                  placeholder={hasKey ? "Key saved — enter new to replace" : (p.id === "gemini" ? "Gemini API Key (optional)" : p.id === "claude" ? "Claude API Key" : "ChatGPT API Key")}
+                                  placeholder={hasKey ? t("settings.keySaved") : (p.id === "gemini" ? t("settings.geminiKeyOpt") : p.id === "claude" ? t("settings.claudeKey") : t("settings.chatgptKey"))}
                                   style={{
                                     flex: 1, padding: "10px 14px", borderRadius: 12,
                                     background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
@@ -5625,7 +5636,7 @@ export default function CircularMenu() {
                 transition={{ delay: 0.25, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
                 style={{ marginTop: 24 }}
               >
-                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>Integrations</div>
+                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>{t("settings.integrations")}</div>
                 <div style={{
                   borderRadius: 20,
                   background: theme.cardBg,
@@ -5651,8 +5662,8 @@ export default function CircularMenu() {
                       </svg>
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Google Calendar & Drive</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{session ? "Calendar & files synced" : "Sign in to connect"}</div>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{t("settings.googleCalDrive")}</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{session ? t("settings.calFilesSynced") : t("settings.signInToConnect")}</div>
                     </div>
                     <div style={{ width: 8, height: 8, borderRadius: "50%", background: session ? "#00B894" : "#E84393" }} />
                   </div>
