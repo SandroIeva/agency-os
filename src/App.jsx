@@ -3737,22 +3737,37 @@ export default function CircularMenu() {
 
       const activeKey = llmKeys[llmProvider];
       const googleToken = llmProvider === "gemini" && !activeKey ? getProviderToken() : null;
+      let usedProvider = llmProvider;
+
       if (activeKey || googleToken) {
         // User has their own key or Google OAuth token — use multi-provider endpoint
-        const response = await fetch("/api/chat-multi", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message: userMessage,
-            systemPrompt,
-            provider: llmProvider,
-            apiKey: activeKey || undefined,
-            oauthToken: googleToken || undefined,
-          }),
-        });
-        data = await response.json();
-      } else {
-        // No user key — fall back to server-side Claude key
+        try {
+          const response = await fetch("/api/chat-multi", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message: userMessage,
+              systemPrompt,
+              provider: llmProvider,
+              apiKey: activeKey || undefined,
+              oauthToken: googleToken || undefined,
+            }),
+          });
+          data = await response.json();
+          // If provider call failed, fall back to server-side Claude
+          if (!data.content?.[0]?.text) {
+            console.warn(`${llmProvider} returned no content, falling back to Claude`);
+            data = null;
+          }
+        } catch (err) {
+          console.warn(`${llmProvider} call failed, falling back to Claude:`, err.message);
+          data = null;
+        }
+      }
+
+      // Fallback to server-side Claude if no data yet
+      if (!data || !data.content?.[0]?.text) {
+        usedProvider = "claude";
         try {
           const response = await fetch("/api/chat", {
             method: "POST",
@@ -3761,13 +3776,13 @@ export default function CircularMenu() {
           });
           data = await response.json();
         } catch (proxyErr) {
-          // Fallback: direct API call (works in Claude Artifact environment)
+          // Last resort: direct API call
           const response = await fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               model: "claude-sonnet-4-20250514",
-              max_tokens: 200,
+              max_tokens: 400,
               system: systemPrompt,
               messages: [{ role: "user", content: userMessage }],
             }),

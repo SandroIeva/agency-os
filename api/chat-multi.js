@@ -96,22 +96,26 @@ export default async function handler(req, res) {
       if (oauthToken && !apiKey) {
         headers["Authorization"] = `Bearer ${oauthToken}`;
       }
+
+      // Build request body — include system prompt as first user turn if system_instruction fails
+      const requestBody = {
+        contents: [{ role: "user", parts: [{ text: systemPrompt ? `${systemPrompt}\n\n---\n\nUser message: ${message}` : message }] }],
+        generationConfig: {
+          maxOutputTokens: 400,
+        },
+      };
+
       const response = await fetch(url, {
           method: "POST",
           headers,
-          body: JSON.stringify({
-            system_instruction: systemPrompt ? { parts: [{ text: systemPrompt }] } : undefined,
-            contents: [{ parts: [{ text: message }] }],
-            generationConfig: {
-              maxOutputTokens: 400,
-            },
-          }),
+          body: JSON.stringify(requestBody),
         }
       );
 
       data = await response.json();
 
       if (!response.ok) {
+        console.error("Gemini API error:", JSON.stringify(data));
         return res.status(response.status).json({
           error: data.error?.message || "Gemini API error",
           provider: "gemini",
