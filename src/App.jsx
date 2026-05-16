@@ -4521,24 +4521,26 @@ export default function CircularMenu() {
                 }}>{t("dash.subtitle")}</div>
               </div>
 
-              {/* Live tasks & events from Kanban + Calendar */}
+              {/* Tasks — real data from Kanban + Calendar, padded to always show 4 cards */}
+              <div style={{
+                display: "flex", flexDirection: "column", gap: 10,
+                maxWidth: 720, alignSelf: "center", width: "100%",
+                marginTop: "auto", marginBottom: 100,
+              }}>
               {(() => {
-                // Build unified card list: priority tasks first, then upcoming events
+                // Build live cards from tasks + events
                 const priorityOrder = { high: 0, medium: 1, low: 2 };
                 const activeTasks = dashboardTasks
                   .filter(tk => tk.column_key !== "done")
                   .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
 
                 const taskCards = activeTasks.slice(0, 4).map(tk => ({
-                  id: "task-" + tk.id,
-                  icon: tk.priority === "high" ? "⚡" : tk.priority === "medium" ? "◎" : "◻",
-                  iconBg: tk.priority === "high" ? "#C4624A" : tk.priority === "medium" ? "#B5872D" : "#5A7AB5",
+                  icon: tk.priority === "high" ? "⚡" : "◎",
+                  iconBg: tk.priority === "high" ? "#C4624A" : "#5A7AB5",
                   name: tk.title,
                   desc: tk.project_name || null,
-                  type: "task",
+                  key: tk.id,
                   priority: tk.priority,
-                  badge: tk.priority === "high" ? t("dash.priority") : (tk.column_key === "in_progress" ? t("kanban.inProgress") : null),
-                  badgeColor: tk.priority === "high" ? "#E84393" : "#F59E0B",
                   onClick: () => setCurrentView("kanban"),
                 }));
 
@@ -4546,99 +4548,93 @@ export default function CircularMenu() {
                   const startTime = ev.start ? new Date(ev.start) : null;
                   const timeStr = startTime ? startTime.toLocaleTimeString(appLanguage === "de" ? "de-DE" : "en-US", { hour: "2-digit", minute: "2-digit" }) : "";
                   return {
-                    id: "event-" + ev.id,
                     icon: ev.isMeet ? "📹" : "📅",
                     iconBg: ev.isMeet ? "#2D7A6A" : "#4A6FA5",
                     name: ev.title,
                     desc: timeStr + (ev.isMeet ? " · Google Meet" : ""),
-                    type: "event",
-                    badge: ev.isMeet ? "Meet" : t("calendar.title"),
-                    badgeColor: ev.isMeet ? "#00B894" : "#5B8DEF",
-                    onClick: ev.hangoutLink
-                      ? () => window.open(ev.hangoutLink, "_blank")
-                      : () => setCurrentView("calendar"),
+                    key: "ev-" + ev.id,
+                    onClick: ev.hangoutLink ? () => window.open(ev.hangoutLink, "_blank") : () => setCurrentView("calendar"),
                   };
                 });
 
-                // Merge: events that are soon go first, then high-priority tasks, then rest
+                // Sort: imminent events first, then high-prio tasks, then rest
                 const now = new Date();
                 const soonEvents = eventCards.filter(ec => {
-                  const ev = upcomingEvents.find(e => "event-" + e.id === ec.id);
+                  const ev = upcomingEvents.find(e => "ev-" + e.id === ec.key);
                   if (!ev?.start) return false;
                   const diff = new Date(ev.start) - now;
-                  return diff >= 0 && diff < 60 * 60 * 1000; // within next hour
+                  return diff >= 0 && diff < 60 * 60 * 1000;
                 });
                 const laterEvents = eventCards.filter(ec => !soonEvents.includes(ec));
                 const highTasks = taskCards.filter(tc => tc.priority === "high");
                 const otherTasks = taskCards.filter(tc => tc.priority !== "high");
+                const liveCards = [...soonEvents, ...highTasks, ...laterEvents, ...otherTasks].slice(0, 4);
 
-                const allCards = [...soonEvents, ...highTasks, ...laterEvents, ...otherTasks].slice(0, 4);
+                // Placeholder cards to always fill up to 4
+                const placeholders = [
+                  { icon: "🎨", iconBg: "#2D7A6A", name: "Figma", desc: "Complete the Dashboard Design", key: "F" },
+                  { icon: "🤖", iconBg: "#C4624A", name: "Claude Code", desc: "Build the new app idea", key: "2" },
+                  { icon: "👤", iconBg: "#5A7AB5", name: "Reply to Tom Behrens over Gmail", desc: null, key: "G" },
+                  { icon: "✦", iconBg: "#4A9A8A", name: "Research with Perplexity", desc: null, key: "P" },
+                ];
 
-                return (
+                // Fill remaining slots with placeholders
+                const cards = [...liveCards];
+                let pIdx = 0;
+                while (cards.length < 4 && pIdx < placeholders.length) {
+                  cards.push(placeholders[pIdx]);
+                  pIdx++;
+                }
+
+                return cards;
+              })().map((task, i) => (
+                <motion.div
+                  key={task.key}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0], delay: 0.15 + i * 0.06 }}
+                  className="hover-row"
+                  onClick={task.onClick}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 18,
+                    padding: "16px 24px", borderRadius: 18,
+                    background: task.desc ? theme.hoverBg : "transparent",
+                    border: task.desc ? `1px solid ${theme.borderFaint}` : "1px solid transparent",
+                    cursor: "pointer",
+                  }}
+                >
                   <div style={{
-                    display: "flex", flexDirection: "column", gap: 10,
-                    maxWidth: 720, alignSelf: "center", width: "100%",
-                    marginTop: "auto", marginBottom: 100,
-                  }}>
-                    {allCards.length === 0 && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.4, delay: 0.15 }}
-                        style={{
-                          textAlign: "center", padding: "24px",
-                          fontSize: 15, fontFamily: FONT, color: theme.textDim,
-                        }}
-                      >
-                        {t("dash.noTasks")}
-                      </motion.div>
+                    width: 50, height: 50, borderRadius: "50%",
+                    background: task.iconBg, display: "flex", alignItems: "center",
+                    justifyContent: "center", fontSize: 22, flexShrink: 0,
+                  }}>{task.icon}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{
+                      fontSize: 19, fontFamily: FONT, color: theme.text,
+                      fontWeight: 400,
+                    }}>{task.name}</div>
+                    {task.desc && (
+                      <div style={{
+                        fontSize: 15, fontFamily: FONT, color: theme.textDim,
+                        marginTop: 3,
+                      }}>{task.desc}</div>
                     )}
-                    {allCards.map((card, i) => (
-                      <motion.div
-                        key={card.id}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0], delay: 0.15 + i * 0.06 }}
-                        className="hover-row"
-                        onClick={card.onClick}
-                        style={{
-                          display: "flex", alignItems: "center", gap: 18,
-                          padding: "16px 24px", borderRadius: 18,
-                          background: theme.hoverBg,
-                          border: `1px solid ${theme.borderFaint}`,
-                          cursor: "pointer",
-                        }}
-                      >
-                        <div style={{
-                          width: 50, height: 50, borderRadius: "50%",
-                          background: card.iconBg, display: "flex", alignItems: "center",
-                          justifyContent: "center", fontSize: 22, flexShrink: 0,
-                        }}>{card.icon}</div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{
-                            fontSize: 19, fontFamily: FONT, color: theme.text,
-                            fontWeight: 400,
-                          }}>{card.name}</div>
-                          {card.desc && (
-                            <div style={{
-                              fontSize: 15, fontFamily: FONT, color: theme.textDim,
-                              marginTop: 3,
-                            }}>{card.desc}</div>
-                          )}
-                        </div>
-                        {card.badge && (
-                          <div style={{
-                            fontSize: 11, fontFamily: FONT, color: card.badgeColor,
-                            padding: "4px 10px", borderRadius: 20,
-                            background: card.badgeColor + "15",
-                            border: `1px solid ${card.badgeColor}30`,
-                            flexShrink: 0,
-                          }}>{card.badge}</div>
-                        )}
-                      </motion.div>
-                    ))}
                   </div>
-                );
-              })()}
+                  <div style={{ display: "flex", gap: 5 }}>
+                    <span style={{
+                      fontSize: 13, color: theme.textDim, fontFamily: FONT,
+                      padding: "5px 8px", borderRadius: 6,
+                      background: theme.borderFaint,
+                    }}>⌘</span>
+                    <span style={{
+                      fontSize: 13, color: theme.textDim, fontFamily: FONT,
+                      padding: "5px 8px", borderRadius: 6,
+                      background: theme.borderFaint,
+                    }}>{typeof task.key === "string" && task.key.length === 1 ? task.key : (i + 1)}</span>
+                  </div>
+                </motion.div>
+              ))}
+              </div>
 
             </motion.div>
           )}
