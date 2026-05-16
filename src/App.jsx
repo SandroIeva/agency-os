@@ -2848,7 +2848,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, theme, dark
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                 <path d="M15 18l-6-6 6-6" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>Back</span>
+              <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{t("common.back")}</span>
             </motion.div>
             {currentFolder && (
               <motion.div
@@ -3310,7 +3310,7 @@ function ChatView({ onBack, initialTab = "Team", t }) {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                     <path d="M15 18l-6-6 6-6" stroke="#ffffff50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                  <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff50" }}>Back</span>
+                  <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff50" }}>{t("common.back")}</span>
                 </motion.div>
                 {/* New chat button */}
                 <motion.div
@@ -5101,9 +5101,9 @@ export default function CircularMenu() {
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                   <path d="M15 18l-6-6 6-6" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>Back</span>
+                <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{t("common.back")}</span>
               </motion.div>
-              <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase" }}>Settings</div>
+              <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase" }}>{t("settings.title")}</div>
               <div style={{ width: 60 }} />
             </div>
 
