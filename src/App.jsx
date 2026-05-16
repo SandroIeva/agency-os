@@ -524,7 +524,7 @@ function AISpeakingSphere() {
 }
 
 // Kanban board data
-const priColors = { high: "#EF4444", medium: "#F59E0B", low: "#ffffff30" };
+const priColors = { high: "#EF4444", medium: "#F59E0B", low: "#999999" };
 const ASSIGNEE_COLORS = ["#8B7AFF", "#E84393", "#00B894", "#F59E0B", "#5B8DEF", "#E88D67", "#6C5CE7", "#FD79A8"];
 
 // Hardcoded fallback columns — always visible even if Supabase fails
@@ -535,7 +535,7 @@ const DEFAULT_COLUMNS = [
   { id: "col-done", key: "done", label: "Done", color: "#00B894", position: 3 },
 ];
 
-function KanbanBoard({ onBack, session }) {
+function KanbanBoard({ onBack, session, theme, darkMode }) {
   const [tasks, setTasks] = useState([]);
   const [teamMembers, setTeamMembers] = useState({});
   const [filter, setFilter] = useState("all");
@@ -689,12 +689,12 @@ function KanbanBoard({ onBack, session }) {
           onClick={onBack}
           style={{
             width: 32, height: 32, borderRadius: "50%", cursor: "pointer",
-            border: "1px solid #ffffff18", display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 14, color: "#ffffff50", fontFamily: FONT,
+            border: `1px solid ${theme.border}`, display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 14, color: theme.textDim, fontFamily: FONT,
           }}>←</motion.div>
         <div>
-          <div style={{ fontSize: 22, fontWeight: 500, color: "#ffffffe6", fontFamily: FONT, letterSpacing: -0.5 }}>Tasks</div>
-          <div style={{ fontSize: 12, color: "#ffffff50", fontFamily: FONT, marginTop: 2 }}>
+          <div style={{ fontSize: 22, fontWeight: 500, color: theme.text, fontFamily: FONT, letterSpacing: -0.5 }}>Tasks</div>
+          <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, marginTop: 2 }}>
             {loading ? "Loading..." : `${filtered.length} tasks across ${colEntries.length} columns`}
           </div>
         </div>
@@ -707,9 +707,9 @@ function KanbanBoard({ onBack, session }) {
             onClick={() => setFilter(p)}
             style={{
               fontSize: 12, fontFamily: FONT, fontWeight: 400, padding: "6px 14px", borderRadius: 20, cursor: "pointer",
-              background: filter === p ? "#ffffff0F" : "transparent",
-              border: `1px solid ${filter === p ? "#ffffff18" : "#ffffff0A"}`,
-              color: filter === p ? "#ffffffe6" : "#ffffff50",
+              background: filter === p ? (darkMode ? "#ffffff0F" : "rgba(0,0,0,0.06)") : "transparent",
+              border: `1px solid ${filter === p ? theme.border : theme.borderFaint}`,
+              color: filter === p ? theme.text : theme.textDim,
             }}
           >{p === "all" ? "All projects" : p}</motion.button>
         ))}
@@ -717,7 +717,7 @@ function KanbanBoard({ onBack, session }) {
           onClick={() => openNewTask("todo")}
           style={{
             fontSize: 12, fontFamily: FONT, fontWeight: 500, padding: "6px 14px", borderRadius: 20, cursor: "pointer",
-            background: "#8B7AFF15", border: "1px solid #8B7AFF30", color: "#8B7AFF", marginLeft: "auto",
+            background: theme.accent + "15", border: `1px solid ${theme.accent}30`, color: theme.accent, marginLeft: "auto",
           }}
         >+ New task</motion.button>
       </div>
@@ -740,20 +740,20 @@ function KanbanBoard({ onBack, session }) {
               }}
               style={{
                 flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
-                background: dragOverCol === col.key ? "rgba(139,122,255,0.04)" : "transparent",
+                background: dragOverCol === col.key ? (theme.accent + "0A") : "transparent",
                 borderRadius: 16, transition: "background 0.2s",
                 padding: dragOverCol === col.key ? "8px" : "0",
               }}>
               {/* Column Header */}
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, padding: "0 4px" }}>
                 <div style={{ width: 7, height: 7, borderRadius: "50%", background: col.color }} />
-                <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffffa0", fontWeight: 500 }}>{col.label}</span>
-                <span style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff30" }}>{colTasks.length}</span>
+                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub, fontWeight: 500 }}>{col.label}</span>
+                <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>{colTasks.length}</span>
                 <motion.div
-                  whileHover={{ scale: 1.15, color: "#8B7AFF" }}
+                  whileHover={{ scale: 1.15, color: theme.accent }}
                   whileTap={{ scale: 0.9 }}
                   onClick={() => openNewTask(col.key)}
-                  style={{ marginLeft: "auto", cursor: "pointer", color: "#ffffff20", fontSize: 16, fontFamily: FONT, lineHeight: 1 }}
+                  style={{ marginLeft: "auto", cursor: "pointer", color: theme.textFaint, fontSize: 16, fontFamily: FONT, lineHeight: 1 }}
                 >+</motion.div>
               </div>
               {/* Cards */}
@@ -762,7 +762,7 @@ function KanbanBoard({ onBack, session }) {
                   <motion.div
                     animate={{ opacity: [0.15, 0.3, 0.15] }}
                     transition={{ duration: 1.5, repeat: Infinity }}
-                    style={{ height: 80, borderRadius: 14, background: "#ffffff08" }}
+                    style={{ height: 80, borderRadius: 14, background: theme.hoverBg }}
                   />
                 ) : (
                   <>
@@ -780,12 +780,12 @@ function KanbanBoard({ onBack, session }) {
                             onDragStart={() => { dragItem.current = task.id; }}
                             onClick={() => openEditTask(task)}
                             style={{
-                              background: "#1A1A24", border: "1px solid #ffffff10", borderRadius: 14,
+                              background: darkMode ? "#1A1A24" : "#ffffff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
                               padding: "14px 16px", cursor: "grab",
                             }}
                           >
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                              <span style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30", letterSpacing: 0.5 }}>{task.project_name || "General"}</span>
+                              <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.5 }}>{task.project_name || "General"}</span>
                               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                 {task.is_ai_task && <span style={{ fontSize: 9, fontFamily: FONT, fontWeight: 500, color: "#E84393", padding: "2px 6px", borderRadius: 4, background: "#E8439315", letterSpacing: 0.5 }}>AI</span>}
                                 <div style={{ width: 6, height: 6, borderRadius: "50%", background: priColors[task.priority] }} />
@@ -793,16 +793,16 @@ function KanbanBoard({ onBack, session }) {
                                   whileHover={{ scale: 1.2 }}
                                   whileTap={{ scale: 0.9 }}
                                   onClick={(e) => { e.stopPropagation(); requestDelete(task.id); }}
-                                  style={{ cursor: "pointer", color: "#ffffff20", fontSize: 12, fontFamily: FONT, padding: "0 2px" }}
+                                  style={{ cursor: "pointer", color: theme.textFaint, fontSize: 12, fontFamily: FONT, padding: "0 2px" }}
                                 >✕</motion.div>
                               </div>
                             </div>
-                            <div style={{ fontSize: 14, fontFamily: FONT, color: "#ffffffe6", fontWeight: 500, marginBottom: 4, lineHeight: 1.4 }}>{task.title}</div>
-                            {task.description && <div style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff50", lineHeight: 1.5, marginBottom: 12 }}>{task.description}</div>}
+                            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 4, lineHeight: 1.4 }}>{task.title}</div>
+                            {task.description && <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginBottom: 12 }}>{task.description}</div>}
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                               {member ? (
                                 member.avatar_url ? (
-                                  <img src={member.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 22, height: 22, borderRadius: "50%", border: "1px solid #ffffff15" }} />
+                                  <img src={member.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 22, height: 22, borderRadius: "50%", border: `1px solid ${theme.borderFaint}` }} />
                                 ) : (
                                   <div style={{
                                     width: 22, height: 22, borderRadius: "50%", background: (member.avatar_color || "#8B7AFF") + "25", color: member.avatar_color || "#8B7AFF",
@@ -811,12 +811,12 @@ function KanbanBoard({ onBack, session }) {
                                 )
                               ) : (
                                 <div style={{
-                                  width: 22, height: 22, borderRadius: "50%", background: "#8B7AFF25", color: "#8B7AFF",
+                                  width: 22, height: 22, borderRadius: "50%", background: theme.accent + "25", color: theme.accent,
                                   display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontFamily: FONT, fontWeight: 600,
                                 }}>?</div>
                               )}
-                              {task.time_tracked && <span style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30" }}>⏱ {task.time_tracked}</span>}
-                              {task.due_date && <span style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff30" }}>{new Date(task.due_date).toLocaleDateString("de-DE", { day: "2-digit", month: "short" })}</span>}
+                              {task.time_tracked && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>⏱ {task.time_tracked}</span>}
+                              {task.due_date && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>{new Date(task.due_date).toLocaleDateString("de-DE", { day: "2-digit", month: "short" })}</span>}
                             </div>
                           </motion.div>
                         );
@@ -826,10 +826,10 @@ function KanbanBoard({ onBack, session }) {
                       <div
                         onClick={() => openNewTask(col.key)}
                         style={{
-                          flex: 1, border: `1px dashed ${dragOverCol === col.key ? "#8B7AFF30" : "#ffffff10"}`,
+                          flex: 1, border: `1px dashed ${dragOverCol === col.key ? theme.accent + "30" : theme.borderFaint}`,
                           borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center",
                           fontSize: 12, fontFamily: FONT, cursor: "pointer",
-                          color: dragOverCol === col.key ? "#8B7AFF60" : "#ffffff20",
+                          color: dragOverCol === col.key ? theme.accent + "60" : theme.textFaint,
                           minHeight: 80, transition: "all 0.2s",
                         }}
                       >
@@ -865,13 +865,13 @@ function KanbanBoard({ onBack, session }) {
               transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
               onClick={e => e.stopPropagation()}
               style={{
-                width: 420, background: "rgba(22, 22, 30, 0.95)",
-                backdropFilter: "blur(40px)", border: "1px solid rgba(255,255,255,0.1)",
+                width: 420, background: darkMode ? "rgba(22, 22, 30, 0.95)" : "rgba(255, 255, 255, 0.97)",
+                backdropFilter: "blur(40px)", border: `1px solid ${theme.border}`,
                 borderRadius: 20, padding: 28, display: "flex", flexDirection: "column", gap: 16,
               }}
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: "#ffffffdd" }}>
+                <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
                   {editingTask ? "Task bearbeiten" : "Neuer Task"}
                 </div>
                 {editingTask && (
@@ -896,9 +896,9 @@ function KanbanBoard({ onBack, session }) {
                 autoFocus
                 onKeyDown={e => { if (e.key === "Enter" && taskForm.title.trim()) { editingTask ? updateTask() : createTask(); } }}
                 style={{
-                  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+                  background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`,
                   borderRadius: 12, padding: "12px 16px", fontSize: 14, fontFamily: FONT,
-                  color: "#ffffffdd", outline: "none", caretColor: "#8B7AFF",
+                  color: theme.text, outline: "none", caretColor: theme.accent,
                 }}
               />
 
@@ -909,9 +909,9 @@ function KanbanBoard({ onBack, session }) {
                 placeholder="Beschreibung (optional)..."
                 rows={3}
                 style={{
-                  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+                  background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`,
                   borderRadius: 12, padding: "12px 16px", fontSize: 13, fontFamily: FONT,
-                  color: "#ffffffdd", outline: "none", resize: "none", caretColor: "#8B7AFF",
+                  color: theme.text, outline: "none", resize: "none", caretColor: theme.accent,
                 }}
               />
 
@@ -922,9 +922,9 @@ function KanbanBoard({ onBack, session }) {
                 placeholder="Projekt Name (z.B. Meridian)..."
                 list="project-suggestions"
                 style={{
-                  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+                  background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`,
                   borderRadius: 12, padding: "10px 16px", fontSize: 13, fontFamily: FONT,
-                  color: "#ffffffdd", outline: "none", caretColor: "#8B7AFF",
+                  color: theme.text, outline: "none", caretColor: theme.accent,
                 }}
               />
               <datalist id="project-suggestions">
@@ -933,7 +933,7 @@ function KanbanBoard({ onBack, session }) {
 
               {/* Assignee */}
               <div>
-                <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginBottom: 6 }}>Zugewiesen an</div>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6 }}>Zugewiesen an</div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {Object.values(teamMembers).map(m => (
                     <motion.div
@@ -943,8 +943,8 @@ function KanbanBoard({ onBack, session }) {
                       style={{
                         display: "flex", alignItems: "center", gap: 8,
                         padding: "6px 12px", borderRadius: 10, cursor: "pointer",
-                        background: taskForm.assignee_id === m.user_id ? (m.avatar_color || "#8B7AFF") + "15" : "rgba(255,255,255,0.03)",
-                        border: `1px solid ${taskForm.assignee_id === m.user_id ? (m.avatar_color || "#8B7AFF") + "35" : "rgba(255,255,255,0.06)"}`,
+                        background: taskForm.assignee_id === m.user_id ? (m.avatar_color || "#8B7AFF") + "15" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
+                        border: `1px solid ${taskForm.assignee_id === m.user_id ? (m.avatar_color || "#8B7AFF") + "35" : theme.borderFaint}`,
                       }}
                     >
                       {m.avatar_url ? (
@@ -959,7 +959,7 @@ function KanbanBoard({ onBack, session }) {
                       )}
                       <span style={{
                         fontSize: 12, fontFamily: FONT,
-                        color: taskForm.assignee_id === m.user_id ? "#ffffffcc" : "#ffffff50",
+                        color: taskForm.assignee_id === m.user_id ? theme.text : theme.textDim,
                       }}>{m.display_name}</span>
                       {taskForm.assignee_id === m.user_id && (
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
@@ -969,14 +969,14 @@ function KanbanBoard({ onBack, session }) {
                     </motion.div>
                   ))}
                   {Object.keys(teamMembers).length === 0 && (
-                    <div style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff30", padding: "6px 0" }}>Keine Team-Mitglieder gefunden</div>
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint, padding: "6px 0" }}>Keine Team-Mitglieder gefunden</div>
                   )}
                 </div>
               </div>
 
               {/* Priority */}
               <div>
-                <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginBottom: 6 }}>Priorität</div>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6 }}>Priorität</div>
                 <div style={{ display: "flex", gap: 6 }}>
                   {["high", "medium", "low"].map(p => (
                     <motion.div key={p} whileTap={{ scale: 0.95 }}
@@ -984,9 +984,9 @@ function KanbanBoard({ onBack, session }) {
                       style={{
                         flex: 1, padding: "6px 0", borderRadius: 8, textAlign: "center", cursor: "pointer",
                         fontSize: 11, fontFamily: FONT,
-                        background: taskForm.priority === p ? priColors[p] + "20" : "rgba(255,255,255,0.03)",
-                        color: taskForm.priority === p ? priColors[p] : "#ffffff40",
-                        border: `1px solid ${taskForm.priority === p ? priColors[p] + "40" : "rgba(255,255,255,0.06)"}`,
+                        background: taskForm.priority === p ? priColors[p] + "20" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
+                        color: taskForm.priority === p ? priColors[p] : theme.textDim,
+                        border: `1px solid ${taskForm.priority === p ? priColors[p] + "40" : theme.borderFaint}`,
                       }}
                     >{p === "high" ? "Hoch" : p === "medium" ? "Mittel" : "Niedrig"}</motion.div>
                   ))}
@@ -995,7 +995,7 @@ function KanbanBoard({ onBack, session }) {
 
               {/* Column */}
               <div>
-                <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40", marginBottom: 6 }}>Spalte</div>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6 }}>Spalte</div>
                 <div style={{ display: "flex", gap: 6 }}>
                   {colEntries.map(c => (
                     <motion.div key={c.key} whileTap={{ scale: 0.95 }}
@@ -1003,9 +1003,9 @@ function KanbanBoard({ onBack, session }) {
                       style={{
                         flex: 1, padding: "6px 0", borderRadius: 8, textAlign: "center", cursor: "pointer",
                         fontSize: 11, fontFamily: FONT,
-                        background: taskForm.column_key === c.key ? c.color + "20" : "rgba(255,255,255,0.03)",
-                        color: taskForm.column_key === c.key ? c.color : "#ffffff40",
-                          border: `1px solid ${taskForm.column_key === c.key ? c.color + "40" : "rgba(255,255,255,0.06)"}`,
+                        background: taskForm.column_key === c.key ? c.color + "20" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
+                        color: taskForm.column_key === c.key ? c.color : theme.textDim,
+                          border: `1px solid ${taskForm.column_key === c.key ? c.color + "40" : theme.borderFaint}`,
                         }}
                       >{c.label}</motion.div>
                   ))}
@@ -1018,18 +1018,18 @@ function KanbanBoard({ onBack, session }) {
                   onClick={resetForm}
                   style={{
                     flex: 1, padding: "10px 0", borderRadius: 12, cursor: "pointer",
-                    background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
-                    fontSize: 13, fontFamily: FONT, color: "#ffffff60",
+                    background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`,
+                    fontSize: 13, fontFamily: FONT, color: theme.textSub,
                   }}
                 >Abbrechen</motion.button>
                 <motion.button whileTap={{ scale: 0.97 }}
                   onClick={editingTask ? updateTask : createTask}
                   style={{
                     flex: 1, padding: "10px 0", borderRadius: 12, cursor: "pointer",
-                    background: taskForm.title.trim() ? "rgba(139,122,255,0.15)" : "rgba(255,255,255,0.03)",
-                    border: `1px solid ${taskForm.title.trim() ? "rgba(139,122,255,0.3)" : "rgba(255,255,255,0.06)"}`,
+                    background: taskForm.title.trim() ? theme.accent + "25" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
+                    border: `1px solid ${taskForm.title.trim() ? theme.accent + "40" : theme.borderFaint}`,
                     fontSize: 13, fontFamily: FONT, fontWeight: 500,
-                    color: taskForm.title.trim() ? "#8B7AFF" : "#ffffff30",
+                    color: taskForm.title.trim() ? theme.accent : theme.textFaint,
                   }}
                 >{editingTask ? "Speichern" : "Task erstellen"}</motion.button>
               </div>
@@ -1060,8 +1060,8 @@ function KanbanBoard({ onBack, session }) {
               transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
               onClick={e => e.stopPropagation()}
               style={{
-                width: 360, background: "rgba(22, 22, 30, 0.96)",
-                backdropFilter: "blur(40px)", border: "1px solid rgba(255,255,255,0.1)",
+                width: 360, background: darkMode ? "rgba(22, 22, 30, 0.96)" : "rgba(255, 255, 255, 0.97)",
+                backdropFilter: "blur(40px)", border: `1px solid ${theme.border}`,
                 borderRadius: 20, padding: "28px 28px 22px", textAlign: "center",
               }}
             >
@@ -1076,10 +1076,10 @@ function KanbanBoard({ onBack, session }) {
                   <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="#EF4444" strokeWidth="1.5" fill="none" />
                 </svg>
               </div>
-              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: "#ffffffdd", marginBottom: 8 }}>
+              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>
                 Task löschen?
               </div>
-              <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffff50", marginBottom: 24, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 24, lineHeight: 1.5 }}>
                 „{confirmDelete.title}" wird unwiderruflich gelöscht.
               </div>
               <div style={{ display: "flex", gap: 10 }}>
@@ -1089,8 +1089,8 @@ function KanbanBoard({ onBack, session }) {
                   onClick={() => setConfirmDelete(null)}
                   style={{
                     flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer",
-                    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
-                    fontSize: 13, fontFamily: FONT, color: "#ffffff70", fontWeight: 500,
+                    background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`,
+                    fontSize: 13, fontFamily: FONT, color: theme.textSub, fontWeight: 500,
                   }}
                 >Abbrechen</motion.button>
                 <motion.button
@@ -4059,7 +4059,7 @@ export default function CircularMenu() {
         {/* KANBAN VIEW */}
         <AnimatePresence>
           {currentView === "kanban" && (
-            <KanbanBoard session={session} onBack={() => setCurrentView("dashboard")} />
+            <KanbanBoard session={session} onBack={() => setCurrentView("dashboard")} theme={theme} darkMode={darkMode} />
           )}
         </AnimatePresence>
 
