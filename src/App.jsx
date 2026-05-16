@@ -1617,7 +1617,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
         </div>
         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
           onClick={() => openNewEvent(selectedDay)}
-          style={{ cursor: "pointer", fontSize: 12, fontFamily: FONT, color: darkMode ? "#fff" : "#1a1a2e", padding: "8px 18px", borderRadius: 10, background: darkMode ? "rgba(139,122,255,0.25)" : "rgba(108,92,231,0.15)", border: `1px solid ${darkMode ? "rgba(139,122,255,0.35)" : "rgba(108,92,231,0.3)"}`, fontWeight: 500, letterSpacing: -0.2 }}>
+          style={{ cursor: "pointer", fontSize: 12, fontFamily: FONT, color: theme.accent, padding: "6px 14px", borderRadius: 20, background: theme.accent + "15", border: `1px solid ${theme.accent}30`, fontWeight: 500 }}>
           + Neuer Termin
         </motion.div>
       </div>
@@ -1638,7 +1638,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
         <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={navigateNext}
           style={{ cursor: "pointer", color: theme.textDim, fontSize: 18, fontFamily: FONT, padding: "4px 8px" }}>›</motion.div>
         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={goToday}
-          style={{ marginLeft: 8, cursor: "pointer", fontSize: 11, fontFamily: FONT, color: "#8B7AFF", padding: "4px 12px", borderRadius: 8, background: darkMode ? "rgba(139,122,255,0.1)" : "rgba(108,92,231,0.08)", border: `1px solid ${darkMode ? "rgba(139,122,255,0.2)" : "rgba(108,92,231,0.15)"}` }}>Heute</motion.div>
+          style={{ marginLeft: 8, cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 500, color: theme.accent, padding: "6px 14px", borderRadius: 20, background: theme.accent + "15", border: `1px solid ${theme.accent}30` }}>Heute</motion.div>
         <div style={{ flex: 1 }} />
         {/* View mode switcher */}
         <div style={{ display: "flex", gap: 2, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", borderRadius: 10, padding: 3, border: `1px solid ${theme.borderFaint}` }}>
@@ -2870,31 +2870,31 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin }) {
             {/* New Folder button */}
             <motion.div
               onClick={handleCreateFolder}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
               style={{
-                padding: "5px 10px", borderRadius: 8, cursor: "pointer",
-                fontSize: 11, fontFamily: FONT, color: "#ffffff60",
-                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                padding: "6px 14px", borderRadius: 20, cursor: "pointer",
+                fontSize: 12, fontFamily: FONT, fontWeight: 500, color: theme.textSub,
+                background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`,
                 display: "flex", alignItems: "center", gap: 5,
               }}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke="#ffffff50" strokeWidth="1.5" fill="none" />
-                <path d="M12 11v4M10 13h4" stroke="#ffffff50" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke={theme.textDim} strokeWidth="1.5" fill="none" />
+                <path d="M12 11v4M10 13h4" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round" />
               </svg>
-              Neuer Ordner
+              + Neuer Ordner
             </motion.div>
             {/* Upload button */}
             <motion.div
               onClick={() => fileInputRef.current?.click()}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
               style={{
-                padding: "5px 12px", borderRadius: 8, cursor: uploading ? "not-allowed" : "pointer",
-                fontSize: 11, fontFamily: FONT, color: uploading ? "#ffffff30" : "#8B7AFF",
-                background: uploading ? "rgba(255,255,255,0.02)" : "rgba(139,122,255,0.1)",
-                border: `1px solid ${uploading ? "rgba(255,255,255,0.05)" : "rgba(139,122,255,0.2)"}`,
+                padding: "6px 14px", borderRadius: 20, cursor: uploading ? "not-allowed" : "pointer",
+                fontSize: 12, fontFamily: FONT, fontWeight: 500, color: uploading ? theme.textFaint : theme.accent,
+                background: uploading ? theme.hoverBg : theme.accent + "15",
+                border: `1px solid ${uploading ? theme.borderFaint : theme.accent + "30"}`,
                 display: "flex", alignItems: "center", gap: 5,
                 opacity: uploading ? 0.5 : 1,
               }}
