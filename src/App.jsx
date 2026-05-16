@@ -4278,7 +4278,7 @@ export default function CircularMenu() {
                 animate={{ opacity: [0.5, 1, 0.5] }}
                 transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                 style={{
-                  fontSize: 13, fontFamily: FONT, color: "#ffffff50",
+                  fontSize: 13, fontFamily: FONT, color: darkMode ? "#ffffff50" : "#1a1a2e50",
                   letterSpacing: 2, marginBottom: 24, fontWeight: 400,
                 }}
               >LISTENING...</motion.div>
@@ -4292,7 +4292,7 @@ export default function CircularMenu() {
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     style={{
-                      fontSize: 15, fontFamily: FONT, color: "#ffffffAA",
+                      fontSize: 15, fontFamily: FONT, color: darkMode ? "#ffffffAA" : "#1a1a2eCC",
                       fontWeight: 400, textAlign: "center", maxWidth: 400,
                       marginTop: 28, lineHeight: 1.5, padding: "0 20px",
                     }}
@@ -4301,7 +4301,7 @@ export default function CircularMenu() {
               </AnimatePresence>
 
               <div style={{
-                fontSize: 11, fontFamily: FONT, color: "#ffffff25",
+                fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40",
                 letterSpacing: 1.5, marginTop: 20,
               }}>CLICK TO SEND</div>
             </motion.div>
