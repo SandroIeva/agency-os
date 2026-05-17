@@ -6560,7 +6560,7 @@ export default function CircularMenu() {
                             // Refresh team list
                             const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", userOrg.id).eq("status", "pending");
                             setTeamInvites(invites || []);
-                            alert(appLanguage === "de" ? `Einladung an ${email} gesendet! Token: ${inv.token}` : `Invite sent to ${email}! Token: ${inv.token}`);
+                            // Token is now visible in the pending invites list with copy button
                           } catch (e) {
                             console.error("[Invite]", e);
                             alert(e.message || "Failed to send invite");
@@ -6641,16 +6641,32 @@ export default function CircularMenu() {
                               <path d="M22 6l-10 7L2 6" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" />
                             </svg>
                           </div>
-                          <div style={{ flex: 1 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>{inv.email}</div>
-                            <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>
-                              Token: {inv.token?.slice(0, 12)}...
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+                              <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {inv.token}
+                              </div>
+                              <motion.button
+                                whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                                onClick={() => {
+                                  navigator.clipboard.writeText(inv.token);
+                                  const btn = document.getElementById(`copy-btn-${inv.id}`);
+                                  if (btn) { btn.textContent = "✓"; setTimeout(() => { btn.textContent = "⧉"; }, 1500); }
+                                }}
+                                id={`copy-btn-${inv.id}`}
+                                style={{
+                                  background: "none", border: `1px solid ${theme.borderFaint}`, borderRadius: 6,
+                                  width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center",
+                                  fontSize: 12, color: theme.textDim, cursor: "pointer", flexShrink: 0,
+                                }}
+                              >⧉</motion.button>
                             </div>
                           </div>
                           <div style={{
                             padding: "3px 10px", borderRadius: 8,
                             background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.15)",
-                            fontSize: 11, fontFamily: FONT, color: "#F59E0B",
+                            fontSize: 11, fontFamily: FONT, color: "#F59E0B", flexShrink: 0,
                           }}>Pending</div>
                         </div>
                       ))}
