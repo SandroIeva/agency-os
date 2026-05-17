@@ -3544,10 +3544,77 @@ export default function CircularMenu() {
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
 
+  // Organization / onboarding state
+  const [userOrg, setUserOrg] = useState(null);            // current org the user belongs to
+  const [orgLoading, setOrgLoading] = useState(true);       // loading org check
+  const [onboardingStep, setOnboardingStep] = useState(null); // null = skip, "choose" | "create" | "join"
+  const [onboardingError, setOnboardingError] = useState(null);
+  const [orgMembers, setOrgMembers] = useState([]);          // team members for chat etc.
+
   // Derive user info from session (Google profile) or fallback to localStorage
   const userName = session?.user?.user_metadata?.full_name || session?.user?.user_metadata?.name || localStorage.getItem("agencyos-name") || "";
   const userAvatar = session?.user?.user_metadata?.avatar_url || null;
   const userEmail = session?.user?.email || "";
+
+  // ── Auto-create profile + check org membership after login ──
+  useEffect(() => {
+    if (!session?.user) { setOrgLoading(false); return; }
+    const uid = session.user.id;
+    const meta = session.user.user_metadata || {};
+
+    (async () => {
+      try {
+        // 1. Upsert profile from Google data
+        const profileData = {
+          id: uid,
+          display_name: meta.full_name || meta.name || session.user.email?.split("@")[0] || "User",
+          avatar_url: meta.avatar_url || meta.picture || null,
+          email: session.user.email,
+          initials: (meta.full_name || meta.name || "U").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase(),
+        };
+        await supabase.from("profiles").upsert(profileData, { onConflict: "id" });
+
+        // 2. Check if user is in any org
+        const { data: memberships } = await supabase
+          .from("org_members")
+          .select("org_id, role, organizations(id, name, slug, logo_url, brand_color)")
+          .eq("user_id", uid);
+
+        if (memberships && memberships.length > 0) {
+          // User has an org — use the first one (multi-org support later)
+          const org = memberships[0].organizations;
+          setUserOrg(org);
+          setOnboardingStep(null);
+
+          // Load org members for chat etc.
+          const { data: members } = await supabase
+            .from("org_members")
+            .select("user_id, role, profiles(display_name, avatar_url, email, initials, status)")
+            .eq("org_id", org.id);
+          setOrgMembers(members || []);
+        } else {
+          // No org — check for pending invitations
+          const { data: invites } = await supabase
+            .from("invitations")
+            .select("*, organizations(name, slug)")
+            .eq("email", session.user.email)
+            .eq("status", "pending");
+
+          if (invites && invites.length > 0) {
+            // Has pending invite — show join option with invite info
+            setOnboardingStep("choose");
+          } else {
+            setOnboardingStep("choose");
+          }
+        }
+      } catch (e) {
+        console.warn("[Onboarding] Error:", e.message);
+        setOnboardingStep("choose");
+      } finally {
+        setOrgLoading(false);
+      }
+    })();
+  }, [session?.user?.id]);
 
   // ── Smart Google Token Management ──────────────────────────────
   // Stores the latest valid token in a ref for instant synchronous access
@@ -4624,6 +4691,387 @@ export default function CircularMenu() {
         )}
       </AnimatePresence>
 
+
+      {/* ONBOARDING SCREEN — after login, before dashboard */}
+      <AnimatePresence>
+        {!authLoading && session && !orgLoading && onboardingStep && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, filter: "blur(8px)", scale: 0.97 }}
+            transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
+            style={{
+              position: "absolute", inset: 0, zIndex: 99,
+              background: "#111117",
+              display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center",
+            }}
+          >
+            <DotGrid darkMode={true} />
+            <AnimatedBlob />
+            <div style={{ position: "relative", zIndex: 2, display: "flex", flexDirection: "column", alignItems: "center", maxWidth: 480, width: "100%", padding: "0 24px" }}>
+
+              {/* ── Step: Choose ── */}
+              {onboardingStep === "choose" && (<>
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1, duration: 0.5 }}
+                  style={{ fontSize: 13, fontFamily: FONT, color: "#ffffff40", marginBottom: 8 }}
+                >
+                  {appLanguage === "de" ? `Hallo, ${userName.split(" ")[0]}` : `Hi, ${userName.split(" ")[0]}`} 👋
+                </motion.div>
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2, duration: 0.5 }}
+                  style={{ fontSize: 26, fontWeight: 300, color: "#ffffffcc", fontFamily: FONT, letterSpacing: -0.5, marginBottom: 8, textAlign: "center" }}
+                >
+                  {appLanguage === "de" ? "Wie möchtest du starten?" : "How would you like to start?"}
+                </motion.div>
+                <motion.div
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                  transition={{ delay: 0.3, duration: 0.4 }}
+                  style={{ fontSize: 14, color: "#ffffff50", fontFamily: FONT, marginBottom: 40, textAlign: "center" }}
+                >
+                  {appLanguage === "de" ? "Erstelle einen neuen Workspace oder tritt einem bestehenden bei." : "Create a new workspace or join an existing one."}
+                </motion.div>
+
+                <div style={{ display: "flex", gap: 16, width: "100%" }}>
+                  {/* Create workspace */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.35, duration: 0.4 }}
+                    whileHover={{ scale: 1.02, borderColor: "rgba(139, 122, 255, 0.3)" }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setOnboardingStep("create")}
+                    style={{
+                      flex: 1, padding: "28px 24px", borderRadius: 20, cursor: "pointer",
+                      background: "rgba(139, 122, 255, 0.06)", border: "1px solid rgba(139, 122, 255, 0.15)",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 14,
+                      transition: "all 0.25s ease",
+                    }}
+                  >
+                    <div style={{
+                      width: 48, height: 48, borderRadius: 14,
+                      background: "rgba(139, 122, 255, 0.12)", border: "1px solid rgba(139, 122, 255, 0.2)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 5v14M5 12h14" stroke="#8B7AFF" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 500, color: "#ffffffdd", fontFamily: FONT }}>
+                      {appLanguage === "de" ? "Workspace erstellen" : "Create Workspace"}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#ffffff40", fontFamily: FONT, textAlign: "center", lineHeight: 1.5 }}>
+                      {appLanguage === "de" ? "Erstelle dein eigenes Team und lade Mitglieder ein" : "Set up your own team and invite members"}
+                    </div>
+                  </motion.div>
+
+                  {/* Join workspace */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4, duration: 0.4 }}
+                    whileHover={{ scale: 1.02, borderColor: "rgba(255,255,255,0.15)" }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setOnboardingStep("join")}
+                    style={{
+                      flex: 1, padding: "28px 24px", borderRadius: 20, cursor: "pointer",
+                      background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 14,
+                      transition: "all 0.25s ease",
+                    }}
+                  >
+                    <div style={{
+                      width: 48, height: 48, borderRadius: 14,
+                      background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                        <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="#ffffff70" strokeWidth="1.8" strokeLinecap="round" />
+                        <circle cx="8.5" cy="7" r="4" stroke="#ffffff70" strokeWidth="1.8" />
+                        <path d="M20 8v6M17 11h6" stroke="#ffffff70" strokeWidth="1.8" strokeLinecap="round" />
+                      </svg>
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 500, color: "#ffffffdd", fontFamily: FONT }}>
+                      {appLanguage === "de" ? "Einladung annehmen" : "Join Workspace"}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#ffffff40", fontFamily: FONT, textAlign: "center", lineHeight: 1.5 }}>
+                      {appLanguage === "de" ? "Tritt einem bestehenden Team mit Einladungscode bei" : "Join an existing team with an invite code"}
+                    </div>
+                  </motion.div>
+                </div>
+              </>)}
+
+              {/* ── Step: Create Workspace ── */}
+              {onboardingStep === "create" && (() => {
+                const [wsName, setWsName] = React.useState("");
+                const [creating, setCreating] = React.useState(false);
+
+                const handleCreate = async () => {
+                  if (!wsName.trim() || creating) return;
+                  setCreating(true);
+                  setOnboardingError(null);
+                  try {
+                    const slug = wsName.trim().toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").slice(0, 40);
+                    // Create org
+                    const { data: org, error: orgErr } = await supabase
+                      .from("organizations")
+                      .insert({ name: wsName.trim(), slug: slug + "-" + Date.now().toString(36), created_by: session.user.id })
+                      .select()
+                      .single();
+                    if (orgErr) throw orgErr;
+                    // Add creator as admin
+                    const { error: memErr } = await supabase
+                      .from("org_members")
+                      .insert({ org_id: org.id, user_id: session.user.id, role: "admin" });
+                    if (memErr) throw memErr;
+                    // Done!
+                    setUserOrg(org);
+                    setOrgMembers([{ user_id: session.user.id, role: "admin", profiles: { display_name: userName, avatar_url: userAvatar, email: userEmail, initials: userName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase(), status: "online" } }]);
+                    setOnboardingStep(null);
+                  } catch (e) {
+                    console.error("[Onboarding] Create org failed:", e);
+                    setOnboardingError(appLanguage === "de" ? "Fehler beim Erstellen. Bitte versuche es erneut." : "Failed to create workspace. Please try again.");
+                    setCreating(false);
+                  }
+                };
+
+                return (<>
+                  <motion.div
+                    initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.3 }}
+                    onClick={() => { setOnboardingStep("choose"); setOnboardingError(null); }}
+                    style={{ alignSelf: "flex-start", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, marginBottom: 24 }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                      <path d="M15 18l-6-6 6-6" stroke="#ffffff50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff50" }}>{appLanguage === "de" ? "Zurück" : "Back"}</span>
+                  </motion.div>
+
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1, duration: 0.4 }}
+                    style={{ fontSize: 24, fontWeight: 300, color: "#ffffffcc", fontFamily: FONT, letterSpacing: -0.5, marginBottom: 8 }}
+                  >
+                    {appLanguage === "de" ? "Workspace erstellen" : "Create your Workspace"}
+                  </motion.div>
+                  <motion.div
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                    transition={{ delay: 0.15, duration: 0.3 }}
+                    style={{ fontSize: 14, color: "#ffffff45", fontFamily: FONT, marginBottom: 32 }}
+                  >
+                    {appLanguage === "de" ? "Gib deinem Workspace einen Namen" : "Give your workspace a name"}
+                  </motion.div>
+
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2, duration: 0.3 }}
+                    style={{ width: "100%", maxWidth: 360 }}
+                  >
+                    <input
+                      autoFocus
+                      value={wsName}
+                      onChange={e => setWsName(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") handleCreate(); }}
+                      placeholder={appLanguage === "de" ? "z.B. Meine Agentur" : "e.g. My Agency"}
+                      style={{
+                        width: "100%", padding: "14px 18px", borderRadius: 14,
+                        background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+                        color: "#ffffffdd", fontSize: 15, fontFamily: FONT, outline: "none",
+                        caretColor: "#8B7AFF",
+                      }}
+                    />
+                    <motion.button
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                      onClick={handleCreate}
+                      disabled={!wsName.trim() || creating}
+                      style={{
+                        width: "100%", marginTop: 16, padding: "14px 24px", borderRadius: 14,
+                        background: wsName.trim() ? "#8B7AFF" : "rgba(255,255,255,0.06)",
+                        border: "none", color: wsName.trim() ? "#fff" : "#ffffff30",
+                        fontSize: 14, fontWeight: 500, fontFamily: FONT, cursor: wsName.trim() ? "pointer" : "default",
+                        transition: "all 0.25s ease", opacity: creating ? 0.6 : 1,
+                      }}
+                    >
+                      {creating
+                        ? (appLanguage === "de" ? "Wird erstellt..." : "Creating...")
+                        : (appLanguage === "de" ? "Workspace erstellen" : "Create Workspace")}
+                    </motion.button>
+                    {onboardingError && (
+                      <div style={{ marginTop: 12, fontSize: 13, color: "#E84393", fontFamily: FONT, textAlign: "center" }}>{onboardingError}</div>
+                    )}
+                  </motion.div>
+                </>);
+              })()}
+
+              {/* ── Step: Join Workspace ── */}
+              {onboardingStep === "join" && (() => {
+                const [inviteCode, setInviteCode] = React.useState("");
+                const [joining, setJoining] = React.useState(false);
+                const [pendingInvites, setPendingInvites] = React.useState([]);
+
+                // Load pending invites for this email
+                React.useEffect(() => {
+                  if (!session?.user?.email) return;
+                  supabase
+                    .from("invitations")
+                    .select("*, organizations(id, name, slug)")
+                    .eq("email", session.user.email)
+                    .eq("status", "pending")
+                    .then(({ data }) => { if (data) setPendingInvites(data); });
+                }, []);
+
+                const acceptInvite = async (invite) => {
+                  setJoining(true);
+                  setOnboardingError(null);
+                  try {
+                    // Add user to org
+                    const { error: memErr } = await supabase
+                      .from("org_members")
+                      .insert({ org_id: invite.org_id, user_id: session.user.id, role: invite.role || "member" });
+                    if (memErr) throw memErr;
+                    // Mark invitation as accepted
+                    await supabase.from("invitations").update({ status: "accepted" }).eq("id", invite.id);
+                    // Load org
+                    const { data: org } = await supabase.from("organizations").select("*").eq("id", invite.org_id).single();
+                    setUserOrg(org);
+                    setOnboardingStep(null);
+                  } catch (e) {
+                    console.error("[Onboarding] Accept invite failed:", e);
+                    setOnboardingError(appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join workspace.");
+                    setJoining(false);
+                  }
+                };
+
+                const joinByCode = async () => {
+                  if (!inviteCode.trim() || joining) return;
+                  setJoining(true);
+                  setOnboardingError(null);
+                  try {
+                    const { data: invite, error } = await supabase
+                      .from("invitations")
+                      .select("*, organizations(id, name, slug)")
+                      .eq("token", inviteCode.trim())
+                      .eq("status", "pending")
+                      .single();
+                    if (error || !invite) {
+                      setOnboardingError(appLanguage === "de" ? "Ungültiger oder abgelaufener Code." : "Invalid or expired invite code.");
+                      setJoining(false);
+                      return;
+                    }
+                    await acceptInvite(invite);
+                  } catch (e) {
+                    setOnboardingError(appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join workspace.");
+                    setJoining(false);
+                  }
+                };
+
+                return (<>
+                  <motion.div
+                    initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.3 }}
+                    onClick={() => { setOnboardingStep("choose"); setOnboardingError(null); }}
+                    style={{ alignSelf: "flex-start", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, marginBottom: 24 }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                      <path d="M15 18l-6-6 6-6" stroke="#ffffff50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff50" }}>{appLanguage === "de" ? "Zurück" : "Back"}</span>
+                  </motion.div>
+
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1, duration: 0.4 }}
+                    style={{ fontSize: 24, fontWeight: 300, color: "#ffffffcc", fontFamily: FONT, letterSpacing: -0.5, marginBottom: 8 }}
+                  >
+                    {appLanguage === "de" ? "Workspace beitreten" : "Join a Workspace"}
+                  </motion.div>
+
+                  {/* Pending invitations */}
+                  {pendingInvites.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.15, duration: 0.3 }}
+                      style={{ width: "100%", maxWidth: 360, marginTop: 20, marginBottom: 24 }}
+                    >
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff45", marginBottom: 10, letterSpacing: 0.5, textTransform: "uppercase" }}>
+                        {appLanguage === "de" ? "Offene Einladungen" : "Pending Invitations"}
+                      </div>
+                      {pendingInvites.map(inv => (
+                        <motion.div
+                          key={inv.id}
+                          whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
+                          onClick={() => !joining && acceptInvite(inv)}
+                          style={{
+                            padding: "14px 18px", borderRadius: 14, marginBottom: 8, cursor: "pointer",
+                            background: "rgba(139, 122, 255, 0.08)", border: "1px solid rgba(139, 122, 255, 0.15)",
+                            display: "flex", alignItems: "center", justifyContent: "space-between",
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: 14, fontWeight: 500, color: "#ffffffdd", fontFamily: FONT }}>{inv.organizations?.name}</div>
+                            <div style={{ fontSize: 11, color: "#ffffff40", fontFamily: FONT, marginTop: 2 }}>
+                              {appLanguage === "de" ? `Eingeladen als ${inv.role}` : `Invited as ${inv.role}`}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: 12, fontFamily: FONT, color: "#8B7AFF", fontWeight: 500 }}>
+                            {appLanguage === "de" ? "Beitreten →" : "Join →"}
+                          </div>
+                        </motion.div>
+                      ))}
+                    </motion.div>
+                  )}
+
+                  {/* Manual code input */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2, duration: 0.3 }}
+                    style={{ width: "100%", maxWidth: 360, marginTop: pendingInvites.length > 0 ? 0 : 24 }}
+                  >
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff45", marginBottom: 10, letterSpacing: 0.5, textTransform: "uppercase" }}>
+                      {appLanguage === "de" ? "Einladungscode eingeben" : "Enter Invite Code"}
+                    </div>
+                    <input
+                      autoFocus={pendingInvites.length === 0}
+                      value={inviteCode}
+                      onChange={e => setInviteCode(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") joinByCode(); }}
+                      placeholder={appLanguage === "de" ? "Code einfügen..." : "Paste invite code..."}
+                      style={{
+                        width: "100%", padding: "14px 18px", borderRadius: 14,
+                        background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+                        color: "#ffffffdd", fontSize: 15, fontFamily: FONT, outline: "none",
+                        caretColor: "#8B7AFF",
+                      }}
+                    />
+                    <motion.button
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                      onClick={joinByCode}
+                      disabled={!inviteCode.trim() || joining}
+                      style={{
+                        width: "100%", marginTop: 16, padding: "14px 24px", borderRadius: 14,
+                        background: inviteCode.trim() ? "#8B7AFF" : "rgba(255,255,255,0.06)",
+                        border: "none", color: inviteCode.trim() ? "#fff" : "#ffffff30",
+                        fontSize: 14, fontWeight: 500, fontFamily: FONT, cursor: inviteCode.trim() ? "pointer" : "default",
+                        transition: "all 0.25s ease", opacity: joining ? 0.6 : 1,
+                      }}
+                    >
+                      {joining
+                        ? (appLanguage === "de" ? "Wird beigetreten..." : "Joining...")
+                        : (appLanguage === "de" ? "Beitreten" : "Join Workspace")}
+                    </motion.button>
+                    {onboardingError && (
+                      <div style={{ marginTop: 12, fontSize: 13, color: "#E84393", fontFamily: FONT, textAlign: "center" }}>{onboardingError}</div>
+                    )}
+                  </motion.div>
+                </>);
+              })()}
+
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Weather — on dashboard & files */}
       <AnimatePresence>
