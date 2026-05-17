@@ -5895,7 +5895,7 @@ export default function CircularMenu() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
             style={{
-              position: "absolute", inset: 0, zIndex: 30,
+              position: "fixed", inset: 0, zIndex: 30,
               background: theme.bg,
               display: "flex", flexDirection: "column",
               overflowY: "auto",
