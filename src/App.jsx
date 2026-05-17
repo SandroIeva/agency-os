@@ -4463,7 +4463,17 @@ export default function CircularMenu() {
 
   const handleCenterClick = () => {
     if (!menuOpen) { setMenuOpen(true); setSubOpen(false); setSubHover(-1); try { sounds.menuOpen(); } catch(e) {} return; }
-    if (menuOpen && !subOpen) { setSubOpen(true); setSubHover(-1); try { sounds.subOpen(); } catch(e) {} return; }
+    if (menuOpen && !subOpen) {
+      // Direct navigation for items that don't need a submenu
+      const item = activeItems[activeIndex];
+      if (item?.id === "chat") {
+        try { sounds.subSelect(); } catch(e) {}
+        setMenuOpen(false); setSubHover(-1);
+        setCurrentView("chat");
+        return;
+      }
+      setSubOpen(true); setSubHover(-1); try { sounds.subOpen(); } catch(e) {} return;
+    }
     if (subOpen) { setSubOpen(false); try { sounds.menuClose(); } catch(e) {} return; }
   };
 
