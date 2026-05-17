@@ -3550,6 +3550,22 @@ export default function CircularMenu() {
   const [onboardingStep, setOnboardingStep] = useState(null); // null = skip, "choose" | "create" | "join"
   const [onboardingError, setOnboardingError] = useState(null);
   const [orgMembers, setOrgMembers] = useState([]);          // team members for chat etc.
+  const [wsName, setWsName] = useState("");                  // workspace name input
+  const [wsCreating, setWsCreating] = useState(false);       // creating workspace loading
+  const [inviteCode, setInviteCode] = useState("");          // invite code input
+  const [joining, setJoining] = useState(false);             // joining workspace loading
+  const [pendingInvites, setPendingInvites] = useState([]);  // pending invitations for user
+
+  // Load pending invites when user goes to "join" step
+  useEffect(() => {
+    if (onboardingStep !== "join" || !session?.user?.email) return;
+    supabase
+      .from("invitations")
+      .select("*, organizations(id, name, slug)")
+      .eq("email", session.user.email)
+      .eq("status", "pending")
+      .then(({ data }) => { if (data) setPendingInvites(data); });
+  }, [onboardingStep, session?.user?.email]);
 
   // Derive user info from session (Google profile) or fallback to localStorage
   const userName = session?.user?.user_metadata?.full_name || session?.user?.user_metadata?.name || localStorage.getItem("agencyos-name") || "";
@@ -4803,44 +4819,11 @@ export default function CircularMenu() {
               </>)}
 
               {/* ── Step: Create Workspace ── */}
-              {onboardingStep === "create" && (() => {
-                const [wsName, setWsName] = React.useState("");
-                const [creating, setCreating] = React.useState(false);
-
-                const handleCreate = async () => {
-                  if (!wsName.trim() || creating) return;
-                  setCreating(true);
-                  setOnboardingError(null);
-                  try {
-                    const slug = wsName.trim().toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").slice(0, 40);
-                    // Create org
-                    const { data: org, error: orgErr } = await supabase
-                      .from("organizations")
-                      .insert({ name: wsName.trim(), slug: slug + "-" + Date.now().toString(36), created_by: session.user.id })
-                      .select()
-                      .single();
-                    if (orgErr) throw orgErr;
-                    // Add creator as admin
-                    const { error: memErr } = await supabase
-                      .from("org_members")
-                      .insert({ org_id: org.id, user_id: session.user.id, role: "admin" });
-                    if (memErr) throw memErr;
-                    // Done!
-                    setUserOrg(org);
-                    setOrgMembers([{ user_id: session.user.id, role: "admin", profiles: { display_name: userName, avatar_url: userAvatar, email: userEmail, initials: userName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase(), status: "online" } }]);
-                    setOnboardingStep(null);
-                  } catch (e) {
-                    console.error("[Onboarding] Create org failed:", e);
-                    setOnboardingError(appLanguage === "de" ? "Fehler beim Erstellen. Bitte versuche es erneut." : "Failed to create workspace. Please try again.");
-                    setCreating(false);
-                  }
-                };
-
-                return (<>
+              {onboardingStep === "create" && (<>
                   <motion.div
                     initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.3 }}
-                    onClick={() => { setOnboardingStep("choose"); setOnboardingError(null); }}
+                    onClick={() => { setOnboardingStep("choose"); setOnboardingError(null); setWsName(""); }}
                     style={{ alignSelf: "flex-start", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, marginBottom: 24 }}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -4873,7 +4856,18 @@ export default function CircularMenu() {
                       autoFocus
                       value={wsName}
                       onChange={e => setWsName(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter") handleCreate(); }}
+                      onKeyDown={async e => {
+                        if (e.key !== "Enter" || !wsName.trim() || wsCreating) return;
+                        setWsCreating(true); setOnboardingError(null);
+                        try {
+                          const slug = wsName.trim().toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").slice(0, 40);
+                          const { data: org, error: orgErr } = await supabase.from("organizations").insert({ name: wsName.trim(), slug: slug + "-" + Date.now().toString(36), created_by: session.user.id }).select().single();
+                          if (orgErr) throw orgErr;
+                          const { error: memErr } = await supabase.from("org_members").insert({ org_id: org.id, user_id: session.user.id, role: "admin" });
+                          if (memErr) throw memErr;
+                          setUserOrg(org); setOnboardingStep(null); setWsName("");
+                        } catch (err) { setOnboardingError(appLanguage === "de" ? "Fehler beim Erstellen." : "Failed to create workspace."); setWsCreating(false); }
+                      }}
                       placeholder={appLanguage === "de" ? "z.B. Meine Agentur" : "e.g. My Agency"}
                       style={{
                         width: "100%", padding: "14px 18px", borderRadius: 14,
@@ -4884,17 +4878,28 @@ export default function CircularMenu() {
                     />
                     <motion.button
                       whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                      onClick={handleCreate}
-                      disabled={!wsName.trim() || creating}
+                      onClick={async () => {
+                        if (!wsName.trim() || wsCreating) return;
+                        setWsCreating(true); setOnboardingError(null);
+                        try {
+                          const slug = wsName.trim().toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").slice(0, 40);
+                          const { data: org, error: orgErr } = await supabase.from("organizations").insert({ name: wsName.trim(), slug: slug + "-" + Date.now().toString(36), created_by: session.user.id }).select().single();
+                          if (orgErr) throw orgErr;
+                          const { error: memErr } = await supabase.from("org_members").insert({ org_id: org.id, user_id: session.user.id, role: "admin" });
+                          if (memErr) throw memErr;
+                          setUserOrg(org); setOnboardingStep(null); setWsName("");
+                        } catch (err) { console.error("[Onboarding]", err); setOnboardingError(appLanguage === "de" ? "Fehler beim Erstellen." : "Failed to create workspace."); setWsCreating(false); }
+                      }}
+                      disabled={!wsName.trim() || wsCreating}
                       style={{
                         width: "100%", marginTop: 16, padding: "14px 24px", borderRadius: 14,
                         background: wsName.trim() ? "#8B7AFF" : "rgba(255,255,255,0.06)",
                         border: "none", color: wsName.trim() ? "#fff" : "#ffffff30",
                         fontSize: 14, fontWeight: 500, fontFamily: FONT, cursor: wsName.trim() ? "pointer" : "default",
-                        transition: "all 0.25s ease", opacity: creating ? 0.6 : 1,
+                        transition: "all 0.25s ease", opacity: wsCreating ? 0.6 : 1,
                       }}
                     >
-                      {creating
+                      {wsCreating
                         ? (appLanguage === "de" ? "Wird erstellt..." : "Creating...")
                         : (appLanguage === "de" ? "Workspace erstellen" : "Create Workspace")}
                     </motion.button>
@@ -4902,76 +4907,14 @@ export default function CircularMenu() {
                       <div style={{ marginTop: 12, fontSize: 13, color: "#E84393", fontFamily: FONT, textAlign: "center" }}>{onboardingError}</div>
                     )}
                   </motion.div>
-                </>);
-              })()}
+              </>)}
 
               {/* ── Step: Join Workspace ── */}
-              {onboardingStep === "join" && (() => {
-                const [inviteCode, setInviteCode] = React.useState("");
-                const [joining, setJoining] = React.useState(false);
-                const [pendingInvites, setPendingInvites] = React.useState([]);
-
-                // Load pending invites for this email
-                React.useEffect(() => {
-                  if (!session?.user?.email) return;
-                  supabase
-                    .from("invitations")
-                    .select("*, organizations(id, name, slug)")
-                    .eq("email", session.user.email)
-                    .eq("status", "pending")
-                    .then(({ data }) => { if (data) setPendingInvites(data); });
-                }, []);
-
-                const acceptInvite = async (invite) => {
-                  setJoining(true);
-                  setOnboardingError(null);
-                  try {
-                    // Add user to org
-                    const { error: memErr } = await supabase
-                      .from("org_members")
-                      .insert({ org_id: invite.org_id, user_id: session.user.id, role: invite.role || "member" });
-                    if (memErr) throw memErr;
-                    // Mark invitation as accepted
-                    await supabase.from("invitations").update({ status: "accepted" }).eq("id", invite.id);
-                    // Load org
-                    const { data: org } = await supabase.from("organizations").select("*").eq("id", invite.org_id).single();
-                    setUserOrg(org);
-                    setOnboardingStep(null);
-                  } catch (e) {
-                    console.error("[Onboarding] Accept invite failed:", e);
-                    setOnboardingError(appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join workspace.");
-                    setJoining(false);
-                  }
-                };
-
-                const joinByCode = async () => {
-                  if (!inviteCode.trim() || joining) return;
-                  setJoining(true);
-                  setOnboardingError(null);
-                  try {
-                    const { data: invite, error } = await supabase
-                      .from("invitations")
-                      .select("*, organizations(id, name, slug)")
-                      .eq("token", inviteCode.trim())
-                      .eq("status", "pending")
-                      .single();
-                    if (error || !invite) {
-                      setOnboardingError(appLanguage === "de" ? "Ungültiger oder abgelaufener Code." : "Invalid or expired invite code.");
-                      setJoining(false);
-                      return;
-                    }
-                    await acceptInvite(invite);
-                  } catch (e) {
-                    setOnboardingError(appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join workspace.");
-                    setJoining(false);
-                  }
-                };
-
-                return (<>
+              {onboardingStep === "join" && (<>
                   <motion.div
                     initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.3 }}
-                    onClick={() => { setOnboardingStep("choose"); setOnboardingError(null); }}
+                    onClick={() => { setOnboardingStep("choose"); setOnboardingError(null); setInviteCode(""); }}
                     style={{ alignSelf: "flex-start", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, marginBottom: 24 }}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -5002,7 +4945,17 @@ export default function CircularMenu() {
                         <motion.div
                           key={inv.id}
                           whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
-                          onClick={() => !joining && acceptInvite(inv)}
+                          onClick={async () => {
+                            if (joining) return;
+                            setJoining(true); setOnboardingError(null);
+                            try {
+                              const { error: memErr } = await supabase.from("org_members").insert({ org_id: inv.org_id, user_id: session.user.id, role: inv.role || "member" });
+                              if (memErr) throw memErr;
+                              await supabase.from("invitations").update({ status: "accepted" }).eq("id", inv.id);
+                              const { data: org } = await supabase.from("organizations").select("*").eq("id", inv.org_id).single();
+                              setUserOrg(org); setOnboardingStep(null);
+                            } catch (e) { setOnboardingError(appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join."); setJoining(false); }
+                          }}
                           style={{
                             padding: "14px 18px", borderRadius: 14, marginBottom: 8, cursor: "pointer",
                             background: "rgba(139, 122, 255, 0.08)", border: "1px solid rgba(139, 122, 255, 0.15)",
@@ -5036,7 +4989,19 @@ export default function CircularMenu() {
                       autoFocus={pendingInvites.length === 0}
                       value={inviteCode}
                       onChange={e => setInviteCode(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter") joinByCode(); }}
+                      onKeyDown={async e => {
+                        if (e.key !== "Enter" || !inviteCode.trim() || joining) return;
+                        setJoining(true); setOnboardingError(null);
+                        try {
+                          const { data: inv, error } = await supabase.from("invitations").select("*, organizations(id, name, slug)").eq("token", inviteCode.trim()).eq("status", "pending").single();
+                          if (error || !inv) { setOnboardingError(appLanguage === "de" ? "Ungültiger oder abgelaufener Code." : "Invalid or expired invite code."); setJoining(false); return; }
+                          const { error: memErr } = await supabase.from("org_members").insert({ org_id: inv.org_id, user_id: session.user.id, role: inv.role || "member" });
+                          if (memErr) throw memErr;
+                          await supabase.from("invitations").update({ status: "accepted" }).eq("id", inv.id);
+                          const { data: org } = await supabase.from("organizations").select("*").eq("id", inv.org_id).single();
+                          setUserOrg(org); setOnboardingStep(null); setInviteCode("");
+                        } catch (err) { setOnboardingError(appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join."); setJoining(false); }
+                      }}
                       placeholder={appLanguage === "de" ? "Code einfügen..." : "Paste invite code..."}
                       style={{
                         width: "100%", padding: "14px 18px", borderRadius: 14,
@@ -5047,7 +5012,19 @@ export default function CircularMenu() {
                     />
                     <motion.button
                       whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                      onClick={joinByCode}
+                      onClick={async () => {
+                        if (!inviteCode.trim() || joining) return;
+                        setJoining(true); setOnboardingError(null);
+                        try {
+                          const { data: inv, error } = await supabase.from("invitations").select("*, organizations(id, name, slug)").eq("token", inviteCode.trim()).eq("status", "pending").single();
+                          if (error || !inv) { setOnboardingError(appLanguage === "de" ? "Ungültiger oder abgelaufener Code." : "Invalid or expired invite code."); setJoining(false); return; }
+                          const { error: memErr } = await supabase.from("org_members").insert({ org_id: inv.org_id, user_id: session.user.id, role: inv.role || "member" });
+                          if (memErr) throw memErr;
+                          await supabase.from("invitations").update({ status: "accepted" }).eq("id", inv.id);
+                          const { data: org } = await supabase.from("organizations").select("*").eq("id", inv.org_id).single();
+                          setUserOrg(org); setOnboardingStep(null); setInviteCode("");
+                        } catch (err) { setOnboardingError(appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join."); setJoining(false); }
+                      }}
                       disabled={!inviteCode.trim() || joining}
                       style={{
                         width: "100%", marginTop: 16, padding: "14px 24px", borderRadius: 14,
@@ -5065,8 +5042,7 @@ export default function CircularMenu() {
                       <div style={{ marginTop: 12, fontSize: 13, color: "#E84393", fontFamily: FONT, textAlign: "center" }}>{onboardingError}</div>
                     )}
                   </motion.div>
-                </>);
-              })()}
+              </>)}
 
             </div>
           </motion.div>
