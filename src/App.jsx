@@ -3575,6 +3575,17 @@ export default function CircularMenu() {
   const userAvatar = session?.user?.user_metadata?.avatar_url || null;
   const userEmail = session?.user?.email || "";
 
+  // ── Check for invite token in URL (?invite=TOKEN) ──
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const inviteToken = params.get("invite");
+    if (inviteToken) {
+      setInviteCode(inviteToken);
+      // Clean URL without reload
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   // ── Auto-create profile + check org membership after login ──
   useEffect(() => {
     if (!session?.user) { setOrgLoading(false); return; }
@@ -3627,8 +3638,11 @@ export default function CircularMenu() {
             .eq("email", session.user.email)
             .eq("status", "pending");
 
-          if (invites && invites.length > 0) {
-            // Has pending invite — show join option with invite info
+          // Check if user arrived via invite link
+          const urlInvite = new URLSearchParams(window.location.search).get("invite") || inviteCode;
+          if (urlInvite) {
+            setOnboardingStep("join");
+          } else if (invites && invites.length > 0) {
             setOnboardingStep("choose");
           } else {
             setOnboardingStep("choose");
