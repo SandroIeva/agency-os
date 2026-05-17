@@ -5569,24 +5569,27 @@ export default function CircularMenu() {
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{t("settings.language")}</div>
                       <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{t("settings.languageSub")}</div>
                     </div>
-                    <select
-                      value={appLanguage}
-                      onChange={(e) => setAppLanguage(e.target.value)}
-                      style={{
-                        padding: "6px 28px 6px 12px", borderRadius: 12,
-                        background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
-                        border: `1px solid ${theme.borderFaint}`,
-                        color: theme.text, fontSize: 13, fontFamily: FONT,
-                        cursor: "pointer", outline: "none",
-                        appearance: "none", WebkitAppearance: "none",
-                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(darkMode ? "#ffffff60" : "#1a1a2e60")}' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
-                        backgroundRepeat: "no-repeat",
-                        backgroundPosition: "right 8px center",
-                      }}
-                    >
-                      <option value="de">Deutsch</option>
-                      <option value="en">English</option>
-                    </select>
+                    <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                      <select
+                        value={appLanguage}
+                        onChange={(e) => setAppLanguage(e.target.value)}
+                        style={{
+                          padding: "6px 28px 6px 12px", borderRadius: 12,
+                          background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
+                          border: `1px solid ${theme.borderFaint}`,
+                          color: theme.text, fontSize: 13, fontFamily: FONT,
+                          cursor: "pointer", outline: "none",
+                          appearance: "none", WebkitAppearance: "none", MozAppearance: "none",
+                        }}
+                      >
+                        <option value="de">Deutsch</option>
+                        <option value="en">English</option>
+                      </select>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                        style={{ position: "absolute", right: 8, pointerEvents: "none" }}>
+                        <path d="M6 9l6 6 6-6" stroke={darkMode ? "#ffffff60" : "#1a1a2e60"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
                   </div>
 
                   {/* Notifications */}
