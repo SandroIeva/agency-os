@@ -3546,6 +3546,9 @@ export default function CircularMenu() {
 
   // Organization / onboarding state
   const [userOrg, setUserOrg] = useState(null);            // current org the user belongs to
+  const [userOrgs, setUserOrgs] = useState([]);             // all orgs the user belongs to
+  const [userOrgRole, setUserOrgRole] = useState(null);     // role in current org
+  const [wsDropdownOpen, setWsDropdownOpen] = useState(false); // workspace switcher dropdown
   const [orgLoading, setOrgLoading] = useState(true);       // loading org check
   const [onboardingStep, setOnboardingStep] = useState(null); // null = skip, "choose" | "create" | "join"
   const [onboardingError, setOnboardingError] = useState(null);
@@ -3611,9 +3614,12 @@ export default function CircularMenu() {
           .eq("user_id", uid);
 
         if (memberships && memberships.length > 0) {
-          // User has an org — use the first one (multi-org support later)
+          // Store all orgs for workspace switcher
+          const allOrgs = memberships.map(m => ({ ...m.organizations, role: m.role }));
+          setUserOrgs(allOrgs);
           const org = memberships[0].organizations;
           setUserOrg(org);
+          setUserOrgRole(memberships[0].role);
           setOnboardingStep(null);
 
           // Load org members for chat etc.
@@ -5968,6 +5974,101 @@ export default function CircularMenu() {
                       {userEmail}
                     </div>
                   </div>
+                  {/* Workspace switcher */}
+                  {userOrg && (
+                    <div style={{ position: "relative" }}>
+                      <motion.div
+                        onClick={() => setWsDropdownOpen(!wsDropdownOpen)}
+                        whileHover={{ opacity: 0.85 }}
+                        whileTap={{ scale: 0.97 }}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 8, padding: "8px 14px",
+                          borderRadius: 12, cursor: "pointer",
+                          background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                          border: `1px solid ${theme.borderFaint}`,
+                        }}
+                      >
+                        <div style={{
+                          width: 28, height: 28, borderRadius: 8,
+                          background: "linear-gradient(135deg, #8B7AFF30, #6C5CE730)",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 12, fontWeight: 600, fontFamily: FONT, color: "#8B7AFF",
+                        }}>{(userOrg.name || "W")[0]}</div>
+                        <div>
+                          <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text, lineHeight: 1.2 }}>{userOrg.name}</div>
+                          <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "capitalize" }}>{userOrgRole || "member"}</div>
+                        </div>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 4, transform: wsDropdownOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>
+                          <path d="M6 9l6 6 6-6" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </motion.div>
+                      {/* Dropdown */}
+                      <AnimatePresence>
+                        {wsDropdownOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                            transition={{ duration: 0.15 }}
+                            style={{
+                              position: "absolute", top: "calc(100% + 6px)", right: 0,
+                              minWidth: 200, borderRadius: 14, overflow: "hidden",
+                              background: darkMode ? "#1e1e2a" : "#fff",
+                              border: `1px solid ${theme.border}`,
+                              boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+                              zIndex: 50,
+                            }}
+                          >
+                            <div style={{ padding: "10px 12px 6px", fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 2, textTransform: "uppercase" }}>
+                              Workspaces
+                            </div>
+                            {userOrgs.map((org) => (
+                              <motion.div
+                                key={org.id}
+                                whileHover={{ background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}
+                                onClick={async () => {
+                                  if (org.id === userOrg.id) { setWsDropdownOpen(false); return; }
+                                  setUserOrg(org);
+                                  setUserOrgRole(org.role);
+                                  setWsDropdownOpen(false);
+                                  // Reload org members
+                                  const { data: members } = await supabase
+                                    .from("org_members")
+                                    .select("user_id, role, profiles(display_name, avatar_url, email, initials, status)")
+                                    .eq("org_id", org.id);
+                                  setOrgMembers(members || []);
+                                  const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", org.id).eq("status", "pending");
+                                  setTeamInvites(invites || []);
+                                }}
+                                style={{
+                                  display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
+                                  cursor: "pointer",
+                                  background: org.id === userOrg.id ? (darkMode ? "rgba(139, 122, 255, 0.08)" : "rgba(139, 122, 255, 0.06)") : "transparent",
+                                }}
+                              >
+                                <div style={{
+                                  width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+                                  background: org.id === userOrg.id ? "linear-gradient(135deg, #8B7AFF40, #6C5CE740)" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"),
+                                  display: "flex", alignItems: "center", justifyContent: "center",
+                                  fontSize: 12, fontWeight: 600, fontFamily: FONT,
+                                  color: org.id === userOrg.id ? "#8B7AFF" : theme.textDim,
+                                }}>{(org.name || "W")[0]}</div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{org.name}</div>
+                                  <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "capitalize" }}>{org.role}</div>
+                                </div>
+                                {org.id === userOrg.id && (
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                    <path d="M20 6L9 17l-5-5" stroke="#8B7AFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                  </svg>
+                                )}
+                              </motion.div>
+                            ))}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
                 </div>
               </motion.div>
 
