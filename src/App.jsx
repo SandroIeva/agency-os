@@ -3556,6 +3556,8 @@ export default function CircularMenu() {
   const [joining, setJoining] = useState(false);             // joining workspace loading
   const [pendingInvites, setPendingInvites] = useState([]);  // pending invitations for user
   const [teamInvites, setTeamInvites] = useState([]);        // pending invites sent by admin
+  const [inviteEmails, setInviteEmails] = useState([]);      // email chips for invite input
+  const [inviteInputVal, setInviteInputVal] = useState("");  // current text in invite input
 
   // Load pending invites when user goes to "join" step
   useEffect(() => {
@@ -6526,51 +6528,101 @@ export default function CircularMenu() {
                   borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`,
                   overflow: "hidden",
                 }}>
-                  {/* Invite member */}
+                  {/* Invite member — chip-based input */}
                   <div style={{ padding: "18px 20px", borderBottom: `1px solid ${theme.borderFaint}` }}>
                     <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 12 }}>
                       {appLanguage === "de" ? "Teammitglied einladen" : "Invite Team Member"}
                     </div>
-                    <div style={{ display: "flex", gap: 10 }}>
-                      <input
-                        id="invite-email-input"
-                        type="email"
-                        placeholder={appLanguage === "de" ? "E-Mail-Adresse eingeben..." : "Enter email address..."}
-                        style={{
-                          flex: 1, padding: "10px 14px", borderRadius: 12,
-                          background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-                          border: `1px solid ${theme.borderFaint}`,
-                          color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none",
-                          caretColor: "#8B7AFF",
-                        }}
-                      />
+                    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                      <div style={{
+                        flex: 1, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6,
+                        padding: "8px 12px", borderRadius: 12, minHeight: 42,
+                        background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                        border: `1px solid ${theme.borderFaint}`,
+                      }}>
+                        {inviteEmails.map((email, idx) => (
+                          <motion.div
+                            key={idx}
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.8, opacity: 0 }}
+                            onClick={() => setInviteEmails(prev => prev.filter((_, i) => i !== idx))}
+                            style={{
+                              display: "flex", alignItems: "center", gap: 5,
+                              padding: "4px 10px", borderRadius: 8,
+                              background: "rgba(139, 122, 255, 0.12)", border: "1px solid rgba(139, 122, 255, 0.25)",
+                              fontSize: 12, fontFamily: FONT, color: "#8B7AFF", cursor: "pointer",
+                              userSelect: "none",
+                            }}
+                          >
+                            {email}
+                            <span style={{ fontSize: 14, lineHeight: 1, opacity: 0.6 }}>×</span>
+                          </motion.div>
+                        ))}
+                        <input
+                          value={inviteInputVal}
+                          onChange={(e) => setInviteInputVal(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === ",") {
+                              e.preventDefault();
+                              const val = inviteInputVal.replace(/,/g, "").trim();
+                              if (val && val.includes("@") && val.includes(".") && !inviteEmails.includes(val)) {
+                                setInviteEmails(prev => [...prev, val]);
+                                setInviteInputVal("");
+                              }
+                            }
+                            if (e.key === "Backspace" && inviteInputVal === "" && inviteEmails.length > 0) {
+                              setInviteEmails(prev => prev.slice(0, -1));
+                            }
+                          }}
+                          onBlur={() => {
+                            const val = inviteInputVal.replace(/,/g, "").trim();
+                            if (val && val.includes("@") && val.includes(".") && !inviteEmails.includes(val)) {
+                              setInviteEmails(prev => [...prev, val]);
+                              setInviteInputVal("");
+                            }
+                          }}
+                          placeholder={inviteEmails.length === 0 ? (appLanguage === "de" ? "E-Mail-Adressen eingeben..." : "Enter email addresses...") : ""}
+                          style={{
+                            flex: 1, minWidth: 120, padding: "4px 2px", border: "none", outline: "none",
+                            background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT,
+                            caretColor: "#8B7AFF",
+                          }}
+                        />
+                      </div>
                       <motion.button
                         whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
                         onClick={async () => {
-                          const input = document.getElementById("invite-email-input");
-                          const email = input?.value?.trim();
-                          if (!email || !email.includes("@")) return;
+                          // Also grab any text still in input
+                          let emails = [...inviteEmails];
+                          const remaining = inviteInputVal.replace(/,/g, "").trim();
+                          if (remaining && remaining.includes("@") && remaining.includes(".") && !emails.includes(remaining)) {
+                            emails.push(remaining);
+                          }
+                          if (emails.length === 0) return;
                           try {
-                            const { data: inv, error } = await supabase.from("invitations")
-                              .insert({ org_id: userOrg.id, email, invited_by: session.user.id, role: "member" })
-                              .select()
-                              .single();
-                            if (error) throw error;
-                            input.value = "";
-                            // Refresh team list
+                            for (const email of emails) {
+                              const { error } = await supabase.from("invitations")
+                                .insert({ org_id: userOrg.id, email, invited_by: session.user.id, role: "member" })
+                                .select()
+                                .single();
+                              if (error) throw error;
+                            }
+                            setInviteEmails([]);
+                            setInviteInputVal("");
+                            // Refresh pending invites list
                             const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", userOrg.id).eq("status", "pending");
                             setTeamInvites(invites || []);
-                            // Token is now visible in the pending invites list with copy button
                           } catch (e) {
                             console.error("[Invite]", e);
                             alert(e.message || "Failed to send invite");
                           }
                         }}
                         style={{
-                          padding: "10px 20px", borderRadius: 12,
+                          padding: "10px 20px", borderRadius: 12, marginTop: 1,
                           background: "#8B7AFF", border: "none",
                           color: "#fff", fontSize: 13, fontWeight: 500, fontFamily: FONT,
-                          cursor: "pointer",
+                          cursor: "pointer", opacity: inviteEmails.length === 0 && !inviteInputVal ? 0.5 : 1,
                         }}
                       >
                         {appLanguage === "de" ? "Einladen" : "Invite"}
