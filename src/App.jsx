@@ -6602,11 +6602,26 @@ export default function CircularMenu() {
                           if (emails.length === 0) return;
                           try {
                             for (const email of emails) {
-                              const { error } = await supabase.from("invitations")
+                              const { data: inv, error } = await supabase.from("invitations")
                                 .insert({ org_id: userOrg.id, email, invited_by: session.user.id, role: "member" })
                                 .select()
                                 .single();
                               if (error) throw error;
+                              // Send invite email via API
+                              try {
+                                await fetch("/api/send-invite", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    email,
+                                    token: inv.token,
+                                    orgName: userOrg.name,
+                                    inviterName: userName || "A team member",
+                                  }),
+                                });
+                              } catch (emailErr) {
+                                console.warn("[Invite] Email send failed:", emailErr);
+                              }
                             }
                             setInviteEmails([]);
                             setInviteInputVal("");
