@@ -37,7 +37,7 @@ export default async function handler(req, res) {
             <p style="font-size: 15px; color: #444; line-height: 1.6; margin-bottom: 24px;">
               <strong>${inviterName || "A team member"}</strong> has invited you to join <strong>${orgName || "their workspace"}</strong> on i7 OS.
             </p>
-            <div style="background: #f8f7ff; border: 1px solid #e8e5ff; border-radius: 12px; padding: 20px; margin-bottom: 16px;">
+            <div style="background: #f8f7ff; border: 1px solid #e8e5ff; border-radius: 12px; padding: 16px 20px; margin-bottom: 28px;">
               <div style="font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Your Invite Code</div>
               <div style="font-size: 15px; font-weight: 600; color: #555; letter-spacing: 0.3px; word-break: break-all; font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;">${token}</div>
             </div>
