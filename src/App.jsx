@@ -572,7 +572,7 @@ const DEFAULT_COLUMNS = [
   { id: "col-done", key: "done", labelKey: "kanban.done", color: "#00B894", position: 3 },
 ];
 
-function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId }) {
+function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg, orgMembers }) {
   const [tasks, setTasks] = useState([]);
   const [teamMembers, setTeamMembers] = useState({});
   const [filter, setFilter] = useState("all");
@@ -607,14 +607,28 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId }) {
         });
       }
 
-      // 2. Load tasks
-      const { data: taskData } = await supabase.from("tasks").select("*").eq("creator_id", u.id).order("position");
+      // 2. Load tasks — org-scoped if user has an org, otherwise personal
+      const orgId = userOrg?.id;
+      const taskQuery = orgId
+        ? supabase.from("tasks").select("*").eq("org_id", orgId).order("position")
+        : supabase.from("tasks").select("*").eq("creator_id", u.id).order("position");
+      const { data: taskData } = await taskQuery;
       setTasks(taskData || []);
 
-      // 3. Load team members (after profile is ensured)
-      const { data: members } = await supabase.from("team_members").select("*");
+      // 3. Build team members map from orgMembers prop
       const memberMap = {};
-      (members || []).forEach(m => { memberMap[m.user_id] = m; });
+      (orgMembers || []).forEach(m => {
+        if (m.profiles) {
+          memberMap[m.user_id] = {
+            user_id: m.user_id,
+            display_name: m.profiles.display_name,
+            avatar_url: m.profiles.avatar_url,
+            initials: m.profiles.initials,
+            email: m.profiles.email,
+            avatar_color: ASSIGNEE_COLORS[Math.abs(m.user_id?.charCodeAt(0) || 0) % ASSIGNEE_COLORS.length],
+          };
+        }
+      });
       setTeamMembers(memberMap);
 
       setLoading(false);
@@ -661,6 +675,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId }) {
       creator_id: session.user.id,
       assignee_id: taskForm.assignee_id || session.user.id,
       position: tasks.filter(t => t.column_key === taskForm.column_key).length,
+      org_id: userOrg?.id || null,
     };
     const { data, error } = await supabase.from("tasks").insert(taskData).select().single();
     console.log("Task create result:", { data, error, taskData });
@@ -3967,11 +3982,10 @@ export default function CircularMenu() {
     if (!session?.user) return;
     const loadTasks = async () => {
       try {
-        const { data } = await supabase
-          .from("tasks")
-          .select("*")
-          .eq("creator_id", session.user.id)
-          .order("position");
+        const query = userOrg?.id
+          ? supabase.from("tasks").select("*").eq("org_id", userOrg.id).order("position")
+          : supabase.from("tasks").select("*").eq("creator_id", session.user.id).order("position");
+        const { data } = await query;
         setDashboardTasks(data || []);
       } catch (e) {
         console.warn("Dashboard tasks load failed:", e.message);
@@ -3980,9 +3994,10 @@ export default function CircularMenu() {
     loadTasks();
 
     // Subscribe to realtime changes so dashboard stays in sync with Kanban
+    const realtimeFilter = userOrg?.id ? `org_id=eq.${userOrg.id}` : `creator_id=eq.${session.user.id}`;
     const channel = supabase
       .channel("dashboard-tasks")
-      .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: `creator_id=eq.${session.user.id}` }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: realtimeFilter }, () => {
         loadTasks();
       })
       .subscribe();
@@ -5128,7 +5143,7 @@ export default function CircularMenu() {
         {/* KANBAN VIEW */}
         <AnimatePresence>
           {currentView === "kanban" && (
-            <KanbanBoard session={session} onBack={() => { setOpenTaskId(null); setCurrentView("dashboard"); }} theme={theme} darkMode={darkMode} t={t} openTaskId={openTaskId} />
+            <KanbanBoard session={session} onBack={() => { setOpenTaskId(null); setCurrentView("dashboard"); }} theme={theme} darkMode={darkMode} t={t} openTaskId={openTaskId} userOrg={userOrg} orgMembers={orgMembers} />
           )}
         </AnimatePresence>
 
