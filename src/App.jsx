@@ -3919,22 +3919,6 @@ export default function CircularMenu() {
     return cards;
   }, [dashboardTasks, upcomingEvents, t, appLanguage]);
 
-  // ── Keyboard shortcuts for startview cards (⌘+1..4) ──
-  useEffect(() => {
-    if (currentView !== "dashboard" || menuOpen || voiceMode || aiSpeaking) return;
-    const handler = (e) => {
-      if (!e.metaKey && !e.ctrlKey) return;
-      const idx = parseInt(e.key) - 1;
-      if (idx >= 0 && idx < startviewCards.length) {
-        e.preventDefault();
-        const card = startviewCards[idx];
-        if (card.onClick) card.onClick();
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [currentView, menuOpen, voiceMode, aiSpeaking, startviewCards]);
-
   const getGreeting = () => {
     const h = new Date().getHours();
     if (h < 5) return t("greet.stillUp");
@@ -3950,6 +3934,22 @@ export default function CircularMenu() {
   const [aiStatus, setAiStatus] = useState("");
   const [weather, setWeather] = useState("–");
   const recognitionRef = useRef(null);
+
+  // ── Keyboard shortcuts for startview cards (⌘+1..4) ──
+  useEffect(() => {
+    if (currentView !== "dashboard" || menuOpen || voiceMode || aiSpeaking) return;
+    const handler = (e) => {
+      if (!e.metaKey && !e.ctrlKey) return;
+      const idx = parseInt(e.key) - 1;
+      if (idx >= 0 && idx < startviewCards.length) {
+        e.preventDefault();
+        const card = startviewCards[idx];
+        if (card.onClick) card.onClick();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [currentView, menuOpen, voiceMode, aiSpeaking, startviewCards]);
 
   useEffect(() => {
     if (!navigator.geolocation) return;
