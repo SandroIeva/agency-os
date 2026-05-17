@@ -4485,8 +4485,8 @@ export default function CircularMenu() {
   };
 
   const handleWheel = useCallback((e) => {
-    // Let views with their own scrolling (files, chat) handle scroll natively
-    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar") {
+    // Let views with their own scrolling handle scroll natively
+    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "settings") {
       return;
     }
 
