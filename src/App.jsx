@@ -4627,7 +4627,7 @@ export default function CircularMenu() {
 
       {/* Weather — on dashboard & files */}
       <AnimatePresence>
-        {(currentView === "dashboard" || currentView === "files" || currentView === "chat") && !panelOpen && (
+        {(currentView === "dashboard" || currentView === "files") && !panelOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
