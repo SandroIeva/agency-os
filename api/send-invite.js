@@ -32,14 +32,14 @@ export default async function handler(req, res) {
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px; text-align: center;">
             <div style="margin-bottom: 32px;">
               <img src="https://agency-os-ebon-phi.vercel.app/logo-dark.svg" alt="i7 os" width="76" height="48" style="display: block; margin: 0 auto 16px;" />
-              <h1 style="font-size: 22px; font-weight: 600; color: #1a1a2e; margin: 0;">You're invited!</h1>
+              <h1 style="font-size: 22px; font-weight: 600; color: #1a1a2e; margin: 0;">You're invited to a workspace</h1>
             </div>
             <p style="font-size: 15px; color: #444; line-height: 1.6; margin-bottom: 24px;">
               <strong>${inviterName || "A team member"}</strong> has invited you to join <strong>${orgName || "their workspace"}</strong> on Agency OS.
             </p>
             <div style="background: #f8f7ff; border: 1px solid #e8e5ff; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
               <div style="font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Your Invite Code</div>
-              <div style="font-size: 16px; font-weight: 600; color: #8B7AFF; letter-spacing: 0.5px; word-break: break-all; margin-bottom: 16px; font-family: monospace;">${token}</div>
+              <div style="font-size: 16px; font-weight: 600; color: #666; letter-spacing: 0.5px; word-break: break-all; margin-bottom: 16px; font-family: monospace;">${token}</div>
               <a href="https://agency-os-ebon-phi.vercel.app/?invite=${token}" style="display: inline-block; padding: 10px 24px; background: #8B7AFF; color: white; text-decoration: none; border-radius: 8px; font-weight: 500; font-size: 14px;">Join Workspace</a>
             </div>
             <p style="font-size: 13px; color: #888; line-height: 1.6; margin-bottom: 24px;">
