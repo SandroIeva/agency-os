@@ -3555,6 +3555,7 @@ export default function CircularMenu() {
   const [inviteCode, setInviteCode] = useState("");          // invite code input
   const [joining, setJoining] = useState(false);             // joining workspace loading
   const [pendingInvites, setPendingInvites] = useState([]);  // pending invitations for user
+  const [teamInvites, setTeamInvites] = useState([]);        // pending invites sent by admin
 
   // Load pending invites when user goes to "join" step
   useEffect(() => {
@@ -3608,6 +3609,14 @@ export default function CircularMenu() {
             .select("user_id, role, profiles(display_name, avatar_url, email, initials, status)")
             .eq("org_id", org.id);
           setOrgMembers(members || []);
+
+          // Load pending invites for team management
+          const { data: sentInvites } = await supabase
+            .from("invitations")
+            .select("*")
+            .eq("org_id", org.id)
+            .eq("status", "pending");
+          setTeamInvites(sentInvites || []);
         } else {
           // No org — check for pending invitations
           const { data: invites } = await supabase
@@ -6501,6 +6510,155 @@ export default function CircularMenu() {
 
               </div>{/* end right column */}
               </div>{/* end grid */}
+
+              {/* ── Team Management (Admin only) ── */}
+              {userOrg && (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+                style={{ marginTop: 32 }}
+              >
+                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
+                  {appLanguage === "de" ? "Workspace" : "Workspace"} — {userOrg.name}
+                </div>
+                <div style={{
+                  borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`,
+                  overflow: "hidden",
+                }}>
+                  {/* Invite member */}
+                  <div style={{ padding: "18px 20px", borderBottom: `1px solid ${theme.borderFaint}` }}>
+                    <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 12 }}>
+                      {appLanguage === "de" ? "Teammitglied einladen" : "Invite Team Member"}
+                    </div>
+                    <div style={{ display: "flex", gap: 10 }}>
+                      <input
+                        id="invite-email-input"
+                        type="email"
+                        placeholder={appLanguage === "de" ? "E-Mail-Adresse eingeben..." : "Enter email address..."}
+                        style={{
+                          flex: 1, padding: "10px 14px", borderRadius: 12,
+                          background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                          border: `1px solid ${theme.borderFaint}`,
+                          color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none",
+                          caretColor: "#8B7AFF",
+                        }}
+                      />
+                      <motion.button
+                        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                        onClick={async () => {
+                          const input = document.getElementById("invite-email-input");
+                          const email = input?.value?.trim();
+                          if (!email || !email.includes("@")) return;
+                          try {
+                            const { data: inv, error } = await supabase.from("invitations")
+                              .insert({ org_id: userOrg.id, email, invited_by: session.user.id, role: "member" })
+                              .select()
+                              .single();
+                            if (error) throw error;
+                            input.value = "";
+                            // Refresh team list
+                            const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", userOrg.id).eq("status", "pending");
+                            setTeamInvites(invites || []);
+                            alert(appLanguage === "de" ? `Einladung an ${email} gesendet! Token: ${inv.token}` : `Invite sent to ${email}! Token: ${inv.token}`);
+                          } catch (e) {
+                            console.error("[Invite]", e);
+                            alert(e.message || "Failed to send invite");
+                          }
+                        }}
+                        style={{
+                          padding: "10px 20px", borderRadius: 12,
+                          background: "#8B7AFF", border: "none",
+                          color: "#fff", fontSize: 13, fontWeight: 500, fontFamily: FONT,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {appLanguage === "de" ? "Einladen" : "Invite"}
+                      </motion.button>
+                    </div>
+                  </div>
+
+                  {/* Current members */}
+                  <div style={{ padding: "14px 20px" }}>
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.5, marginBottom: 10, textTransform: "uppercase" }}>
+                      {appLanguage === "de" ? "Mitglieder" : "Members"} ({orgMembers.length})
+                    </div>
+                    {orgMembers.map((m, i) => (
+                      <div key={m.user_id || i} style={{
+                        display: "flex", alignItems: "center", gap: 12, padding: "10px 0",
+                        borderBottom: i < orgMembers.length - 1 ? `1px solid ${theme.borderFaint}` : "none",
+                      }}>
+                        {m.profiles?.avatar_url ? (
+                          <img src={m.profiles.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${theme.borderFaint}` }} />
+                        ) : (
+                          <div style={{
+                            width: 34, height: 34, borderRadius: 10,
+                            background: "linear-gradient(135deg, #8B7AFF50, #8B7AFF20)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 12, fontWeight: 600, fontFamily: FONT, color: "#8B7AFF",
+                          }}>{m.profiles?.initials || "?"}</div>
+                        )}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{m.profiles?.display_name || "Unknown"}</div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>{m.profiles?.email || ""}</div>
+                        </div>
+                        <div style={{
+                          padding: "3px 10px", borderRadius: 8,
+                          background: m.role === "admin" ? "rgba(139, 122, 255, 0.1)" : "rgba(255,255,255,0.05)",
+                          border: `1px solid ${m.role === "admin" ? "rgba(139, 122, 255, 0.2)" : theme.borderFaint}`,
+                          fontSize: 11, fontFamily: FONT, color: m.role === "admin" ? "#8B7AFF" : theme.textDim,
+                          fontWeight: 500,
+                        }}>
+                          {m.role === "admin" ? "Admin" : "Member"}
+                        </div>
+                      </div>
+                    ))}
+                    {orgMembers.length === 0 && (
+                      <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, padding: "8px 0" }}>
+                        {appLanguage === "de" ? "Noch keine Mitglieder" : "No members yet"}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Pending invites */}
+                  {teamInvites.length > 0 && (
+                    <div style={{ padding: "14px 20px", borderTop: `1px solid ${theme.borderFaint}` }}>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.5, marginBottom: 10, textTransform: "uppercase" }}>
+                        {appLanguage === "de" ? "Offene Einladungen" : "Pending Invites"} ({teamInvites.length})
+                      </div>
+                      {teamInvites.map((inv, i) => (
+                        <div key={inv.id} style={{
+                          display: "flex", alignItems: "center", gap: 12, padding: "8px 0",
+                          borderBottom: i < teamInvites.length - 1 ? `1px solid ${theme.borderFaint}` : "none",
+                        }}>
+                          <div style={{
+                            width: 34, height: 34, borderRadius: 10,
+                            background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.2)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                          }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#F59E0B" strokeWidth="1.5" />
+                              <path d="M22 6l-10 7L2 6" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" />
+                            </svg>
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>{inv.email}</div>
+                            <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>
+                              Token: {inv.token?.slice(0, 12)}...
+                            </div>
+                          </div>
+                          <div style={{
+                            padding: "3px 10px", borderRadius: 8,
+                            background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.15)",
+                            fontSize: 11, fontFamily: FONT, color: "#F59E0B",
+                          }}>Pending</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+              )}
 
               {/* Logout */}
               <motion.div
