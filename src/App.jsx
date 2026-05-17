@@ -4000,54 +4000,47 @@ export default function CircularMenu() {
 
     const navRules = [
       { patterns: isDE ? [
-        "kalender", "termine", "termin", "öffne kalender", "zeig termine",
-        "geh zum kalender", "wann hab ich", "was steht an", "nächster termin",
-        "zeitplan", "meine termine", "calendar",
+        "öffne kalender", "öffne termine", "öffne den kalender",
+        "öffne meine termine", "öffne zeitplan",
       ] : [
-        "calendar", "events", "event", "schedule", "open calendar",
-        "show calendar", "go to calendar", "my events", "appointments",
-        "what's next", "next meeting", "termine",
+        "open calendar", "open events", "open schedule",
+        "open my calendar", "open appointments",
       ], view: "calendar" },
       { patterns: isDE ? [
-        "kanban", "board", "projekte", "projekt", "aufgaben", "aufgabe",
-        "öffne kanban", "zeig projekte", "meine aufgaben", "was muss ich",
-        "was liegt an", "todos", "to do", "tasks",
+        "öffne kanban", "öffne kanbanboard", "öffne board",
+        "öffne projekte", "öffne aufgaben", "öffne tasks",
+        "öffne meine aufgaben",
       ] : [
-        "kanban", "board", "projects", "project", "tasks", "task",
-        "todos", "to do", "open board", "show tasks", "my tasks",
-        "what's pending", "show projects",
+        "open kanban", "open board", "open projects", "open tasks",
+        "open my tasks", "open todos",
       ], view: "kanban" },
       { patterns: isDE ? [
-        "dateien", "datei", "dokumente", "dokument", "ordner", "drive",
-        "��ffne dateien", "zeig dateien", "meine dateien", "meine dokumente",
-        "bilder", "videos", "docs", "files",
+        "öffne dateien", "öffne dokumente", "öffne drive",
+        "öffne ordner", "öffne meine dateien", "öffne files",
       ] : [
-        "files", "file", "documents", "document", "drive", "folder",
-        "open files", "show files", "my files", "my documents",
-        "images", "videos", "docs", "dateien",
+        "open files", "open documents", "open drive", "open folder",
+        "open my files", "open my documents", "open docs",
       ], view: "files" },
       { patterns: isDE ? [
-        "chat", "chats", "nachrichten", "nachricht", "öffne chat",
-        "zeig nachrichten", "wer hat geschrieben", "kommunikation",
-        "team chat", "messages",
+        "öffne chat", "öffne chats", "öffne nachrichten",
+        "öffne den chat", "öffne messages",
       ] : [
-        "chat", "chats", "messages", "message", "open chat",
-        "show messages", "who wrote", "communication", "team chat",
-        "nachrichten",
+        "open chat", "open chats", "open messages",
+        "open the chat", "open communication",
       ], view: "chat" },
       { patterns: isDE ? [
-        "einstellungen", "einstellung", "optionen", "konfiguration",
-        "öffne einstellungen", "settings", "preferences",
+        "öffne einstellungen", "öffne settings", "öffne optionen",
+        "öffne die einstellungen", "öffne konfiguration",
       ] : [
-        "settings", "preferences", "options", "config", "configuration",
-        "open settings", "show settings", "einstellungen",
+        "open settings", "open preferences", "open options",
+        "open the settings", "open configuration",
       ], view: "settings" },
       { patterns: isDE ? [
-        "dashboard", "home", "startseite", "start", "zurück", "hauptseite",
-        "übersicht", "geh zurück", "anfang", "back",
+        "öffne dashboard", "öffne startseite", "öffne home",
+        "öffne übersicht", "öffne die startseite",
       ] : [
-        "dashboard", "home", "back", "go back", "go home", "overview",
-        "main", "start", "zurück",
+        "open dashboard", "open home", "open start",
+        "open overview", "open the dashboard",
       ], view: "dashboard" },
     ];
 
@@ -4100,14 +4093,38 @@ export default function CircularMenu() {
       recognition.lang = appLanguage === "de" ? "de-DE" : "en-US";
       recognitionRef.current = recognition;
 
+      let commandExecuted = false;
       recognition.onresult = (event) => {
+        if (commandExecuted) return;
         let final = "";
         let interim = "";
         for (let i = 0; i < event.results.length; i++) {
           if (event.results[i].isFinal) final += event.results[i][0].transcript;
           else interim += event.results[i][0].transcript;
         }
-        setTranscript(final + interim);
+        const currentText = final + interim;
+        setTranscript(currentText);
+
+        // Auto-detect and execute voice commands in real-time
+        if (currentText.trim().length > 0) {
+          const voiceNav = detectVoiceCommand(currentText);
+          if (voiceNav) {
+            commandExecuted = true;
+            // Stop recognition immediately
+            try { recognition.stop(); } catch(e) {}
+            recognitionRef.current = null;
+            // Use setTimeout to ensure React processes state updates
+            setTimeout(() => {
+              setVoiceMode(false);
+              setAiSpeaking(false);
+              setAiStatus("");
+              setAiResponse("");
+              setTranscript("");
+              if (voiceNav.view) setCurrentView(voiceNav.view);
+              if (voiceNav.action) voiceNav.action();
+            }, 50);
+          }
+        }
       };
       recognition.onerror = () => {};
       recognition.start();
