@@ -572,7 +572,7 @@ const DEFAULT_COLUMNS = [
   { id: "col-done", key: "done", labelKey: "kanban.done", color: "#00B894", position: 3 },
 ];
 
-function KanbanBoard({ onBack, session, theme, darkMode, t }) {
+function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId }) {
   const [tasks, setTasks] = useState([]);
   const [teamMembers, setTeamMembers] = useState({});
   const [filter, setFilter] = useState("all");
@@ -621,6 +621,24 @@ function KanbanBoard({ onBack, session, theme, darkMode, t }) {
     };
     init();
   }, [session]);
+
+  // Auto-open task edit form when navigating from startview card
+  useEffect(() => {
+    if (!openTaskId || loading || tasks.length === 0) return;
+    const task = tasks.find(tk => tk.id === openTaskId);
+    if (task) {
+      setEditingTask(task);
+      setTaskForm({
+        title: task.title || "",
+        description: task.description || "",
+        priority: task.priority || "medium",
+        column_key: task.column_key || "todo",
+        project_name: task.project_name || "",
+        assignee_id: task.assignee_id || session?.user?.id || null,
+      });
+      setShowNewTask(true);
+    }
+  }, [openTaskId, loading, tasks]);
 
   const projectNames = [...new Set(tasks.map(t => t.project_name).filter(Boolean))];
   const filtered = filter === "all" ? tasks : tasks.filter(t => t.project_name === filter);
@@ -3402,6 +3420,7 @@ export default function CircularMenu() {
     return "dashboard";
   });
   const [chatTab, setChatTab] = useState("Team");
+  const [openTaskId, setOpenTaskId] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [dashboardTasks, setDashboardTasks] = useState([]);
@@ -3876,7 +3895,8 @@ export default function CircularMenu() {
       desc: tk.project_name || colLabel(tk.column_key),
       key: tk.id,
       priority: tk.priority,
-      onClick: () => setCurrentView("kanban"),
+      taskId: tk.id,
+      onClick: () => { setOpenTaskId(tk.id); setCurrentView("kanban"); },
     }));
 
     const eventCards = upcomingEvents.map(ev => {
@@ -4570,7 +4590,7 @@ export default function CircularMenu() {
         {/* KANBAN VIEW */}
         <AnimatePresence>
           {currentView === "kanban" && (
-            <KanbanBoard session={session} onBack={() => setCurrentView("dashboard")} theme={theme} darkMode={darkMode} t={t} />
+            <KanbanBoard session={session} onBack={() => { setOpenTaskId(null); setCurrentView("dashboard"); }} theme={theme} darkMode={darkMode} t={t} openTaskId={openTaskId} />
           )}
         </AnimatePresence>
 
