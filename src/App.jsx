@@ -3574,9 +3574,9 @@ export default function CircularMenu() {
     localStorage.setItem("agencyos-google-token-ts", String(now));
   }, []);
 
-  // Check if stored token is still likely valid (< 50 min old, Google tokens expire at 60 min)
+  // Check if stored token is still likely valid (< 45 min old, Google tokens expire at 60 min)
   const isTokenFresh = useCallback(() => {
-    return googleTokenRef.current && (Date.now() - googleTokenTsRef.current < 50 * 60 * 1000);
+    return googleTokenRef.current && (Date.now() - googleTokenTsRef.current < 45 * 60 * 1000);
   }, []);
 
   // Synchronous getter — returns cached token (may be stale, use ensureValidToken for guaranteed fresh)
@@ -3594,12 +3594,42 @@ export default function CircularMenu() {
       setSession(s);
       setAuthLoading(false);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      console.log("[Auth]", event, s ? "session present" : "no session");
+
       if (s?.provider_token) storeGoogleToken(s.provider_token);
       if (s?.provider_refresh_token) {
         localStorage.setItem("agencyos-google-refresh-token", s.provider_refresh_token);
       }
-      setSession(s);
+
+      // TOKEN_REFRESHED with a valid session — update normally
+      if (event === "TOKEN_REFRESHED" && s) {
+        setSession(s);
+        return;
+      }
+
+      // SIGNED_OUT — only clear session if user explicitly logged out
+      // If this was triggered by a failed token refresh, try to recover first
+      if (event === "SIGNED_OUT" && !s) {
+        // Check if we still have a stored session before giving up
+        supabase.auth.getSession().then(({ data: { session: recoveredSession } }) => {
+          if (recoveredSession) {
+            console.log("[Auth] Recovered session after SIGNED_OUT event");
+            setSession(recoveredSession);
+          } else {
+            // Truly signed out
+            setSession(null);
+          }
+        }).catch(() => {
+          setSession(null);
+        });
+        return;
+      }
+
+      // SIGNED_IN, INITIAL_SESSION, USER_UPDATED etc.
+      if (s) {
+        setSession(s);
+      }
       setAuthLoading(false);
     });
     return () => subscription.unsubscribe();
@@ -3781,16 +3811,52 @@ export default function CircularMenu() {
       console.log("[TokenMgr] Token stale on mount, refreshing...");
       autoReLoginRef.current();
     }
-    // Periodic check every 5 minutes
+    // Periodic check every 3 minutes
     const interval = setInterval(() => {
       if (!isTokenFreshRef.current()) {
         console.log("[TokenMgr] Periodic refresh triggered");
         autoReLoginRef.current();
       }
-    }, 5 * 60 * 1000);
+      // Also proactively refresh the Supabase JWT to prevent session expiry
+      supabase.auth.getSession().then(({ data: { session: s } }) => {
+        if (s) setSession(s);
+      }).catch(() => {});
+    }, 3 * 60 * 1000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!session]);
+
+  // ── Recover session when tab becomes visible (after sleep/standby/tab switch) ──
+  useEffect(() => {
+    const handleVisibility = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        // First try to refresh the session
+        const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+        if (refreshed) {
+          if (refreshed.provider_token) storeGoogleToken(refreshed.provider_token);
+          if (refreshed.provider_refresh_token) {
+            localStorage.setItem("agencyos-google-refresh-token", refreshed.provider_refresh_token);
+          }
+          setSession(refreshed);
+          console.log("[Auth] Session recovered on tab focus");
+          return;
+        }
+        // Fallback: just get current session
+        const { data: { session: s } } = await supabase.auth.getSession();
+        if (s) {
+          setSession(s);
+        } else if (!isTokenFreshRef.current()) {
+          // Google token also stale — try full refresh
+          autoReLoginRef.current();
+        }
+      } catch (e) {
+        console.warn("[Auth] Visibility recovery failed:", e.message);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [storeGoogleToken]);
 
   // ── Fetch Kanban tasks for dashboard/startview ──
   useEffect(() => {
