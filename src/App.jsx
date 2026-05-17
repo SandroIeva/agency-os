@@ -4821,18 +4821,6 @@ export default function CircularMenu() {
               {/* ── Step: Create Workspace ── */}
               {onboardingStep === "create" && (<>
                   <motion.div
-                    initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.3 }}
-                    onClick={() => { setOnboardingStep("choose"); setOnboardingError(null); setWsName(""); }}
-                    style={{ alignSelf: "flex-start", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, marginBottom: 24 }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                      <path d="M15 18l-6-6 6-6" stroke="#ffffff50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff50" }}>{appLanguage === "de" ? "Zurück" : "Back"}</span>
-                  </motion.div>
-
-                  <motion.div
                     initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1, duration: 0.4 }}
                     style={{ fontSize: 24, fontWeight: 300, color: "#ffffffcc", fontFamily: FONT, letterSpacing: -0.5, marginBottom: 8 }}
@@ -4906,23 +4894,23 @@ export default function CircularMenu() {
                     {onboardingError && (
                       <div style={{ marginTop: 12, fontSize: 13, color: "#E84393", fontFamily: FONT, textAlign: "center" }}>{onboardingError}</div>
                     )}
+                    <motion.button
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                      onClick={() => { setOnboardingStep("choose"); setOnboardingError(null); setWsName(""); setWsCreating(false); }}
+                      style={{
+                        width: "100%", marginTop: 12, padding: "14px 24px", borderRadius: 14,
+                        background: "transparent", border: "1px solid rgba(255,255,255,0.12)",
+                        color: "#ffffff60", fontSize: 14, fontWeight: 500, fontFamily: FONT,
+                        cursor: "pointer", transition: "all 0.25s ease",
+                      }}
+                    >
+                      {appLanguage === "de" ? "Abbrechen" : "Cancel"}
+                    </motion.button>
                   </motion.div>
               </>)}
 
               {/* ── Step: Join Workspace ── */}
               {onboardingStep === "join" && (<>
-                  <motion.div
-                    initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.3 }}
-                    onClick={() => { setOnboardingStep("choose"); setOnboardingError(null); setInviteCode(""); }}
-                    style={{ alignSelf: "flex-start", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, marginBottom: 24 }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                      <path d="M15 18l-6-6 6-6" stroke="#ffffff50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff50" }}>{appLanguage === "de" ? "Zurück" : "Back"}</span>
-                  </motion.div>
-
                   <motion.div
                     initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1, duration: 0.4 }}
@@ -5041,6 +5029,18 @@ export default function CircularMenu() {
                     {onboardingError && (
                       <div style={{ marginTop: 12, fontSize: 13, color: "#E84393", fontFamily: FONT, textAlign: "center" }}>{onboardingError}</div>
                     )}
+                    <motion.button
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                      onClick={() => { setOnboardingStep("choose"); setOnboardingError(null); setInviteCode(""); setJoining(false); }}
+                      style={{
+                        width: "100%", marginTop: 12, padding: "14px 24px", borderRadius: 14,
+                        background: "transparent", border: "1px solid rgba(255,255,255,0.12)",
+                        color: "#ffffff60", fontSize: 14, fontWeight: 500, fontFamily: FONT,
+                        cursor: "pointer", transition: "all 0.25s ease",
+                      }}
+                    >
+                      {appLanguage === "de" ? "Abbrechen" : "Cancel"}
+                    </motion.button>
                   </motion.div>
               </>)}
 
