@@ -3050,347 +3050,337 @@ const CHAT_MESSAGES = {
   ],
 };
 
-function ConversationView({ conversation, onBack }) {
+function ChatView({ onBack, initialTab = "Team", t }) {
+  const [search, setSearch] = useState("");
+  const [activeConversation, setActiveConversation] = useState(CHAT_CONVERSATIONS[0]);
   const [msgInput, setMsgInput] = useState("");
-  const messages = CHAT_MESSAGES[conversation.id] || [];
   const scrollRef = useRef(null);
+  const filtered = CHAT_CONVERSATIONS.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.lastMsg.toLowerCase().includes(search.toLowerCase()));
+  const messages = activeConversation ? (CHAT_MESSAGES[activeConversation.id] || []) : [];
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, []);
+  }, [activeConversation]);
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: 60 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -40 }}
-      transition={{ duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
-      style={{ display: "flex", flexDirection: "column", height: "100%" }}
-    >
-      {/* Header with person info */}
-      <div style={{
-        padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)",
-        display: "flex", alignItems: "center", gap: 12,
-      }}>
-        <motion.div
-          onClick={onBack}
-          className="hover-back"
-          whileTap={{ scale: 0.95 }}
-          style={{ cursor: "pointer", padding: "4px 6px", borderRadius: 8, flexShrink: 0 }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <path d="M15 18l-6-6 6-6" stroke="#ffffff50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </motion.div>
-        <div style={{
-          width: 36, height: 36, borderRadius: "50%",
-          background: `linear-gradient(135deg, ${conversation.avatar}50, ${conversation.avatar}20)`,
-          border: `1px solid ${conversation.avatar}40`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          flexShrink: 0, fontSize: 13, fontWeight: 600, fontFamily: FONT,
-          color: conversation.avatar,
-        }}>
-          {conversation.name.split(" ").map(n => n[0]).join("")}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd" }}>{conversation.name}</div>
-          <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40" }}>{conversation.role}</div>
-        </div>
-        <div style={{
-          width: 8, height: 8, borderRadius: "50%", background: "#6BC5A0",
-          boxShadow: "0 0 6px #6BC5A040",
-        }} />
-      </div>
-
-      {/* Messages */}
-      <div ref={scrollRef} style={{
-        flex: 1, minHeight: 0, overflowY: "auto",
-        padding: "16px 20px", display: "flex", flexDirection: "column", gap: 6,
-      }}>
-        {messages.map((msg, i) => (
-          <motion.div
-            key={msg.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.03 + i * 0.04, duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
-            style={{
-              display: "flex",
-              justifyContent: msg.from === "me" ? "flex-end" : "flex-start",
-            }}
-          >
-            <div style={{
-              maxWidth: "75%",
-              padding: "10px 14px",
-              borderRadius: msg.from === "me" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-              background: msg.from === "me"
-                ? "rgba(139, 122, 255, 0.15)"
-                : "rgba(255,255,255,0.06)",
-              border: `1px solid ${msg.from === "me" ? "rgba(139, 122, 255, 0.2)" : "rgba(255,255,255,0.06)"}`,
-              fontSize: 13, fontFamily: FONT, color: "#ffffffcc",
-              lineHeight: 1.5,
-            }}>
-              {msg.text}
-              <div style={{
-                fontSize: 10, fontFamily: FONT, color: "#ffffff30",
-                marginTop: 4, textAlign: msg.from === "me" ? "right" : "left",
-              }}>{msg.time}</div>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Message input */}
-      <div style={{
-        padding: "12px 20px 16px", borderTop: "1px solid rgba(255,255,255,0.06)",
-      }}>
-        <div style={{
-          display: "flex", alignItems: "center", gap: 10,
-          background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          borderRadius: 16, padding: "10px 14px",
-        }}>
-          <input
-            value={msgInput}
-            onChange={e => setMsgInput(e.target.value)}
-            placeholder={`Message ${conversation.name.split(" ")[0]}...`}
-            style={{
-              flex: 1, background: "none", border: "none", outline: "none",
-              fontSize: 13, fontFamily: FONT, color: "#ffffffdd",
-              caretColor: "#8B7AFF",
-            }}
-          />
-          <motion.div
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            style={{
-              width: 32, height: 32, borderRadius: "50%",
-              background: msgInput.trim() ? "rgba(139, 122, 255, 0.3)" : "rgba(255,255,255,0.05)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: msgInput.trim() ? "pointer" : "default",
-              transition: "background 0.2s ease",
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M22 2L11 13" stroke={msgInput.trim() ? "#8B7AFF" : "#ffffff30"} strokeWidth="2" strokeLinecap="round" />
-              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke={msgInput.trim() ? "#8B7AFF" : "#ffffff30"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </motion.div>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function ChatView({ onBack, initialTab = "Team", t }) {
-  const [activeTab, setActiveTab] = useState(initialTab);
-  const [search, setSearch] = useState("");
-  const [activeConversation, setActiveConversation] = useState(null);
-  const filtered = CHAT_CONVERSATIONS.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.lastMsg.toLowerCase().includes(search.toLowerCase()));
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95, y: 20 }}
+      initial={{ opacity: 0, scale: 0.97, y: 16 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }}
       transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
       style={{
         position: "absolute", inset: 0, display: "flex",
-        alignItems: "center", justifyContent: "center",
-        padding: 40,
+        padding: "24px 24px 24px 24px",
       }}
     >
       <div style={{
-        width: "100%", maxWidth: 680, maxHeight: "85%",
-        background: "rgba(22, 22, 30, 0.75)",
+        width: "100%", height: "100%",
+        background: "rgba(18, 18, 26, 0.85)",
         backdropFilter: "blur(40px)",
         border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: 24, overflow: "hidden",
-        display: "flex", flexDirection: "column",
+        borderRadius: 20, overflow: "hidden",
+        display: "flex",
       }}>
-        <AnimatePresence mode="wait">
-          {activeConversation ? (
-            <ConversationView
-              key="conversation"
-              conversation={activeConversation}
-              onBack={() => setActiveConversation(null)}
-            />
-          ) : (
-            <motion.div
-              key="list"
-              initial={{ opacity: 0, x: -40 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -40 }}
-              transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
-              style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
-            >
-              {/* Tabs */}
-              <motion.div
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.05, duration: 0.3 }}
+
+        {/* ── Left Sidebar: Conversations ── */}
+        <div style={{
+          width: 340, minWidth: 340, display: "flex", flexDirection: "column",
+          borderRight: "1px solid rgba(255,255,255,0.06)",
+          background: "rgba(255,255,255,0.02)",
+        }}>
+          {/* Header */}
+          <div style={{
+            padding: "18px 20px 14px", display: "flex", alignItems: "center", justifyContent: "space-between",
+            borderBottom: "1px solid rgba(255,255,255,0.06)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <motion.div onClick={onBack} className="hover-back" whileTap={{ scale: 0.95 }}
+                style={{ cursor: "pointer", padding: "4px 6px", borderRadius: 8 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M15 18l-6-6 6-6" stroke="#ffffff50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </motion.div>
+              <span style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: "#ffffffdd", letterSpacing: -0.3 }}>
+                {t("chat.search") ? "Messages" : "Messages"}
+              </span>
+            </div>
+            {/* New chat */}
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+              style={{ cursor: "pointer", padding: 6, borderRadius: 8, background: "rgba(255,255,255,0.05)" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M12 5v14M5 12h14" stroke="#ffffff60" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </motion.div>
+          </div>
+
+          {/* Search */}
+          <div style={{ padding: "12px 16px 8px" }}>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10,
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.06)",
+              borderRadius: 12, padding: "9px 12px",
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <circle cx="11" cy="11" r="7" stroke="#ffffff40" strokeWidth="1.8" />
+                <path d="M16 16l4.5 4.5" stroke="#ffffff40" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+              <input
+                value={search} onChange={e => setSearch(e.target.value)}
+                placeholder={t("chat.search")}
                 style={{
-                  padding: "16px 20px 0",
-                  display: "flex", gap: 4, overflowX: "auto",
+                  flex: 1, background: "none", border: "none", outline: "none",
+                  fontSize: 13, fontFamily: FONT, color: "#ffffffdd", caretColor: "#8B7AFF",
                 }}
-              >
-                {CHAT_TABS.map(tab => (
-                  <motion.div
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    whileTap={{ scale: 0.95 }}
-                    style={{
-                      padding: "8px 16px", borderRadius: 12, cursor: "pointer",
-                      fontSize: 12, fontFamily: FONT, fontWeight: 500, letterSpacing: 0.3,
-                      background: activeTab === tab ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.03)",
-                      color: activeTab === tab ? "#ffffffdd" : "#ffffff50",
-                      border: `1px solid ${activeTab === tab ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.04)"}`,
-                      transition: "all 0.25s ease",
-                      whiteSpace: "nowrap",
-                    }}
-                  >{tab}</motion.div>
-                ))}
-              </motion.div>
+              />
+              {search && (
+                <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
+                  onClick={() => setSearch("")}
+                  style={{ cursor: "pointer", color: "#ffffff40", fontSize: 11, fontFamily: FONT }}>✕</motion.div>
+              )}
+            </div>
+          </div>
 
-              {/* Search bar */}
-              <motion.div
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1, duration: 0.3 }}
-                style={{ padding: "12px 20px 8px" }}
-              >
-                <div style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: 14, padding: "10px 14px",
-                }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <circle cx="11" cy="11" r="7" stroke="#ffffff40" strokeWidth="1.8" />
-                    <path d="M16 16l4.5 4.5" stroke="#ffffff40" strokeWidth="1.8" strokeLinecap="round" />
-                  </svg>
-                  <input
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    placeholder={t("chat.search")}
-                    style={{
-                      flex: 1, background: "none", border: "none", outline: "none",
-                      fontSize: 13, fontFamily: FONT, color: "#ffffffdd",
-                      caretColor: "#8B7AFF",
-                    }}
-                  />
-                  {search && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      onClick={() => setSearch("")}
-                      style={{ cursor: "pointer", color: "#ffffff40", fontSize: 12, fontFamily: FONT }}
-                    >✕</motion.div>
-                  )}
-                </div>
-              </motion.div>
-
-              {/* Conversation list — scrollable */}
-              <div style={{
-                padding: "4px 20px 12px", display: "flex", flexDirection: "column", gap: 4,
-                overflowY: "auto", flex: 1, minHeight: 0,
-              }}>
-                {filtered.map((conv, i) => (
-                  <motion.div
-                    key={conv.id}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.08 + i * 0.04, duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
-                    className="hover-row"
-                    onClick={() => setActiveConversation(conv)}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 14,
-                      padding: "14px 14px", borderRadius: 14,
-                      background: "rgba(255,255,255,0.03)",
-                      border: "1px solid rgba(255,255,255,0.05)",
-                      cursor: "pointer", flexShrink: 0,
-                    }}
-                  >
-                    {/* Avatar */}
+          {/* Conversation list */}
+          <div style={{
+            flex: 1, minHeight: 0, overflowY: "auto",
+            padding: "4px 8px", display: "flex", flexDirection: "column", gap: 2,
+          }}>
+            {filtered.map((conv, i) => {
+              const isActive = activeConversation?.id === conv.id;
+              return (
+                <motion.div
+                  key={conv.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.03 + i * 0.025, duration: 0.25 }}
+                  onClick={() => setActiveConversation(conv)}
+                  className={isActive ? "" : "hover-row"}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: "12px 12px", borderRadius: 12, cursor: "pointer",
+                    background: isActive ? "rgba(139, 122, 255, 0.12)" : "transparent",
+                    border: `1px solid ${isActive ? "rgba(139, 122, 255, 0.2)" : "transparent"}`,
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  {/* Avatar with online dot */}
+                  <div style={{ position: "relative", flexShrink: 0 }}>
                     <div style={{
                       width: 42, height: 42, borderRadius: "50%",
                       background: `linear-gradient(135deg, ${conv.avatar}50, ${conv.avatar}20)`,
                       border: `1px solid ${conv.avatar}40`,
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      flexShrink: 0, fontSize: 15, fontWeight: 600, fontFamily: FONT,
-                      color: conv.avatar,
+                      fontSize: 14, fontWeight: 600, fontFamily: FONT, color: conv.avatar,
                     }}>
                       {conv.name.split(" ").map(n => n[0]).join("")}
                     </div>
-                    {/* Info */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd", lineHeight: 1.3 }}>{conv.name}</div>
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff35", flexShrink: 0 }}>{conv.time}</div>
-                      </div>
-                      <div style={{
-                        fontSize: 12, fontFamily: FONT, color: "#ffffff50", marginTop: 3,
-                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                      }}>{conv.lastMsg}</div>
+                    <div style={{
+                      position: "absolute", bottom: 0, right: 0,
+                      width: 10, height: 10, borderRadius: "50%",
+                      background: "#6BC5A0", border: "2px solid #12121a",
+                    }} />
+                  </div>
+                  {/* Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd" }}>{conv.name}</div>
+                      <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff35", flexShrink: 0 }}>{conv.time}</div>
                     </div>
-                    {/* Unread badge */}
-                    {conv.unread > 0 && (
-                      <div style={{
-                        width: 20, height: 20, borderRadius: "50%",
-                        background: "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 10, fontWeight: 600, fontFamily: FONT, color: "#fff", flexShrink: 0,
-                      }}>{conv.unread}</div>
-                    )}
+                    <div style={{
+                      fontSize: 12, fontFamily: FONT, color: "#ffffff45", marginTop: 2,
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    }}>{conv.lastMsg}</div>
+                  </div>
+                  {/* Unread */}
+                  {conv.unread > 0 && (
+                    <div style={{
+                      minWidth: 20, height: 20, borderRadius: 10, padding: "0 6px",
+                      background: "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 10, fontWeight: 600, fontFamily: FONT, color: "#fff", flexShrink: 0,
+                    }}>{conv.unread}</div>
+                  )}
+                </motion.div>
+              );
+            })}
+            {filtered.length === 0 && (
+              <div style={{ padding: 32, textAlign: "center", fontSize: 13, fontFamily: FONT, color: "#ffffff30" }}>
+                No conversations found
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Right: Chat Window ── */}
+        {activeConversation ? (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+            {/* Chat Header */}
+            <div style={{
+              padding: "14px 24px", borderBottom: "1px solid rgba(255,255,255,0.06)",
+              display: "flex", alignItems: "center", gap: 14,
+            }}>
+              <div style={{ position: "relative", flexShrink: 0 }}>
+                <div style={{
+                  width: 38, height: 38, borderRadius: "50%",
+                  background: `linear-gradient(135deg, ${activeConversation.avatar}50, ${activeConversation.avatar}20)`,
+                  border: `1px solid ${activeConversation.avatar}40`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 13, fontWeight: 600, fontFamily: FONT, color: activeConversation.avatar,
+                }}>
+                  {activeConversation.name.split(" ").map(n => n[0]).join("")}
+                </div>
+                <div style={{
+                  position: "absolute", bottom: -1, right: -1,
+                  width: 10, height: 10, borderRadius: "50%",
+                  background: "#6BC5A0", border: "2px solid #12121a",
+                }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd" }}>{activeConversation.name}</div>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40" }}>{activeConversation.role} · Online</div>
+              </div>
+              {/* Action buttons */}
+              <div style={{ display: "flex", gap: 4 }}>
+                {[
+                  <><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" /></>,
+                  <><path d="M23 7l-7 5 7 5V7z" /><rect x="1" y="5" width="15" height="14" rx="2" /></>,
+                  <><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></>,
+                ].map((icon, idx) => (
+                  <motion.div key={idx} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                    style={{
+                      width: 34, height: 34, borderRadius: 10,
+                      background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)",
+                      display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                    }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                      stroke="#ffffff50" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      {icon}
+                    </svg>
                   </motion.div>
                 ))}
-                {filtered.length === 0 && (
-                  <div style={{ padding: 32, textAlign: "center", fontSize: 13, fontFamily: FONT, color: "#ffffff30" }}>
-                    No conversations found
-                  </div>
-                )}
               </div>
+            </div>
 
-              {/* Bottom bar */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.3, duration: 0.3 }}
-                style={{
-                  padding: "12px 20px", borderTop: "1px solid rgba(255,255,255,0.06)",
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                }}
-              >
+            {/* Messages */}
+            <div ref={scrollRef} style={{
+              flex: 1, minHeight: 0, overflowY: "auto",
+              padding: "20px 24px", display: "flex", flexDirection: "column", gap: 8,
+            }}>
+              {/* Date separator */}
+              <div style={{
+                textAlign: "center", fontSize: 11, fontFamily: FONT, color: "#ffffff30",
+                padding: "8px 0 16px",
+              }}>Today</div>
+
+              {messages.map((msg, i) => (
                 <motion.div
-                  onClick={onBack}
-                  className="hover-back"
-                  whileTap={{ scale: 0.97 }}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
-                    padding: "6px 14px", borderRadius: 10,
-                  }}
+                  key={msg.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.02 + i * 0.03, duration: 0.25 }}
+                  style={{ display: "flex", justifyContent: msg.from === "me" ? "flex-end" : "flex-start", gap: 10 }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                    <path d="M15 18l-6-6 6-6" stroke="#ffffff50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff50" }}>{t("common.back")}</span>
+                  {msg.from !== "me" && (
+                    <div style={{
+                      width: 32, height: 32, borderRadius: "50%", flexShrink: 0, marginTop: 2,
+                      background: `linear-gradient(135deg, ${activeConversation.avatar}50, ${activeConversation.avatar}20)`,
+                      border: `1px solid ${activeConversation.avatar}30`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 11, fontWeight: 600, fontFamily: FONT, color: activeConversation.avatar,
+                    }}>
+                      {activeConversation.name.split(" ").map(n => n[0]).join("")}
+                    </div>
+                  )}
+                  <div style={{ maxWidth: "65%" }}>
+                    {/* Sender name + time */}
+                    <div style={{
+                      fontSize: 11, fontFamily: FONT, marginBottom: 4,
+                      color: msg.from === "me" ? "#ffffff50" : activeConversation.avatar,
+                      textAlign: msg.from === "me" ? "right" : "left",
+                    }}>
+                      {msg.from === "me" ? "You" : activeConversation.name.split(" ")[0]} · {msg.time}
+                    </div>
+                    <div style={{
+                      padding: "10px 16px",
+                      borderRadius: msg.from === "me" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                      background: msg.from === "me"
+                        ? "linear-gradient(135deg, rgba(139, 122, 255, 0.2), rgba(100, 80, 220, 0.15))"
+                        : "rgba(255,255,255,0.05)",
+                      border: `1px solid ${msg.from === "me" ? "rgba(139, 122, 255, 0.15)" : "rgba(255,255,255,0.06)"}`,
+                      fontSize: 13, fontFamily: FONT, color: "#ffffffcc", lineHeight: 1.55,
+                    }}>
+                      {msg.text}
+                    </div>
+                  </div>
                 </motion.div>
-                {/* New chat button */}
-                <motion.div
-                  className="hover-back"
-                  whileTap={{ scale: 0.95 }}
+              ))}
+            </div>
+
+            {/* Message Input */}
+            <div style={{
+              padding: "14px 24px 18px", borderTop: "1px solid rgba(255,255,255,0.06)",
+            }}>
+              <div style={{
+                display: "flex", alignItems: "center", gap: 12,
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 16, padding: "10px 10px 10px 18px",
+              }}>
+                {/* Attach */}
+                <motion.div whileTap={{ scale: 0.9 }} style={{ cursor: "pointer", flexShrink: 0 }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 5v14M5 12h14" stroke="#ffffff30" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </motion.div>
+                <input
+                  value={msgInput} onChange={e => setMsgInput(e.target.value)}
+                  placeholder={`Type a message...`}
+                  onKeyDown={e => { if (e.key === "Enter" && msgInput.trim()) setMsgInput(""); }}
                   style={{
-                    display: "flex", alignItems: "center", gap: 6, cursor: "pointer",
-                    padding: "6px 14px", borderRadius: 10,
+                    flex: 1, background: "none", border: "none", outline: "none",
+                    fontSize: 14, fontFamily: FONT, color: "#ffffffdd", caretColor: "#8B7AFF",
                   }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 5v14M5 12h14" stroke="#ffffff50" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
-                  <span style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff50" }}>New Chat</span>
-                </motion.div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                />
+                {/* Emoji, GIF, Attach, Send */}
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  {["😊", "GIF", "📎"].map((icon, idx) => (
+                    <motion.div key={idx} whileTap={{ scale: 0.9 }}
+                      style={{
+                        width: 32, height: 32, borderRadius: 8,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        cursor: "pointer", fontSize: idx === 1 ? 10 : 14,
+                        fontFamily: FONT, color: "#ffffff35", fontWeight: idx === 1 ? 700 : 400,
+                      }}>
+                      {icon}
+                    </motion.div>
+                  ))}
+                  <motion.div
+                    whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
+                    style={{
+                      width: 36, height: 36, borderRadius: "50%",
+                      background: msgInput.trim() ? "#8B7AFF" : "rgba(255,255,255,0.06)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      cursor: msgInput.trim() ? "pointer" : "default",
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                      <path d="M22 2L11 13" stroke={msgInput.trim() ? "#fff" : "#ffffff30"} strokeWidth="2" strokeLinecap="round" />
+                      <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke={msgInput.trim() ? "#fff" : "#ffffff30"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </motion.div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div style={{
+            flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+            color: "#ffffff25", fontSize: 14, fontFamily: FONT,
+          }}>
+            Select a conversation
+          </div>
+        )}
       </div>
     </motion.div>
   );
