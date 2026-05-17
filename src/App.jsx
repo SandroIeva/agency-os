@@ -6105,8 +6105,8 @@ export default function CircularMenu() {
           transition: background 0.6s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
         .hover-row:hover {
-          background: rgba(255,255,255,0.07) !important;
-          border-color: rgba(255,255,255,0.10) !important;
+          background: ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.07)"} !important;
+          border-color: ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)"} !important;
           transition: background 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), border-color 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
         .hover-back {
