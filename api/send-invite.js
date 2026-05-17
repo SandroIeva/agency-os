@@ -25,7 +25,7 @@ export default async function handler(req, res) {
         "Authorization": `Bearer ${resendKey}`,
       },
       body: JSON.stringify({
-        from: "Agency OS <onboarding@resend.dev>",
+        from: "Agency OS <invite@i7os.com>",
         to: [email],
         subject: `${inviterName || "Someone"} invited you to join ${orgName || "their workspace"} on Agency OS`,
         html: `
