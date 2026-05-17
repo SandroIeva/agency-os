@@ -27,7 +27,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         from: "Agency OS <invite@i7os.com>",
         to: [email],
-        subject: `${inviterName || "Someone"} invited you to join ${orgName || "their workspace"} on Agency OS`,
+        subject: `${inviterName || "Someone"} invited you to join ${orgName || "their workspace"} on i7 OS`,
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px; text-align: center;">
             <div style="margin-bottom: 32px;">
