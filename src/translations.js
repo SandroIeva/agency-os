@@ -171,8 +171,10 @@ const translations = {
   "settings.comingSoon": { de: "Demnächst", en: "Coming soon" },
 
   // ── Auth ─────────────────────────────────────
+  "auth.welcome": { de: "Willkommen in deinem Workspace", en: "Welcome to Your Workspace" },
   "auth.signInPrompt": { de: "Anmelden, um auf deinen Workspace zuzugreifen", en: "Sign in to access your workspace" },
   "auth.signInGoogle": { de: "Mit Google anmelden", en: "Sign in with Google" },
+  "auth.privacyNote": { de: "Deine Daten bleiben privat und sicher", en: "Your data stays private and secure" },
 
   // ── Calendar ─────────────────────────────────
   "cal.month": { de: "Monat", en: "Month" },
