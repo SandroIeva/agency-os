@@ -31,14 +31,7 @@ export default async function handler(req, res) {
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px; text-align: center;">
             <div style="margin-bottom: 32px;">
-              <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 0 auto 16px;">
-                <tr>
-                  <td style="font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 28px; font-weight: 300; color: #1a1a2e; opacity: 0.8; padding-right: 6px; vertical-align: middle;">i7</td>
-                  <td style="vertical-align: middle;">
-                    <div style="display: inline-block; border: 1.5px solid #1a1a2e; border-radius: 11px; padding: 3px 12px; font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 14px; font-weight: 400; color: #1a1a2e; opacity: 0.8; letter-spacing: 0.5px;">os</div>
-                  </td>
-                </tr>
-              </table>
+              <img src="https://agency-os-ebon-phi.vercel.app/logo-dark.svg" alt="i7 os" width="76" height="48" style="display: block; margin: 0 auto 16px;" />
               <h1 style="font-size: 22px; font-weight: 600; color: #1a1a2e; margin: 0;">You're invited!</h1>
             </div>
             <p style="font-size: 15px; color: #444; line-height: 1.6; margin-bottom: 24px;">
