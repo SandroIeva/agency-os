@@ -4854,7 +4854,7 @@ export default function CircularMenu() {
                           const { error: memErr } = await supabase.from("org_members").insert({ org_id: org.id, user_id: session.user.id, role: "admin" });
                           if (memErr) throw memErr;
                           setUserOrg(org); setOnboardingStep(null); setWsName("");
-                        } catch (err) { setOnboardingError(appLanguage === "de" ? "Fehler beim Erstellen." : "Failed to create workspace."); setWsCreating(false); }
+                        } catch (err) { console.error("[Onboarding]", err); setOnboardingError(err?.message || err?.details || JSON.stringify(err)); setWsCreating(false); }
                       }}
                       placeholder={appLanguage === "de" ? "z.B. Meine Agentur" : "e.g. My Agency"}
                       style={{
@@ -4876,7 +4876,7 @@ export default function CircularMenu() {
                           const { error: memErr } = await supabase.from("org_members").insert({ org_id: org.id, user_id: session.user.id, role: "admin" });
                           if (memErr) throw memErr;
                           setUserOrg(org); setOnboardingStep(null); setWsName("");
-                        } catch (err) { console.error("[Onboarding]", err); setOnboardingError(appLanguage === "de" ? "Fehler beim Erstellen." : "Failed to create workspace."); setWsCreating(false); }
+                        } catch (err) { console.error("[Onboarding]", err); setOnboardingError(err?.message || err?.details || JSON.stringify(err)); setWsCreating(false); }
                       }}
                       disabled={!wsName.trim() || wsCreating}
                       style={{
