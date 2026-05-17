@@ -42,11 +42,11 @@ export default async function handler(req, res) {
               <div style="font-size: 15px; font-weight: 600; color: #555; letter-spacing: 0.3px; word-break: break-all; font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;">${token}</div>
             </div>
             <a href="https://agency-os-ebon-phi.vercel.app/?invite=${token}" style="display: inline-block; padding: 12px 28px; background: #111111; color: white; text-decoration: none; border-radius: 10px; font-weight: 500; font-size: 14px; margin-bottom: 24px;">Join Workspace</a>
-            <p style="font-size: 13px; color: #888; line-height: 1.6; margin-bottom: 24px; white-space: nowrap;">
-              Click the button to join directly, or copy the invite code and enter it manually in i7 OS.
+            <p style="font-size: 13px; color: #888; line-height: 1.6; margin-bottom: 24px;">
+              Click the button to join directly,<br/>or copy the invite code and enter it manually in i7 OS.
             </p>
             <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0 16px;" />
-            <p style="font-size: 11px; color: #999;">
+            <p style="font-size: 11px; color: #999; text-align: center; margin: 0;">
               If you didn't expect this invitation, you can safely ignore this email.
             </p>
           </div>
