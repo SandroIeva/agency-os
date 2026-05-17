@@ -610,35 +610,50 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
       // 2. Load tasks — org-scoped if user has an org, otherwise personal
       const orgId = userOrg?.id;
       const taskQuery = orgId
-        ? supabase.from("tasks").select("*").eq("org_id", orgId).order("position")
-        : supabase.from("tasks").select("*").eq("creator_id", u.id).order("position");
-      const { data: taskData } = await taskQuery;
-      setTasks(taskData || []);
+        ? supabase.from("tasks").select("*, creator:profiles!tasks_creator_profile_fkey(display_name, avatar_url, initials), assignee:profiles!tasks_assignee_profile_fkey(display_name, avatar_url, initials)").eq("org_id", orgId).order("position")
+        : supabase.from("tasks").select("*, creator:profiles!tasks_creator_profile_fkey(display_name, avatar_url, initials), assignee:profiles!tasks_assignee_profile_fkey(display_name, avatar_url, initials)").eq("creator_id", u.id).order("position");
+      const { data: taskData, error: taskError } = await taskQuery;
+      if (taskError) {
+        // Fallback without joins if FK doesn't exist
+        const fallbackQuery = orgId
+          ? supabase.from("tasks").select("*").eq("org_id", orgId).order("position")
+          : supabase.from("tasks").select("*").eq("creator_id", u.id).order("position");
+        const { data: fb } = await fallbackQuery;
+        setTasks(fb || []);
+      } else {
+        setTasks(taskData || []);
+      }
 
-      // 3. Build team members map from orgMembers prop + current user fallback
+      // 3. Build team members map — load all org profiles from DB
       const memberMap = {};
-      // Always add current user
-      const uName = u.user_metadata?.full_name || u.email?.split("@")[0] || "User";
-      memberMap[u.id] = {
-        user_id: u.id,
-        display_name: uName,
-        avatar_url: u.user_metadata?.avatar_url || null,
-        initials: uName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2),
-        avatar_color: ASSIGNEE_COLORS[0],
-      };
-      // Add all org members (overwrites current user with richer profile data)
-      (orgMembers || []).forEach(m => {
-        if (m.profiles) {
-          memberMap[m.user_id] = {
-            user_id: m.user_id,
-            display_name: m.profiles.display_name,
-            avatar_url: m.profiles.avatar_url,
-            initials: m.profiles.initials,
-            email: m.profiles.email,
-            avatar_color: ASSIGNEE_COLORS[Math.abs((m.user_id || "").charCodeAt(0)) % ASSIGNEE_COLORS.length],
-          };
-        }
-      });
+      if (orgId) {
+        const { data: allMembers } = await supabase
+          .from("org_members")
+          .select("user_id, role, profiles(display_name, avatar_url, email, initials)")
+          .eq("org_id", orgId);
+        (allMembers || []).forEach(m => {
+          if (m.profiles) {
+            memberMap[m.user_id] = {
+              user_id: m.user_id,
+              display_name: m.profiles.display_name,
+              avatar_url: m.profiles.avatar_url,
+              initials: m.profiles.initials,
+              email: m.profiles.email,
+              avatar_color: ASSIGNEE_COLORS[Math.abs((m.user_id || "").charCodeAt(0)) % ASSIGNEE_COLORS.length],
+            };
+          }
+        });
+      }
+      // Always ensure current user is in map
+      if (!memberMap[u.id]) {
+        const uName = u.user_metadata?.full_name || u.email?.split("@")[0] || "User";
+        memberMap[u.id] = {
+          user_id: u.id, display_name: uName,
+          avatar_url: u.user_metadata?.avatar_url || null,
+          initials: uName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2),
+          avatar_color: ASSIGNEE_COLORS[0],
+        };
+      }
       setTeamMembers(memberMap);
 
       setLoading(false);
@@ -879,24 +894,44 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                             </div>
                             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 4, lineHeight: 1.4 }}>{task.title}</div>
                             {task.description && <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginBottom: 12 }}>{task.description}</div>}
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                              {member ? (
-                                member.avatar_url ? (
-                                  <img src={member.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 22, height: 22, borderRadius: "50%", border: `1px solid ${theme.borderFaint}` }} />
+                            {/* Creator + date */}
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                              {(() => {
+                                const creator = task.creator || teamMembers[task.creator_id];
+                                return creator?.avatar_url ? (
+                                  <img src={creator.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 16, height: 16, borderRadius: "50%", border: `1px solid ${theme.borderFaint}` }} />
                                 ) : (
-                                  <div style={{
-                                    width: 22, height: 22, borderRadius: "50%", background: (member.avatar_color || "#8B7AFF") + "25", color: member.avatar_color || "#8B7AFF",
-                                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontFamily: FONT, fontWeight: 600,
-                                  }}>{member.initials}</div>
-                                )
-                              ) : (
-                                <div style={{
-                                  width: 22, height: 22, borderRadius: "50%", background: theme.accent + "25", color: theme.accent,
-                                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontFamily: FONT, fontWeight: 600,
-                                }}>?</div>
-                              )}
-                              {task.time_tracked && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>⏱ {task.time_tracked}</span>}
-                              {task.due_date && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>{new Date(task.due_date).toLocaleDateString("de-DE", { day: "2-digit", month: "short" })}</span>}
+                                  <div style={{ width: 16, height: 16, borderRadius: "50%", background: theme.accent + "25", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontFamily: FONT, fontWeight: 600 }}>{creator?.initials || "?"}</div>
+                                );
+                              })()}
+                              <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>
+                                {(task.creator?.display_name || teamMembers[task.creator_id]?.display_name || "Unknown")}
+                              </span>
+                              <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, opacity: 0.5 }}>·</span>
+                              <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>
+                                {task.created_at ? new Date(task.created_at).toLocaleDateString("de-DE", { day: "2-digit", month: "short" }) + " " + new Date(task.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : ""}
+                              </span>
+                            </div>
+                            {/* Assignee + meta */}
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                {(() => {
+                                  const assignee = task.assignee || member;
+                                  return assignee?.avatar_url ? (
+                                    <img src={assignee.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 22, height: 22, borderRadius: "50%", border: `1px solid ${theme.borderFaint}` }} />
+                                  ) : (
+                                    <div style={{
+                                      width: 22, height: 22, borderRadius: "50%", background: (assignee?.avatar_color || "#8B7AFF") + "25", color: assignee?.avatar_color || "#8B7AFF",
+                                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontFamily: FONT, fontWeight: 600,
+                                    }}>{assignee?.initials || "?"}</div>
+                                  );
+                                })()}
+                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim }}>{(task.assignee?.display_name || member?.display_name || "")}</span>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                {task.time_tracked && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>⏱ {task.time_tracked}</span>}
+                                {task.due_date && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>{new Date(task.due_date).toLocaleDateString("de-DE", { day: "2-digit", month: "short" })}</span>}
+                              </div>
                             </div>
                           </motion.div>
                         );
