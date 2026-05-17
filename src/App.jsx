@@ -1,9 +1,42 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, Component } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "./supabase";
 import { buildSystemPrompt } from "./systemPrompt";
 import { getTranslation } from "./translations";
+
+// Error Boundary to prevent black screen — shows error info in production
+export class AppErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    this.setState({ errorInfo });
+    console.error("[ErrorBoundary]", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ background: "#111117", color: "#ff6b6b", padding: 40, fontFamily: "monospace", height: "100vh", overflow: "auto" }}>
+          <h2 style={{ color: "#fff", marginBottom: 16 }}>Agency OS — Runtime Error</h2>
+          <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.6 }}>
+            {this.state.error?.toString()}
+            {"\n\n"}
+            {this.state.errorInfo?.componentStack}
+          </pre>
+          <button onClick={() => window.location.reload()} style={{ marginTop: 24, padding: "10px 20px", background: "#333", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
+            Reload App
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const COLORS = {
   bg: "#111117",
@@ -3766,7 +3799,8 @@ export default function CircularMenu() {
       .subscribe();
 
     return () => supabase.removeChannel(channel);
-  }, [session]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]);
 
   // ── Fetch upcoming Google Calendar events for startview ──
   useEffect(() => {
@@ -6011,7 +6045,7 @@ export default function CircularMenu() {
             }}
             style={{ cursor: "pointer" }}>
             <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
-              <motion.rect x="0.6" y="0.6" width="50.4" height="50.4" rx="25.2" stroke="white"
+              <motion.rect x="0.6" y="0.6" width="50.4" height="50.4" rx="25.2"
                 animate={{ strokeOpacity: menuOpen && menuSource === "grid" ? 0.5 : 0.15 }}
                 transition={gentleTween}
                 strokeWidth="1.2" stroke={darkMode ? "white" : "#1a1a2e"} />
