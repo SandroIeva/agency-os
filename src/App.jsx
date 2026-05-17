@@ -615,8 +615,18 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
       const { data: taskData } = await taskQuery;
       setTasks(taskData || []);
 
-      // 3. Build team members map from orgMembers prop
+      // 3. Build team members map from orgMembers prop + current user fallback
       const memberMap = {};
+      // Always add current user
+      const uName = u.user_metadata?.full_name || u.email?.split("@")[0] || "User";
+      memberMap[u.id] = {
+        user_id: u.id,
+        display_name: uName,
+        avatar_url: u.user_metadata?.avatar_url || null,
+        initials: uName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2),
+        avatar_color: ASSIGNEE_COLORS[0],
+      };
+      // Add all org members (overwrites current user with richer profile data)
       (orgMembers || []).forEach(m => {
         if (m.profiles) {
           memberMap[m.user_id] = {
@@ -625,7 +635,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
             avatar_url: m.profiles.avatar_url,
             initials: m.profiles.initials,
             email: m.profiles.email,
-            avatar_color: ASSIGNEE_COLORS[Math.abs(m.user_id?.charCodeAt(0) || 0) % ASSIGNEE_COLORS.length],
+            avatar_color: ASSIGNEE_COLORS[Math.abs((m.user_id || "").charCodeAt(0)) % ASSIGNEE_COLORS.length],
           };
         }
       });
@@ -634,7 +644,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
       setLoading(false);
     };
     init();
-  }, [session]);
+  }, [session, userOrg?.id, orgMembers]);
 
   // Auto-open task edit form when navigating from startview card
   useEffect(() => {
