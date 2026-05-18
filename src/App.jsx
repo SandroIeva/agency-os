@@ -1058,17 +1058,9 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                     </span>
                   )}
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  {editingTask && (
-                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                      onClick={() => { resetForm(); requestDelete(editingTask.id); }}
-                      style={{ fontSize: 11, fontFamily: FONT, color: "#EF4444", cursor: "pointer", padding: "4px 10px", borderRadius: 8, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}
-                    >{t("common.delete")}</motion.div>
-                  )}
-                  <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={resetForm}
-                    style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 16 }}
-                  >✕</motion.div>
-                </div>
+                <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={resetForm}
+                  style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 16 }}
+                >✕</motion.div>
               </div>
 
               {/* Body: split layout for edit, single for new */}
@@ -1110,7 +1102,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                             <span style={{ color: theme.text }}>{sel.display_name}</span>
                           </>) : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke={theme.textDim} strokeWidth="1.5"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round"/></svg><span>Zuweisen</span></>;
                         })()}
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"/></svg>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                       </motion.div>
                       {assigneeDropdownOpen && (
                         <div style={{
@@ -1302,25 +1294,39 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                     </div>
                   )}
 
-                  {/* Save / Cancel buttons */}
-                  <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-                    <motion.button whileTap={{ scale: 0.97 }} onClick={resetForm}
-                      style={{
-                        padding: "10px 20px", borderRadius: 12, cursor: "pointer",
-                        background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`,
-                        fontSize: 13, fontFamily: FONT, color: theme.textSub,
-                      }}
-                    >{t("common.cancel")}</motion.button>
-                    <motion.button whileTap={{ scale: 0.97 }}
-                      onClick={editingTask ? updateTask : createTask}
-                      style={{
-                        padding: "10px 24px", borderRadius: 12, cursor: "pointer",
-                        background: taskForm.title.trim() ? theme.accent + "25" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
-                        border: `1px solid ${taskForm.title.trim() ? theme.accent + "40" : theme.borderFaint}`,
-                        fontSize: 13, fontFamily: FONT, fontWeight: 500,
-                        color: taskForm.title.trim() ? theme.accent : theme.textFaint,
-                      }}
-                    >{editingTask ? t("task.save") : t("task.create")}</motion.button>
+                  {/* Action buttons: Delete left, Save/Cancel right */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                    <div>
+                      {editingTask && (
+                        <motion.button whileTap={{ scale: 0.95 }}
+                          onClick={() => { resetForm(); requestDelete(editingTask.id); }}
+                          style={{
+                            padding: "8px 16px", borderRadius: 10, cursor: "pointer",
+                            background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)",
+                            fontSize: 12, fontFamily: FONT, color: "#EF4444",
+                          }}
+                        >{t("common.delete")}</motion.button>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", gap: 10 }}>
+                      <motion.button whileTap={{ scale: 0.97 }} onClick={resetForm}
+                        style={{
+                          padding: "10px 20px", borderRadius: 12, cursor: "pointer",
+                          background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`,
+                          fontSize: 13, fontFamily: FONT, color: theme.textSub,
+                        }}
+                      >{t("common.cancel")}</motion.button>
+                      <motion.button whileTap={{ scale: 0.97 }}
+                        onClick={editingTask ? updateTask : createTask}
+                        style={{
+                          padding: "10px 24px", borderRadius: 12, cursor: "pointer",
+                          background: taskForm.title.trim() ? theme.accent + "25" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
+                          border: `1px solid ${taskForm.title.trim() ? theme.accent + "40" : theme.borderFaint}`,
+                          fontSize: 13, fontFamily: FONT, fontWeight: 500,
+                          color: taskForm.title.trim() ? theme.accent : theme.textFaint,
+                        }}
+                      >{editingTask ? t("task.save") : t("task.create")}</motion.button>
+                    </div>
                   </div>
                 </div>
 
