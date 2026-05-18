@@ -879,9 +879,28 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                               padding: "14px 16px", cursor: "grab",
                             }}
                           >
+                            {/* Top row: Creator avatar + name · date · project | priority + delete */}
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                              <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.5 }}>{task.project_name || "General"}</span>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 5, flex: 1, minWidth: 0 }}>
+                                {(() => {
+                                  const creator = task.creator || teamMembers[task.creator_id];
+                                  return creator?.avatar_url ? (
+                                    <img src={creator.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 16, height: 16, borderRadius: "50%", border: `1px solid ${theme.borderFaint}`, flexShrink: 0 }} />
+                                  ) : (
+                                    <div style={{ width: 16, height: 16, borderRadius: "50%", background: theme.accent + "25", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{creator?.initials || "?"}</div>
+                                  );
+                                })()}
+                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, whiteSpace: "nowrap" }}>
+                                  {(task.creator?.display_name || teamMembers[task.creator_id]?.display_name || "Unknown")}
+                                </span>
+                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, opacity: 0.4 }}>·</span>
+                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, whiteSpace: "nowrap" }}>
+                                  {task.created_at ? new Date(task.created_at).toLocaleDateString("de-DE", { day: "2-digit", month: "short" }) + " " + new Date(task.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : ""}
+                                </span>
+                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, opacity: 0.4 }}>·</span>
+                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{task.project_name || "General"}</span>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginLeft: 8 }}>
                                 {task.is_ai_task && <span style={{ fontSize: 9, fontFamily: FONT, fontWeight: 500, color: "#E84393", padding: "2px 6px", borderRadius: 4, background: "#E8439315", letterSpacing: 0.5 }}>AI</span>}
                                 <div style={{ width: 6, height: 6, borderRadius: "50%", background: priColors[task.priority] }} />
                                 <motion.div
@@ -892,28 +911,11 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                                 >✕</motion.div>
                               </div>
                             </div>
+                            {/* Title + description */}
                             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 4, lineHeight: 1.4 }}>{task.title}</div>
-                            {task.description && <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginBottom: 12 }}>{task.description}</div>}
-                            {/* Creator + date */}
-                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                              {(() => {
-                                const creator = task.creator || teamMembers[task.creator_id];
-                                return creator?.avatar_url ? (
-                                  <img src={creator.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 16, height: 16, borderRadius: "50%", border: `1px solid ${theme.borderFaint}` }} />
-                                ) : (
-                                  <div style={{ width: 16, height: 16, borderRadius: "50%", background: theme.accent + "25", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontFamily: FONT, fontWeight: 600 }}>{creator?.initials || "?"}</div>
-                                );
-                              })()}
-                              <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>
-                                {(task.creator?.display_name || teamMembers[task.creator_id]?.display_name || "Unknown")}
-                              </span>
-                              <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, opacity: 0.5 }}>·</span>
-                              <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>
-                                {task.created_at ? new Date(task.created_at).toLocaleDateString("de-DE", { day: "2-digit", month: "short" }) + " " + new Date(task.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : ""}
-                              </span>
-                            </div>
-                            {/* Assignee + meta */}
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            {task.description && <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginBottom: 8 }}>{task.description}</div>}
+                            {/* Bottom: Assignee + meta */}
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                 {(() => {
                                   const assignee = task.assignee || member;
