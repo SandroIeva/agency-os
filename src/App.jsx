@@ -1372,7 +1372,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                       })}
                     </div>
                     {/* Comment input */}
-                    <div style={{ padding: "12px 16px", borderTop: `1px solid ${theme.border}` }}>
+                    <div style={{ padding: "16px 16px 24px", borderTop: `1px solid ${theme.border}` }}>
                       <div style={{ display: "flex", gap: 8 }}>
                         <input
                           value={commentText}
