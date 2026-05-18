@@ -4457,7 +4457,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                     <div style={{ maxWidth: "65%" }}>
                       <div style={{
                         fontSize: 11, fontFamily: FONT, marginBottom: 4,
-                        color: isMe ? theme.textDim : sender.color,
+                        color: theme.textDim,
                         textAlign: isMe ? "right" : "left",
                       }}>
                         {isMe ? "Du" : sender.display_name} · {msgTime}
