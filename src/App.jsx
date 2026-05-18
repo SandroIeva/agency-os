@@ -4943,6 +4943,8 @@ export default function CircularMenu() {
   const [pushSubExists, setPushSubExists] = useState(false);
   const [pushSetupSending, setPushSetupSending] = useState(false);
   const [pushSetupSent, setPushSetupSent] = useState(false);
+  // Push-setup overlay (shown when ?push-setup=true)
+  const [pushSetupOverlay, setPushSetupOverlay] = useState(null); // null | { status, message, needsPwa }
   const [panelOpen, setPanelOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [dashboardTasks, setDashboardTasks] = useState([]);
@@ -5756,53 +5758,96 @@ export default function CircularMenu() {
       .then(({ data }) => { if (data?.length) setPushSubExists(true); });
   }, [session?.user?.id]);
 
-  // ── Handle ?push-setup=true — register service worker + request permission ──
+  // ── Push setup: actual subscription flow (used by overlay button) ──
+  const performPushSubscribe = useCallback(async () => {
+    setPushSetupOverlay({ status: "working", message: "Aktiviere Benachrichtigungen..." });
+    try {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+        setPushSetupOverlay({ status: "error", message: "Dieser Browser unterstützt keine Push-Benachrichtigungen. Nutze Chrome (Android) oder Safari (iOS 16.4+)." });
+        return;
+      }
+      const reg = await navigator.serviceWorker.register("/sw-push.js");
+      await navigator.serviceWorker.ready;
+      console.log("[Push] Service worker registered");
+
+      const permission = await Notification.requestPermission();
+      console.log("[Push] Permission:", permission);
+      if (permission !== "granted") {
+        setPushSetupOverlay({ status: "error", message: "Benachrichtigungen wurden nicht erlaubt. Bitte in den Browser- / Geräteeinstellungen aktivieren." });
+        return;
+      }
+
+      const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: VAPID_PUBLIC_KEY,
+      });
+      const subJson = subscription.toJSON();
+      console.log("[Push] Subscription obtained, endpoint:", subJson.endpoint?.slice(0, 50));
+
+      const { error: dbErr } = await supabase.from("push_subscriptions").upsert({
+        user_id: session.user.id,
+        endpoint: subJson.endpoint,
+        p256dh: subJson.keys.p256dh,
+        auth: subJson.keys.auth,
+      }, { onConflict: "user_id,endpoint" });
+      if (dbErr) throw new Error("DB save failed: " + dbErr.message);
+      console.log("[Push] Subscription saved to DB");
+
+      setPushSubExists(true);
+
+      // Immediately fire a test push so the user knows it works
+      try {
+        const testRes = await fetch("/api/send-push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subscription: { endpoint: subJson.endpoint, keys: { p256dh: subJson.keys.p256dh, auth: subJson.keys.auth } },
+            title: "✓ Push aktiviert",
+            body: "Du erhältst ab jetzt Erinnerungen auf diesem Gerät.",
+            tag: "push-setup-ok",
+          }),
+        });
+        console.log("[Push] Test push response:", testRes.status);
+        if (!testRes.ok) {
+          const errBody = await testRes.text().catch(() => "");
+          throw new Error(`Test push failed (${testRes.status}): ${errBody.slice(0, 200)}`);
+        }
+        setPushSetupOverlay({ status: "success", message: "Du hast jetzt eine Test-Benachrichtigung erhalten. Ab sofort kommen alle Reminder auf dieses Gerät." });
+      } catch (testErr) {
+        setPushSetupOverlay({ status: "partial", message: "Subscription gespeichert, aber Test-Push fehlgeschlagen: " + testErr.message + ". VAPID Keys auf Vercel gesetzt?" });
+      }
+    } catch (e) {
+      console.error("[Push] Setup error:", e);
+      setPushSetupOverlay({ status: "error", message: "Setup fehlgeschlagen: " + e.message });
+    }
+  }, [session?.user?.id]);
+
+  // ── Handle ?push-setup=true — show setup overlay ──
   useEffect(() => {
     if (!session?.user?.id) return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("push-setup") !== "true") return;
-    // Clean URL
     window.history.replaceState({}, "", window.location.pathname);
 
-    (async () => {
-      try {
-        if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-          alert("Dein Browser unterstützt keine Push-Benachrichtigungen.");
-          return;
-        }
-        const permission = await Notification.requestPermission();
-        if (permission !== "granted") {
-          alert("Benachrichtigungen wurden nicht erlaubt. Bitte erlaube sie in den Browser-Einstellungen.");
-          return;
-        }
-        const reg = await navigator.serviceWorker.register("/sw-push.js");
-        await navigator.serviceWorker.ready;
-        const subscription = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: VAPID_PUBLIC_KEY,
-        });
-        const subJson = subscription.toJSON();
-        await supabase.from("push_subscriptions").upsert({
-          user_id: session.user.id,
-          endpoint: subJson.endpoint,
-          p256dh: subJson.keys.p256dh,
-          auth: subJson.keys.auth,
-        }, { onConflict: "user_id,endpoint" });
-        setPushSubExists(true);
-        // Show success as notification
-        setNotifications(prev => [{
-          id: "push-setup-ok",
-          type: "reminder",
-          title: "Push aktiviert",
-          body: "Du erhältst jetzt Erinnerungen auf diesem Gerät.",
-          read: false,
-          created_at: new Date().toISOString(),
-        }, ...prev]);
-      } catch (e) {
-        console.error("Push setup error:", e);
-        alert("Push-Setup fehlgeschlagen: " + e.message);
-      }
-    })();
+    // Detect platform
+    const ua = navigator.userAgent;
+    const isIOS = /iPhone|iPad|iPod/.test(ua);
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    const supported = "serviceWorker" in navigator && "PushManager" in window;
+
+    if (!supported) {
+      setPushSetupOverlay({ status: "error", message: "Dieser Browser unterstützt keine Push-Benachrichtigungen.", needsPwa: false });
+      return;
+    }
+
+    if (isIOS && !isStandalone) {
+      // iOS requires PWA install first
+      setPushSetupOverlay({ status: "needsPwa", message: "", needsPwa: true });
+      return;
+    }
+
+    // Android / installed PWA / desktop — show ready-to-activate prompt
+    setPushSetupOverlay({ status: "ready", message: "" });
   }, [session?.user?.id]);
 
   // ── Build startview cards (tasks + events + placeholders) ──
@@ -8862,7 +8907,29 @@ export default function CircularMenu() {
                     <motion.button
                       whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
                       onClick={async () => {
-                        if (pushSubExists) return;
+                        if (pushSubExists) {
+                          // Send a test push
+                          setPushSetupSending(true);
+                          try {
+                            const { data: subs } = await supabase.from("push_subscriptions").select("*").eq("user_id", session.user.id);
+                            for (const sub of subs || []) {
+                              await fetch("/api/send-push", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  subscription: { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+                                  title: "🔔 Test-Benachrichtigung",
+                                  body: "Push funktioniert auf diesem Gerät!",
+                                  tag: "test-push",
+                                }),
+                              });
+                            }
+                            setPushSetupSent(true);
+                            setTimeout(() => setPushSetupSent(false), 3000);
+                          } catch (e) { console.error("Test push error:", e); }
+                          setPushSetupSending(false);
+                          return;
+                        }
                         setPushSetupSending(true);
                         try {
                           await fetch("/api/send-push-setup", {
@@ -8876,16 +8943,19 @@ export default function CircularMenu() {
                         setPushSetupSending(false);
                       }}
                       style={{
-                        padding: pushSubExists ? "8px 16px" : "10px 20px", borderRadius: 12,
-                        background: pushSubExists ? "rgba(0, 184, 148, 0.12)" : "#8B7AFF",
-                        border: pushSubExists ? "1px solid rgba(0, 184, 148, 0.2)" : "none",
+                        padding: "10px 20px", borderRadius: 12,
+                        background: pushSubExists ? "rgba(0, 184, 148, 0.15)" : "#8B7AFF",
+                        border: pushSubExists ? "1px solid rgba(0, 184, 148, 0.3)" : "none",
                         color: pushSubExists ? "#00B894" : "#fff",
                         fontSize: 13, fontWeight: 500, fontFamily: FONT,
-                        cursor: pushSubExists ? "default" : "pointer",
+                        cursor: "pointer",
                         opacity: pushSetupSending ? 0.6 : 1,
                       }}
                     >
-                      {pushSubExists ? "✓ Aktiv" : pushSetupSent ? "✓ E-Mail gesendet!" : pushSetupSending ? "Sende..." : "📱 Aktivieren"}
+                      {pushSubExists
+                        ? (pushSetupSent ? "✓ Test gesendet" : pushSetupSending ? "Sende..." : "Test senden")
+                        : (pushSetupSent ? "✓ E-Mail gesendet!" : pushSetupSending ? "Sende..." : "📱 Aktivieren")
+                      }
                     </motion.button>
                   </div>
                   {!pushSubExists && (
@@ -9038,6 +9108,116 @@ export default function CircularMenu() {
           transition: background 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
       `}</style>
+
+      {/* ── Push Setup Overlay (Portal) ── */}
+      {createPortal(<AnimatePresence>
+        {pushSetupOverlay && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setPushSetupOverlay(null)}
+            style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(10px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                width: "100%", maxWidth: 440,
+                background: darkMode ? "rgba(22, 22, 30, 0.98)" : "rgba(255, 255, 255, 0.98)",
+                backdropFilter: "blur(40px)", border: `1px solid ${theme.border}`,
+                borderRadius: 20, overflow: "hidden",
+                padding: "32px 28px",
+              }}
+            >
+              {/* Status icon */}
+              <div style={{
+                width: 64, height: 64, borderRadius: 18, margin: "0 auto 20px",
+                background:
+                  pushSetupOverlay.status === "success" ? "rgba(0, 184, 148, 0.12)" :
+                  pushSetupOverlay.status === "error" || pushSetupOverlay.status === "partial" ? "rgba(239, 68, 68, 0.12)" :
+                  pushSetupOverlay.status === "needsPwa" ? "rgba(139, 122, 255, 0.12)" :
+                  "rgba(139, 122, 255, 0.12)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <div style={{ fontSize: 32 }}>
+                  {pushSetupOverlay.status === "success" ? "✓" :
+                   pushSetupOverlay.status === "error" ? "⚠️" :
+                   pushSetupOverlay.status === "partial" ? "⚠️" :
+                   pushSetupOverlay.status === "needsPwa" ? "📱" :
+                   pushSetupOverlay.status === "working" ? "⏳" : "🔔"}
+                </div>
+              </div>
+
+              {/* Title */}
+              <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, textAlign: "center", marginBottom: 12 }}>
+                {pushSetupOverlay.status === "ready" ? "Benachrichtigungen aktivieren" :
+                 pushSetupOverlay.status === "working" ? "Aktiviere..." :
+                 pushSetupOverlay.status === "success" ? "Aktiviert!" :
+                 pushSetupOverlay.status === "partial" ? "Fast geschafft" :
+                 pushSetupOverlay.status === "needsPwa" ? "App zum Home-Bildschirm hinzufügen" :
+                 "Setup fehlgeschlagen"}
+              </div>
+
+              {/* Body */}
+              {pushSetupOverlay.status === "needsPwa" ? (
+                <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 20 }}>
+                  Auf iPhone funktionieren Push-Benachrichtigungen nur, wenn i7 OS zum Home-Bildschirm hinzugefügt ist.
+                  <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", fontSize: 12 }}>
+                    <div style={{ fontWeight: 600, color: theme.text, marginBottom: 6 }}>So geht's:</div>
+                    <div style={{ marginBottom: 4 }}>1. Tippe unten auf <strong>Teilen</strong> (das Symbol mit dem Pfeil nach oben ↑)</div>
+                    <div style={{ marginBottom: 4 }}>2. Scrolle und wähle <strong>"Zum Home-Bildschirm"</strong></div>
+                    <div style={{ marginBottom: 4 }}>3. Tippe <strong>"Hinzufügen"</strong></div>
+                    <div>4. Öffne i7 OS vom <strong>Home-Bildschirm</strong> und aktiviere die Benachrichtigungen dort</div>
+                  </div>
+                </div>
+              ) : pushSetupOverlay.message ? (
+                <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 20, textAlign: "center" }}>
+                  {pushSetupOverlay.message}
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 20, textAlign: "center" }}>
+                  Klicke auf "Aktivieren" und erlaube die Benachrichtigungen. Anschließend bekommst du sofort eine Test-Benachrichtigung.
+                </div>
+              )}
+
+              {/* Buttons */}
+              <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+                {pushSetupOverlay.status === "ready" && (
+                  <motion.button whileTap={{ scale: 0.97 }}
+                    onClick={performPushSubscribe}
+                    style={{
+                      flex: 1, padding: "12px 0", borderRadius: 12, cursor: "pointer",
+                      background: theme.accent + "22", border: `1px solid ${theme.accent}40`,
+                      fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.accent,
+                    }}
+                  >🔔 Aktivieren</motion.button>
+                )}
+                {(pushSetupOverlay.status === "success" || pushSetupOverlay.status === "error" || pushSetupOverlay.status === "partial" || pushSetupOverlay.status === "needsPwa") && (
+                  <motion.button whileTap={{ scale: 0.97 }}
+                    onClick={() => setPushSetupOverlay(null)}
+                    style={{
+                      flex: 1, padding: "12px 0", borderRadius: 12, cursor: "pointer",
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
+                      border: `1px solid ${theme.borderFaint}`,
+                      fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text,
+                    }}
+                  >Schließen</motion.button>
+                )}
+                {pushSetupOverlay.status === "error" && (
+                  <motion.button whileTap={{ scale: 0.97 }}
+                    onClick={performPushSubscribe}
+                    style={{
+                      flex: 1, padding: "12px 0", borderRadius: 12, cursor: "pointer",
+                      background: theme.accent + "22", border: `1px solid ${theme.accent}40`,
+                      fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.accent,
+                    }}
+                  >Erneut versuchen</motion.button>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>, document.body)}
 
       {/* ── Reminder Modal (Portal) ── */}
       {createPortal(<AnimatePresence>

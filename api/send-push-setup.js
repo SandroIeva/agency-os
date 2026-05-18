@@ -44,9 +44,18 @@ export default async function handler(req, res) {
             </p>
             <a href="${setupUrl}" style="display: inline-block; padding: 14px 32px; background: #111111; color: white; text-decoration: none; border-radius: 12px; font-weight: 500; font-size: 15px; margin-bottom: 24px;">📱 Auf dem Handy öffnen</a>
             <p style="font-size: 13px; color: #888; line-height: 1.6; margin-top: 24px;">
-              Wichtig: Öffne den Link im <strong>Browser deines Handys</strong> (Safari oder Chrome).<br/>
-              Erlaube dann die Benachrichtigungen wenn du gefragt wirst.
+              <strong>Android:</strong> Öffne den Link in Chrome und erlaube die Benachrichtigungen.
             </p>
+            <div style="background: #fff8e1; border: 1px solid #ffe082; border-radius: 12px; padding: 14px 16px; margin-top: 16px; text-align: left;">
+              <p style="font-size: 12px; color: #666; line-height: 1.6; margin: 0;">
+                <strong style="color: #f57c00;">iPhone-Nutzer:</strong><br/>
+                Apple erlaubt Push-Benachrichtigungen nur in installierten Web-Apps.<br/>
+                1. Öffne den Link in Safari<br/>
+                2. Tippe auf das <strong>Teilen-Symbol</strong> (↑)<br/>
+                3. Wähle <strong>"Zum Home-Bildschirm"</strong><br/>
+                4. Öffne i7 OS dann vom Home-Bildschirm und aktiviere dort die Benachrichtigungen
+              </p>
+            </div>
             <hr style="border: none; border-top: 1px solid #eee; margin: 28px 0 16px;" />
             <p style="font-size: 11px; color: #999;">
               Du erhältst diese E-Mail, weil du Push-Benachrichtigungen in i7 OS aktivieren möchtest.
