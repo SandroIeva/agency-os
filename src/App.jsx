@@ -4004,7 +4004,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
 
 const CHAT_COLORS = ["#E88D67", "#5B8DEF", "#8B7AFF", "#6BC5A0", "#F59E0B", "#E84393", "#00B894", "#FD79A8"];
 
-function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers, darkMode, theme, createNotification, notifications = [], markNotifRead }) {
+function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t, session, userOrg, orgMembers, darkMode, theme, createNotification, notifications = [], markNotifRead }) {
   const [search, setSearch] = useState("");
   const [conversations, setConversations] = useState([]);
   const [activeConvId, setActiveConvId] = useState(null);
@@ -4085,6 +4085,14 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
   }, [myId, userOrg?.id, memberMap]);
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
+
+  // Auto-open conversation from notification
+  useEffect(() => {
+    if (initialConvId && !loadingConvs) {
+      openConversation(initialConvId);
+      if (onConvOpened) onConvOpened();
+    }
+  }, [initialConvId, loadingConvs]);
 
   // Load messages for active conversation
   useEffect(() => {
@@ -4546,6 +4554,7 @@ export default function CircularMenu() {
     return "dashboard";
   });
   const [chatTab, setChatTab] = useState("Team");
+  const [openChatConvId, setOpenChatConvId] = useState(null);
   const [openTaskId, setOpenTaskId] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
@@ -6435,7 +6444,7 @@ export default function CircularMenu() {
                             whileTap={{ scale: 0.98 }}
                             onClick={() => {
                               markNotifRead(n.id);
-                              if (n.type === "chat_message") { setCurrentView("chat"); setNotifOpen(false); }
+                              if (n.type === "chat_message") { setOpenChatConvId(n.metadata?.conversation_id || null); setCurrentView("chat"); setNotifOpen(false); }
                               else if (n.metadata?.task_id) { setOpenTaskId(n.metadata.task_id); setCurrentView("kanban"); setNotifOpen(false); }
                               else if (n.metadata?.hangoutLink) { window.open(n.metadata.hangoutLink, "_blank"); }
                               else if (n.type === "calendar_reminder") { setCurrentView("calendar"); setNotifOpen(false); }
@@ -6543,6 +6552,8 @@ export default function CircularMenu() {
           {currentView === "chat" && (
             <ChatView
               initialTab={chatTab}
+              initialConvId={openChatConvId}
+              onConvOpened={() => setOpenChatConvId(null)}
               t={t}
               session={session}
               userOrg={userOrg}
