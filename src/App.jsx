@@ -3900,7 +3900,6 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
       .select("*, chat_participants(user_id), chat_messages(id, text, sender_id, created_at)")
       .eq("org_id", userOrg.id)
       .order("created_at", { ascending: false });
-    console.log("[Chat] loadConversations:", { convs, convLoadErr });
     if (!convs) { setConversations([]); setLoadingConvs(false); return; }
     // Build enriched conversation list
     const enriched = convs.map(c => {
@@ -3980,24 +3979,20 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
 
   // Start new direct conversation
   const startConversation = async (otherUserId) => {
-    console.log("[Chat] startConversation", { myId, orgId: userOrg?.id, otherUserId });
-    if (!myId || !userOrg?.id) { console.log("[Chat] ABORT: no myId or orgId"); return; }
+    if (!myId || !userOrg?.id) return;
     // Check if a direct conversation already exists between these two users
     const existing = conversations.find(c => !c.is_group && c.otherIds.includes(otherUserId));
     if (existing) { setActiveConvId(existing.id); setShowNewChat(false); return; }
     try {
       // Create new conversation
       const { data: conv, error: convErr } = await supabase.from("chat_conversations").insert({ org_id: userOrg.id, is_group: false }).select().single();
-      console.log("[Chat] conv insert result:", { conv, convErr });
-      if (convErr) { console.error("[Chat] Create conv error:", convErr); return; }
-      if (!conv) { console.error("[Chat] No conv returned"); return; }
+      if (convErr || !conv) return;
       // Add both participants
       const { data: partData, error: partErr } = await supabase.from("chat_participants").insert([
         { conversation_id: conv.id, user_id: myId },
         { conversation_id: conv.id, user_id: otherUserId },
       ]).select();
-      console.log("[Chat] participants insert:", { partData, partErr });
-      if (partErr) console.error("[Chat] Add participants error:", partErr);
+      if (partErr) return;
       setShowNewChat(false);
       await loadConversations();
       setActiveConvId(conv.id);
