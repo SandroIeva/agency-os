@@ -48,7 +48,7 @@ const COLORS = {
 };
 
 const MENU_ITEMS_DEF = [
-  { id: "chat", labelKey: "menu.chat", sub: [{ id: "team", labelKey: "sub.team" }, { id: "clients", labelKey: "sub.clients" }, { id: "ai", labelKey: "sub.ai" }, { id: "channels", labelKey: "sub.channels" }, { id: "calls", labelKey: "sub.calls" }, { id: "archive", labelKey: "sub.archive" }] },
+  { id: "chat", labelKey: "menu.chat", sub: [] },
   { id: "plan", labelKey: "menu.plan", sub: [{ id: "kanban", labelKey: "sub.kanban" }, { id: "timeline", labelKey: "sub.timeline" }, { id: "tasks", labelKey: "sub.tasks" }, { id: "calendar", labelKey: "sub.calendar" }] },
   { id: "brand", labelKey: "menu.brand", sub: [{ id: "assets", labelKey: "sub.assets" }, { id: "identity", labelKey: "sub.identity" }, { id: "knowledge", labelKey: "sub.intelligence" }, { id: "personas", labelKey: "sub.personas" }, { id: "competitor", labelKey: "sub.analyze" }, { id: "guidelines", labelKey: "sub.guidelines" }] },
   { id: "docs", labelKey: "menu.projects", sub: [{ id: "notes", labelKey: "sub.notes" }, { id: "briefs", labelKey: "sub.briefs" }, { id: "wiki", labelKey: "sub.wiki" }, { id: "templates", labelKey: "sub.templates" }, { id: "proposals", labelKey: "sub.proposals" }, { id: "reports", labelKey: "sub.reports" }] },
