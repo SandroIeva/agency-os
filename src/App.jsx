@@ -4942,6 +4942,7 @@ export default function CircularMenu() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [dashboardTasks, setDashboardTasks] = useState([]);
+  const [dashboardReminders, setDashboardReminders] = useState([]);
   const [dashboardProjects, setDashboardProjects] = useState([]);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -5538,6 +5539,9 @@ export default function CircularMenu() {
           : supabase.from("tasks").select("*").eq("creator_id", session.user.id).order("position");
         const { data } = await query;
         setDashboardTasks(data || []);
+        // Load reminders for dashboard
+        const { data: rems } = await supabase.from("reminders").select("*").eq("user_id", session.user.id).eq("notified", false).order("remind_at", { ascending: true });
+        setDashboardReminders(rems || []);
         // Also load projects for logo display
         if (userOrg?.id) {
           const { data: prj } = await supabase.from("projects").select("*").eq("org_id", userOrg.id);
@@ -7693,8 +7697,60 @@ export default function CircularMenu() {
                       </div>
                     )}
 
+                    {/* Reminders section */}
+                    {dashboardReminders.length > 0 && (
+                      <div>
+                        <motion.div
+                          initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.35, duration: 0.3 }}
+                          style={{ fontSize: 10, fontFamily: FONT, color: "#00B89480", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}
+                        >
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#00B894" }} />
+                          Reminder
+                        </motion.div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          {dashboardReminders.map((rem, i) => {
+                            const remindDate = new Date(rem.remind_at);
+                            const eventDate = new Date(remindDate.getTime() + rem.lead_minutes * 60000);
+                            const dateStr = eventDate.toLocaleDateString("de-DE", { day: "2-digit", month: "short" });
+                            const timeStr = eventDate.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+                            const leadLabel = rem.lead_minutes === 60 ? "1 Std vorher" : `${rem.lead_minutes} Min vorher`;
+                            return (
+                              <motion.div key={rem.id}
+                                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.37 + i * 0.05, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
+                                className="hover-row"
+                                style={{
+                                  display: "flex", alignItems: "center", gap: 14,
+                                  padding: "13px 16px", borderRadius: 14,
+                                  background: darkMode ? "rgba(0, 184, 148, 0.04)" : "rgba(0, 184, 148, 0.05)",
+                                  border: darkMode ? "1px solid rgba(0, 184, 148, 0.1)" : "1px solid rgba(0, 184, 148, 0.12)",
+                                }}
+                              >
+                                <div style={{
+                                  width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                                  border: "1.5px solid #00B89450",
+                                  display: "flex", alignItems: "center", justifyContent: "center",
+                                }}>
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#00B894" strokeWidth="1.5"/><path d="M12 7v5l3 3" stroke="#00B894" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{rem.title}</div>
+                                  <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff35" : "#1a1a2e55", marginTop: 2 }}>{leadLabel}</div>
+                                </div>
+                                <div style={{ fontSize: 11, fontFamily: FONT, color: "#00B89490", flexShrink: 0, textAlign: "right" }}>
+                                  <div>{dateStr}</div>
+                                  <div style={{ fontSize: 10, opacity: 0.7 }}>{timeStr}</div>
+                                </div>
+                              </motion.div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Empty state */}
-                    {activeTasks.length === 0 && (
+                    {activeTasks.length === 0 && dashboardReminders.length === 0 && (
                       <div style={{ textAlign: "center", padding: "40px 20px" }}>
                         <div style={{ fontSize: 28, marginBottom: 12 }}>✓</div>
                         <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffff60" : "#1a1a2e80" }}>{t("dash.noTasks")}</div>
@@ -8858,13 +8914,14 @@ export default function CircularMenu() {
               setSaving(true);
               const remindAtFull = new Date(`${remDate}T${remTime}`);
               const remindAt = new Date(remindAtFull.getTime() - remLead * 60000);
-              await supabase.from("reminders").insert({
+              const { data: newRem } = await supabase.from("reminders").insert({
                 user_id: session.user.id,
                 org_id: userOrg?.id || null,
                 title: remTitle.trim(),
                 remind_at: remindAt.toISOString(),
                 lead_minutes: remLead,
-              });
+              }).select().single();
+              if (newRem) setDashboardReminders(prev => [...prev, newRem].sort((a, b) => new Date(a.remind_at) - new Date(b.remind_at)));
               setSaving(false);
               setShowReminderModal(false);
             };
