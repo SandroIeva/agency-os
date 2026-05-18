@@ -2832,7 +2832,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
   const toggleMeet = async (enable) => {
     setEventForm(f => ({ ...f, withMeet: enable }));
     if (enable) {
-      const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
+      const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
       if (!providerToken) return;
       setMeetLoading(true);
       try {
@@ -2867,7 +2867,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
     } else {
       // Toggle off — delete temp event if exists
       if (tempEventId) {
-        const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
+        const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
         if (providerToken) {
           fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${tempEventId}`, {
             method: "DELETE",
@@ -2882,9 +2882,9 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
   };
 
   // Cancel new event — delete temp Meet event if exists
-  const cancelNewEvent = () => {
+  const cancelNewEvent = async () => {
     if (tempEventId) {
-      const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
+      const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
       if (providerToken) {
         fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${tempEventId}`, {
           method: "DELETE",
@@ -2909,7 +2909,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
         setTeamEvents(prev => prev.filter(e => e.id !== eventObj.id));
         setConfirmDeleteEvent(null);
       } else if (eventObj.type === "google") {
-        const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
+        const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
         if (!providerToken) { setDeletingEvent(false); return; }
         const res = await fetch(
           `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventObj.id}?sendUpdates=all`,
@@ -2964,7 +2964,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
 
   const createGoogleEvent = async () => {
     if (!eventForm.title.trim() || !eventForm.date) return;
-    const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
+    const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
     if (!providerToken) { alert("Kein Google Zugriff. Bitte neu einloggen."); return; }
     setSavingEvent(true);
     try {
@@ -3910,7 +3910,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
     const fetchAgain = async () => {
       setError(null);
       try {
-        const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
+        const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
         if (!providerToken) { setError("Kein Google Drive Zugriff."); setLoading(false); return; }
         let query = "trashed=false";
         if (currentFolder) { query += ` and '${currentFolder}' in parents`; }
@@ -3936,7 +3936,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   };
 
   const handleUpload = async (fileList) => {
-    const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
+    const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
     if (!providerToken) { setError("Kein Google Drive Zugriff. Bitte neu einloggen."); return; }
     setUploading(true);
     setUploadProgress({ current: 0, total: fileList.length });
@@ -3990,7 +3990,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   };
 
   const handleCreateFolder = async () => {
-    const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
+    const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
     if (!providerToken) { setError("Kein Google Drive Zugriff."); return; }
     const folderName = prompt("Ordner Name:");
     if (!folderName) return;
@@ -5334,24 +5334,49 @@ export default function CircularMenu() {
     if (error) setAuthError(error.message);
   };
 
-  // Silent token refresh: tries multiple strategies
+  // Silent token refresh: tries two strategies (popup strategy removed — COOP-blocked)
   // 1. Server-side refresh via /api/refresh-token (needs GOOGLE_CLIENT_ID/SECRET env vars)
-  // 2. Supabase session refresh (may return provider_token on some setups)
-  // 3. Silent popup OAuth as last resort
+  // 2. Supabase session refresh (may return provider_token if Supabase auto-refreshed Google)
   const refreshingTokenRef = useRef(false);
-  const refreshPromiseRef = useRef(null); // Deduplicate concurrent refresh calls
+  const refreshPromiseRef = useRef(null);
+  const refreshFailCountRef = useRef(0);
+  const refreshBackoffUntilRef = useRef(0);
 
   const autoReLogin = useCallback(async () => {
-    // If already refreshing, return the same promise (dedup)
+    // Backoff: if we've failed repeatedly, pause refresh attempts
+    if (Date.now() < refreshBackoffUntilRef.current) {
+      return googleTokenRef.current || null;
+    }
+    // Dedup concurrent calls
     if (refreshingTokenRef.current && refreshPromiseRef.current) {
       return refreshPromiseRef.current;
     }
     refreshingTokenRef.current = true;
 
+    const onSuccess = (tok) => {
+      refreshFailCountRef.current = 0;
+      refreshBackoffUntilRef.current = 0;
+      refreshingTokenRef.current = false;
+      refreshPromiseRef.current = null;
+      return tok;
+    };
+
+    const onFailure = () => {
+      refreshFailCountRef.current += 1;
+      // After 3 consecutive fails, pause for 30 min to stop the 500-spam loop
+      if (refreshFailCountRef.current >= 3) {
+        refreshBackoffUntilRef.current = Date.now() + 30 * 60 * 1000;
+        console.warn("[TokenMgr] Refresh failed 3x in a row — backing off for 30 min");
+      }
+      refreshingTokenRef.current = false;
+      refreshPromiseRef.current = null;
+      return null;
+    };
+
     const doRefresh = async () => {
       // Strategy 1: Server-side refresh with stored refresh_token
       const refreshToken = localStorage.getItem("agencyos-google-refresh-token");
-      if (refreshToken) {
+      if (refreshToken && refreshToken.length > 20) {
         try {
           const res = await fetch("/api/refresh-token", {
             method: "POST",
@@ -5362,19 +5387,18 @@ export default function CircularMenu() {
             const data = await res.json();
             if (data.access_token) {
               storeGoogleToken(data.access_token);
-              refreshingTokenRef.current = false;
-              refreshPromiseRef.current = null;
-              return data.access_token;
+              return onSuccess(data.access_token);
             }
           } else if (res.status === 400 || res.status === 401) {
+            // Refresh token is invalid/revoked — remove it so we don't keep retrying
             localStorage.removeItem("agencyos-google-refresh-token");
           }
         } catch (e) {
-          console.warn("Server refresh failed, trying fallback:", e.message);
+          console.warn("Server refresh failed:", e.message);
         }
       }
 
-      // Strategy 2: Supabase session refresh — sometimes returns fresh provider_token
+      // Strategy 2: Supabase session refresh
       try {
         const { data: { session: freshSession } } = await supabase.auth.refreshSession();
         if (freshSession?.provider_token) {
@@ -5383,62 +5407,13 @@ export default function CircularMenu() {
             localStorage.setItem("agencyos-google-refresh-token", freshSession.provider_refresh_token);
           }
           setSession(freshSession);
-          refreshingTokenRef.current = false;
-          refreshPromiseRef.current = null;
-          return freshSession.provider_token;
+          return onSuccess(freshSession.provider_token);
         }
       } catch (e) {
         console.warn("Supabase session refresh failed:", e.message);
       }
 
-      // Strategy 3: Silent popup OAuth (user already authorized, no consent screen)
-      try {
-        const { data, error } = await supabase.auth.signInWithOAuth({
-          provider: "google",
-          options: {
-            redirectTo: window.location.origin,
-            scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/generative-language.retriever https://www.googleapis.com/auth/cloud-platform",
-            skipBrowserRedirect: true,
-            queryParams: { prompt: "none" },
-          },
-        });
-        if (!error && data?.url) {
-          const popup = window.open(data.url, "google-auth-refresh", "width=1,height=1,left=-100,top=-100");
-          if (popup) {
-            const token = await new Promise((resolve) => {
-              const timeout = setTimeout(() => { try { popup.close(); } catch(e) {} resolve(null); }, 15000);
-              const poll = setInterval(() => {
-                try {
-                  if (popup.closed) { clearInterval(poll); clearTimeout(timeout); resolve(null); return; }
-                  if (popup.location?.origin === window.location.origin) {
-                    popup.close(); clearInterval(poll); clearTimeout(timeout);
-                    setTimeout(async () => {
-                      const { data: { session: s } } = await supabase.auth.getSession();
-                      if (s?.provider_token) {
-                        storeGoogleToken(s.provider_token);
-                        if (s.provider_refresh_token) localStorage.setItem("agencyos-google-refresh-token", s.provider_refresh_token);
-                        setSession(s);
-                        resolve(s.provider_token);
-                      } else {
-                        resolve(null);
-                      }
-                    }, 800);
-                  }
-                } catch(e) { /* cross-origin, keep polling */ }
-              }, 300);
-            });
-            refreshingTokenRef.current = false;
-            refreshPromiseRef.current = null;
-            return token;
-          }
-        }
-      } catch (e) {
-        console.warn("Silent popup refresh failed:", e.message);
-      }
-
-      refreshingTokenRef.current = false;
-      refreshPromiseRef.current = null;
-      return null;
+      return onFailure();
     };
 
     refreshPromiseRef.current = doRefresh();
@@ -5486,17 +5461,24 @@ export default function CircularMenu() {
       console.log("[TokenMgr] Token stale on mount, refreshing...");
       autoReLoginRef.current();
     }
-    // Periodic check every 3 minutes
+    // Periodic check every 10 minutes (was 3 — reduce spam)
     const interval = setInterval(() => {
       if (!isTokenFreshRef.current()) {
         console.log("[TokenMgr] Periodic refresh triggered");
         autoReLoginRef.current();
       }
-      // Also proactively refresh the Supabase JWT to prevent session expiry
-      supabase.auth.getSession().then(({ data: { session: s } }) => {
-        if (s) setSession(s);
-      }).catch(() => {});
-    }, 3 * 60 * 1000);
+      // Proactively refresh the Supabase JWT (not just getSession which returns cached)
+      // This prevents the Supabase session from silently expiring → random logouts
+      supabase.auth.refreshSession().then(({ data: { session: s } }) => {
+        if (s) {
+          if (s.provider_token) storeGoogleToken(s.provider_token);
+          if (s.provider_refresh_token) {
+            localStorage.setItem("agencyos-google-refresh-token", s.provider_refresh_token);
+          }
+          setSession(s);
+        }
+      }).catch((e) => { console.warn("[Auth] Periodic refresh failed:", e.message); });
+    }, 10 * 60 * 1000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!session]);
