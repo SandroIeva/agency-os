@@ -6403,7 +6403,7 @@ export default function CircularMenu() {
                       position: "fixed", top: 70, right: 25, width: 360, maxHeight: 440,
                       background: darkMode ? "rgba(22,22,30,0.98)" : "rgba(255,255,255,0.99)",
                       backdropFilter: "blur(40px)", border: `1px solid ${theme.border}`,
-                      borderRadius: 16, overflow: "hidden", boxShadow: "0 16px 48px rgba(0,0,0,0.3)",
+                      borderRadius: 16, overflow: "hidden", boxShadow: darkMode ? "0 12px 32px rgba(0,0,0,0.25)" : "0 8px 24px rgba(0,0,0,0.08)",
                     }}
                   >
                     <div style={{
@@ -6455,7 +6455,6 @@ export default function CircularMenu() {
                               borderBottom: `1px solid ${theme.borderFaint}`,
                             }}
                           >
-                            <div style={{ fontSize: 16, flexShrink: 0, marginTop: 2 }}>{iconMap[n.type] || "🔔"}</div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{
                                 fontSize: 13, fontFamily: FONT, color: theme.text,
