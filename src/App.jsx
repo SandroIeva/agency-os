@@ -4036,9 +4036,9 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
     >
       <div style={{
         width: "100%", height: "100%",
-        background: "rgba(18, 18, 26, 0.85)",
+        background: darkMode ? "rgba(18, 18, 26, 0.85)" : "rgba(255, 255, 255, 0.92)",
         backdropFilter: "blur(40px)",
-        border: "1px solid rgba(255,255,255,0.08)",
+        border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
         borderRadius: 20, overflow: "hidden",
         display: "flex",
       }}>
@@ -4046,22 +4046,22 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
         {/* ── Left Sidebar: Conversations ── */}
         <div style={{
           width: 340, minWidth: 340, display: "flex", flexDirection: "column",
-          borderRight: "1px solid rgba(255,255,255,0.06)",
-          background: "rgba(255,255,255,0.02)",
+          borderRight: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)"}`,
+          background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
         }}>
           {/* Header */}
           <div style={{
             padding: "18px 20px 14px", display: "flex", alignItems: "center", justifyContent: "space-between",
-            borderBottom: "1px solid rgba(255,255,255,0.06)",
+            borderBottom: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)"}`,
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <motion.div onClick={onBack} className="hover-back" whileTap={{ scale: 0.95 }}
                 style={{ cursor: "pointer", padding: "4px 6px", borderRadius: 8 }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M15 18l-6-6 6-6" stroke="#ffffff50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M15 18l-6-6 6-6" stroke={darkMode ? "#ffffff50" : "#00000050"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </motion.div>
-              <span style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: "#ffffffdd", letterSpacing: -0.3 }}>
+              <span style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>
                 Messages
               </span>
             </div>
@@ -4071,26 +4071,26 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
           <div style={{ padding: "12px 16px 8px" }}>
             <div style={{
               display: "flex", alignItems: "center", gap: 10,
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.06)",
+              background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
+              border: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)"}`,
               borderRadius: 12, padding: "9px 12px",
             }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                <circle cx="11" cy="11" r="7" stroke="#ffffff40" strokeWidth="1.8" />
-                <path d="M16 16l4.5 4.5" stroke="#ffffff40" strokeWidth="1.8" strokeLinecap="round" />
+                <circle cx="11" cy="11" r="7" stroke={darkMode ? "#ffffff40" : "#00000040"} strokeWidth="1.8" />
+                <path d="M16 16l4.5 4.5" stroke={darkMode ? "#ffffff40" : "#00000040"} strokeWidth="1.8" strokeLinecap="round" />
               </svg>
               <input
                 value={search} onChange={e => setSearch(e.target.value)}
                 placeholder="Suchen..."
                 style={{
                   flex: 1, background: "none", border: "none", outline: "none",
-                  fontSize: 13, fontFamily: FONT, color: "#ffffffdd", caretColor: "#8B7AFF",
+                  fontSize: 13, fontFamily: FONT, color: theme.text, caretColor: "#8B7AFF",
                 }}
               />
               {search && (
                 <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
                   onClick={() => setSearch("")}
-                  style={{ cursor: "pointer", color: "#ffffff40", fontSize: 11, fontFamily: FONT }}>✕</motion.div>
+                  style={{ cursor: "pointer", color: theme.textDim, fontSize: 11, fontFamily: FONT }}>✕</motion.div>
               )}
             </div>
           </div>
@@ -4101,7 +4101,7 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
             padding: "4px 8px", display: "flex", flexDirection: "column", gap: 2,
           }}>
             {loadingConvs ? (
-              <div style={{ padding: 32, textAlign: "center", fontSize: 13, fontFamily: FONT, color: "#ffffff30" }}>Laden...</div>
+              <div style={{ padding: 32, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>Laden...</div>
             ) : (() => {
               // Build unified list: existing conversations + team members without conversations
               const membersWithConv = new Set();
@@ -4117,7 +4117,7 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
               if (allItems.length === 0) return (
                 <div style={{ padding: 32, textAlign: "center" }}>
                   <div style={{ fontSize: 28, marginBottom: 8, opacity: 0.2 }}>💬</div>
-                  <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffff30" }}>Keine Ergebnisse</div>
+                  <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>Keine Ergebnisse</div>
                 </div>
               );
               return allItems.map((item, i) => {
@@ -4134,7 +4134,7 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
                       style={{
                         display: "flex", alignItems: "center", gap: 12,
                         padding: "12px 12px", borderRadius: 12, cursor: "pointer",
-                        background: isActive ? "rgba(139, 122, 255, 0.12)" : "transparent",
+                        background: isActive ? (darkMode ? "rgba(139, 122, 255, 0.12)" : "rgba(139, 122, 255, 0.1)") : "transparent",
                         border: `1px solid ${isActive ? "rgba(139, 122, 255, 0.2)" : "transparent"}`,
                         transition: "all 0.2s ease",
                       }}
@@ -4154,11 +4154,11 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                          <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd" }}>{item.name}</div>
-                          <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff35", flexShrink: 0 }}>{item.time}</div>
+                          <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{item.name}</div>
+                          <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, flexShrink: 0 }}>{item.time}</div>
                         </div>
                         <div style={{
-                          fontSize: 12, fontFamily: FONT, color: "#ffffff45", marginTop: 2,
+                          fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2,
                           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                         }}>{item.lastMsg || "Noch keine Nachrichten"}</div>
                       </div>
@@ -4194,9 +4194,9 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
                       )}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd" }}>{item.display_name}</div>
+                      <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{item.display_name}</div>
                       <div style={{
-                        fontSize: 12, fontFamily: FONT, color: "#ffffff30", marginTop: 2,
+                        fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2,
                       }}>Nachricht schreiben…</div>
                     </div>
                   </motion.div>
@@ -4211,7 +4211,7 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
           <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
             {/* Chat Header */}
             <div style={{
-              padding: "14px 24px", borderBottom: "1px solid rgba(255,255,255,0.06)",
+              padding: "14px 24px", borderBottom: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)"}`,
               display: "flex", alignItems: "center", gap: 14,
             }}>
               <div style={{ position: "relative", flexShrink: 0 }}>
@@ -4228,8 +4228,8 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
                 )}
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd" }}>{activeConv.name}</div>
-                <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40" }}>Direkte Nachricht</div>
+                <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{activeConv.name}</div>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>Direkte Nachricht</div>
               </div>
             </div>
 
@@ -4241,7 +4241,7 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
               {messages.length === 0 && (
                 <div style={{ textAlign: "center", padding: "60px 20px" }}>
                   <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.2 }}>👋</div>
-                  <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffff40" }}>Sag Hallo!</div>
+                  <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>Sag Hallo!</div>
                 </div>
               )}
               {messages.map((msg, i) => {
@@ -4272,7 +4272,7 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
                     <div style={{ maxWidth: "65%" }}>
                       <div style={{
                         fontSize: 11, fontFamily: FONT, marginBottom: 4,
-                        color: isMe ? "#ffffff50" : sender.color,
+                        color: isMe ? theme.textDim : sender.color,
                         textAlign: isMe ? "right" : "left",
                       }}>
                         {isMe ? "Du" : sender.display_name} · {msgTime}
@@ -4281,10 +4281,10 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
                         padding: "10px 16px",
                         borderRadius: isMe ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
                         background: isMe
-                          ? "linear-gradient(135deg, rgba(139, 122, 255, 0.2), rgba(100, 80, 220, 0.15))"
-                          : "rgba(255,255,255,0.05)",
-                        border: `1px solid ${isMe ? "rgba(139, 122, 255, 0.15)" : "rgba(255,255,255,0.06)"}`,
-                        fontSize: 13, fontFamily: FONT, color: "#ffffffcc", lineHeight: 1.55,
+                          ? (darkMode ? "linear-gradient(135deg, rgba(139, 122, 255, 0.2), rgba(100, 80, 220, 0.15))" : "linear-gradient(135deg, rgba(139, 122, 255, 0.15), rgba(100, 80, 220, 0.1))")
+                          : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+                        border: `1px solid ${isMe ? "rgba(139, 122, 255, 0.15)" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)")}`,
+                        fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.55,
                       }}>
                         {msg.text}
                       </div>
@@ -4296,12 +4296,12 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
 
             {/* Message Input */}
             <div style={{
-              padding: "14px 24px 18px", borderTop: "1px solid rgba(255,255,255,0.06)",
+              padding: "14px 24px 18px", borderTop: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)"}`,
             }}>
               <div style={{
                 display: "flex", alignItems: "center", gap: 12,
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
+                background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
                 borderRadius: 16, padding: "10px 10px 10px 18px",
               }}>
                 <input
@@ -4310,7 +4310,7 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
                   onKeyDown={e => { if (e.key === "Enter" && msgInput.trim()) sendMessage(); }}
                   style={{
                     flex: 1, background: "none", border: "none", outline: "none",
-                    fontSize: 14, fontFamily: FONT, color: "#ffffffdd", caretColor: "#8B7AFF",
+                    fontSize: 14, fontFamily: FONT, color: theme.text, caretColor: "#8B7AFF",
                   }}
                 />
                 <motion.div
@@ -4318,15 +4318,15 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
                   onClick={sendMessage}
                   style={{
                     width: 36, height: 36, borderRadius: "50%",
-                    background: msgInput.trim() ? "#8B7AFF" : "rgba(255,255,255,0.06)",
+                    background: msgInput.trim() ? "#8B7AFF" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"),
                     display: "flex", alignItems: "center", justifyContent: "center",
                     cursor: msgInput.trim() ? "pointer" : "default",
                     transition: "all 0.2s ease",
                   }}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <path d="M22 2L11 13" stroke={msgInput.trim() ? "#fff" : "#ffffff30"} strokeWidth="2" strokeLinecap="round" />
-                    <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke={msgInput.trim() ? "#fff" : "#ffffff30"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M22 2L11 13" stroke={msgInput.trim() ? "#fff" : (darkMode ? "#ffffff30" : "#00000030")} strokeWidth="2" strokeLinecap="round" />
+                    <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke={msgInput.trim() ? "#fff" : (darkMode ? "#ffffff30" : "#00000030")} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </motion.div>
               </div>
@@ -4335,7 +4335,7 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
         ) : (
           <div style={{
             flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12,
-            color: "#ffffff25", fontSize: 14, fontFamily: FONT,
+            color: theme.textDim, fontSize: 14, fontFamily: FONT,
           }}>
             <div style={{ fontSize: 40, opacity: 0.15 }}>💬</div>
             <div>Wähle ein Gespräch oder starte ein neues</div>
