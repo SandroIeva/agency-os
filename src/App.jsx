@@ -4938,6 +4938,7 @@ export default function CircularMenu() {
   const [openChatConvId, setOpenChatConvId] = useState(null);
   const [openTaskId, setOpenTaskId] = useState(null);
   const [triggerNewTask, setTriggerNewTask] = useState(false);
+  const [showReminderModal, setShowReminderModal] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [dashboardTasks, setDashboardTasks] = useState([]);
@@ -5702,6 +5703,38 @@ export default function CircularMenu() {
     return () => clearInterval(interval);
   }, [upcomingEvents, calendarNotifiedIds]);
 
+  // ── Reminder checker: poll every 30s for due reminders ──
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    const checkReminders = async () => {
+      const now = new Date().toISOString();
+      const { data: dueReminders } = await supabase
+        .from("reminders")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .eq("notified", false)
+        .lte("remind_at", now);
+      if (dueReminders?.length) {
+        for (const rem of dueReminders) {
+          const notif = {
+            id: "rem-" + rem.id,
+            type: "reminder",
+            title: "Erinnerung",
+            body: rem.title,
+            metadata: { reminder_id: rem.id },
+            read: false,
+            created_at: new Date().toISOString(),
+          };
+          setNotifications(prev => [notif, ...prev.filter(n => n.id !== notif.id)]);
+          await supabase.from("reminders").update({ notified: true }).eq("id", rem.id);
+        }
+      }
+    };
+    checkReminders();
+    const interval = setInterval(checkReminders, 30000);
+    return () => clearInterval(interval);
+  }, [session?.user?.id]);
+
   // ── Build startview cards (tasks + events + placeholders) ──
   const startviewCards = useMemo(() => {
     const priorityOrder = { high: 0, medium: 1, low: 2 };
@@ -6257,6 +6290,8 @@ export default function CircularMenu() {
     if (subItem.id === "todo") {
       setTriggerNewTask(true);
       setCurrentView("kanban");
+    } else if (subItem.id === "reminder") {
+      setShowReminderModal(true);
     } else if (subItem.id === "kanban") {
       setCurrentView("kanban");
     } else if (subItem.id === "calendar") {
@@ -6814,6 +6849,7 @@ export default function CircularMenu() {
                           calendar_reminder: n.metadata?.hangoutLink ? "📹" : "📅",
                           member_joined: "👤", task_updated: "✏️",
                           chat_message: "💬",
+                          reminder: "⏰",
                         };
                         const timeAgo = (() => {
                           const diff = Date.now() - new Date(n.created_at).getTime();
@@ -6833,6 +6869,7 @@ export default function CircularMenu() {
                               else if (n.metadata?.task_id) { setOpenTaskId(n.metadata.task_id); setCurrentView("kanban"); setNotifOpen(false); }
                               else if (n.metadata?.hangoutLink) { window.open(n.metadata.hangoutLink, "_blank"); }
                               else if (n.type === "calendar_reminder") { setCurrentView("calendar"); setNotifOpen(false); }
+                              else if (n.type === "reminder") { setNotifOpen(false); }
                             }}
                             style={{
                               padding: "12px 18px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 12,
@@ -8805,6 +8842,149 @@ export default function CircularMenu() {
           transition: background 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
       `}</style>
+
+      {/* ── Reminder Modal (Portal) ── */}
+      {createPortal(<AnimatePresence>
+        {showReminderModal && (() => {
+          const ReminderModalInner = () => {
+            const [remTitle, setRemTitle] = useState("");
+            const [remDate, setRemDate] = useState("");
+            const [remTime, setRemTime] = useState("");
+            const [remLead, setRemLead] = useState(15);
+            const [saving, setSaving] = useState(false);
+
+            const handleSaveReminder = async () => {
+              if (!remTitle.trim() || !remDate || !remTime) return;
+              setSaving(true);
+              const remindAtFull = new Date(`${remDate}T${remTime}`);
+              const remindAt = new Date(remindAtFull.getTime() - remLead * 60000);
+              await supabase.from("reminders").insert({
+                user_id: session.user.id,
+                org_id: userOrg?.id || null,
+                title: remTitle.trim(),
+                remind_at: remindAt.toISOString(),
+                lead_minutes: remLead,
+              });
+              setSaving(false);
+              setShowReminderModal(false);
+            };
+
+            return (
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                onClick={() => setShowReminderModal(false)}
+                style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                  transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
+                  onClick={e => e.stopPropagation()}
+                  style={{
+                    width: "100%", maxWidth: 440,
+                    background: darkMode ? "rgba(22, 22, 30, 0.97)" : "rgba(255, 255, 255, 0.98)",
+                    backdropFilter: "blur(40px)", border: `1px solid ${theme.border}`,
+                    borderRadius: 20, display: "flex", flexDirection: "column", overflow: "hidden",
+                  }}
+                >
+                  {/* Header */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: `1px solid ${theme.border}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={theme.textDim} strokeWidth="1.5"/><path d="M12 7v5l3 3" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Neue Erinnerung</span>
+                    </div>
+                    <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => setShowReminderModal(false)}
+                      style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 16 }}
+                    >✕</motion.div>
+                  </div>
+
+                  {/* Body */}
+                  <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18 }}>
+                    {/* Title */}
+                    <div>
+                      <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Woran möchtest du erinnert werden?</label>
+                      <input
+                        value={remTitle} onChange={e => setRemTitle(e.target.value)}
+                        placeholder="z.B. Kundenpräsentation vorbereiten"
+                        autoFocus
+                        style={{
+                          width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                          border: `1px solid ${theme.borderFaint}`, borderRadius: 12,
+                          padding: "12px 14px", fontSize: 14, fontFamily: FONT,
+                          color: theme.text, outline: "none", caretColor: theme.accent,
+                        }}
+                        onFocus={e => e.currentTarget.style.borderColor = theme.accent + "60"}
+                        onBlur={e => e.currentTarget.style.borderColor = theme.borderFaint}
+                      />
+                    </div>
+
+                    {/* Date + Time row */}
+                    <div style={{ display: "flex", gap: 12 }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Datum</label>
+                        <input type="date" value={remDate} onChange={e => setRemDate(e.target.value)}
+                          style={{
+                            width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                            border: `1px solid ${theme.borderFaint}`, borderRadius: 12,
+                            padding: "10px 14px", fontSize: 13, fontFamily: FONT,
+                            color: theme.text, outline: "none", colorScheme: darkMode ? "dark" : "light",
+                          }}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Uhrzeit</label>
+                        <input type="time" value={remTime} onChange={e => setRemTime(e.target.value)}
+                          style={{
+                            width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                            border: `1px solid ${theme.borderFaint}`, borderRadius: 12,
+                            padding: "10px 14px", fontSize: 13, fontFamily: FONT,
+                            color: theme.text, outline: "none", colorScheme: darkMode ? "dark" : "light",
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Lead time selector */}
+                    <div>
+                      <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Erinnere mich</label>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        {[{ val: 15, label: "15 Min vorher" }, { val: 30, label: "30 Min vorher" }, { val: 60, label: "1 Std vorher" }].map(opt => (
+                          <motion.div key={opt.val} whileTap={{ scale: 0.95 }}
+                            onClick={() => setRemLead(opt.val)}
+                            style={{
+                              flex: 1, padding: "10px 8px", borderRadius: 10, cursor: "pointer",
+                              textAlign: "center", fontSize: 12, fontFamily: FONT, fontWeight: 500,
+                              background: remLead === opt.val ? theme.accent + "15" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
+                              color: remLead === opt.val ? theme.accent : theme.textDim,
+                              border: `1px solid ${remLead === opt.val ? theme.accent + "40" : theme.borderFaint}`,
+                              transition: "all 0.2s ease",
+                            }}
+                          >{opt.label}</motion.div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Save button */}
+                    <motion.button whileTap={{ scale: 0.97 }}
+                      onClick={handleSaveReminder}
+                      disabled={!remTitle.trim() || !remDate || !remTime || saving}
+                      style={{
+                        padding: "12px 0", borderRadius: 12, cursor: remTitle.trim() && remDate && remTime ? "pointer" : "not-allowed",
+                        background: remTitle.trim() && remDate && remTime ? theme.accent + "20" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
+                        border: `1px solid ${remTitle.trim() && remDate && remTime ? theme.accent + "40" : theme.borderFaint}`,
+                        fontSize: 14, fontFamily: FONT, fontWeight: 600,
+                        color: remTitle.trim() && remDate && remTime ? theme.accent : theme.textFaint,
+                        opacity: saving ? 0.6 : 1,
+                        transition: "all 0.2s ease",
+                      }}
+                    >{saving ? "Speichern..." : "Erinnerung erstellen"}</motion.button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            );
+          };
+          return <ReminderModalInner />;
+        })()}
+      </AnimatePresence>, document.body)}
     </div>
   );
 }
