@@ -3965,6 +3965,40 @@ export default function CircularMenu() {
     })();
   }, [session?.user?.id]);
 
+  // ── Refresh org members helper — used by realtime + settings navigation ──
+  const refreshOrgMembers = useCallback(async () => {
+    if (!userOrg?.id) return;
+    const { data: members } = await supabase
+      .from("org_members")
+      .select("user_id, role, profiles(display_name, avatar_url, email, initials, status)")
+      .eq("org_id", userOrg.id);
+    setOrgMembers(members || []);
+    const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", userOrg.id).eq("status", "pending");
+    setTeamInvites(invites || []);
+  }, [userOrg?.id]);
+
+  // ── Realtime subscription for org_members changes ──
+  useEffect(() => {
+    if (!userOrg?.id) return;
+    const channel = supabase
+      .channel("org-members-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "org_members", filter: `org_id=eq.${userOrg.id}` }, () => {
+        refreshOrgMembers();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "invitations", filter: `org_id=eq.${userOrg.id}` }, () => {
+        refreshOrgMembers();
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [userOrg?.id, refreshOrgMembers]);
+
+  // ── Refresh org members when opening settings view ──
+  useEffect(() => {
+    if (currentView === "settings" && userOrg?.id) {
+      refreshOrgMembers();
+    }
+  }, [currentView, userOrg?.id, refreshOrgMembers]);
+
   // ── Smart Google Token Management ──────────────────────────────
   // Stores the latest valid token in a ref for instant synchronous access
   const googleTokenRef = useRef(localStorage.getItem("agencyos-google-token") || null);
