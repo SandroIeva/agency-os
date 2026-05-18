@@ -6408,6 +6408,233 @@ export default function CircularMenu() {
                 </div>
               </motion.div>
 
+              {/* ── Workspace & Team Management ── */}
+              {userOrg && (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+                style={{ marginTop: 24 }}
+              >
+                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
+                  {appLanguage === "de" ? "Workspace" : "Workspace"} — {userOrg.name}
+                </div>
+                <div style={{
+                  borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`,
+                  overflow: "hidden",
+                }}>
+                  {/* Invite member — chip-based input */}
+                  <div style={{ padding: "18px 20px", borderBottom: `1px solid ${theme.borderFaint}` }}>
+                    <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 12 }}>
+                      {appLanguage === "de" ? "Teammitglied einladen" : "Invite Team Member"}
+                    </div>
+                    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                      <div style={{
+                        flex: 1, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6,
+                        padding: "8px 12px", borderRadius: 12, minHeight: 42,
+                        background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                        border: `1px solid ${theme.borderFaint}`,
+                      }}>
+                        {inviteEmails.map((email, idx) => (
+                          <motion.div
+                            key={idx}
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.8, opacity: 0 }}
+                            onClick={() => setInviteEmails(prev => prev.filter((_, i) => i !== idx))}
+                            style={{
+                              display: "flex", alignItems: "center", gap: 5,
+                              padding: "4px 10px", borderRadius: 8,
+                              background: "rgba(139, 122, 255, 0.12)", border: "1px solid rgba(139, 122, 255, 0.25)",
+                              fontSize: 12, fontFamily: FONT, color: "#8B7AFF", cursor: "pointer",
+                              userSelect: "none",
+                            }}
+                          >
+                            {email}
+                            <span style={{ fontSize: 14, lineHeight: 1, opacity: 0.6 }}>×</span>
+                          </motion.div>
+                        ))}
+                        <input
+                          value={inviteInputVal}
+                          onChange={(e) => setInviteInputVal(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === ",") {
+                              e.preventDefault();
+                              const val = inviteInputVal.replace(/,/g, "").trim();
+                              if (val && val.includes("@") && val.includes(".") && !inviteEmails.includes(val)) {
+                                setInviteEmails(prev => [...prev, val]);
+                                setInviteInputVal("");
+                              }
+                            }
+                            if (e.key === "Backspace" && inviteInputVal === "" && inviteEmails.length > 0) {
+                              setInviteEmails(prev => prev.slice(0, -1));
+                            }
+                          }}
+                          onBlur={() => {
+                            const val = inviteInputVal.replace(/,/g, "").trim();
+                            if (val && val.includes("@") && val.includes(".") && !inviteEmails.includes(val)) {
+                              setInviteEmails(prev => [...prev, val]);
+                              setInviteInputVal("");
+                            }
+                          }}
+                          placeholder={inviteEmails.length === 0 ? (appLanguage === "de" ? "E-Mail-Adressen eingeben..." : "Enter email addresses...") : ""}
+                          style={{
+                            flex: 1, minWidth: 120, padding: "4px 2px", border: "none", outline: "none",
+                            background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT,
+                            caretColor: "#8B7AFF",
+                          }}
+                        />
+                      </div>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                        onClick={async () => {
+                          let emails = [...inviteEmails];
+                          const remaining = inviteInputVal.replace(/,/g, "").trim();
+                          if (remaining && remaining.includes("@") && remaining.includes(".") && !emails.includes(remaining)) {
+                            emails.push(remaining);
+                          }
+                          if (emails.length === 0) return;
+                          try {
+                            for (const email of emails) {
+                              const { data: inv, error } = await supabase.from("invitations")
+                                .insert({ org_id: userOrg.id, email, invited_by: session.user.id, role: "member" })
+                                .select()
+                                .single();
+                              if (error) throw error;
+                              try {
+                                await fetch("/api/send-invite", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    email,
+                                    token: inv.token,
+                                    orgName: userOrg.name,
+                                    inviterName: userName || "A team member",
+                                  }),
+                                });
+                              } catch (emailErr) {
+                                console.warn("[Invite] Email send failed:", emailErr);
+                              }
+                            }
+                            setInviteEmails([]);
+                            setInviteInputVal("");
+                            const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", userOrg.id).eq("status", "pending");
+                            setTeamInvites(invites || []);
+                          } catch (e) {
+                            console.error("[Invite]", e);
+                            alert(e.message || "Failed to send invite");
+                          }
+                        }}
+                        style={{
+                          padding: "10px 20px", borderRadius: 12, marginTop: 1,
+                          background: "#8B7AFF", border: "none",
+                          color: "#fff", fontSize: 13, fontWeight: 500, fontFamily: FONT,
+                          cursor: "pointer", opacity: inviteEmails.length === 0 && !inviteInputVal ? 0.5 : 1,
+                        }}
+                      >
+                        {appLanguage === "de" ? "Einladen" : "Invite"}
+                      </motion.button>
+                    </div>
+                  </div>
+
+                  {/* Current members */}
+                  <div style={{ padding: "14px 20px" }}>
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.5, marginBottom: 10, textTransform: "uppercase" }}>
+                      {appLanguage === "de" ? "Mitglieder" : "Members"} ({orgMembers.length})
+                    </div>
+                    {orgMembers.map((m, i) => (
+                      <div key={m.user_id || i} style={{
+                        display: "flex", alignItems: "center", gap: 12, padding: "10px 0",
+                        borderBottom: i < orgMembers.length - 1 ? `1px solid ${theme.borderFaint}` : "none",
+                      }}>
+                        {m.profiles?.avatar_url ? (
+                          <img src={m.profiles.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${theme.borderFaint}` }} />
+                        ) : (
+                          <div style={{
+                            width: 34, height: 34, borderRadius: 10,
+                            background: "linear-gradient(135deg, #8B7AFF50, #8B7AFF20)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 12, fontWeight: 600, fontFamily: FONT, color: "#8B7AFF",
+                          }}>{m.profiles?.initials || "?"}</div>
+                        )}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{m.profiles?.display_name || "Unknown"}</div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>{m.profiles?.email || ""}</div>
+                        </div>
+                        <div style={{
+                          padding: "3px 10px", borderRadius: 8,
+                          background: m.role === "admin" ? "rgba(139, 122, 255, 0.1)" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+                          border: `1px solid ${m.role === "admin" ? "rgba(139, 122, 255, 0.2)" : theme.borderFaint}`,
+                          fontSize: 11, fontFamily: FONT, color: m.role === "admin" ? "#8B7AFF" : theme.textDim,
+                          fontWeight: 500,
+                        }}>
+                          {m.role === "admin" ? "Admin" : "Member"}
+                        </div>
+                      </div>
+                    ))}
+                    {orgMembers.length === 0 && (
+                      <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, padding: "8px 0" }}>
+                        {appLanguage === "de" ? "Noch keine Mitglieder" : "No members yet"}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Pending invites */}
+                  {teamInvites.length > 0 && (
+                    <div style={{ padding: "14px 20px", borderTop: `1px solid ${theme.borderFaint}` }}>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.5, marginBottom: 10, textTransform: "uppercase" }}>
+                        {appLanguage === "de" ? "Offene Einladungen" : "Pending Invites"} ({teamInvites.length})
+                      </div>
+                      {teamInvites.map((inv, i) => (
+                        <div key={inv.id} style={{
+                          display: "flex", alignItems: "center", gap: 12, padding: "8px 0",
+                          borderBottom: i < teamInvites.length - 1 ? `1px solid ${theme.borderFaint}` : "none",
+                        }}>
+                          <div style={{
+                            width: 34, height: 34, borderRadius: 10,
+                            background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.2)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                          }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#F59E0B" strokeWidth="1.5" />
+                              <path d="M22 6l-10 7L2 6" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" />
+                            </svg>
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>{inv.email}</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+                              <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {inv.token}
+                              </div>
+                              <motion.button
+                                whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                                onClick={() => {
+                                  navigator.clipboard.writeText(inv.token);
+                                  const btn = document.getElementById(`copy-btn-${inv.id}`);
+                                  if (btn) { btn.textContent = "✓"; setTimeout(() => { btn.textContent = "⧉"; }, 1500); }
+                                }}
+                                id={`copy-btn-${inv.id}`}
+                                style={{
+                                  background: "none", border: `1px solid ${theme.borderFaint}`, borderRadius: 6,
+                                  width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center",
+                                  fontSize: 12, color: theme.textDim, cursor: "pointer", flexShrink: 0,
+                                }}
+                              >⧉</motion.button>
+                            </div>
+                          </div>
+                          <div style={{
+                            padding: "3px 10px", borderRadius: 8,
+                            background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.15)",
+                            fontSize: 11, fontFamily: FONT, color: "#F59E0B", flexShrink: 0,
+                          }}>Pending</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+              )}
+
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
 
               {/* Left column */}
@@ -6963,236 +7190,6 @@ export default function CircularMenu() {
 
               </div>{/* end right column */}
               </div>{/* end grid */}
-
-              {/* ── Team Management (Admin only) ── */}
-              {userOrg && (
-              <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.25, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
-                style={{ marginTop: 32 }}
-              >
-                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
-                  {appLanguage === "de" ? "Workspace" : "Workspace"} — {userOrg.name}
-                </div>
-                <div style={{
-                  borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`,
-                  overflow: "hidden",
-                }}>
-                  {/* Invite member — chip-based input */}
-                  <div style={{ padding: "18px 20px", borderBottom: `1px solid ${theme.borderFaint}` }}>
-                    <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 12 }}>
-                      {appLanguage === "de" ? "Teammitglied einladen" : "Invite Team Member"}
-                    </div>
-                    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                      <div style={{
-                        flex: 1, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6,
-                        padding: "8px 12px", borderRadius: 12, minHeight: 42,
-                        background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-                        border: `1px solid ${theme.borderFaint}`,
-                      }}>
-                        {inviteEmails.map((email, idx) => (
-                          <motion.div
-                            key={idx}
-                            initial={{ scale: 0.8, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.8, opacity: 0 }}
-                            onClick={() => setInviteEmails(prev => prev.filter((_, i) => i !== idx))}
-                            style={{
-                              display: "flex", alignItems: "center", gap: 5,
-                              padding: "4px 10px", borderRadius: 8,
-                              background: "rgba(139, 122, 255, 0.12)", border: "1px solid rgba(139, 122, 255, 0.25)",
-                              fontSize: 12, fontFamily: FONT, color: "#8B7AFF", cursor: "pointer",
-                              userSelect: "none",
-                            }}
-                          >
-                            {email}
-                            <span style={{ fontSize: 14, lineHeight: 1, opacity: 0.6 }}>×</span>
-                          </motion.div>
-                        ))}
-                        <input
-                          value={inviteInputVal}
-                          onChange={(e) => setInviteInputVal(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === ",") {
-                              e.preventDefault();
-                              const val = inviteInputVal.replace(/,/g, "").trim();
-                              if (val && val.includes("@") && val.includes(".") && !inviteEmails.includes(val)) {
-                                setInviteEmails(prev => [...prev, val]);
-                                setInviteInputVal("");
-                              }
-                            }
-                            if (e.key === "Backspace" && inviteInputVal === "" && inviteEmails.length > 0) {
-                              setInviteEmails(prev => prev.slice(0, -1));
-                            }
-                          }}
-                          onBlur={() => {
-                            const val = inviteInputVal.replace(/,/g, "").trim();
-                            if (val && val.includes("@") && val.includes(".") && !inviteEmails.includes(val)) {
-                              setInviteEmails(prev => [...prev, val]);
-                              setInviteInputVal("");
-                            }
-                          }}
-                          placeholder={inviteEmails.length === 0 ? (appLanguage === "de" ? "E-Mail-Adressen eingeben..." : "Enter email addresses...") : ""}
-                          style={{
-                            flex: 1, minWidth: 120, padding: "4px 2px", border: "none", outline: "none",
-                            background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT,
-                            caretColor: "#8B7AFF",
-                          }}
-                        />
-                      </div>
-                      <motion.button
-                        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                        onClick={async () => {
-                          // Also grab any text still in input
-                          let emails = [...inviteEmails];
-                          const remaining = inviteInputVal.replace(/,/g, "").trim();
-                          if (remaining && remaining.includes("@") && remaining.includes(".") && !emails.includes(remaining)) {
-                            emails.push(remaining);
-                          }
-                          if (emails.length === 0) return;
-                          try {
-                            for (const email of emails) {
-                              const { data: inv, error } = await supabase.from("invitations")
-                                .insert({ org_id: userOrg.id, email, invited_by: session.user.id, role: "member" })
-                                .select()
-                                .single();
-                              if (error) throw error;
-                              // Send invite email via API
-                              try {
-                                await fetch("/api/send-invite", {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({
-                                    email,
-                                    token: inv.token,
-                                    orgName: userOrg.name,
-                                    inviterName: userName || "A team member",
-                                  }),
-                                });
-                              } catch (emailErr) {
-                                console.warn("[Invite] Email send failed:", emailErr);
-                              }
-                            }
-                            setInviteEmails([]);
-                            setInviteInputVal("");
-                            // Refresh pending invites list
-                            const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", userOrg.id).eq("status", "pending");
-                            setTeamInvites(invites || []);
-                          } catch (e) {
-                            console.error("[Invite]", e);
-                            alert(e.message || "Failed to send invite");
-                          }
-                        }}
-                        style={{
-                          padding: "10px 20px", borderRadius: 12, marginTop: 1,
-                          background: "#8B7AFF", border: "none",
-                          color: "#fff", fontSize: 13, fontWeight: 500, fontFamily: FONT,
-                          cursor: "pointer", opacity: inviteEmails.length === 0 && !inviteInputVal ? 0.5 : 1,
-                        }}
-                      >
-                        {appLanguage === "de" ? "Einladen" : "Invite"}
-                      </motion.button>
-                    </div>
-                  </div>
-
-                  {/* Current members */}
-                  <div style={{ padding: "14px 20px" }}>
-                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.5, marginBottom: 10, textTransform: "uppercase" }}>
-                      {appLanguage === "de" ? "Mitglieder" : "Members"} ({orgMembers.length})
-                    </div>
-                    {orgMembers.map((m, i) => (
-                      <div key={m.user_id || i} style={{
-                        display: "flex", alignItems: "center", gap: 12, padding: "10px 0",
-                        borderBottom: i < orgMembers.length - 1 ? `1px solid ${theme.borderFaint}` : "none",
-                      }}>
-                        {m.profiles?.avatar_url ? (
-                          <img src={m.profiles.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${theme.borderFaint}` }} />
-                        ) : (
-                          <div style={{
-                            width: 34, height: 34, borderRadius: 10,
-                            background: "linear-gradient(135deg, #8B7AFF50, #8B7AFF20)",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 12, fontWeight: 600, fontFamily: FONT, color: "#8B7AFF",
-                          }}>{m.profiles?.initials || "?"}</div>
-                        )}
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{m.profiles?.display_name || "Unknown"}</div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>{m.profiles?.email || ""}</div>
-                        </div>
-                        <div style={{
-                          padding: "3px 10px", borderRadius: 8,
-                          background: m.role === "admin" ? "rgba(139, 122, 255, 0.1)" : "rgba(255,255,255,0.05)",
-                          border: `1px solid ${m.role === "admin" ? "rgba(139, 122, 255, 0.2)" : theme.borderFaint}`,
-                          fontSize: 11, fontFamily: FONT, color: m.role === "admin" ? "#8B7AFF" : theme.textDim,
-                          fontWeight: 500,
-                        }}>
-                          {m.role === "admin" ? "Admin" : "Member"}
-                        </div>
-                      </div>
-                    ))}
-                    {orgMembers.length === 0 && (
-                      <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, padding: "8px 0" }}>
-                        {appLanguage === "de" ? "Noch keine Mitglieder" : "No members yet"}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Pending invites */}
-                  {teamInvites.length > 0 && (
-                    <div style={{ padding: "14px 20px", borderTop: `1px solid ${theme.borderFaint}` }}>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.5, marginBottom: 10, textTransform: "uppercase" }}>
-                        {appLanguage === "de" ? "Offene Einladungen" : "Pending Invites"} ({teamInvites.length})
-                      </div>
-                      {teamInvites.map((inv, i) => (
-                        <div key={inv.id} style={{
-                          display: "flex", alignItems: "center", gap: 12, padding: "8px 0",
-                          borderBottom: i < teamInvites.length - 1 ? `1px solid ${theme.borderFaint}` : "none",
-                        }}>
-                          <div style={{
-                            width: 34, height: 34, borderRadius: 10,
-                            background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.2)",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                          }}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#F59E0B" strokeWidth="1.5" />
-                              <path d="M22 6l-10 7L2 6" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" />
-                            </svg>
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>{inv.email}</div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
-                              <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                {inv.token}
-                              </div>
-                              <motion.button
-                                whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                                onClick={() => {
-                                  navigator.clipboard.writeText(inv.token);
-                                  const btn = document.getElementById(`copy-btn-${inv.id}`);
-                                  if (btn) { btn.textContent = "✓"; setTimeout(() => { btn.textContent = "⧉"; }, 1500); }
-                                }}
-                                id={`copy-btn-${inv.id}`}
-                                style={{
-                                  background: "none", border: `1px solid ${theme.borderFaint}`, borderRadius: 6,
-                                  width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center",
-                                  fontSize: 12, color: theme.textDim, cursor: "pointer", flexShrink: 0,
-                                }}
-                              >⧉</motion.button>
-                            </div>
-                          </div>
-                          <div style={{
-                            padding: "3px 10px", borderRadius: 8,
-                            background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.15)",
-                            fontSize: 11, fontFamily: FONT, color: "#F59E0B", flexShrink: 0,
-                          }}>Pending</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-              )}
 
               {/* Logout */}
               <motion.div
