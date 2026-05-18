@@ -1189,7 +1189,10 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                       )}
                     </div>
 
-                    {/* Column selector */}
+                  </div>
+
+                  {/* Column selector — separate row */}
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {colEntries.map(c => (
                       <motion.div key={c.key} whileTap={{ scale: 0.95 }}
                         onClick={() => setTaskForm(prev => ({ ...prev, column_key: c.key }))}
