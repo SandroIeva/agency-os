@@ -1215,10 +1215,16 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
               </div>
 
               {/* Body: split layout for edit, single for new */}
-              {(() => { const isTaskOwner = !editingTask || editingTask.creator_id === session?.user?.id; console.log("[TaskPerms]", { isTaskOwner, creator_id: editingTask?.creator_id, my_id: session?.user?.id, task_title: editingTask?.title }); return (
+              {(() => { const isTaskOwner = !editingTask || editingTask.creator_id === session?.user?.id; return (
               <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
                 {/* Left panel — main content */}
                 <div style={{ flex: 1, padding: 24, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
+                  {/* DEBUG — remove after testing */}
+                  {editingTask && (
+                    <div style={{ fontSize: 10, fontFamily: "monospace", color: "#EF4444", background: "rgba(239,68,68,0.1)", padding: "4px 8px", borderRadius: 6 }}>
+                      DEBUG: owner={isTaskOwner ? "YES" : "NO"} | creator={editingTask.creator_id?.slice(0,8)} | me={session?.user?.id?.slice(0,8)}
+                    </div>
+                  )}
                   {/* Title — view mode for existing tasks, edit on click */}
                   {editingTask && !editingTitle ? (
                     <div
