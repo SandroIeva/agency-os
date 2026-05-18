@@ -63,6 +63,7 @@ const PLUS_MENU_ITEMS_DEF = [
 ];
 
 const FONT = "'Geist', -apple-system, sans-serif";
+const VAPID_PUBLIC_KEY = "BJJ_TXEs7qnwTKLnYO5_pvuuzr6oB59d4xpSCssTZCkfujAaQYlCwxptfnUPXxhSnikKcG4rPH1FuU4CTYh4gvg";
 
 const smoothSpring = { type: "spring", stiffness: 120, damping: 20, mass: 0.8 };
 const softSpring = { type: "spring", stiffness: 80, damping: 18, mass: 1 };
@@ -4939,6 +4940,9 @@ export default function CircularMenu() {
   const [openTaskId, setOpenTaskId] = useState(null);
   const [triggerNewTask, setTriggerNewTask] = useState(false);
   const [showReminderModal, setShowReminderModal] = useState(false);
+  const [pushSubExists, setPushSubExists] = useState(false);
+  const [pushSetupSending, setPushSetupSending] = useState(false);
+  const [pushSetupSent, setPushSetupSent] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [dashboardTasks, setDashboardTasks] = useState([]);
@@ -5719,6 +5723,8 @@ export default function CircularMenu() {
         .eq("notified", false)
         .lte("remind_at", now);
       if (dueReminders?.length) {
+        // Also fetch push subscriptions for sending push
+        const { data: pushSubs } = await supabase.from("push_subscriptions").select("*").eq("user_id", session.user.id);
         for (const rem of dueReminders) {
           const notif = {
             id: "rem-" + rem.id,
@@ -5731,12 +5737,90 @@ export default function CircularMenu() {
           };
           setNotifications(prev => [notif, ...prev.filter(n => n.id !== notif.id)]);
           await supabase.from("reminders").update({ notified: true }).eq("id", rem.id);
+          // Send push notification to all subscribed devices
+          if (pushSubs?.length) {
+            for (const sub of pushSubs) {
+              try {
+                const res = await fetch("/api/send-push", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    subscription: { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+                    title: "⏰ Erinnerung",
+                    body: rem.title,
+                    tag: "reminder-" + rem.id,
+                  }),
+                });
+                if (res.status === 410) {
+                  await supabase.from("push_subscriptions").delete().eq("id", sub.id);
+                }
+              } catch (e) { console.warn("Push send failed:", e); }
+            }
+          }
+          // Update dashboard reminders list
+          setDashboardReminders(prev => prev.filter(r => r.id !== rem.id));
         }
       }
     };
     checkReminders();
     const interval = setInterval(checkReminders, 30000);
     return () => clearInterval(interval);
+  }, [session?.user?.id]);
+
+  // ── Check if push subscription exists ──
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    supabase.from("push_subscriptions").select("id").eq("user_id", session.user.id).limit(1)
+      .then(({ data }) => { if (data?.length) setPushSubExists(true); });
+  }, [session?.user?.id]);
+
+  // ── Handle ?push-setup=true — register service worker + request permission ──
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("push-setup") !== "true") return;
+    // Clean URL
+    window.history.replaceState({}, "", window.location.pathname);
+
+    (async () => {
+      try {
+        if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+          alert("Dein Browser unterstützt keine Push-Benachrichtigungen.");
+          return;
+        }
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") {
+          alert("Benachrichtigungen wurden nicht erlaubt. Bitte erlaube sie in den Browser-Einstellungen.");
+          return;
+        }
+        const reg = await navigator.serviceWorker.register("/sw-push.js");
+        await navigator.serviceWorker.ready;
+        const subscription = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: VAPID_PUBLIC_KEY,
+        });
+        const subJson = subscription.toJSON();
+        await supabase.from("push_subscriptions").upsert({
+          user_id: session.user.id,
+          endpoint: subJson.endpoint,
+          p256dh: subJson.keys.p256dh,
+          auth: subJson.keys.auth,
+        }, { onConflict: "user_id,endpoint" });
+        setPushSubExists(true);
+        // Show success as notification
+        setNotifications(prev => [{
+          id: "push-setup-ok",
+          type: "reminder",
+          title: "Push aktiviert",
+          body: "Du erhältst jetzt Erinnerungen auf diesem Gerät.",
+          read: false,
+          created_at: new Date().toISOString(),
+        }, ...prev]);
+      } catch (e) {
+        console.error("Push setup error:", e);
+        alert("Push-Setup fehlgeschlagen: " + e.message);
+      }
+    })();
   }, [session?.user?.id]);
 
   // ── Build startview cards (tasks + events + placeholders) ──
@@ -8755,6 +8839,80 @@ export default function CircularMenu() {
 
               </div>{/* end right column */}
               </div>{/* end grid */}
+
+              {/* Push Notifications */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.22, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+                style={{ marginTop: 24 }}
+              >
+                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
+                  Push-Benachrichtigungen
+                </div>
+                <div style={{
+                  borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`,
+                  padding: "20px 24px",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    <div style={{
+                      width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                      background: pushSubExists ? "rgba(0, 184, 148, 0.1)" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+                      border: `1px solid ${pushSubExists ? "rgba(0, 184, 148, 0.2)" : theme.borderFaint}`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke={pushSubExists ? "#00B894" : theme.textDim} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M13.73 21a2 2 0 01-3.46 0" stroke={pushSubExists ? "#00B894" : theme.textDim} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
+                        {pushSubExists ? "Push aktiv" : "Erinnerungen aufs Handy"}
+                      </div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.4 }}>
+                        {pushSubExists
+                          ? "Du erhältst Reminder als Push-Notification auf deinem Gerät."
+                          : "Erhalte Reminder direkt als Notification auf deinem Handy."
+                        }
+                      </div>
+                    </div>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                      onClick={async () => {
+                        if (pushSubExists) return;
+                        setPushSetupSending(true);
+                        try {
+                          await fetch("/api/send-push-setup", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ email: userEmail, userName }),
+                          });
+                          setPushSetupSent(true);
+                          setTimeout(() => setPushSetupSent(false), 5000);
+                        } catch (e) { console.error("Push setup email error:", e); }
+                        setPushSetupSending(false);
+                      }}
+                      style={{
+                        padding: pushSubExists ? "8px 16px" : "10px 20px", borderRadius: 12,
+                        background: pushSubExists ? "rgba(0, 184, 148, 0.12)" : "#8B7AFF",
+                        border: pushSubExists ? "1px solid rgba(0, 184, 148, 0.2)" : "none",
+                        color: pushSubExists ? "#00B894" : "#fff",
+                        fontSize: 13, fontWeight: 500, fontFamily: FONT,
+                        cursor: pushSubExists ? "default" : "pointer",
+                        opacity: pushSetupSending ? 0.6 : 1,
+                      }}
+                    >
+                      {pushSubExists ? "✓ Aktiv" : pushSetupSent ? "✓ E-Mail gesendet!" : pushSetupSending ? "Sende..." : "📱 Aktivieren"}
+                    </motion.button>
+                  </div>
+                  {!pushSubExists && (
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 14, lineHeight: 1.5, paddingLeft: 58 }}>
+                      Du erhältst eine E-Mail mit einem Link. Öffne diesen auf deinem Handy und erlaube die Benachrichtigungen.
+                    </div>
+                  )}
+                </div>
+              </motion.div>
 
               {/* Logout */}
               <motion.div
