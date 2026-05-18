@@ -579,9 +579,17 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
   const [loading, setLoading] = useState(true);
   const [showNewTask, setShowNewTask] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
-  const [taskForm, setTaskForm] = useState({ title: "", description: "", priority: "medium", column_key: "todo", project_name: "", assignee_id: null });
+  const [taskForm, setTaskForm] = useState({ title: "", description: "", priority: "medium", column_key: "todo", project_name: "", assignee_id: null, due_date: "" });
   const [dragOverCol, setDragOverCol] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [taskComments, setTaskComments] = useState([]);
+  const [taskAttachments, setTaskAttachments] = useState([]);
+  const [commentText, setCommentText] = useState("");
+  const [attachmentUrl, setAttachmentUrl] = useState("");
+  const [attachmentName, setAttachmentName] = useState("");
+  const [showAttachInput, setShowAttachInput] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
   const dragItem = useRef(null);
 
   // Always use these columns
@@ -674,10 +682,53 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
         column_key: task.column_key || "todo",
         project_name: task.project_name || "",
         assignee_id: task.assignee_id || session?.user?.id || null,
+        due_date: task.due_date ? task.due_date.slice(0, 10) : "",
       });
       setShowNewTask(true);
+      loadTaskExtras(task.id);
     }
   }, [openTaskId, loading, tasks]);
+
+  // Load comments + attachments for a task
+  const loadTaskExtras = async (taskId) => {
+    const [{ data: cmts }, { data: atts }] = await Promise.all([
+      supabase.from("task_comments").select("*, profile:profiles!task_comments_user_id_fkey_profiles(display_name, avatar_url, initials)").eq("task_id", taskId).order("created_at", { ascending: true }),
+      supabase.from("task_attachments").select("*").eq("task_id", taskId).order("created_at", { ascending: true }),
+    ]);
+    setTaskComments(cmts || []);
+    setTaskAttachments(atts || []);
+  };
+
+  const addComment = async () => {
+    if (!commentText.trim() || !editingTask) return;
+    const { data, error } = await supabase.from("task_comments").insert({
+      task_id: editingTask.id, user_id: session.user.id, text: commentText.trim(),
+    }).select("*, profile:profiles!task_comments_user_id_fkey_profiles(display_name, avatar_url, initials)").single();
+    if (data) setTaskComments(prev => [...prev, data]);
+    setCommentText("");
+  };
+
+  const deleteComment = async (id) => {
+    setTaskComments(prev => prev.filter(c => c.id !== id));
+    await supabase.from("task_comments").delete().eq("id", id);
+  };
+
+  const addAttachment = async () => {
+    if (!attachmentUrl.trim() || !editingTask) return;
+    const name = attachmentName.trim() || new URL(attachmentUrl.trim()).hostname;
+    const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(attachmentUrl.trim());
+    const { data } = await supabase.from("task_attachments").insert({
+      task_id: editingTask.id, user_id: session.user.id,
+      name, url: attachmentUrl.trim(), type: isImage ? "image" : "link",
+    }).select().single();
+    if (data) setTaskAttachments(prev => [...prev, data]);
+    setAttachmentUrl(""); setAttachmentName(""); setShowAttachInput(false);
+  };
+
+  const deleteAttachment = async (id) => {
+    setTaskAttachments(prev => prev.filter(a => a.id !== id));
+    await supabase.from("task_attachments").delete().eq("id", id);
+  };
 
   const projectNames = [...new Set(tasks.map(t => t.project_name).filter(Boolean))];
   const filtered = filter === "all" ? tasks : tasks.filter(t => t.project_name === filter);
@@ -699,6 +750,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
       project_name: taskForm.project_name || null,
       creator_id: session.user.id,
       assignee_id: taskForm.assignee_id || session.user.id,
+      due_date: taskForm.due_date ? new Date(taskForm.due_date).toISOString() : null,
       position: tasks.filter(t => t.column_key === taskForm.column_key).length,
       org_id: userOrg?.id || null,
     };
@@ -724,6 +776,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
       column_key: taskForm.column_key,
       project_name: taskForm.project_name || null,
       assignee_id: taskForm.assignee_id || session.user.id,
+      due_date: taskForm.due_date ? new Date(taskForm.due_date).toISOString() : null,
       updated_at: new Date().toISOString(),
     };
     setTasks(prev => prev.map(t => t.id === editingTask.id ? { ...t, ...updates } : t));
@@ -747,7 +800,8 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
   const resetForm = () => {
     setShowNewTask(false);
     setEditingTask(null);
-    setTaskForm({ title: "", description: "", priority: "medium", column_key: "todo", project_name: "", assignee_id: session?.user?.id || null });
+    setTaskForm({ title: "", description: "", priority: "medium", column_key: "todo", project_name: "", assignee_id: session?.user?.id || null, due_date: "" });
+    setTaskComments([]); setTaskAttachments([]); setCommentText(""); setAttachmentUrl(""); setAttachmentName(""); setShowAttachInput(false); setAssigneeDropdownOpen(false); setShowDatePicker(false);
   };
 
   const openEditTask = (task) => {
@@ -759,13 +813,16 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
       column_key: task.column_key || "todo",
       project_name: task.project_name || "",
       assignee_id: task.assignee_id || session?.user?.id || null,
+      due_date: task.due_date ? task.due_date.slice(0, 10) : "",
     });
     setShowNewTask(true);
+    loadTaskExtras(task.id);
   };
 
   const openNewTask = (colKey) => {
     setEditingTask(null);
-    setTaskForm({ title: "", description: "", priority: "medium", column_key: colKey || "todo", project_name: "", assignee_id: session?.user?.id || null });
+    setTaskForm({ title: "", description: "", priority: "medium", column_key: colKey || "todo", project_name: "", assignee_id: session?.user?.id || null, due_date: "" });
+    setTaskComments([]); setTaskAttachments([]);
     setShowNewTask(true);
   };
 
@@ -973,6 +1030,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
               position: "fixed", inset: 0, zIndex: 100,
               background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)",
               display: "flex", alignItems: "center", justifyContent: "center",
+              padding: 24,
             }}
           >
             <motion.div
@@ -982,173 +1040,355 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
               transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
               onClick={e => e.stopPropagation()}
               style={{
-                width: 420, background: darkMode ? "rgba(22, 22, 30, 0.95)" : "rgba(255, 255, 255, 0.97)",
+                width: "100%", maxWidth: editingTask ? 860 : 520, maxHeight: "85vh",
+                background: darkMode ? "rgba(22, 22, 30, 0.97)" : "rgba(255, 255, 255, 0.98)",
                 backdropFilter: "blur(40px)", border: `1px solid ${theme.border}`,
-                borderRadius: 20, padding: 28, display: "flex", flexDirection: "column", gap: 16,
+                borderRadius: 20, display: "flex", flexDirection: "column", overflow: "hidden",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
-                  {editingTask ? t("task.editTask") : t("task.newTask")}
-                </div>
-                {editingTask && (
-                  <motion.div
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => { resetForm(); requestDelete(editingTask.id); }}
-                    style={{
-                      fontSize: 11, fontFamily: FONT, color: "#EF4444", cursor: "pointer",
-                      padding: "4px 10px", borderRadius: 8, background: "rgba(239,68,68,0.1)",
-                      border: "1px solid rgba(239,68,68,0.2)",
-                    }}
-                  >{t("common.delete")}</motion.div>
-                )}
-              </div>
-
-              {/* Title */}
-              <input
-                value={taskForm.title}
-                onChange={e => setTaskForm(p => ({ ...p, title: e.target.value }))}
-                placeholder={t("task.title")}
-                autoFocus
-                onKeyDown={e => { if (e.key === "Enter" && taskForm.title.trim()) { editingTask ? updateTask() : createTask(); } }}
-                style={{
-                  background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`,
-                  borderRadius: 12, padding: "12px 16px", fontSize: 14, fontFamily: FONT,
-                  color: theme.text, outline: "none", caretColor: theme.accent,
-                }}
-              />
-
-              {/* Description */}
-              <textarea
-                value={taskForm.description}
-                onChange={e => setTaskForm(p => ({ ...p, description: e.target.value }))}
-                placeholder={t("task.description")}
-                rows={3}
-                style={{
-                  background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`,
-                  borderRadius: 12, padding: "12px 16px", fontSize: 13, fontFamily: FONT,
-                  color: theme.text, outline: "none", resize: "none", caretColor: theme.accent,
-                }}
-              />
-
-              {/* Project name */}
-              <input
-                value={taskForm.project_name}
-                onChange={e => setTaskForm(p => ({ ...p, project_name: e.target.value }))}
-                placeholder={t("task.projectName")}
-                list="project-suggestions"
-                style={{
-                  background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`,
-                  borderRadius: 12, padding: "10px 16px", fontSize: 13, fontFamily: FONT,
-                  color: theme.text, outline: "none", caretColor: theme.accent,
-                }}
-              />
-              <datalist id="project-suggestions">
-                {projectNames.map(p => <option key={p} value={p} />)}
-              </datalist>
-
-              {/* Assignee */}
-              <div>
-                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6 }}>Zugewiesen an</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {Object.values(teamMembers).map(m => (
-                    <motion.div
-                      key={m.user_id}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => setTaskForm(prev => ({ ...prev, assignee_id: m.user_id }))}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 8,
-                        padding: "6px 12px", borderRadius: 10, cursor: "pointer",
-                        background: taskForm.assignee_id === m.user_id ? (m.avatar_color || "#8B7AFF") + "15" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
-                        border: `1px solid ${taskForm.assignee_id === m.user_id ? (m.avatar_color || "#8B7AFF") + "35" : theme.borderFaint}`,
-                      }}
-                    >
-                      {m.avatar_url ? (
-                        <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 20, height: 20, borderRadius: "50%" }} />
-                      ) : (
-                        <div style={{
-                          width: 20, height: 20, borderRadius: "50%",
-                          background: (m.avatar_color || "#8B7AFF") + "30", color: m.avatar_color || "#8B7AFF",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 9, fontFamily: FONT, fontWeight: 600,
-                        }}>{m.initials}</div>
-                      )}
-                      <span style={{
-                        fontSize: 12, fontFamily: FONT,
-                        color: taskForm.assignee_id === m.user_id ? theme.text : theme.textDim,
-                      }}>{m.display_name}</span>
-                      {taskForm.assignee_id === m.user_id && (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                          <path d="M5 13l4 4L19 7" stroke={m.avatar_color || "#8B7AFF"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      )}
-                    </motion.div>
-                  ))}
-                  {Object.keys(teamMembers).length === 0 && (
-                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint, padding: "6px 0" }}>Keine Team-Mitglieder gefunden</div>
+              {/* Header bar */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 24px", borderBottom: `1px solid ${theme.border}` }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                    {editingTask ? t("task.editTask") : t("task.newTask")}
+                  </div>
+                  {editingTask && (
+                    <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", padding: "2px 8px", borderRadius: 6 }}>
+                      {new Date(editingTask.created_at).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" })} · {new Date(editingTask.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+                    </span>
                   )}
                 </div>
-              </div>
-
-              {/* Priority */}
-              <div>
-                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6 }}>Priorität</div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {["high", "medium", "low"].map(p => (
-                    <motion.div key={p} whileTap={{ scale: 0.95 }}
-                      onClick={() => setTaskForm(prev => ({ ...prev, priority: p }))}
-                      style={{
-                        flex: 1, padding: "6px 0", borderRadius: 8, textAlign: "center", cursor: "pointer",
-                        fontSize: 11, fontFamily: FONT,
-                        background: taskForm.priority === p ? priColors[p] + "20" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
-                        color: taskForm.priority === p ? priColors[p] : theme.textDim,
-                        border: `1px solid ${taskForm.priority === p ? priColors[p] + "40" : theme.borderFaint}`,
-                      }}
-                    >{p === "high" ? "Hoch" : p === "medium" ? "Mittel" : "Niedrig"}</motion.div>
-                  ))}
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {editingTask && (
+                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                      onClick={() => { resetForm(); requestDelete(editingTask.id); }}
+                      style={{ fontSize: 11, fontFamily: FONT, color: "#EF4444", cursor: "pointer", padding: "4px 10px", borderRadius: 8, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}
+                    >{t("common.delete")}</motion.div>
+                  )}
+                  <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={resetForm}
+                    style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 16 }}
+                  >✕</motion.div>
                 </div>
               </div>
 
-              {/* Column */}
-              <div>
-                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6 }}>Spalte</div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {colEntries.map(c => (
-                    <motion.div key={c.key} whileTap={{ scale: 0.95 }}
-                      onClick={() => setTaskForm(prev => ({ ...prev, column_key: c.key }))}
-                      style={{
-                        flex: 1, padding: "6px 0", borderRadius: 8, textAlign: "center", cursor: "pointer",
-                        fontSize: 11, fontFamily: FONT,
-                        background: taskForm.column_key === c.key ? c.color + "20" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
-                        color: taskForm.column_key === c.key ? c.color : theme.textDim,
-                          border: `1px solid ${taskForm.column_key === c.key ? c.color + "40" : theme.borderFaint}`,
+              {/* Body: split layout for edit, single for new */}
+              <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+                {/* Left panel — main content */}
+                <div style={{ flex: 1, padding: 24, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
+                  {/* Title — looks like text, editable */}
+                  <input
+                    value={taskForm.title}
+                    onChange={e => setTaskForm(p => ({ ...p, title: e.target.value }))}
+                    placeholder={t("task.title")}
+                    autoFocus
+                    style={{
+                      background: "transparent", border: "none", borderBottom: `1px solid transparent`,
+                      padding: "4px 0", fontSize: 20, fontFamily: FONT, fontWeight: 600,
+                      color: theme.text, outline: "none", caretColor: theme.accent, width: "100%",
+                      transition: "border-color 0.2s",
+                    }}
+                    onFocus={e => e.target.style.borderBottomColor = theme.accent + "40"}
+                    onBlur={e => e.target.style.borderBottomColor = "transparent"}
+                  />
+
+                  {/* Toolbar row: labels, date, column, assignee chips */}
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    {/* Assignee button */}
+                    <div style={{ position: "relative" }}>
+                      <motion.div whileTap={{ scale: 0.95 }}
+                        onClick={() => setAssigneeDropdownOpen(!assigneeDropdownOpen)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8,
+                          border: `1px solid ${theme.borderFaint}`, cursor: "pointer", fontSize: 12, fontFamily: FONT, color: theme.textDim,
+                          background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
                         }}
-                      >{c.label}</motion.div>
-                  ))}
-                </div>
-              </div>
+                      >
+                        {(() => {
+                          const sel = teamMembers[taskForm.assignee_id];
+                          return sel ? (<>
+                            {sel.avatar_url ? <img src={sel.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 16, height: 16, borderRadius: "50%" }} /> : <div style={{ width: 16, height: 16, borderRadius: "50%", background: (sel.avatar_color || "#8B7AFF") + "30", color: sel.avatar_color || "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontFamily: FONT, fontWeight: 600 }}>{sel.initials}</div>}
+                            <span style={{ color: theme.text }}>{sel.display_name}</span>
+                          </>) : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke={theme.textDim} strokeWidth="1.5"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round"/></svg><span>Zuweisen</span></>;
+                        })()}
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"/></svg>
+                      </motion.div>
+                      {assigneeDropdownOpen && (
+                        <div style={{
+                          position: "absolute", top: "100%", left: 0, marginTop: 4, zIndex: 10,
+                          background: darkMode ? "rgba(30,30,40,0.98)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.border}`,
+                          borderRadius: 12, padding: 6, minWidth: 200, boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+                        }}>
+                          {Object.values(teamMembers).map(m => (
+                            <div key={m.user_id}
+                              onClick={() => { setTaskForm(prev => ({ ...prev, assignee_id: m.user_id })); setAssigneeDropdownOpen(false); }}
+                              style={{
+                                display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, cursor: "pointer",
+                                background: taskForm.assignee_id === m.user_id ? theme.accent + "12" : "transparent",
+                              }}
+                              onMouseEnter={e => { if (taskForm.assignee_id !== m.user_id) e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)"; }}
+                              onMouseLeave={e => { if (taskForm.assignee_id !== m.user_id) e.currentTarget.style.background = "transparent"; }}
+                            >
+                              {m.avatar_url ? <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 22, height: 22, borderRadius: "50%" }} /> : <div style={{ width: 22, height: 22, borderRadius: "50%", background: (m.avatar_color || "#8B7AFF") + "30", color: m.avatar_color || "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontFamily: FONT, fontWeight: 600 }}>{m.initials}</div>}
+                              <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, flex: 1 }}>{m.display_name}</span>
+                              {taskForm.assignee_id === m.user_id && <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={theme.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
 
-              {/* Action buttons */}
-              <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-                <motion.button whileTap={{ scale: 0.97 }}
-                  onClick={resetForm}
-                  style={{
-                    flex: 1, padding: "10px 0", borderRadius: 12, cursor: "pointer",
-                    background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`,
-                    fontSize: 13, fontFamily: FONT, color: theme.textSub,
-                  }}
-                >{t("common.cancel")}</motion.button>
-                <motion.button whileTap={{ scale: 0.97 }}
-                  onClick={editingTask ? updateTask : createTask}
-                  style={{
-                    flex: 1, padding: "10px 0", borderRadius: 12, cursor: "pointer",
-                    background: taskForm.title.trim() ? theme.accent + "25" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
-                    border: `1px solid ${taskForm.title.trim() ? theme.accent + "40" : theme.borderFaint}`,
-                    fontSize: 13, fontFamily: FONT, fontWeight: 500,
-                    color: taskForm.title.trim() ? theme.accent : theme.textFaint,
-                  }}
-                >{editingTask ? t("task.save") : t("task.create")}</motion.button>
+                    {/* Priority dropdown-like */}
+                    {["high", "medium", "low"].map(p => (
+                      <motion.div key={p} whileTap={{ scale: 0.95 }}
+                        onClick={() => setTaskForm(prev => ({ ...prev, priority: p }))}
+                        style={{
+                          padding: "5px 10px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontFamily: FONT,
+                          background: taskForm.priority === p ? priColors[p] + "18" : "transparent",
+                          color: taskForm.priority === p ? priColors[p] : theme.textFaint,
+                          border: `1px solid ${taskForm.priority === p ? priColors[p] + "35" : theme.borderFaint}`,
+                        }}
+                      >{p === "high" ? "Hoch" : p === "medium" ? "Mittel" : "Niedrig"}</motion.div>
+                    ))}
+
+                    {/* Date chip */}
+                    <div style={{ position: "relative" }}>
+                      <motion.div whileTap={{ scale: 0.95 }}
+                        onClick={() => setShowDatePicker(!showDatePicker)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: 8,
+                          border: `1px solid ${taskForm.due_date ? "#F59E0B35" : theme.borderFaint}`, cursor: "pointer",
+                          fontSize: 12, fontFamily: FONT,
+                          color: taskForm.due_date ? "#F59E0B" : theme.textDim,
+                          background: taskForm.due_date ? "#F59E0B12" : "transparent",
+                        }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                        {taskForm.due_date ? new Date(taskForm.due_date).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" }) : "Frist setzen"}
+                        {taskForm.due_date && (
+                          <span onClick={e => { e.stopPropagation(); setTaskForm(prev => ({ ...prev, due_date: "" })); }} style={{ cursor: "pointer", marginLeft: 2, opacity: 0.6 }}>✕</span>
+                        )}
+                      </motion.div>
+                      {showDatePicker && (
+                        <div style={{
+                          position: "absolute", top: "100%", left: 0, marginTop: 4, zIndex: 10,
+                          background: darkMode ? "rgba(30,30,40,0.98)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.border}`,
+                          borderRadius: 12, padding: 12, boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+                        }}>
+                          <input type="date"
+                            value={taskForm.due_date}
+                            onChange={e => { setTaskForm(prev => ({ ...prev, due_date: e.target.value })); setShowDatePicker(false); }}
+                            style={{
+                              background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`,
+                              borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: FONT,
+                              color: theme.text, outline: "none", caretColor: theme.accent,
+                              colorScheme: darkMode ? "dark" : "light",
+                            }}
+                            autoFocus
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Column selector */}
+                    {colEntries.map(c => (
+                      <motion.div key={c.key} whileTap={{ scale: 0.95 }}
+                        onClick={() => setTaskForm(prev => ({ ...prev, column_key: c.key }))}
+                        style={{
+                          padding: "5px 10px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontFamily: FONT,
+                          background: taskForm.column_key === c.key ? c.color + "18" : "transparent",
+                          color: taskForm.column_key === c.key ? (c.key === "todo" ? theme.textSub : c.color) : theme.textFaint,
+                          border: `1px solid ${taskForm.column_key === c.key ? (c.key === "todo" ? theme.textSub + "30" : c.color + "35") : theme.borderFaint}`,
+                        }}
+                      >{t(c.labelKey)}</motion.div>
+                    ))}
+                  </div>
+
+                  {/* Description */}
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, display: "flex", alignItems: "center", gap: 6 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h10M4 18h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                      Beschreibung
+                    </div>
+                    <textarea
+                      value={taskForm.description}
+                      onChange={e => setTaskForm(p => ({ ...p, description: e.target.value }))}
+                      placeholder="Beschreibung hinzufügen..."
+                      rows={editingTask ? 6 : 4}
+                      style={{
+                        background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`,
+                        borderRadius: 12, padding: "12px 16px", fontSize: 13, fontFamily: FONT, lineHeight: 1.6,
+                        color: theme.text, outline: "none", resize: "vertical", caretColor: theme.accent,
+                        flex: 1, minHeight: 80,
+                      }}
+                    />
+                  </div>
+
+                  {/* Project name */}
+                  <div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M3 7l3-3h4l2 2h9v14H3V7z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+                      Projekt
+                    </div>
+                    <input
+                      value={taskForm.project_name}
+                      onChange={e => setTaskForm(p => ({ ...p, project_name: e.target.value }))}
+                      placeholder="Projekt zuordnen..."
+                      list="project-suggestions"
+                      style={{
+                        background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`,
+                        borderRadius: 10, padding: "8px 14px", fontSize: 13, fontFamily: FONT, width: "100%",
+                        color: theme.text, outline: "none", caretColor: theme.accent,
+                      }}
+                    />
+                    <datalist id="project-suggestions">
+                      {projectNames.map(p => <option key={p} value={p} />)}
+                    </datalist>
+                  </div>
+
+                  {/* Attachments section (only in edit mode) */}
+                  {editingTask && (
+                    <div>
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M13.5 6L5.5 14c-1.5 1.5-1.5 4 0 5.5s4 1.5 5.5 0l10-10c1-1 1-3 0-4s-3-1-4 0l-10 10c-.5.5-.5 1.5 0 2s1.5.5 2 0l8-8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                          Anhänge {taskAttachments.length > 0 && `(${taskAttachments.length})`}
+                        </span>
+                        <motion.span whileTap={{ scale: 0.95 }}
+                          onClick={() => setShowAttachInput(!showAttachInput)}
+                          style={{ fontSize: 11, color: theme.accent, cursor: "pointer" }}
+                        >+ Link hinzufügen</motion.span>
+                      </div>
+                      {showAttachInput && (
+                        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                          <input value={attachmentUrl} onChange={e => setAttachmentUrl(e.target.value)}
+                            placeholder="URL einfügen..." autoFocus
+                            onKeyDown={e => { if (e.key === "Enter") addAttachment(); }}
+                            style={{
+                              flex: 1, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`,
+                              borderRadius: 8, padding: "7px 12px", fontSize: 12, fontFamily: FONT,
+                              color: theme.text, outline: "none", caretColor: theme.accent,
+                            }}
+                          />
+                          <input value={attachmentName} onChange={e => setAttachmentName(e.target.value)}
+                            placeholder="Name (optional)"
+                            onKeyDown={e => { if (e.key === "Enter") addAttachment(); }}
+                            style={{
+                              width: 120, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`,
+                              borderRadius: 8, padding: "7px 12px", fontSize: 12, fontFamily: FONT,
+                              color: theme.text, outline: "none", caretColor: theme.accent,
+                            }}
+                          />
+                          <motion.button whileTap={{ scale: 0.95 }} onClick={addAttachment}
+                            style={{ padding: "7px 14px", borderRadius: 8, background: theme.accent + "20", border: `1px solid ${theme.accent}30`, color: theme.accent, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}
+                          >+</motion.button>
+                        </div>
+                      )}
+                      {taskAttachments.map(a => (
+                        <div key={a.id} style={{
+                          display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8,
+                          background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", marginBottom: 4,
+                          border: `1px solid ${theme.borderFaint}`,
+                        }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                            {a.type === "image" ? <><rect x="3" y="3" width="18" height="18" rx="3" stroke={theme.textDim} strokeWidth="1.5"/><circle cx="8.5" cy="8.5" r="2" stroke={theme.textDim} strokeWidth="1.5"/><path d="M3 16l5-5 4 4 3-3 6 6" stroke={theme.textDim} strokeWidth="1.5"/></> : <><circle cx="12" cy="12" r="9" stroke={theme.textDim} strokeWidth="1.5"/><path d="M12 8v4l3 3" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round"/></>}
+                          </svg>
+                          <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, fontSize: 12, fontFamily: FONT, color: theme.accent, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</a>
+                          <motion.span whileTap={{ scale: 0.9 }} onClick={() => deleteAttachment(a.id)} style={{ cursor: "pointer", fontSize: 12, color: theme.textFaint, padding: "0 4px" }}>✕</motion.span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Save / Cancel buttons */}
+                  <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                    <motion.button whileTap={{ scale: 0.97 }} onClick={resetForm}
+                      style={{
+                        padding: "10px 20px", borderRadius: 12, cursor: "pointer",
+                        background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`,
+                        fontSize: 13, fontFamily: FONT, color: theme.textSub,
+                      }}
+                    >{t("common.cancel")}</motion.button>
+                    <motion.button whileTap={{ scale: 0.97 }}
+                      onClick={editingTask ? updateTask : createTask}
+                      style={{
+                        padding: "10px 24px", borderRadius: 12, cursor: "pointer",
+                        background: taskForm.title.trim() ? theme.accent + "25" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
+                        border: `1px solid ${taskForm.title.trim() ? theme.accent + "40" : theme.borderFaint}`,
+                        fontSize: 13, fontFamily: FONT, fontWeight: 500,
+                        color: taskForm.title.trim() ? theme.accent : theme.textFaint,
+                      }}
+                    >{editingTask ? t("task.save") : t("task.create")}</motion.button>
+                  </div>
+                </div>
+
+                {/* Right panel — comments & activity (only in edit mode) */}
+                {editingTask && (
+                  <div style={{
+                    width: 300, borderLeft: `1px solid ${theme.border}`, display: "flex", flexDirection: "column",
+                    background: darkMode ? "rgba(255,255,255,0.015)" : "rgba(0,0,0,0.015)",
+                  }}>
+                    <div style={{ padding: "14px 16px", borderBottom: `1px solid ${theme.border}`, fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text, display: "flex", alignItems: "center", gap: 6 }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 12c0 5-4.5 9-9.9 9a10.5 10.5 0 01-4.2-.9L3 21l.9-3.9A9.3 9.3 0 013 12c0-5 4.5-9 9-9s9 4 9 9z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      Kommentare {taskComments.length > 0 && <span style={{ fontSize: 11, color: theme.textFaint, fontWeight: 400 }}>({taskComments.length})</span>}
+                    </div>
+                    {/* Comment list */}
+                    <div style={{ flex: 1, overflowY: "auto", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+                      {taskComments.length === 0 && (
+                        <div style={{ textAlign: "center", padding: "32px 16px" }}>
+                          <div style={{ fontSize: 24, marginBottom: 8, opacity: 0.3 }}>💬</div>
+                          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>Noch keine Kommentare</div>
+                        </div>
+                      )}
+                      {taskComments.map(c => {
+                        const prof = c.profile || teamMembers[c.user_id] || {};
+                        return (
+                          <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                            {prof.avatar_url ? (
+                              <img src={prof.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 24, height: 24, borderRadius: "50%", flexShrink: 0, marginTop: 2 }} />
+                            ) : (
+                              <div style={{ width: 24, height: 24, borderRadius: "50%", background: theme.accent + "25", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontFamily: FONT, fontWeight: 600, flexShrink: 0, marginTop: 2 }}>{prof.initials || "?"}</div>
+                            )}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                                <span style={{ fontSize: 11, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{prof.display_name || "User"}</span>
+                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>{new Date(c.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</span>
+                                {c.user_id === session.user.id && (
+                                  <motion.span whileTap={{ scale: 0.9 }} onClick={() => deleteComment(c.id)} style={{ fontSize: 10, color: theme.textFaint, cursor: "pointer", marginLeft: "auto" }}>✕</motion.span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5, wordBreak: "break-word" }}>{c.text}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* Comment input */}
+                    <div style={{ padding: "12px 16px", borderTop: `1px solid ${theme.border}` }}>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input
+                          value={commentText}
+                          onChange={e => setCommentText(e.target.value)}
+                          placeholder="Kommentar schreiben..."
+                          onKeyDown={e => { if (e.key === "Enter" && commentText.trim()) addComment(); }}
+                          style={{
+                            flex: 1, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
+                            border: `1px solid ${theme.border}`, borderRadius: 10, padding: "8px 12px",
+                            fontSize: 12, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent,
+                          }}
+                        />
+                        <motion.button whileTap={{ scale: 0.9 }} onClick={addComment}
+                          style={{
+                            padding: "8px 12px", borderRadius: 10, cursor: "pointer",
+                            background: commentText.trim() ? theme.accent + "20" : "transparent",
+                            border: `1px solid ${commentText.trim() ? theme.accent + "40" : theme.borderFaint}`,
+                            color: commentText.trim() ? theme.accent : theme.textFaint,
+                            fontSize: 12, fontFamily: FONT,
+                          }}
+                        >↩</motion.button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </motion.div>
           </motion.div>
