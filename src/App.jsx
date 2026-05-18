@@ -5947,16 +5947,22 @@ export default function CircularMenu() {
   }, [currentView, menuOpen, voiceMode, aiSpeaking, startviewCards]);
 
   useEffect(() => {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+    // IP-based geolocation — no permission prompt, city-level accuracy
+    (async () => {
       try {
+        const geoRes = await fetch("https://ipapi.co/json/");
+        if (!geoRes.ok) return;
+        const geo = await geoRes.json();
+        if (!geo.latitude || !geo.longitude) return;
         const res = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${coords.latitude}&longitude=${coords.longitude}&current_weather=true&temperature_unit=celsius`
+          `https://api.open-meteo.com/v1/forecast?latitude=${geo.latitude}&longitude=${geo.longitude}&current_weather=true&temperature_unit=celsius`
         );
         const data = await res.json();
-        setWeather(Math.round(data.current_weather.temperature));
+        if (data?.current_weather?.temperature !== undefined) {
+          setWeather(Math.round(data.current_weather.temperature));
+        }
       } catch { /* keep dash */ }
-    }, () => { /* permission denied — keep dash */ });
+    })();
   }, []);
   const audioRef = useRef(null);
   const [highlightWordIndex, setHighlightWordIndex] = useState(-1);
