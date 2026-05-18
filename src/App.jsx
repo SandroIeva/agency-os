@@ -584,6 +584,10 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [taskComments, setTaskComments] = useState([]);
   const [taskAttachments, setTaskAttachments] = useState([]);
+  const [taskChecklist, setTaskChecklist] = useState([]);
+  const [newChecklistText, setNewChecklistText] = useState("");
+  const [editingChecklistId, setEditingChecklistId] = useState(null);
+  const [editingChecklistText, setEditingChecklistText] = useState("");
   const [commentText, setCommentText] = useState("");
   const [attachmentUrl, setAttachmentUrl] = useState("");
   const [attachmentName, setAttachmentName] = useState("");
@@ -719,12 +723,14 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
 
   // Load comments + attachments for a task
   const loadTaskExtras = async (taskId) => {
-    const [{ data: cmts }, { data: atts }] = await Promise.all([
+    const [{ data: cmts }, { data: atts }, { data: chk }] = await Promise.all([
       supabase.from("task_comments").select("*, profile:profiles!task_comments_user_id_fkey_profiles(display_name, avatar_url, initials)").eq("task_id", taskId).order("created_at", { ascending: true }),
       supabase.from("task_attachments").select("*").eq("task_id", taskId).order("created_at", { ascending: true }),
+      supabase.from("task_checklist_items").select("*").eq("task_id", taskId).order("position", { ascending: true }),
     ]);
     setTaskComments(cmts || []);
     setTaskAttachments(atts || []);
+    setTaskChecklist(chk || []);
   };
 
   const addComment = async () => {
@@ -769,6 +775,35 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
   const deleteAttachment = async (id) => {
     setTaskAttachments(prev => prev.filter(a => a.id !== id));
     await supabase.from("task_attachments").delete().eq("id", id);
+  };
+
+  // Checklist CRUD
+  const addChecklistItem = async () => {
+    if (!newChecklistText.trim() || !editingTask) return;
+    const pos = taskChecklist.length;
+    const { data } = await supabase.from("task_checklist_items").insert({
+      task_id: editingTask.id, text: newChecklistText.trim(), position: pos,
+    }).select().single();
+    if (data) setTaskChecklist(prev => [...prev, data]);
+    setNewChecklistText("");
+  };
+
+  const toggleChecklistItem = async (id, currentVal) => {
+    setTaskChecklist(prev => prev.map(i => i.id === id ? { ...i, checked: !currentVal } : i));
+    await supabase.from("task_checklist_items").update({ checked: !currentVal }).eq("id", id);
+  };
+
+  const updateChecklistItem = async (id, newText) => {
+    if (!newText.trim()) return;
+    setTaskChecklist(prev => prev.map(i => i.id === id ? { ...i, text: newText.trim() } : i));
+    await supabase.from("task_checklist_items").update({ text: newText.trim() }).eq("id", id);
+    setEditingChecklistId(null);
+    setEditingChecklistText("");
+  };
+
+  const deleteChecklistItem = async (id) => {
+    setTaskChecklist(prev => prev.filter(i => i.id !== id));
+    await supabase.from("task_checklist_items").delete().eq("id", id);
   };
 
   // Merge DB projects + task-derived names for filter
@@ -932,8 +967,8 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
     setShowNewTask(false);
     setEditingTask(null);
     setTaskForm({ title: "", description: "", priority: "medium", column_key: "todo", project_name: "", assignee_id: session?.user?.id || null, due_date: "" });
-    setTaskComments([]); setTaskAttachments([]); setCommentText(""); setAttachmentUrl(""); setAttachmentName(""); setShowAttachInput(false); setAssigneeDropdownOpen(false); setShowDatePicker(false);
-    setEditingTitle(false); setEditingDesc(false);
+    setTaskComments([]); setTaskAttachments([]); setTaskChecklist([]); setCommentText(""); setAttachmentUrl(""); setAttachmentName(""); setShowAttachInput(false); setAssigneeDropdownOpen(false); setShowDatePicker(false);
+    setEditingTitle(false); setEditingDesc(false); setNewChecklistText(""); setEditingChecklistId(null);
   };
 
   const openEditTask = (task) => {
@@ -956,7 +991,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
   const openNewTask = (colKey) => {
     setEditingTask(null);
     setTaskForm({ title: "", description: "", priority: "medium", column_key: colKey || "todo", project_name: "", assignee_id: session?.user?.id || null, due_date: "" });
-    setTaskComments([]); setTaskAttachments([]);
+    setTaskComments([]); setTaskAttachments([]); setTaskChecklist([]);
     setShowNewTask(true);
   };
 
@@ -1406,26 +1441,149 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                     )}
                   </div>
 
-                  {/* Project name */}
+                  {/* Project selector */}
+                  {isTaskOwner && (
                   <div>
                     <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M3 7l3-3h4l2 2h9v14H3V7z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
                       Projekt
                     </div>
-                    <input
-                      value={taskForm.project_name}
-                      onChange={e => setTaskForm(p => ({ ...p, project_name: e.target.value }))}
-                      placeholder="Projekt zuordnen..."
-                      list="project-suggestions"
-                      style={{
-                        background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`,
-                        borderRadius: 10, padding: "8px 14px", fontSize: 13, fontFamily: FONT, width: "100%",
-                        color: theme.text, outline: "none", caretColor: theme.accent,
-                      }}
-                    />
-                    <datalist id="project-suggestions">
-                      {projectNames.map(p => <option key={p} value={p} />)}
-                    </datalist>
+                    <div style={{ position: "relative" }}>
+                      <select
+                        value={taskForm.project_name}
+                        onChange={e => setTaskForm(p => ({ ...p, project_name: e.target.value }))}
+                        style={{
+                          background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`,
+                          borderRadius: 10, padding: "8px 14px", paddingRight: 32, fontSize: 13, fontFamily: FONT, width: "100%",
+                          color: taskForm.project_name ? theme.text : theme.textFaint, outline: "none",
+                          appearance: "none", WebkitAppearance: "none", cursor: "pointer",
+                        }}
+                      >
+                        <option value="" style={{ color: theme.textFaint }}>Kein Projekt</option>
+                        {projects.map(p => (
+                          <option key={p.id} value={p.name} style={{ color: theme.text }}>{p.name}</option>
+                        ))}
+                      </select>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+                        <path d="M6 9l6 6 6-6" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </div>
+                  </div>
+                  )}
+                  {!isTaskOwner && taskForm.project_name && (
+                  <div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M3 7l3-3h4l2 2h9v14H3V7z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+                      Projekt
+                    </div>
+                    <div style={{
+                      background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`,
+                      borderRadius: 10, padding: "8px 14px", fontSize: 13, fontFamily: FONT, color: theme.text,
+                    }}>{taskForm.project_name}</div>
+                  </div>
+                  )}
+
+                  {/* Checklist */}
+                  <div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        Checkliste {taskChecklist.length > 0 && (<span style={{ fontWeight: 400, color: theme.textFaint }}>({taskChecklist.filter(i => i.checked).length}/{taskChecklist.length})</span>)}
+                      </span>
+                    </div>
+                    {/* Progress bar */}
+                    {taskChecklist.length > 0 && (
+                      <div style={{ height: 3, borderRadius: 2, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", marginBottom: 8, overflow: "hidden" }}>
+                        <div style={{
+                          height: "100%", borderRadius: 2, background: "#00B894",
+                          width: `${(taskChecklist.filter(i => i.checked).length / taskChecklist.length) * 100}%`,
+                          transition: "width 0.3s ease",
+                        }} />
+                      </div>
+                    )}
+                    {/* Checklist items */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2, marginBottom: 8 }}>
+                      {taskChecklist.map(item => (
+                        <div key={item.id} style={{
+                          display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8,
+                          background: "transparent",
+                        }}
+                          onMouseEnter={e => e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)"}
+                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                        >
+                          {/* Checkbox */}
+                          <div
+                            onClick={() => toggleChecklistItem(item.id, item.checked)}
+                            style={{
+                              width: 18, height: 18, borderRadius: 5, flexShrink: 0, cursor: "pointer",
+                              border: item.checked ? "none" : `1.5px solid ${theme.textFaint}`,
+                              background: item.checked ? "#00B894" : "transparent",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              transition: "all 0.2s ease",
+                            }}
+                          >
+                            {item.checked && <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          </div>
+                          {/* Text — inline edit for owner */}
+                          {editingChecklistId === item.id ? (
+                            <input
+                              value={editingChecklistText}
+                              onChange={e => setEditingChecklistText(e.target.value)}
+                              onBlur={() => updateChecklistItem(item.id, editingChecklistText)}
+                              onKeyDown={e => { if (e.key === "Enter") updateChecklistItem(item.id, editingChecklistText); if (e.key === "Escape") { setEditingChecklistId(null); setEditingChecklistText(""); } }}
+                              autoFocus
+                              style={{
+                                flex: 1, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.accent}40`,
+                                borderRadius: 6, padding: "3px 8px", fontSize: 13, fontFamily: FONT,
+                                color: theme.text, outline: "none", caretColor: theme.accent,
+                              }}
+                            />
+                          ) : (
+                            <span
+                              onClick={() => { if (isTaskOwner) { setEditingChecklistId(item.id); setEditingChecklistText(item.text); } }}
+                              style={{
+                                flex: 1, fontSize: 13, fontFamily: FONT, cursor: isTaskOwner ? "text" : "default",
+                                color: item.checked ? theme.textFaint : theme.text,
+                                textDecoration: item.checked ? "line-through" : "none",
+                                transition: "all 0.2s ease",
+                              }}
+                            >{item.text}</span>
+                          )}
+                          {/* Delete button — owner only */}
+                          {isTaskOwner && (
+                            <motion.div whileTap={{ scale: 0.85 }}
+                              onClick={() => deleteChecklistItem(item.id)}
+                              style={{ cursor: "pointer", padding: "0 2px", opacity: 0.4, fontSize: 13, color: theme.textDim }}
+                            >✕</motion.div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {/* Add new item — owner only */}
+                    {isTaskOwner && (
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <div style={{
+                          width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+                          border: `1.5px dashed ${theme.textFaint}40`,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                        }}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke={theme.textFaint} strokeWidth="2" strokeLinecap="round"/></svg>
+                        </div>
+                        <input
+                          value={newChecklistText}
+                          onChange={e => setNewChecklistText(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter" && newChecklistText.trim()) addChecklistItem(); }}
+                          placeholder="Neuer Punkt..."
+                          style={{
+                            flex: 1, background: "transparent", border: "none", borderBottom: `1px solid transparent`,
+                            padding: "4px 0", fontSize: 13, fontFamily: FONT,
+                            color: theme.text, outline: "none", caretColor: theme.accent,
+                          }}
+                          onFocus={e => e.currentTarget.style.borderBottomColor = theme.accent + "40"}
+                          onBlur={e => { e.currentTarget.style.borderBottomColor = "transparent"; if (newChecklistText.trim()) addChecklistItem(); }}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Attachments section (only in edit mode) */}
