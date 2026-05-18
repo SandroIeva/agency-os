@@ -974,6 +974,13 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
     }
     if (data) {
       setTasks(prev => [...prev, data]);
+      // Save pending checklist items if any
+      if (taskChecklist.length > 0) {
+        const items = taskChecklist.map((item, idx) => ({
+          task_id: data.id, text: item.text, checked: item.checked || false, position: idx,
+        }));
+        await supabase.from("task_checklist_items").insert(items);
+      }
       // Notify assignee if task is assigned to someone else
       if (taskData.assignee_id && taskData.assignee_id !== session.user.id) {
         const myName = session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "Jemand";
@@ -1245,6 +1252,50 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                       caretColor: theme.accent, lineHeight: 1.6,
                     }}
                   />
+                  {/* Checklist */}
+                  <div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      Checkliste {taskChecklist.length > 0 && (<span style={{ fontWeight: 400, color: theme.textFaint }}>({taskChecklist.filter(i => i.checked).length}/{taskChecklist.length})</span>)}
+                    </div>
+                    {taskChecklist.length > 0 && (
+                      <div style={{ height: 3, borderRadius: 2, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", marginBottom: 8, overflow: "hidden" }}>
+                        <div style={{ height: "100%", borderRadius: 2, background: "#00B894", width: `${(taskChecklist.filter(i => i.checked).length / taskChecklist.length) * 100}%`, transition: "width 0.3s ease" }} />
+                      </div>
+                    )}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2, marginBottom: 8 }}>
+                      {taskChecklist.map((item, idx) => (
+                        <div key={item._localId || idx} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8 }}
+                          onMouseEnter={e => e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)"}
+                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                        >
+                          <div onClick={() => setTaskChecklist(prev => prev.map((it, i) => i === idx ? { ...it, checked: !it.checked } : it))}
+                            style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, cursor: "pointer", border: item.checked ? "none" : `1.5px solid ${theme.textFaint}`, background: item.checked ? "#00B894" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s ease" }}
+                          >
+                            {item.checked && <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          </div>
+                          <span style={{ flex: 1, fontSize: 13, fontFamily: FONT, color: item.checked ? theme.textFaint : theme.text, textDecoration: item.checked ? "line-through" : "none" }}>{item.text}</span>
+                          <motion.div whileTap={{ scale: 0.85 }} onClick={() => setTaskChecklist(prev => prev.filter((_, i) => i !== idx))}
+                            style={{ cursor: "pointer", padding: "0 2px", opacity: 0.4, fontSize: 13, color: theme.textDim }}
+                          >✕</motion.div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, border: `1.5px dashed ${theme.textFaint}40`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke={theme.textFaint} strokeWidth="2" strokeLinecap="round"/></svg>
+                      </div>
+                      <input
+                        value={newChecklistText}
+                        onChange={e => setNewChecklistText(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter" && newChecklistText.trim()) { setTaskChecklist(prev => [...prev, { _localId: Date.now(), text: newChecklistText.trim(), checked: false }]); setNewChecklistText(""); } }}
+                        placeholder="Neuer Punkt..."
+                        style={{ flex: 1, background: "transparent", border: "none", borderBottom: "1px solid transparent", padding: "4px 0", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent }}
+                        onFocus={e => e.currentTarget.style.borderBottomColor = theme.accent + "40"}
+                        onBlur={e => { e.currentTarget.style.borderBottomColor = "transparent"; if (newChecklistText.trim()) { setTaskChecklist(prev => [...prev, { _localId: Date.now(), text: newChecklistText.trim(), checked: false }]); setNewChecklistText(""); } }}
+                      />
+                    </div>
+                  </div>
                   {/* Create button */}
                   <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 4, paddingBottom: 8 }}>
                     <motion.button whileTap={{ scale: 0.97 }} onClick={createTask}
