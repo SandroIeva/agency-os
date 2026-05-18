@@ -637,7 +637,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
       if (orgId) {
         const { data: allMembers } = await supabase
           .from("org_members")
-          .select("user_id, role, profiles(display_name, avatar_url, email, initials)")
+          .select("user_id, role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials)")
           .eq("org_id", orgId);
         (allMembers || []).forEach(m => {
           if (m.profiles) {
@@ -3927,7 +3927,7 @@ export default function CircularMenu() {
           // Load org members for chat etc.
           const { data: members } = await supabase
             .from("org_members")
-            .select("user_id, role, profiles(display_name, avatar_url, email, initials, status)")
+            .select("user_id, role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
             .eq("org_id", org.id);
           setOrgMembers(members || []);
 
@@ -3970,7 +3970,7 @@ export default function CircularMenu() {
     if (!userOrg?.id) return;
     const { data: members } = await supabase
       .from("org_members")
-      .select("user_id, role, profiles(display_name, avatar_url, email, initials, status)")
+      .select("user_id, role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
       .eq("org_id", userOrg.id);
     setOrgMembers(members || []);
     const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", userOrg.id).eq("status", "pending");
@@ -6370,7 +6370,7 @@ export default function CircularMenu() {
                                   // Reload org members
                                   const { data: members } = await supabase
                                     .from("org_members")
-                                    .select("user_id, role, profiles(display_name, avatar_url, email, initials, status)")
+                                    .select("user_id, role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
                                     .eq("org_id", org.id);
                                   setOrgMembers(members || []);
                                   const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", org.id).eq("status", "pending");
