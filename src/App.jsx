@@ -5839,146 +5839,140 @@ export default function CircularMenu() {
         )}
       </AnimatePresence>
 
-      {/* Weather — on dashboard & files */}
-      <AnimatePresence>
-        {(currentView === "dashboard" || currentView === "files") && !panelOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, filter: "blur(4px)" }}
-            transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
-            style={{
-              position: "absolute", top: 16, right: 24, display: "flex", alignItems: "center",
-              fontSize: 20, color: "#79787D", zIndex: 10, fontFamily: FONT, fontWeight: 400, gap: 12,
-            }}
-          >
-            {weather}°
-            <svg width="24" height="19" viewBox="0 0 20 16" fill="none">
-              <path opacity="0.7" d="M9 2C11.6123 2 13.8334 3.66984 14.6572 6H15C17.7614 6 20 8.23858 20 11C20 13.7614 17.7614 16 15 16H4.5C2.01472 16 0 13.9853 0 11.5C0 9.5226 1.27576 7.84409 3.04883 7.24023C3.4223 4.2853 5.9437 2 9 2ZM15 0C17.7614 0 20 2.23858 20 5C20 5.48668 19.9285 5.95656 19.7988 6.40137C18.7997 5.07171 17.2622 4.16972 15.5088 4.02246C14.883 2.57436 13.7037 1.42135 12.2373 0.831055C13.0287 0.305544 13.9788 0 15 0Z" fill="#79787D"/>
-            </svg>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Click-away for notification dropdown */}
       {notifOpen && <div onClick={() => setNotifOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 49 }} />}
 
-      {/* Notification Bell */}
+      {/* Top-right bar: Bell + Weather */}
       <AnimatePresence>
         {!panelOpen && !tasksOpen && (
           <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ position: "absolute", top: 16, right: (currentView === "dashboard" || currentView === "files") ? 100 : 24, zIndex: 50 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, filter: "blur(4px)" }}
+            transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
+            style={{
+              position: "absolute", top: 16, right: 24, display: "flex", alignItems: "center",
+              fontSize: 20, color: "#79787D", zIndex: 50, fontFamily: FONT, fontWeight: 400, gap: 10,
+            }}
           >
-            <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-              onClick={() => setNotifOpen(prev => !prev)}
-              style={{ position: "relative", width: 36, height: 36, borderRadius: 12, cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                background: notifOpen ? (darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)") : "transparent",
-              }}
-            >
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
-                <path d="M18 8A6 6 0 1 0 6 8c0 7-3 9-3 9h18s-3-2-3-9ZM13.73 21a2 2 0 0 1-3.46 0" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              {unreadCount > 0 && (
-                <div style={{
-                  position: "absolute", top: 2, right: 2, minWidth: 16, height: 16, borderRadius: 8,
-                  background: "#EF4444", color: "#fff", fontSize: 9, fontWeight: 700, fontFamily: FONT,
-                  display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px",
-                  border: `2px solid ${darkMode ? "#111117" : "#ffffff"}`,
-                }}>{unreadCount > 9 ? "9+" : unreadCount}</div>
-              )}
-            </motion.div>
-
-            {/* Notification dropdown */}
-            <AnimatePresence>
-              {notifOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: -8, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -8, scale: 0.96 }}
-                  transition={{ duration: 0.2, ease: [0.22, 0.68, 0.35, 1.0] }}
-                  style={{
-                    position: "absolute", top: 44, right: 0, width: 360, maxHeight: 440,
-                    background: darkMode ? "rgba(22,22,30,0.98)" : "rgba(255,255,255,0.99)",
-                    backdropFilter: "blur(40px)", border: `1px solid ${theme.border}`,
-                    borderRadius: 16, overflow: "hidden", boxShadow: "0 16px 48px rgba(0,0,0,0.3)",
-                  }}
-                >
-                  {/* Header */}
+            {/* Bell */}
+            <div style={{ position: "relative", marginTop: 1, marginRight: -3 }}>
+              <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                onClick={() => setNotifOpen(prev => !prev)}
+                style={{ position: "relative", width: 36, height: 36, borderRadius: 12, cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: notifOpen ? (darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)") : "transparent",
+                }}
+              >
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+                  <path d="M18 8A6 6 0 1 0 6 8c0 7-3 9-3 9h18s-3-2-3-9ZM13.73 21a2 2 0 0 1-3.46 0" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                {unreadCount > 0 && (
                   <div style={{
-                    padding: "14px 18px 12px", display: "flex", alignItems: "center", justifyContent: "space-between",
-                    borderBottom: `1px solid ${theme.borderFaint}`,
-                  }}>
-                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Notifications</div>
-                    {unreadCount > 0 && (
-                      <motion.div whileTap={{ scale: 0.95 }}
-                        onClick={markAllNotifsRead}
-                        style={{ fontSize: 11, fontFamily: FONT, color: theme.accent, cursor: "pointer" }}
-                      >Alle gelesen</motion.div>
-                    )}
-                  </div>
-                  {/* List */}
-                  <div style={{ overflowY: "auto", maxHeight: 380 }}>
-                    {notifications.length === 0 ? (
-                      <div style={{ padding: "40px 20px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textFaint }}>
-                        Keine Benachrichtigungen
-                      </div>
-                    ) : notifications.map(n => {
-                      const iconMap = {
-                        task_assigned: "📋", comment_added: "💬",
-                        calendar_reminder: n.metadata?.hangoutLink ? "📹" : "📅",
-                        member_joined: "👤", task_updated: "✏️",
-                      };
-                      const timeAgo = (() => {
-                        const diff = Date.now() - new Date(n.created_at).getTime();
-                        const mins = Math.floor(diff / 60000);
-                        if (mins < 1) return "gerade eben";
-                        if (mins < 60) return `${mins} Min`;
-                        const hrs = Math.floor(mins / 60);
-                        if (hrs < 24) return `${hrs} Std`;
-                        return `${Math.floor(hrs / 24)} T`;
-                      })();
-                      return (
-                        <motion.div key={n.id}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => {
-                            markNotifRead(n.id);
-                            if (n.metadata?.task_id) { setOpenTaskId(n.metadata.task_id); setCurrentView("kanban"); setNotifOpen(false); }
-                            else if (n.metadata?.hangoutLink) { window.open(n.metadata.hangoutLink, "_blank"); }
-                            else if (n.type === "calendar_reminder") { setCurrentView("calendar"); setNotifOpen(false); }
-                          }}
-                          style={{
-                            padding: "12px 18px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 12,
-                            background: n.read ? "transparent" : (darkMode ? "rgba(139,122,255,0.04)" : "rgba(139,122,255,0.06)"),
-                            borderBottom: `1px solid ${theme.borderFaint}`,
-                          }}
-                        >
-                          <div style={{ fontSize: 16, flexShrink: 0, marginTop: 2 }}>{iconMap[n.type] || "🔔"}</div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{
-                              fontSize: 13, fontFamily: FONT, color: theme.text,
-                              fontWeight: n.read ? 400 : 600, lineHeight: 1.4,
-                            }}>{n.title}</div>
-                            {n.body && (
+                    position: "absolute", top: 2, right: 2, minWidth: 16, height: 16, borderRadius: 8,
+                    background: "#EF4444", color: "#fff", fontSize: 9, fontWeight: 700, fontFamily: FONT,
+                    display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px",
+                    border: `2px solid ${darkMode ? "#111117" : "#ffffff"}`,
+                  }}>{unreadCount > 9 ? "9+" : unreadCount}</div>
+                )}
+              </motion.div>
+
+              {/* Notification dropdown */}
+              <AnimatePresence>
+                {notifOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                    transition={{ duration: 0.2, ease: [0.22, 0.68, 0.35, 1.0] }}
+                    style={{
+                      position: "fixed", top: 70, right: 25, width: 360, maxHeight: 440,
+                      background: darkMode ? "rgba(22,22,30,0.98)" : "rgba(255,255,255,0.99)",
+                      backdropFilter: "blur(40px)", border: `1px solid ${theme.border}`,
+                      borderRadius: 16, overflow: "hidden", boxShadow: "0 16px 48px rgba(0,0,0,0.3)",
+                    }}
+                  >
+                    <div style={{
+                      padding: "14px 18px 12px", display: "flex", alignItems: "center", justifyContent: "space-between",
+                      borderBottom: `1px solid ${theme.borderFaint}`,
+                    }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Notifications</div>
+                      {unreadCount > 0 && (
+                        <motion.div whileTap={{ scale: 0.95 }}
+                          onClick={markAllNotifsRead}
+                          style={{ fontSize: 11, fontFamily: FONT, color: theme.accent, cursor: "pointer" }}
+                        >Alle gelesen</motion.div>
+                      )}
+                    </div>
+                    <div style={{ overflowY: "auto", maxHeight: 380 }}>
+                      {notifications.length === 0 ? (
+                        <div style={{ padding: "40px 20px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textFaint }}>
+                          Keine Benachrichtigungen
+                        </div>
+                      ) : notifications.map(n => {
+                        const iconMap = {
+                          task_assigned: "📋", comment_added: "💬",
+                          calendar_reminder: n.metadata?.hangoutLink ? "📹" : "📅",
+                          member_joined: "👤", task_updated: "✏️",
+                        };
+                        const timeAgo = (() => {
+                          const diff = Date.now() - new Date(n.created_at).getTime();
+                          const mins = Math.floor(diff / 60000);
+                          if (mins < 1) return "gerade eben";
+                          if (mins < 60) return `${mins} Min`;
+                          const hrs = Math.floor(mins / 60);
+                          if (hrs < 24) return `${hrs} Std`;
+                          return `${Math.floor(hrs / 24)} T`;
+                        })();
+                        return (
+                          <motion.div key={n.id}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => {
+                              markNotifRead(n.id);
+                              if (n.metadata?.task_id) { setOpenTaskId(n.metadata.task_id); setCurrentView("kanban"); setNotifOpen(false); }
+                              else if (n.metadata?.hangoutLink) { window.open(n.metadata.hangoutLink, "_blank"); }
+                              else if (n.type === "calendar_reminder") { setCurrentView("calendar"); setNotifOpen(false); }
+                            }}
+                            style={{
+                              padding: "12px 18px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 12,
+                              background: n.read ? "transparent" : (darkMode ? "rgba(139,122,255,0.04)" : "rgba(139,122,255,0.06)"),
+                              borderBottom: `1px solid ${theme.borderFaint}`,
+                            }}
+                          >
+                            <div style={{ fontSize: 16, flexShrink: 0, marginTop: 2 }}>{iconMap[n.type] || "🔔"}</div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{
-                                fontSize: 12, fontFamily: FONT, color: theme.textDim,
-                                marginTop: 2, lineHeight: 1.4,
-                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                              }}>{n.body}</div>
+                                fontSize: 13, fontFamily: FONT, color: theme.text,
+                                fontWeight: n.read ? 400 : 600, lineHeight: 1.4,
+                              }}>{n.title}</div>
+                              {n.body && (
+                                <div style={{
+                                  fontSize: 12, fontFamily: FONT, color: theme.textDim,
+                                  marginTop: 2, lineHeight: 1.4,
+                                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                }}>{n.body}</div>
+                              )}
+                              <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 4 }}>{timeAgo}</div>
+                            </div>
+                            {!n.read && (
+                              <div style={{ width: 7, height: 7, borderRadius: "50%", background: theme.accent, flexShrink: 0, marginTop: 6 }} />
                             )}
-                            <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 4 }}>{timeAgo}</div>
-                          </div>
-                          {!n.read && (
-                            <div style={{ width: 7, height: 7, borderRadius: "50%", background: theme.accent, flexShrink: 0, marginTop: 6 }} />
-                          )}
-                        </motion.div>
-                      );
-                    })}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Weather */}
+            {(currentView === "dashboard" || currentView === "files") && (
+              <>
+                {weather}°
+                <svg width="24" height="19" viewBox="0 0 20 16" fill="none">
+                  <path opacity="0.7" d="M9 2C11.6123 2 13.8334 3.66984 14.6572 6H15C17.7614 6 20 8.23858 20 11C20 13.7614 17.7614 16 15 16H4.5C2.01472 16 0 13.9853 0 11.5C0 9.5226 1.27576 7.84409 3.04883 7.24023C3.4223 4.2853 5.9437 2 9 2ZM15 0C17.7614 0 20 2.23858 20 5C20 5.48668 19.9285 5.95656 19.7988 6.40137C18.7997 5.07171 17.2622 4.16972 15.5088 4.02246C14.883 2.57436 13.7037 1.42135 12.2373 0.831055C13.0287 0.305544 13.9788 0 15 0Z" fill="#79787D"/>
+                </svg>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
