@@ -3865,7 +3865,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
 
 const CHAT_COLORS = ["#E88D67", "#5B8DEF", "#8B7AFF", "#6BC5A0", "#F59E0B", "#E84393", "#00B894", "#FD79A8"];
 
-function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers, darkMode, theme, createNotification }) {
+function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers, darkMode, theme, createNotification, notifications = [], markNotifRead }) {
   const [search, setSearch] = useState("");
   const [conversations, setConversations] = useState([]);
   const [activeConvId, setActiveConvId] = useState(null);
@@ -3874,6 +3874,19 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
   const [loadingConvs, setLoadingConvs] = useState(true);
   const scrollRef = useRef(null);
   const myId = session?.user?.id;
+
+  // Compute unread chat notifications per conversation
+  const unreadByConv = useMemo(() => {
+    const map = {};
+    (notifications || []).forEach(n => {
+      if (n.type === "chat_message" && !n.read && n.metadata?.conversation_id) {
+        const cid = n.metadata.conversation_id;
+        if (!map[cid]) map[cid] = [];
+        map[cid].push(n);
+      }
+    });
+    return map;
+  }, [notifications]);
 
   // Build member lookup from orgMembers
   const memberMap = useMemo(() => {
@@ -3995,7 +4008,7 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
     if (!myId || !userOrg?.id) return;
     // Check if a direct conversation already exists between these two users
     const existing = conversations.find(c => !c.is_group && c.otherIds.includes(otherUserId));
-    if (existing) { setActiveConvId(existing.id); setShowNewChat(false); return; }
+    if (existing) { openConversation(existing.id); return; }
     try {
       // Create new conversation
       const { data: conv, error: convErr } = await supabase.from("chat_conversations").insert({ org_id: userOrg.id, is_group: false }).select().single();
@@ -4008,11 +4021,19 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
       if (partErr) return;
       setShowNewChat(false);
       await loadConversations();
-      setActiveConvId(conv.id);
+      openConversation(conv.id);
     } catch (err) {
       console.error("startConversation failed:", err);
     }
   };
+
+  // Open conversation and mark its chat notifications as read
+  const openConversation = useCallback((convId) => {
+    setActiveConvId(convId);
+    if (markNotifRead && unreadByConv[convId]) {
+      unreadByConv[convId].forEach(n => markNotifRead(n.id));
+    }
+  }, [markNotifRead, unreadByConv]);
 
   const activeConv = conversations.find(c => c.id === activeConvId);
   const filtered = conversations.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.lastMsg.toLowerCase().includes(search.toLowerCase()));
@@ -4129,7 +4150,7 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.03 + i * 0.025, duration: 0.25 }}
-                      onClick={() => setActiveConvId(item.id)}
+                      onClick={() => openConversation(item.id)}
                       className={isActive ? "" : "hover-row"}
                       style={{
                         display: "flex", alignItems: "center", gap: 12,
@@ -4152,16 +4173,32 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
                           }}>{item.initials}</div>
                         )}
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                          <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{item.name}</div>
-                          <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, flexShrink: 0 }}>{item.time}</div>
-                        </div>
-                        <div style={{
-                          fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2,
-                          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                        }}>{item.lastMsg || "Noch keine Nachrichten"}</div>
-                      </div>
+                      {(() => {
+                        const unreadN = (unreadByConv[item.id] || []).length;
+                        return (
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                                <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: unreadN > 0 ? 600 : 500, color: theme.text }}>{item.name}</div>
+                                {unreadN > 0 && (
+                                  <div style={{
+                                    minWidth: 18, height: 18, borderRadius: 9, padding: "0 5px",
+                                    background: "#8B7AFF", color: "#fff",
+                                    fontSize: 10, fontWeight: 700, fontFamily: FONT,
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                  }}>{unreadN > 9 ? "9+" : unreadN}</div>
+                                )}
+                              </div>
+                              <div style={{ fontSize: 10, fontFamily: FONT, color: unreadN > 0 ? "#8B7AFF" : theme.textDim, flexShrink: 0 }}>{item.time}</div>
+                            </div>
+                            <div style={{
+                              fontSize: 12, fontFamily: FONT, color: unreadN > 0 ? theme.text : theme.textDim, marginTop: 2,
+                              fontWeight: unreadN > 0 ? 500 : 400,
+                              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                            }}>{item.lastMsg || "Noch keine Nachrichten"}</div>
+                          </div>
+                        );
+                      })()}
                     </motion.div>
                   );
                 }
@@ -6175,7 +6212,7 @@ export default function CircularMenu() {
 
       {/* Top-right bar: Bell + Weather */}
       <AnimatePresence>
-        {!panelOpen && !tasksOpen && (
+        {!panelOpen && !tasksOpen && currentView !== "chat" && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, filter: "blur(4px)" }}
             transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
@@ -6372,6 +6409,8 @@ export default function CircularMenu() {
               darkMode={darkMode}
               theme={theme}
               createNotification={createNotification}
+              notifications={notifications}
+              markNotifRead={markNotifRead}
               onBack={() => {
                 setCurrentView("dashboard");
                 setMenuSource("grid");
