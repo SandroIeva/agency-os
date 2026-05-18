@@ -1120,7 +1120,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
             onClick={() => setShowMemberDropdown(prev => !prev)}
             style={{
               display: "flex", alignItems: "center", gap: 5, cursor: "pointer",
-              padding: "5px 10px 5px 8px", borderRadius: 20,
+              padding: "6px 14px 6px 10px", borderRadius: 20,
               background: memberFilter !== "all" ? (theme.accent + "15") : "transparent",
               border: `1px solid ${memberFilter !== "all" ? (theme.accent + "30") : theme.borderFaint}`,
               color: memberFilter !== "all" ? theme.accent : theme.textDim,
