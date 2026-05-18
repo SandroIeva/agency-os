@@ -572,7 +572,7 @@ const DEFAULT_COLUMNS = [
   { id: "col-done", key: "done", labelKey: "kanban.done", color: "#00B894", position: 3 },
 ];
 
-function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg, orgMembers, createNotification }) {
+function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerNewTask, onNewTaskTriggered, userOrg, orgMembers, createNotification }) {
   const [tasks, setTasks] = useState([]);
   const [teamMembers, setTeamMembers] = useState({});
   const [filter, setFilter] = useState("all");
@@ -728,6 +728,14 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
       loadTaskExtras(task.id);
     }
   }, [openTaskId, loading, tasks]);
+
+  // Auto-open new task form when triggered from To-Do submenu
+  useEffect(() => {
+    if (triggerNewTask && !loading) {
+      openNewTask("todo");
+      if (onNewTaskTriggered) onNewTaskTriggered();
+    }
+  }, [triggerNewTask, loading]);
 
   // Load comments + attachments for a task
   const loadTaskExtras = async (taskId) => {
@@ -4677,6 +4685,7 @@ export default function CircularMenu() {
   const [chatTab, setChatTab] = useState("Team");
   const [openChatConvId, setOpenChatConvId] = useState(null);
   const [openTaskId, setOpenTaskId] = useState(null);
+  const [triggerNewTask, setTriggerNewTask] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [dashboardTasks, setDashboardTasks] = useState([]);
@@ -5993,7 +6002,10 @@ export default function CircularMenu() {
     setMenuOpen(false);
     setSubHover(-1);
 
-    if (subItem.id === "kanban") {
+    if (subItem.id === "todo") {
+      setTriggerNewTask(true);
+      setCurrentView("kanban");
+    } else if (subItem.id === "kanban") {
       setCurrentView("kanban");
     } else if (subItem.id === "calendar") {
       setCurrentView("calendar");
@@ -6642,7 +6654,7 @@ export default function CircularMenu() {
         {/* KANBAN VIEW */}
         <AnimatePresence>
           {currentView === "kanban" && (
-            <KanbanBoard session={session} onBack={() => { setOpenTaskId(null); setCurrentView("dashboard"); }} theme={theme} darkMode={darkMode} t={t} openTaskId={openTaskId} userOrg={userOrg} orgMembers={orgMembers} createNotification={createNotification} />
+            <KanbanBoard session={session} onBack={() => { setOpenTaskId(null); setTriggerNewTask(false); setCurrentView("dashboard"); }} theme={theme} darkMode={darkMode} t={t} openTaskId={openTaskId} triggerNewTask={triggerNewTask} onNewTaskTriggered={() => setTriggerNewTask(false)} userOrg={userOrg} orgMembers={orgMembers} createNotification={createNotification} />
           )}
         </AnimatePresence>
 
