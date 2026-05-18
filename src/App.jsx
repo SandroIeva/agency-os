@@ -686,9 +686,12 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
         const allTasks = taskData || [];
         const missingNames = [...new Set(allTasks.map(t => t.project_name).filter(n => n && !existingNames.has(n)))];
         if (missingNames.length > 0) {
+          // Use upsert with onConflict to prevent duplicates
           const inserts = missingNames.map(name => ({ name, org_id: orgId, owner_id: u.id, color: "#8B7AFF" }));
-          const { data: created } = await supabase.from("projects").insert(inserts).select();
-          setProjects([...existingProjects, ...(created || [])]);
+          const { data: created } = await supabase.from("projects").upsert(inserts, { onConflict: "name,org_id", ignoreDuplicates: true }).select();
+          // Re-fetch to get clean list
+          const { data: freshProjects } = await supabase.from("projects").select("*").eq("org_id", orgId).order("created_at");
+          setProjects(freshProjects || []);
         } else {
           setProjects(existingProjects);
         }
