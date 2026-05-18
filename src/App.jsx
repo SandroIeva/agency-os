@@ -4127,10 +4127,12 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
     setMsgInput("");
     await supabase.from("chat_messages").insert({ conversation_id: activeConvId, sender_id: myId, text });
     // Notify other participants
-    const conv = conversations.find(c => c.id === activeConvId);
-    if (conv && createNotification) {
+    if (createNotification) {
       const myName = memberMap[myId]?.display_name || "Jemand";
-      (conv.otherIds || []).forEach(uid => {
+      // Get participant IDs directly from DB to avoid stale state
+      const { data: parts } = await supabase.from("chat_participants").select("user_id").eq("conversation_id", activeConvId);
+      const recipientIds = (parts || []).map(p => p.user_id).filter(uid => uid !== myId);
+      recipientIds.forEach(uid => {
         createNotification({
           userId: uid,
           type: "chat_message",
