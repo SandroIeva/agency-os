@@ -597,6 +597,8 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoPreview, setLogoPreview] = useState(null);
   const projectLogoInputRef = useRef(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [editingDesc, setEditingDesc] = useState(false);
   const dragItem = useRef(null);
 
   // Always use these columns
@@ -929,6 +931,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
     setEditingTask(null);
     setTaskForm({ title: "", description: "", priority: "medium", column_key: "todo", project_name: "", assignee_id: session?.user?.id || null, due_date: "" });
     setTaskComments([]); setTaskAttachments([]); setCommentText(""); setAttachmentUrl(""); setAttachmentName(""); setShowAttachInput(false); setAssigneeDropdownOpen(false); setShowDatePicker(false);
+    setEditingTitle(false); setEditingDesc(false);
   };
 
   const openEditTask = (task) => {
@@ -1208,24 +1211,34 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
               </div>
 
               {/* Body: split layout for edit, single for new */}
+              {(() => { const isTaskOwner = !editingTask || editingTask.creator_id === session?.user?.id; return (
               <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
                 {/* Left panel — main content */}
                 <div style={{ flex: 1, padding: 24, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
-                  {/* Title — looks like text, editable */}
-                  <input
-                    value={taskForm.title}
-                    onChange={e => setTaskForm(p => ({ ...p, title: e.target.value }))}
-                    placeholder={t("task.title")}
-                    autoFocus
-                    style={{
-                      background: "transparent", border: "none", borderBottom: `1px solid transparent`,
-                      padding: "4px 0", fontSize: 20, fontFamily: FONT, fontWeight: 600,
-                      color: theme.text, outline: "none", caretColor: theme.accent, width: "100%",
-                      transition: "border-color 0.2s",
-                    }}
-                    onFocus={e => e.target.style.borderBottomColor = theme.accent + "40"}
-                    onBlur={e => e.target.style.borderBottomColor = "transparent"}
-                  />
+                  {/* Title — view mode for existing tasks, edit on click */}
+                  {editingTask && !editingTitle ? (
+                    <div
+                      onClick={() => { if (isTaskOwner) setEditingTitle(true); }}
+                      style={{
+                        padding: "4px 0", fontSize: 20, fontFamily: FONT, fontWeight: 600,
+                        color: theme.text, cursor: isTaskOwner ? "text" : "default", minHeight: 32,
+                      }}
+                    >{taskForm.title || <span style={{ color: theme.textFaint }}>{t("task.title")}</span>}</div>
+                  ) : (
+                    <input
+                      value={taskForm.title}
+                      onChange={e => setTaskForm(p => ({ ...p, title: e.target.value }))}
+                      placeholder={t("task.title")}
+                      autoFocus
+                      style={{
+                        background: "transparent", border: "none", borderBottom: `1px solid ${theme.accent}40`,
+                        padding: "4px 0", fontSize: 20, fontFamily: FONT, fontWeight: 600,
+                        color: theme.text, outline: "none", caretColor: theme.accent, width: "100%",
+                        transition: "border-color 0.2s",
+                      }}
+                      onBlur={() => { if (editingTask) setEditingTitle(false); }}
+                    />
+                  )}
 
                   {/* Toolbar row: labels, date, column, assignee chips */}
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
@@ -1275,24 +1288,25 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
 
                     {/* Priority dropdown-like */}
                     {["high", "medium", "low"].map(p => (
-                      <motion.div key={p} whileTap={{ scale: 0.95 }}
-                        onClick={() => setTaskForm(prev => ({ ...prev, priority: p }))}
+                      <motion.div key={p} whileTap={isTaskOwner ? { scale: 0.95 } : {}}
+                        onClick={() => { if (isTaskOwner) setTaskForm(prev => ({ ...prev, priority: p })); }}
                         style={{
-                          padding: "5px 10px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontFamily: FONT,
+                          padding: "5px 10px", borderRadius: 8, cursor: isTaskOwner ? "pointer" : "default", fontSize: 11, fontFamily: FONT,
                           background: taskForm.priority === p ? priColors[p] + "18" : "transparent",
                           color: taskForm.priority === p ? priColors[p] : theme.textFaint,
                           border: `1px solid ${taskForm.priority === p ? priColors[p] + "35" : theme.borderFaint}`,
+                          opacity: !isTaskOwner && taskForm.priority !== p ? 0.4 : 1,
                         }}
                       >{p === "high" ? "Hoch" : p === "medium" ? "Mittel" : "Niedrig"}</motion.div>
                     ))}
 
                     {/* Date chip */}
                     <div style={{ position: "relative" }}>
-                      <motion.div whileTap={{ scale: 0.95 }}
-                        onClick={() => setShowDatePicker(!showDatePicker)}
+                      <motion.div whileTap={isTaskOwner ? { scale: 0.95 } : {}}
+                        onClick={() => { if (isTaskOwner) setShowDatePicker(!showDatePicker); }}
                         style={{
                           display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: 8,
-                          border: `1px solid ${taskForm.due_date ? "#F59E0B35" : theme.borderFaint}`, cursor: "pointer",
+                          border: `1px solid ${taskForm.due_date ? "#F59E0B35" : theme.borderFaint}`, cursor: isTaskOwner ? "pointer" : "default",
                           fontSize: 12, fontFamily: FONT,
                           color: taskForm.due_date ? "#F59E0B" : theme.textDim,
                           background: taskForm.due_date ? "#F59E0B12" : "transparent",
@@ -1330,13 +1344,14 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                   {/* Column selector — separate row */}
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {colEntries.map(c => (
-                      <motion.div key={c.key} whileTap={{ scale: 0.95 }}
-                        onClick={() => setTaskForm(prev => ({ ...prev, column_key: c.key }))}
+                      <motion.div key={c.key} whileTap={isTaskOwner ? { scale: 0.95 } : {}}
+                        onClick={() => { if (isTaskOwner) setTaskForm(prev => ({ ...prev, column_key: c.key })); }}
                         style={{
-                          padding: "5px 10px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontFamily: FONT,
+                          padding: "5px 10px", borderRadius: 8, cursor: isTaskOwner ? "pointer" : "default", fontSize: 11, fontFamily: FONT,
                           background: taskForm.column_key === c.key ? c.color + "18" : "transparent",
                           color: taskForm.column_key === c.key ? (c.key === "todo" ? theme.textSub : c.color) : theme.textFaint,
                           border: `1px solid ${taskForm.column_key === c.key ? (c.key === "todo" ? theme.textSub + "30" : c.color + "35") : theme.borderFaint}`,
+                          opacity: !isTaskOwner && taskForm.column_key !== c.key ? 0.4 : 1,
                         }}
                       >{t(c.labelKey)}</motion.div>
                     ))}
@@ -1348,18 +1363,43 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h10M4 18h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                       Beschreibung
                     </div>
-                    <textarea
-                      value={taskForm.description}
-                      onChange={e => setTaskForm(p => ({ ...p, description: e.target.value }))}
-                      placeholder="Beschreibung hinzufügen..."
-                      rows={editingTask ? 6 : 4}
-                      style={{
-                        background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`,
-                        borderRadius: 12, padding: "12px 16px", fontSize: 13, fontFamily: FONT, lineHeight: 1.6,
-                        color: theme.text, outline: "none", resize: "vertical", caretColor: theme.accent,
-                        flex: 1, minHeight: 80,
-                      }}
-                    />
+                    {editingTask && !editingDesc ? (
+                      <div
+                        onClick={() => { if (isTaskOwner) setEditingDesc(true); }}
+                        style={{
+                          background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`,
+                          borderRadius: 12, padding: "12px 16px", fontSize: 13, fontFamily: FONT, lineHeight: 1.6,
+                          color: taskForm.description ? theme.text : theme.textFaint, cursor: isTaskOwner ? "text" : "default",
+                          flex: 1, minHeight: 80, whiteSpace: "pre-wrap", position: "relative",
+                        }}
+                      >
+                        {taskForm.description || (isTaskOwner ? "Beschreibung hinzufügen..." : "Keine Beschreibung")}
+                        {isTaskOwner && (
+                          <div style={{
+                            position: "absolute", top: 10, right: 10, width: 24, height: 24, borderRadius: 6,
+                            background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
+                            display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                          }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <textarea
+                        value={taskForm.description}
+                        onChange={e => setTaskForm(p => ({ ...p, description: e.target.value }))}
+                        placeholder="Beschreibung hinzufügen..."
+                        rows={editingTask ? 6 : 4}
+                        autoFocus={!!editingTask}
+                        style={{
+                          background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`,
+                          borderRadius: 12, padding: "12px 16px", fontSize: 13, fontFamily: FONT, lineHeight: 1.6,
+                          color: theme.text, outline: "none", resize: "vertical", caretColor: theme.accent,
+                          flex: 1, minHeight: 80,
+                        }}
+                        onBlur={() => { if (editingTask) setEditingDesc(false); }}
+                      />
+                    )}
                   </div>
 
                   {/* Project name */}
@@ -1441,7 +1481,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                   {/* Action buttons: Delete left, Save/Cancel right */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
                     <div>
-                      {editingTask && (
+                      {editingTask && isTaskOwner && (
                         <motion.button whileTap={{ scale: 0.97 }}
                           onClick={() => { resetForm(); requestDelete(editingTask.id); }}
                           style={{
@@ -1543,6 +1583,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                   </div>
                 )}
               </div>
+              ); })()}
             </motion.div>
           </motion.div>
         )}
