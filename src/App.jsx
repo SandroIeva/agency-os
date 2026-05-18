@@ -1215,7 +1215,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
               </div>
 
               {/* Body: split layout for edit, single for new */}
-              {(() => { const isTaskOwner = !editingTask || editingTask.creator_id === session?.user?.id; return (
+              {(() => { const isTaskOwner = !editingTask || editingTask.creator_id === session?.user?.id; console.log("[TaskPerms]", { isTaskOwner, creator_id: editingTask?.creator_id, my_id: session?.user?.id, task_title: editingTask?.title }); return (
               <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
                 {/* Left panel — main content */}
                 <div style={{ flex: 1, padding: 24, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
