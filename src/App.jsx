@@ -5972,7 +5972,7 @@ export default function CircularMenu() {
   }, [handleWheel]);
 
   const handleCenterClick = () => {
-    if (!menuOpen) { setMenuOpen(true); setSubOpen(false); setSubHover(-1); try { sounds.menuOpen(); } catch(e) {} return; }
+    if (!menuOpen) { setCurrentView("dashboard"); setMenuOpen(true); setSubOpen(false); setSubHover(-1); try { sounds.menuOpen(); } catch(e) {} return; }
     if (menuOpen && !subOpen) {
       // Direct navigation for items that don't need a submenu
       const item = activeItems[activeIndex];
