@@ -572,7 +572,7 @@ const DEFAULT_COLUMNS = [
   { id: "col-done", key: "done", labelKey: "kanban.done", color: "#00B894", position: 3 },
 ];
 
-function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg, orgMembers }) {
+function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg, orgMembers, createNotification }) {
   const [tasks, setTasks] = useState([]);
   const [teamMembers, setTeamMembers] = useState({});
   const [filter, setFilter] = useState("all");
@@ -728,7 +728,20 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
     const { data, error } = await supabase.from("task_comments").insert({
       task_id: editingTask.id, user_id: session.user.id, text: commentText.trim(),
     }).select("*, profile:profiles!task_comments_user_id_fkey_profiles(display_name, avatar_url, initials)").single();
-    if (data) setTaskComments(prev => [...prev, data]);
+    if (data) {
+      setTaskComments(prev => [...prev, data]);
+      // Notify task assignee about the comment (if it's someone else)
+      if (editingTask.assignee_id && editingTask.assignee_id !== session.user.id) {
+        const myName = session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "Jemand";
+        createNotification?.({
+          userId: editingTask.assignee_id,
+          type: "comment_added",
+          title: "Neuer Kommentar",
+          body: `${myName} hat "${editingTask.title}" kommentiert`,
+          metadata: { task_id: editingTask.id, comment_id: data.id },
+        });
+      }
+    }
     setCommentText("");
   };
 
@@ -854,6 +867,17 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
     }
     if (data) {
       setTasks(prev => [...prev, data]);
+      // Notify assignee if task is assigned to someone else
+      if (taskData.assignee_id && taskData.assignee_id !== session.user.id) {
+        const myName = session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "Jemand";
+        createNotification?.({
+          userId: taskData.assignee_id,
+          type: "task_assigned",
+          title: "Neue Aufgabe zugewiesen",
+          body: `${myName} hat dir "${data.title}" zugewiesen`,
+          metadata: { task_id: data.id },
+        });
+      }
       resetForm();
     }
   };
@@ -873,6 +897,17 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
     };
     setTasks(prev => prev.map(t => t.id === editingTask.id ? { ...t, ...updates } : t));
     await supabase.from("tasks").update(updates).eq("id", editingTask.id);
+    // Notify if assignee changed to someone else
+    if (updates.assignee_id && updates.assignee_id !== session.user.id && updates.assignee_id !== editingTask.assignee_id) {
+      const myName = session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "Jemand";
+      createNotification?.({
+        userId: updates.assignee_id,
+        type: "task_assigned",
+        title: "Aufgabe zugewiesen",
+        body: `${myName} hat dir "${taskForm.title}" zugewiesen`,
+        metadata: { task_id: editingTask.id },
+      });
+    }
     resetForm();
   };
 
@@ -4011,6 +4046,9 @@ export default function CircularMenu() {
   const [dashboardProjects, setDashboardProjects] = useState([]);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [calendarNotifiedIds, setCalendarNotifiedIds] = useState(new Set());
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem("agencyos-dark-mode");
     return saved !== null ? JSON.parse(saved) : true; // default dark
@@ -4683,6 +4721,88 @@ export default function CircularMenu() {
     return () => { clearTimeout(timeout); clearInterval(interval); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id]);
+
+  // ── Notifications: load, subscribe, helpers ──
+  const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    const loadNotifications = async () => {
+      const { data } = await supabase.from("notifications")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      setNotifications(data || []);
+    };
+    loadNotifications();
+
+    // Realtime: listen for new notifications for this user
+    const channel = supabase
+      .channel("user-notifications")
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "notifications",
+        filter: `user_id=eq.${session.user.id}`,
+      }, (payload) => {
+        setNotifications(prev => [payload.new, ...prev]);
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [session?.user?.id]);
+
+  const createNotification = useCallback(async ({ userId, type, title, body, metadata }) => {
+    if (!userId || userId === session?.user?.id) return; // don't notify yourself
+    await supabase.from("notifications").insert({
+      user_id: userId,
+      org_id: userOrg?.id || null,
+      type,
+      title,
+      body: body || null,
+      metadata: metadata || {},
+    });
+  }, [session?.user?.id, userOrg?.id]);
+
+  const markNotifRead = useCallback(async (id) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    await supabase.from("notifications").update({ read: true }).eq("id", id);
+  }, []);
+
+  const markAllNotifsRead = useCallback(async () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    await supabase.from("notifications").update({ read: true }).eq("user_id", session?.user?.id).eq("read", false);
+  }, [session?.user?.id]);
+
+  // ── Calendar reminder: check every 60s for events starting within 30 min ──
+  useEffect(() => {
+    if (!upcomingEvents.length) return;
+    const checkReminders = () => {
+      const now = Date.now();
+      upcomingEvents.forEach(ev => {
+        if (!ev.start || calendarNotifiedIds.has(ev.id)) return;
+        const startMs = new Date(ev.start).getTime();
+        const diffMin = (startMs - now) / 60000;
+        if (diffMin > 0 && diffMin <= 30) {
+          setCalendarNotifiedIds(prev => new Set([...prev, ev.id]));
+          // Add local notification (not DB, since it's for the current user)
+          const mins = Math.round(diffMin);
+          const notif = {
+            id: "cal-" + ev.id,
+            type: "calendar_reminder",
+            title: ev.isMeet ? "Google Meet" : "Termin",
+            body: `${ev.title} — in ${mins} Min`,
+            metadata: { hangoutLink: ev.hangoutLink },
+            read: false,
+            created_at: new Date().toISOString(),
+          };
+          setNotifications(prev => [notif, ...prev.filter(n => n.id !== notif.id)]);
+        }
+      });
+    };
+    checkReminders();
+    const interval = setInterval(checkReminders, 60000);
+    return () => clearInterval(interval);
+  }, [upcomingEvents, calendarNotifiedIds]);
 
   // ── Build startview cards (tasks + events + placeholders) ──
   const startviewCards = useMemo(() => {
@@ -5740,7 +5860,130 @@ export default function CircularMenu() {
         )}
       </AnimatePresence>
 
-      {/* Notification */}
+      {/* Click-away for notification dropdown */}
+      {notifOpen && <div onClick={() => setNotifOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 49 }} />}
+
+      {/* Notification Bell */}
+      <AnimatePresence>
+        {!panelOpen && !tasksOpen && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            style={{ position: "absolute", top: 16, right: (currentView === "dashboard" || currentView === "files") ? 100 : 24, zIndex: 50 }}
+          >
+            <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+              onClick={() => setNotifOpen(prev => !prev)}
+              style={{ position: "relative", width: 36, height: 36, borderRadius: 12, cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: notifOpen ? (darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)") : "transparent",
+              }}
+            >
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+                <path d="M18 8A6 6 0 1 0 6 8c0 7-3 9-3 9h18s-3-2-3-9ZM13.73 21a2 2 0 0 1-3.46 0" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {unreadCount > 0 && (
+                <div style={{
+                  position: "absolute", top: 2, right: 2, minWidth: 16, height: 16, borderRadius: 8,
+                  background: "#EF4444", color: "#fff", fontSize: 9, fontWeight: 700, fontFamily: FONT,
+                  display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px",
+                  border: `2px solid ${darkMode ? "#111117" : "#ffffff"}`,
+                }}>{unreadCount > 9 ? "9+" : unreadCount}</div>
+              )}
+            </motion.div>
+
+            {/* Notification dropdown */}
+            <AnimatePresence>
+              {notifOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                  transition={{ duration: 0.2, ease: [0.22, 0.68, 0.35, 1.0] }}
+                  style={{
+                    position: "absolute", top: 44, right: 0, width: 360, maxHeight: 440,
+                    background: darkMode ? "rgba(22,22,30,0.98)" : "rgba(255,255,255,0.99)",
+                    backdropFilter: "blur(40px)", border: `1px solid ${theme.border}`,
+                    borderRadius: 16, overflow: "hidden", boxShadow: "0 16px 48px rgba(0,0,0,0.3)",
+                  }}
+                >
+                  {/* Header */}
+                  <div style={{
+                    padding: "14px 18px 12px", display: "flex", alignItems: "center", justifyContent: "space-between",
+                    borderBottom: `1px solid ${theme.borderFaint}`,
+                  }}>
+                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Notifications</div>
+                    {unreadCount > 0 && (
+                      <motion.div whileTap={{ scale: 0.95 }}
+                        onClick={markAllNotifsRead}
+                        style={{ fontSize: 11, fontFamily: FONT, color: theme.accent, cursor: "pointer" }}
+                      >Alle gelesen</motion.div>
+                    )}
+                  </div>
+                  {/* List */}
+                  <div style={{ overflowY: "auto", maxHeight: 380 }}>
+                    {notifications.length === 0 ? (
+                      <div style={{ padding: "40px 20px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textFaint }}>
+                        Keine Benachrichtigungen
+                      </div>
+                    ) : notifications.map(n => {
+                      const iconMap = {
+                        task_assigned: "📋", comment_added: "💬",
+                        calendar_reminder: n.metadata?.hangoutLink ? "📹" : "📅",
+                        member_joined: "👤", task_updated: "✏️",
+                      };
+                      const timeAgo = (() => {
+                        const diff = Date.now() - new Date(n.created_at).getTime();
+                        const mins = Math.floor(diff / 60000);
+                        if (mins < 1) return "gerade eben";
+                        if (mins < 60) return `${mins} Min`;
+                        const hrs = Math.floor(mins / 60);
+                        if (hrs < 24) return `${hrs} Std`;
+                        return `${Math.floor(hrs / 24)} T`;
+                      })();
+                      return (
+                        <motion.div key={n.id}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => {
+                            markNotifRead(n.id);
+                            if (n.metadata?.task_id) { setOpenTaskId(n.metadata.task_id); setCurrentView("kanban"); setNotifOpen(false); }
+                            else if (n.metadata?.hangoutLink) { window.open(n.metadata.hangoutLink, "_blank"); }
+                            else if (n.type === "calendar_reminder") { setCurrentView("calendar"); setNotifOpen(false); }
+                          }}
+                          style={{
+                            padding: "12px 18px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 12,
+                            background: n.read ? "transparent" : (darkMode ? "rgba(139,122,255,0.04)" : "rgba(139,122,255,0.06)"),
+                            borderBottom: `1px solid ${theme.borderFaint}`,
+                          }}
+                        >
+                          <div style={{ fontSize: 16, flexShrink: 0, marginTop: 2 }}>{iconMap[n.type] || "🔔"}</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{
+                              fontSize: 13, fontFamily: FONT, color: theme.text,
+                              fontWeight: n.read ? 400 : 600, lineHeight: 1.4,
+                            }}>{n.title}</div>
+                            {n.body && (
+                              <div style={{
+                                fontSize: 12, fontFamily: FONT, color: theme.textDim,
+                                marginTop: 2, lineHeight: 1.4,
+                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                              }}>{n.body}</div>
+                            )}
+                            <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 4 }}>{timeAgo}</div>
+                          </div>
+                          {!n.read && (
+                            <div style={{ width: 7, height: 7, borderRadius: "50%", background: theme.accent, flexShrink: 0, marginTop: 6 }} />
+                          )}
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Notification toast */}
       <AnimatePresence>
         {selectedItem && (
           <motion.div
@@ -5767,7 +6010,7 @@ export default function CircularMenu() {
         {/* KANBAN VIEW */}
         <AnimatePresence>
           {currentView === "kanban" && (
-            <KanbanBoard session={session} onBack={() => { setOpenTaskId(null); setCurrentView("dashboard"); }} theme={theme} darkMode={darkMode} t={t} openTaskId={openTaskId} userOrg={userOrg} orgMembers={orgMembers} />
+            <KanbanBoard session={session} onBack={() => { setOpenTaskId(null); setCurrentView("dashboard"); }} theme={theme} darkMode={darkMode} t={t} openTaskId={openTaskId} userOrg={userOrg} orgMembers={orgMembers} createNotification={createNotification} />
           )}
         </AnimatePresence>
 
