@@ -1235,12 +1235,42 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                 borderRadius: 20, display: "flex", flexDirection: "column", overflow: "hidden",
               }}
             >
-              {/* Header bar */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 24px", borderBottom: `1px solid ${theme.border}` }}>
+              {/* Header bar with project selector */}
+              {(() => { const isTaskOwner = !editingTask || editingTask.creator_id === session?.user?.id; return (<>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderBottom: `1px solid ${theme.border}` }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                  {/* Project selector — compact, in header */}
+                  {isTaskOwner ? (
+                    <div style={{ position: "relative" }}>
+                      <select
+                        value={taskForm.project_name}
+                        onChange={e => setTaskForm(p => ({ ...p, project_name: e.target.value }))}
+                        style={{
+                          background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                          border: `1px solid ${theme.borderFaint}`, borderRadius: 8,
+                          padding: "4px 26px 4px 8px", fontSize: 12, fontFamily: FONT,
+                          color: taskForm.project_name ? theme.text : theme.textFaint, outline: "none",
+                          appearance: "none", WebkitAppearance: "none", cursor: "pointer",
+                          maxWidth: 160,
+                        }}
+                      >
+                        <option value="">Kein Projekt</option>
+                        {projects.map(p => (
+                          <option key={p.id} value={p.name}>{p.name}</option>
+                        ))}
+                      </select>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+                        <path d="M6 9l6 6 6-6" stroke={theme.textDim} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </div>
+                  ) : taskForm.project_name ? (
+                    <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", padding: "4px 10px", borderRadius: 8 }}>
+                      {taskForm.project_name}
+                    </span>
+                  ) : null}
+                  <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.textDim }}>
                     {editingTask ? t("task.editTask") : t("task.newTask")}
-                  </div>
+                  </span>
                   {editingTask && (
                     <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", padding: "2px 8px", borderRadius: 6 }}>
                       {new Date(editingTask.created_at).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" })} · {new Date(editingTask.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
@@ -1253,7 +1283,6 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
               </div>
 
               {/* Body: split layout for edit, single for new */}
-              {(() => { const isTaskOwner = !editingTask || editingTask.creator_id === session?.user?.id; return (
               <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
                 {/* Left panel — main content */}
                 <div style={{ flex: 1, padding: 24, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
@@ -1443,48 +1472,6 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                       />
                     )}
                   </div>
-
-                  {/* Project selector */}
-                  {isTaskOwner && (
-                  <div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M3 7l3-3h4l2 2h9v14H3V7z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
-                      Projekt
-                    </div>
-                    <div style={{ position: "relative" }}>
-                      <select
-                        value={taskForm.project_name}
-                        onChange={e => setTaskForm(p => ({ ...p, project_name: e.target.value }))}
-                        style={{
-                          background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`,
-                          borderRadius: 10, padding: "8px 14px", paddingRight: 32, fontSize: 13, fontFamily: FONT, width: "100%",
-                          color: taskForm.project_name ? theme.text : theme.textFaint, outline: "none",
-                          appearance: "none", WebkitAppearance: "none", cursor: "pointer",
-                        }}
-                      >
-                        <option value="" style={{ color: theme.textFaint }}>Kein Projekt</option>
-                        {projects.map(p => (
-                          <option key={p.id} value={p.name} style={{ color: theme.text }}>{p.name}</option>
-                        ))}
-                      </select>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
-                        <path d="M6 9l6 6 6-6" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </div>
-                  </div>
-                  )}
-                  {!isTaskOwner && taskForm.project_name && (
-                  <div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M3 7l3-3h4l2 2h9v14H3V7z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
-                      Projekt
-                    </div>
-                    <div style={{
-                      background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`,
-                      borderRadius: 10, padding: "8px 14px", fontSize: 13, fontFamily: FONT, color: theme.text,
-                    }}>{taskForm.project_name}</div>
-                  </div>
-                  )}
 
                   {/* Checklist */}
                   <div>
@@ -1748,7 +1735,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                   </div>
                 )}
               </div>
-              ); })()}
+              </>); })()}
             </motion.div>
           </motion.div>
         )}
