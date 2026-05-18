@@ -2196,18 +2196,19 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
 const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const MONTH_NAMES = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
 
-function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReLogin, ensureValidToken, theme, darkMode, t }) {
+function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReLogin, ensureValidToken, theme, darkMode, t, userOrg }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
   const [viewMode, setViewMode] = useState("month"); // "month" | "week" | "day"
   const [navDirection, setNavDirection] = useState(0); // -1 = prev, 1 = next, for animation
   const [navKey, setNavKey] = useState(0); // force re-render for animation
   const [googleEvents, setGoogleEvents] = useState([]);
+  const [teamEvents, setTeamEvents] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [showNewEvent, setShowNewEvent] = useState(false);
-  const [eventForm, setEventForm] = useState({ title: "", date: "", startTime: "09:00", endTime: "10:00", description: "", allDay: false, withMeet: false });
+  const [eventForm, setEventForm] = useState({ title: "", date: "", startTime: "09:00", endTime: "10:00", description: "", allDay: false, withMeet: false, isTeamEvent: false });
   const [savingEvent, setSavingEvent] = useState(false);
   const [meetLink, setMeetLink] = useState(null);
   const [meetLoading, setMeetLoading] = useState(false);
@@ -2380,10 +2381,66 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
         project: t.project_name,
       })));
 
+      // Supabase team events
+      if (userOrg?.id) {
+        const timeMinLocal = new Date(year, month, 1).toISOString();
+        const timeMaxLocal = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
+        const { data: teamData } = await supabase
+          .from("calendar_events")
+          .select("*")
+          .eq("org_id", userOrg.id)
+          .gte("start_time", timeMinLocal)
+          .lte("start_time", timeMaxLocal)
+          .order("start_time");
+        setTeamEvents((teamData || []).map(e => ({
+          id: e.id,
+          title: e.title,
+          start: e.all_day ? e.start_time.split("T")[0] : e.start_time,
+          end: e.all_day ? e.end_time.split("T")[0] : e.end_time,
+          allDay: e.all_day,
+          color: e.color || "#8B7AFF",
+          type: "team",
+          description: e.description,
+          location: e.location,
+          creator_id: e.creator_id,
+        })));
+      }
+
       setLoading(false);
     };
     load();
-  }, [session, year, month]);
+  }, [session, year, month, userOrg?.id]);
+
+  // Realtime subscription for team events
+  useEffect(() => {
+    if (!userOrg?.id) return;
+    const channel = supabase.channel("team-calendar-" + userOrg.id)
+      .on("postgres_changes", { event: "*", schema: "public", table: "calendar_events", filter: `org_id=eq.${userOrg.id}` },
+        () => {
+          // Refetch team events on any change
+          const fetchTeam = async () => {
+            const timeMinLocal = new Date(year, month, 1).toISOString();
+            const timeMaxLocal = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
+            const { data: teamData } = await supabase
+              .from("calendar_events")
+              .select("*")
+              .eq("org_id", userOrg.id)
+              .gte("start_time", timeMinLocal)
+              .lte("start_time", timeMaxLocal)
+              .order("start_time");
+            setTeamEvents((teamData || []).map(e => ({
+              id: e.id, title: e.title,
+              start: e.all_day ? e.start_time.split("T")[0] : e.start_time,
+              end: e.all_day ? e.end_time.split("T")[0] : e.end_time,
+              allDay: e.all_day, color: e.color || "#8B7AFF", type: "team",
+              description: e.description, location: e.location, creator_id: e.creator_id,
+            })));
+          };
+          fetchTeam();
+        })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [userOrg?.id, year, month]);
 
   // Get date key for a dayObj (for holiday lookup etc)
   const getDateKey = (dayObj) => {
@@ -2413,6 +2470,10 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
 
     const dayEvents = [];
     googleEvents.forEach(e => {
+      const eDate = (e.start || "").substring(0, 10);
+      if (eDate === checkDate) dayEvents.push(e);
+    });
+    teamEvents.forEach(e => {
       const eDate = (e.start || "").substring(0, 10);
       if (eDate === checkDate) dayEvents.push(e);
     });
@@ -2464,6 +2525,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
     const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
     const dayEvents = [];
     googleEvents.forEach(e => { if ((e.start || "").substring(0, 10) === dateStr) dayEvents.push(e); });
+    teamEvents.forEach(e => { if ((e.start || "").substring(0, 10) === dateStr) dayEvents.push(e); });
     tasks.forEach(t => { if ((t.start || "").substring(0, 10) === dateStr) dayEvents.push(t); });
     return dayEvents;
   };
@@ -2577,22 +2639,28 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
 
   // Delete / cancel a Google Calendar event
   const deleteGoogleEvent = async (eventObj) => {
-    if (!eventObj?.id || eventObj.type !== "google") return;
-    const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
-    if (!providerToken) return;
+    if (!eventObj?.id) return;
     setDeletingEvent(true);
     try {
-      const res = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventObj.id}?sendUpdates=all`,
-        { method: "DELETE", headers: { Authorization: `Bearer ${providerToken}` } }
-      );
-      if (res.ok || res.status === 204) {
-        // Remove from local state
-        setGoogleEvents(prev => prev.filter(e => e.id !== eventObj.id));
+      if (eventObj.type === "team") {
+        // Delete from Supabase
+        await supabase.from("calendar_events").delete().eq("id", eventObj.id);
+        setTeamEvents(prev => prev.filter(e => e.id !== eventObj.id));
         setConfirmDeleteEvent(null);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        console.error("Delete event error:", res.status, err);
+      } else if (eventObj.type === "google") {
+        const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
+        if (!providerToken) { setDeletingEvent(false); return; }
+        const res = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventObj.id}?sendUpdates=all`,
+          { method: "DELETE", headers: { Authorization: `Bearer ${providerToken}` } }
+        );
+        if (res.ok || res.status === 204) {
+          setGoogleEvents(prev => prev.filter(e => e.id !== eventObj.id));
+          setConfirmDeleteEvent(null);
+        } else {
+          const err = await res.json().catch(() => ({}));
+          console.error("Delete event error:", res.status, err);
+        }
       }
     } catch (err) {
       console.error("Delete event error:", err);
@@ -2601,6 +2669,38 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
   };
 
   // Create or update Google Calendar event
+  const createTeamEvent = async () => {
+    if (!eventForm.title.trim() || !eventForm.date || !userOrg?.id) return;
+    setSavingEvent(true);
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      let start_time, end_time;
+      if (eventForm.allDay) {
+        start_time = `${eventForm.date}T00:00:00`;
+        const nextDay = new Date(eventForm.date);
+        nextDay.setDate(nextDay.getDate() + 1);
+        end_time = `${nextDay.toISOString().split("T")[0]}T00:00:00`;
+      } else {
+        start_time = `${eventForm.date}T${eventForm.startTime}:00`;
+        end_time = `${eventForm.date}T${eventForm.endTime}:00`;
+      }
+      await supabase.from("calendar_events").insert({
+        org_id: userOrg.id,
+        creator_id: session.user.id,
+        title: eventForm.title.trim(),
+        description: eventForm.description || null,
+        start_time,
+        end_time,
+        all_day: eventForm.allDay,
+      });
+      setShowNewEvent(false);
+      setEventForm({ title: "", date: "", startTime: "09:00", endTime: "10:00", description: "", allDay: false, withMeet: false, isTeamEvent: false });
+    } catch (err) {
+      console.error("Create team event error:", err);
+    }
+    setSavingEvent(false);
+  };
+
   const createGoogleEvent = async () => {
     if (!eventForm.title.trim() || !eventForm.date) return;
     const providerToken = getProviderToken ? getProviderToken() : session?.provider_token;
@@ -2702,7 +2802,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 22, fontWeight: 500, color: theme.text, fontFamily: FONT, letterSpacing: -0.5 }}>Calendar</div>
           <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, marginTop: 2 }}>
-            {loading ? "Loading..." : `${googleEvents.length} Events · ${tasks.length} Tasks`}
+            {loading ? "Loading..." : `${googleEvents.length + teamEvents.length} Events · ${tasks.length} Tasks`}
           </div>
         </div>
         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
@@ -2970,6 +3070,9 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                           {e.type === "google" && (
                             <span style={{ fontSize: 10, fontFamily: FONT, color: "#5B8DEF", padding: "2px 8px", borderRadius: 4, background: "rgba(91,141,239,0.1)" }}>Google</span>
                           )}
+                          {e.type === "team" && (
+                            <span style={{ fontSize: 10, fontFamily: FONT, color: "#8B7AFF", padding: "2px 8px", borderRadius: 4, background: "rgba(139,122,255,0.1)" }}>Team</span>
+                          )}
                           {e.type === "task" && (
                             <span style={{ fontSize: 10, fontFamily: FONT, color: "#8B7AFF", padding: "2px 8px", borderRadius: 4, background: "rgba(139,122,255,0.1)" }}>Task</span>
                           )}
@@ -2984,8 +3087,8 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                           >🔗 Google Meet beitreten</motion.div>
                         )}
                       </div>
-                      {/* Delete button for Google events */}
-                      {e.type === "google" && (
+                      {/* Delete button for Google events or own team events */}
+                      {(e.type === "google" || (e.type === "team" && e.creator_id === session?.user?.id)) && (
                         <motion.div
                           whileHover={{ scale: 1.15, background: "rgba(232,67,67,0.15)" }}
                           whileTap={{ scale: 0.9 }}
@@ -3138,6 +3241,22 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none", marginBottom: 12, boxSizing: "border-box", colorScheme: darkMode ? "dark" : "light" }}
             />
 
+            {/* Team Event toggle */}
+            {userOrg?.id && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  onClick={() => setEventForm(f => ({ ...f, isTeamEvent: !f.isTeamEvent, withMeet: f.isTeamEvent ? f.withMeet : false }))}
+                  style={{ width: 36, height: 20, borderRadius: 10, background: eventForm.isTeamEvent ? "rgba(139,122,255,0.4)" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"), cursor: "pointer", position: "relative", transition: "background 0.2s" }}
+                >
+                  <motion.div animate={{ x: eventForm.isTeamEvent ? 17 : 2 }} transition={{ duration: 0.2 }}
+                    style={{ width: 16, height: 16, borderRadius: "50%", background: eventForm.isTeamEvent ? "#8B7AFF" : theme.textDim, position: "absolute", top: 2 }} />
+                </motion.div>
+                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub }}>Team Event</span>
+                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim }}>{eventForm.isTeamEvent ? "Sichtbar für alle" : "Nur Google Calendar"}</span>
+              </div>
+            )}
+
             {/* Toggles row */}
             <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 12 }}>
               {/* All day toggle */}
@@ -3153,7 +3272,8 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                 <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub }}>Ganztägig</span>
               </div>
 
-              {/* Google Meet toggle */}
+              {/* Google Meet toggle (only for Google events) */}
+              {!eventForm.isTeamEvent && (
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <motion.div
                   whileHover={{ scale: 1.05 }}
@@ -3166,6 +3286,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                 <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub }}>Google Meet</span>
                 {meetLoading && <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>Erstelle Link...</span>}
               </div>
+              )}
             </div>
 
             {/* Meet Link display */}
@@ -3296,7 +3417,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                 {t("common.cancel")}
               </motion.div>
               <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                onClick={createGoogleEvent}
+                onClick={eventForm.isTeamEvent ? createTeamEvent : createGoogleEvent}
                 style={{ cursor: savingEvent ? "wait" : "pointer", padding: "9px 24px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: darkMode ? "#fff" : "#1a1a2e", fontWeight: 500, background: savingEvent ? (darkMode ? "rgba(139,122,255,0.15)" : "rgba(108,92,231,0.1)") : (darkMode ? "rgba(139,122,255,0.3)" : "rgba(108,92,231,0.2)"), border: `1px solid ${darkMode ? "rgba(139,122,255,0.4)" : "rgba(108,92,231,0.3)"}`, opacity: (!eventForm.title.trim() || savingEvent) ? 0.5 : 1 }}>
                 {savingEvent ? t("cal.saving") : t("cal.createEvent")}
               </motion.div>
@@ -6528,7 +6649,7 @@ export default function CircularMenu() {
         {/* CALENDAR VIEW */}
         <AnimatePresence>
           {currentView === "calendar" && (
-            <CalendarView session={session} getProviderToken={getProviderToken} openMeetCall={openMeetCall} autoReLogin={autoReLogin} ensureValidToken={ensureValidToken} onBack={() => setCurrentView("dashboard")} theme={theme} darkMode={darkMode} t={t} />
+            <CalendarView session={session} getProviderToken={getProviderToken} openMeetCall={openMeetCall} autoReLogin={autoReLogin} ensureValidToken={ensureValidToken} onBack={() => setCurrentView("dashboard")} theme={theme} darkMode={darkMode} t={t} userOrg={userOrg} />
           )}
         </AnimatePresence>
 
