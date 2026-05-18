@@ -4125,22 +4125,27 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
     if (!msgInput.trim() || !activeConvId || !myId) return;
     const text = msgInput.trim();
     setMsgInput("");
-    await supabase.from("chat_messages").insert({ conversation_id: activeConvId, sender_id: myId, text });
+    const { error: msgErr } = await supabase.from("chat_messages").insert({ conversation_id: activeConvId, sender_id: myId, text });
+    console.log("[Chat] msg insert:", { msgErr, activeConvId, myId });
     // Notify other participants
+    console.log("[Chat] createNotification fn exists:", !!createNotification);
     if (createNotification) {
       const myName = memberMap[myId]?.display_name || "Jemand";
-      // Get participant IDs directly from DB to avoid stale state
-      const { data: parts } = await supabase.from("chat_participants").select("user_id").eq("conversation_id", activeConvId);
+      const { data: parts, error: partsErr } = await supabase.from("chat_participants").select("user_id").eq("conversation_id", activeConvId);
+      console.log("[Chat] participants:", { parts, partsErr, myId });
       const recipientIds = (parts || []).map(p => p.user_id).filter(uid => uid !== myId);
-      recipientIds.forEach(uid => {
-        createNotification({
+      console.log("[Chat] recipientIds:", recipientIds);
+      for (const uid of recipientIds) {
+        console.log("[Chat] sending notification to:", uid);
+        const result = await createNotification({
           userId: uid,
           type: "chat_message",
           title: `Neue Nachricht von ${myName}`,
           body: text.length > 80 ? text.slice(0, 80) + "…" : text,
           metadata: { conversation_id: activeConvId },
         });
-      });
+        console.log("[Chat] notification result:", result);
+      }
     }
   };
 
@@ -5260,15 +5265,17 @@ export default function CircularMenu() {
   }, [session?.user?.id]);
 
   const createNotification = useCallback(async ({ userId, type, title, body, metadata }) => {
+    console.log("[Notif] createNotification called:", { userId, type, title, sessionUserId: session?.user?.id, skip: !userId || userId === session?.user?.id });
     if (!userId || userId === session?.user?.id) return; // don't notify yourself
-    await supabase.from("notifications").insert({
+    const { data: notifData, error: notifErr } = await supabase.from("notifications").insert({
       user_id: userId,
       org_id: userOrg?.id || null,
       type,
       title,
       body: body || null,
       metadata: metadata || {},
-    });
+    }).select();
+    console.log("[Notif] insert result:", { notifData, notifErr });
   }, [session?.user?.id, userOrg?.id]);
 
   const markNotifRead = useCallback(async (id) => {
