@@ -3865,14 +3865,13 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
 
 const CHAT_COLORS = ["#E88D67", "#5B8DEF", "#8B7AFF", "#6BC5A0", "#F59E0B", "#E84393", "#00B894", "#FD79A8"];
 
-function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers, darkMode, theme }) {
+function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers, darkMode, theme, createNotification }) {
   const [search, setSearch] = useState("");
   const [conversations, setConversations] = useState([]);
   const [activeConvId, setActiveConvId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [msgInput, setMsgInput] = useState("");
   const [loadingConvs, setLoadingConvs] = useState(true);
-  const [showNewChat, setShowNewChat] = useState(false);
   const scrollRef = useRef(null);
   const myId = session?.user?.id;
 
@@ -3975,6 +3974,20 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
     const text = msgInput.trim();
     setMsgInput("");
     await supabase.from("chat_messages").insert({ conversation_id: activeConvId, sender_id: myId, text });
+    // Notify other participants
+    const conv = conversations.find(c => c.id === activeConvId);
+    if (conv && createNotification) {
+      const myName = memberMap[myId]?.display_name || "Jemand";
+      (conv.otherIds || []).forEach(uid => {
+        createNotification({
+          userId: uid,
+          type: "chat_message",
+          title: `Neue Nachricht von ${myName}`,
+          body: text.length > 80 ? text.slice(0, 80) + "…" : text,
+          metadata: { conversation_id: activeConvId },
+        });
+      });
+    }
   };
 
   // Start new direct conversation
@@ -4052,44 +4065,7 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
                 Messages
               </span>
             </div>
-            {/* New chat */}
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-              onClick={() => setShowNewChat(!showNewChat)}
-              style={{ cursor: "pointer", padding: 6, borderRadius: 8, background: showNewChat ? "rgba(139,122,255,0.15)" : "rgba(255,255,255,0.05)" }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path d="M12 5v14M5 12h14" stroke={showNewChat ? "#8B7AFF" : "#ffffff60"} strokeWidth="2" strokeLinecap="round" />
-              </svg>
-            </motion.div>
           </div>
-
-          {/* New chat member picker */}
-          {showNewChat && (
-            <div style={{ padding: "8px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-              <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff50", padding: "4px 8px 8px" }}>Neues Gespräch starten</div>
-              {otherMembers.map(m => (
-                <motion.div key={m.user_id} whileTap={{ scale: 0.97 }}
-                  onClick={() => startConversation(m.user_id)}
-                  className="hover-row"
-                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 10, cursor: "pointer" }}
-                >
-                  {m.avatar_url ? (
-                    <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 32, height: 32, borderRadius: "50%" }} />
-                  ) : (
-                    <div style={{
-                      width: 32, height: 32, borderRadius: "50%",
-                      background: `linear-gradient(135deg, ${m.color}50, ${m.color}20)`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 11, fontWeight: 600, fontFamily: FONT, color: m.color,
-                    }}>{m.initials}</div>
-                  )}
-                  <span style={{ fontSize: 13, fontFamily: FONT, color: "#ffffffdd" }}>{m.display_name}</span>
-                </motion.div>
-              ))}
-              {otherMembers.length === 0 && (
-                <div style={{ padding: "12px 10px", fontSize: 12, fontFamily: FONT, color: "#ffffff30", textAlign: "center" }}>Keine Team-Mitglieder</div>
-              )}
-            </div>
-          )}
 
           {/* Search */}
           <div style={{ padding: "12px 16px 8px" }}>
@@ -4119,64 +4095,114 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
             </div>
           </div>
 
-          {/* Conversation list */}
+          {/* Conversation list — shows all team members, with existing chats on top */}
           <div style={{
             flex: 1, minHeight: 0, overflowY: "auto",
             padding: "4px 8px", display: "flex", flexDirection: "column", gap: 2,
           }}>
             {loadingConvs ? (
               <div style={{ padding: 32, textAlign: "center", fontSize: 13, fontFamily: FONT, color: "#ffffff30" }}>Laden...</div>
-            ) : filtered.length === 0 ? (
-              <div style={{ padding: 32, textAlign: "center" }}>
-                <div style={{ fontSize: 28, marginBottom: 8, opacity: 0.2 }}>💬</div>
-                <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffff30" }}>
-                  {conversations.length === 0 ? "Starte ein neues Gespräch" : "Keine Ergebnisse"}
-                </div>
-              </div>
-            ) : filtered.map((conv, i) => {
-              const isActive = activeConvId === conv.id;
-              return (
-                <motion.div
-                  key={conv.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.03 + i * 0.025, duration: 0.25 }}
-                  onClick={() => setActiveConvId(conv.id)}
-                  className={isActive ? "" : "hover-row"}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 12,
-                    padding: "12px 12px", borderRadius: 12, cursor: "pointer",
-                    background: isActive ? "rgba(139, 122, 255, 0.12)" : "transparent",
-                    border: `1px solid ${isActive ? "rgba(139, 122, 255, 0.2)" : "transparent"}`,
-                    transition: "all 0.2s ease",
-                  }}
-                >
-                  <div style={{ position: "relative", flexShrink: 0 }}>
-                    {conv.avatar_url ? (
-                      <img src={conv.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 42, height: 42, borderRadius: "50%" }} />
-                    ) : (
-                      <div style={{
-                        width: 42, height: 42, borderRadius: "50%",
-                        background: `linear-gradient(135deg, ${conv.color}50, ${conv.color}20)`,
-                        border: `1px solid ${conv.color}40`,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 14, fontWeight: 600, fontFamily: FONT, color: conv.color,
-                      }}>{conv.initials}</div>
-                    )}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd" }}>{conv.name}</div>
-                      <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff35", flexShrink: 0 }}>{conv.time}</div>
-                    </div>
-                    <div style={{
-                      fontSize: 12, fontFamily: FONT, color: "#ffffff45", marginTop: 2,
-                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                    }}>{conv.lastMsg || "Noch keine Nachrichten"}</div>
-                  </div>
-                </motion.div>
+            ) : (() => {
+              // Build unified list: existing conversations + team members without conversations
+              const membersWithConv = new Set();
+              filtered.forEach(c => (c.otherIds || []).forEach(id => membersWithConv.add(id)));
+              const membersWithoutConv = otherMembers.filter(m =>
+                !membersWithConv.has(m.user_id) &&
+                (m.display_name.toLowerCase().includes(search.toLowerCase()) || !search)
               );
-            })}
+              const allItems = [
+                ...filtered.map(c => ({ type: "conv", ...c })),
+                ...membersWithoutConv.map(m => ({ type: "member", ...m })),
+              ];
+              if (allItems.length === 0) return (
+                <div style={{ padding: 32, textAlign: "center" }}>
+                  <div style={{ fontSize: 28, marginBottom: 8, opacity: 0.2 }}>💬</div>
+                  <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffff30" }}>Keine Ergebnisse</div>
+                </div>
+              );
+              return allItems.map((item, i) => {
+                if (item.type === "conv") {
+                  const isActive = activeConvId === item.id;
+                  return (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.03 + i * 0.025, duration: 0.25 }}
+                      onClick={() => setActiveConvId(item.id)}
+                      className={isActive ? "" : "hover-row"}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 12,
+                        padding: "12px 12px", borderRadius: 12, cursor: "pointer",
+                        background: isActive ? "rgba(139, 122, 255, 0.12)" : "transparent",
+                        border: `1px solid ${isActive ? "rgba(139, 122, 255, 0.2)" : "transparent"}`,
+                        transition: "all 0.2s ease",
+                      }}
+                    >
+                      <div style={{ position: "relative", flexShrink: 0 }}>
+                        {item.avatar_url ? (
+                          <img src={item.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 42, height: 42, borderRadius: "50%" }} />
+                        ) : (
+                          <div style={{
+                            width: 42, height: 42, borderRadius: "50%",
+                            background: `linear-gradient(135deg, ${item.color}50, ${item.color}20)`,
+                            border: `1px solid ${item.color}40`,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 14, fontWeight: 600, fontFamily: FONT, color: item.color,
+                          }}>{item.initials}</div>
+                        )}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd" }}>{item.name}</div>
+                          <div style={{ fontSize: 10, fontFamily: FONT, color: "#ffffff35", flexShrink: 0 }}>{item.time}</div>
+                        </div>
+                        <div style={{
+                          fontSize: 12, fontFamily: FONT, color: "#ffffff45", marginTop: 2,
+                          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                        }}>{item.lastMsg || "Noch keine Nachrichten"}</div>
+                      </div>
+                    </motion.div>
+                  );
+                }
+                // Team member without existing conversation
+                return (
+                  <motion.div
+                    key={"m-" + item.user_id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.03 + i * 0.025, duration: 0.25 }}
+                    onClick={() => startConversation(item.user_id)}
+                    className="hover-row"
+                    style={{
+                      display: "flex", alignItems: "center", gap: 12,
+                      padding: "12px 12px", borderRadius: 12, cursor: "pointer",
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    <div style={{ position: "relative", flexShrink: 0 }}>
+                      {item.avatar_url ? (
+                        <img src={item.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 42, height: 42, borderRadius: "50%" }} />
+                      ) : (
+                        <div style={{
+                          width: 42, height: 42, borderRadius: "50%",
+                          background: `linear-gradient(135deg, ${item.color}50, ${item.color}20)`,
+                          border: `1px solid ${item.color}40`,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 14, fontWeight: 600, fontFamily: FONT, color: item.color,
+                        }}>{item.initials}</div>
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd" }}>{item.display_name}</div>
+                      <div style={{
+                        fontSize: 12, fontFamily: FONT, color: "#ffffff30", marginTop: 2,
+                      }}>Nachricht schreiben…</div>
+                    </div>
+                  </motion.div>
+                );
+              });
+            })()}
           </div>
         </div>
 
@@ -6345,6 +6371,7 @@ export default function CircularMenu() {
               orgMembers={orgMembers}
               darkMode={darkMode}
               theme={theme}
+              createNotification={createNotification}
               onBack={() => {
                 setCurrentView("dashboard");
                 setMenuSource("grid");
