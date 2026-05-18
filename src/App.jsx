@@ -603,6 +603,9 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
   const projectLogoInputRef = useRef(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef(null);
+  const descRef = useRef(null);
   const dragItem = useRef(null);
 
   // Always use these columns
@@ -809,6 +812,55 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
     await supabase.from("task_checklist_items").delete().eq("id", id);
   };
 
+  // Speech-to-text dictation for description
+  const startDictation = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) { alert("Spracherkennung wird in diesem Browser nicht unterstützt. Bitte verwende Chrome."); return; }
+    if (isRecording) { stopDictation(); return; }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "de-DE";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    let finalTranscript = taskForm.description || "";
+    let needsSpace = finalTranscript.length > 0 && !finalTranscript.endsWith(" ") && !finalTranscript.endsWith("\n");
+    recognition.onresult = (event) => {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          // Auto-capitalize first letter of sentence
+          let cleaned = t.trim();
+          if (cleaned.length > 0) {
+            const prevChar = finalTranscript.trim().slice(-1);
+            if (!prevChar || prevChar === "." || prevChar === "!" || prevChar === "?" || prevChar === "\n") {
+              cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+            }
+          }
+          // Add period at end if no punctuation
+          const lastChar = cleaned.slice(-1);
+          if (cleaned.length > 0 && !/[.!?,;:\n]/.test(lastChar)) cleaned += ".";
+          finalTranscript += (needsSpace ? " " : "") + cleaned;
+          needsSpace = true;
+          setTaskForm(p => ({ ...p, description: finalTranscript }));
+        } else {
+          interim = t;
+        }
+      }
+    };
+    recognition.onerror = (e) => { if (e.error !== "no-speech") console.error("Speech error:", e.error); };
+    recognition.onend = () => { setIsRecording(false); recognitionRef.current = null; };
+    recognition.start();
+    recognitionRef.current = recognition;
+    setIsRecording(true);
+  };
+  const stopDictation = () => {
+    if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; }
+    setIsRecording(false);
+  };
+
+  // Cleanup recognition on unmount
+  useEffect(() => { return () => { if (recognitionRef.current) recognitionRef.current.stop(); }; }, []);
+
   // Merge DB projects + task-derived names for filter
   const projectNames = [...new Set([
     ...projects.map(p => p.name),
@@ -972,6 +1024,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
     setTaskForm({ title: "", description: "", priority: "medium", column_key: "todo", project_name: "", assignee_id: session?.user?.id || null, due_date: "" });
     setTaskComments([]); setTaskAttachments([]); setTaskChecklist([]); setCommentText(""); setAttachmentUrl(""); setAttachmentName(""); setShowAttachInput(false); setAssigneeDropdownOpen(false); setShowDatePicker(false);
     setEditingTitle(false); setEditingDesc(false); setNewChecklistText(""); setEditingChecklistId(null);
+    stopDictation();
   };
 
   const openEditTask = (task) => {
@@ -1429,48 +1482,59 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                   </div>
 
                   {/* Description */}
-                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, display: "flex", alignItems: "center", gap: 6 }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h10M4 18h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                      Beschreibung
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h10M4 18h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                        Beschreibung
+                      </span>
+                      {isTaskOwner && (
+                        <motion.div
+                          whileTap={{ scale: 0.9 }}
+                          onClick={startDictation}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 4, cursor: "pointer",
+                            color: isRecording ? "#EF4444" : theme.accent, fontSize: 11, fontFamily: FONT,
+                          }}
+                        >
+                          {isRecording ? (
+                            <><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="6" y="6" width="12" height="12" rx="2" fill="#EF4444"/></svg> Stopp</>
+                          ) : (
+                            <><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M5 10a7 7 0 0014 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M12 17v4M8 21h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> Diktieren</>
+                          )}
+                        </motion.div>
+                      )}
                     </div>
-                    {editingTask && !editingDesc ? (
-                      <div
-                        onClick={() => { if (isTaskOwner) setEditingDesc(true); }}
-                        style={{
-                          background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`,
-                          borderRadius: 12, padding: "12px 16px", fontSize: 13, fontFamily: FONT, lineHeight: 1.6,
-                          color: taskForm.description ? theme.text : theme.textFaint, cursor: isTaskOwner ? "text" : "default",
-                          flex: 1, minHeight: 80, whiteSpace: "pre-wrap", position: "relative",
-                        }}
-                      >
-                        {taskForm.description || (isTaskOwner ? "Beschreibung hinzufügen..." : "Keine Beschreibung")}
-                        {isTaskOwner && (
-                          <div style={{
-                            position: "absolute", top: 10, right: 10, width: 24, height: 24, borderRadius: 6,
-                            background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
-                            display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-                          }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
+                    <div style={{ position: "relative" }}>
                       <textarea
+                        ref={descRef}
                         value={taskForm.description}
-                        onChange={e => setTaskForm(p => ({ ...p, description: e.target.value }))}
-                        placeholder="Beschreibung hinzufügen..."
-                        rows={editingTask ? 6 : 4}
-                        autoFocus={!!editingTask}
+                        onChange={e => { if (isTaskOwner) setTaskForm(p => ({ ...p, description: e.target.value })); }}
+                        placeholder={isTaskOwner ? "Beschreibung hinzufügen..." : "Keine Beschreibung"}
+                        readOnly={!isTaskOwner}
+                        spellCheck={true}
                         style={{
-                          background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`,
+                          background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+                          border: `1px solid ${isRecording ? "#EF444450" : theme.borderFaint}`,
                           borderRadius: 12, padding: "12px 16px", fontSize: 13, fontFamily: FONT, lineHeight: 1.6,
-                          color: theme.text, outline: "none", resize: "vertical", caretColor: theme.accent,
-                          flex: 1, minHeight: 80,
+                          color: theme.text, outline: "none", resize: "none", caretColor: theme.accent,
+                          width: "100%", height: 120, cursor: isTaskOwner ? "text" : "default",
+                          transition: "border-color 0.2s ease",
                         }}
-                        onBlur={() => { if (editingTask) setEditingDesc(false); }}
                       />
-                    )}
+                      {isRecording && (
+                        <div style={{
+                          position: "absolute", bottom: 10, right: 12, display: "flex", alignItems: "center", gap: 6,
+                          fontSize: 10, fontFamily: FONT, color: "#EF4444",
+                        }}>
+                          <div style={{
+                            width: 6, height: 6, borderRadius: "50%", background: "#EF4444",
+                            animation: "pulse 1.2s ease-in-out infinite",
+                          }} />
+                          Aufnahme läuft...
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Checklist */}
