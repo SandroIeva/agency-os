@@ -590,6 +590,13 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
   const [showAttachInput, setShowAttachInput] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
+  const [projects, setProjects] = useState([]);
+  const [showProjectEditor, setShowProjectEditor] = useState(false);
+  const [editingProject, setEditingProject] = useState(null);
+  const [projectForm, setProjectForm] = useState({ name: "", logo_url: "", color: "#8B7AFF" });
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoPreview, setLogoPreview] = useState(null);
+  const projectLogoInputRef = useRef(null);
   const dragItem = useRef(null);
 
   // Always use these columns
@@ -664,6 +671,23 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
       }
       setTeamMembers(memberMap);
 
+      // 4. Load projects — and auto-create entries for project_names that exist on tasks but not in projects table
+      if (orgId) {
+        const { data: prj } = await supabase.from("projects").select("*").eq("org_id", orgId).order("created_at");
+        const existingProjects = prj || [];
+        const existingNames = new Set(existingProjects.map(p => p.name));
+        // Find project_names from tasks that don't have a projects row yet
+        const allTasks = taskData || [];
+        const missingNames = [...new Set(allTasks.map(t => t.project_name).filter(n => n && !existingNames.has(n)))];
+        if (missingNames.length > 0) {
+          const inserts = missingNames.map(name => ({ name, org_id: orgId, owner_id: u.id, color: "#8B7AFF" }));
+          const { data: created } = await supabase.from("projects").insert(inserts).select();
+          setProjects([...existingProjects, ...(created || [])]);
+        } else {
+          setProjects(existingProjects);
+        }
+      }
+
       setLoading(false);
     };
     init();
@@ -730,8 +754,76 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
     await supabase.from("task_attachments").delete().eq("id", id);
   };
 
-  const projectNames = [...new Set(tasks.map(t => t.project_name).filter(Boolean))];
+  // Merge DB projects + task-derived names for filter
+  const projectNames = [...new Set([
+    ...projects.map(p => p.name),
+    ...tasks.map(t => t.project_name).filter(Boolean),
+  ])];
   const filtered = filter === "all" ? tasks : tasks.filter(t => t.project_name === filter);
+
+  // Get project logo by name
+  const getProjectLogo = (name) => projects.find(p => p.name === name)?.logo_url || null;
+
+  // Upload project logo to Supabase Storage
+  const handleProjectLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Show local preview immediately
+    const reader = new FileReader();
+    reader.onload = (ev) => setLogoPreview(ev.target.result);
+    reader.readAsDataURL(file);
+
+    setLogoUploading(true);
+    try {
+      const ext = file.name.split(".").pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const filePath = `${userOrg?.id || session.user.id}/${fileName}`;
+      const { error } = await supabase.storage.from("project-logos").upload(filePath, file, { upsert: true });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from("project-logos").getPublicUrl(filePath);
+      setProjectForm(p => ({ ...p, logo_url: urlData.publicUrl }));
+    } catch (err) {
+      console.error("Logo upload failed:", err);
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  // Remove uploaded logo
+  const removeProjectLogo = () => {
+    setProjectForm(p => ({ ...p, logo_url: "" }));
+    setLogoPreview(null);
+    if (projectLogoInputRef.current) projectLogoInputRef.current.value = "";
+  };
+
+  // Project CRUD
+  const saveProject = async () => {
+    if (!projectForm.name.trim()) return;
+    if (editingProject) {
+      const updates = { name: projectForm.name.trim(), logo_url: projectForm.logo_url || null, color: projectForm.color };
+      await supabase.from("projects").update(updates).eq("id", editingProject.id);
+      if (editingProject.name !== projectForm.name.trim()) {
+        await supabase.from("tasks").update({ project_name: projectForm.name.trim() }).eq("project_name", editingProject.name).eq("org_id", userOrg?.id);
+        setTasks(prev => prev.map(t => t.project_name === editingProject.name ? { ...t, project_name: projectForm.name.trim() } : t));
+      }
+      setProjects(prev => prev.map(p => p.id === editingProject.id ? { ...p, ...updates } : p));
+    } else {
+      const { data } = await supabase.from("projects").insert({
+        name: projectForm.name.trim(), logo_url: projectForm.logo_url || null,
+        color: projectForm.color, owner_id: session.user.id, org_id: userOrg?.id || null,
+      }).select().single();
+      if (data) setProjects(prev => [...prev, data]);
+    }
+    setEditingProject(null);
+    setProjectForm({ name: "", logo_url: "", color: "#8B7AFF" });
+    setLogoPreview(null);
+    setShowProjectEditor(false);
+  };
+
+  const deleteProject = async (proj) => {
+    await supabase.from("projects").delete().eq("id", proj.id);
+    setProjects(prev => prev.filter(p => p.id !== proj.id));
+  };
 
   // Move task to another column
   const moveTask = async (taskId, newColumnKey) => {
@@ -854,17 +946,34 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
 
       {/* Filters */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 32px", flexWrap: "wrap" }}>
-        {["all", ...projectNames].map(p => (
-          <motion.button key={p} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-            onClick={() => setFilter(p)}
-            style={{
-              fontSize: 12, fontFamily: FONT, fontWeight: 400, padding: "6px 14px", borderRadius: 20, cursor: "pointer",
-              background: filter === p ? (darkMode ? "#ffffff0F" : "rgba(0,0,0,0.06)") : "transparent",
-              border: `1px solid ${filter === p ? theme.border : theme.borderFaint}`,
-              color: filter === p ? theme.text : theme.textDim,
-            }}
-          >{p === "all" ? "All projects" : p}</motion.button>
-        ))}
+        {["all", ...projectNames].map(p => {
+          const logo = p !== "all" ? getProjectLogo(p) : null;
+          return (
+            <motion.button key={p} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+              onClick={() => setFilter(p)}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                fontSize: 12, fontFamily: FONT, fontWeight: 400, padding: "6px 14px", borderRadius: 20, cursor: "pointer",
+                background: filter === p ? (darkMode ? "#ffffff0F" : "rgba(0,0,0,0.06)") : "transparent",
+                border: `1px solid ${filter === p ? theme.border : theme.borderFaint}`,
+                color: filter === p ? theme.text : theme.textDim,
+              }}
+            >
+              {logo && <img src={logo} alt="" style={{ width: 16, height: 16, borderRadius: 4, objectFit: "cover" }} />}
+              {p === "all" ? "All projects" : p}
+            </motion.button>
+          );
+        })}
+        {/* Edit projects button */}
+        <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}
+          onClick={() => { setShowProjectEditor(true); setEditingProject(null); setProjectForm({ name: "", logo_url: "", color: "#8B7AFF" }); setLogoPreview(null); }}
+          style={{
+            width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", color: theme.textDim,
+          }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </motion.div>
         <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
           onClick={() => openNewTask("todo")}
           style={{
@@ -1469,6 +1578,180 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                     fontSize: 13, fontFamily: FONT, color: "#EF4444", fontWeight: 600,
                   }}
                 >{t("common.delete")}</motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>, document.body)}
+
+      {/* Project Editor Modal */}
+      {createPortal(<AnimatePresence>
+        {showProjectEditor && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setShowProjectEditor(false)}
+            style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                width: 480, background: darkMode ? "rgba(22,22,30,0.97)" : "rgba(255,255,255,0.98)",
+                backdropFilter: "blur(40px)", border: `1px solid ${theme.border}`,
+                borderRadius: 20, padding: 28, display: "flex", flexDirection: "column", gap: 20, maxHeight: "80vh", overflow: "hidden",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                  {editingProject ? "Projekt bearbeiten" : "Projekte verwalten"}
+                </div>
+                <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => { setShowProjectEditor(false); setEditingProject(null); setLogoPreview(null); }}
+                  style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 16 }}
+                >✕</motion.div>
+              </div>
+
+              {/* Project list */}
+              {!editingProject && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, overflowY: "auto", maxHeight: 300 }}>
+                  {projects.map(p => (
+                    <div key={p.id} style={{
+                      display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12,
+                      border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
+                    }}>
+                      {p.logo_url ? (
+                        <img src={p.logo_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", border: `1px solid ${theme.borderFaint}` }} />
+                      ) : (
+                        <div style={{ width: 32, height: 32, borderRadius: 8, background: (p.color || "#8B7AFF") + "20", border: `1px solid ${(p.color || "#8B7AFF")}30`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>
+                          {p.icon || "◆"}
+                        </div>
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{p.name}</div>
+                      </div>
+                      <motion.div whileTap={{ scale: 0.9 }}
+                        onClick={() => { setEditingProject(p); setProjectForm({ name: p.name, logo_url: p.logo_url || "", color: p.color || "#8B7AFF" }); setLogoPreview(p.logo_url || null); }}
+                        style={{ padding: "4px 10px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.textDim, border: `1px solid ${theme.borderFaint}` }}
+                      >Edit</motion.div>
+                      <motion.div whileTap={{ scale: 0.9 }}
+                        onClick={() => deleteProject(p)}
+                        style={{ padding: "4px 8px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontFamily: FONT, color: "#EF4444", border: "1px solid rgba(239,68,68,0.15)" }}
+                      >✕</motion.div>
+                    </div>
+                  ))}
+                  {projects.length === 0 && (
+                    <div style={{ textAlign: "center", padding: "24px 0", fontSize: 13, fontFamily: FONT, color: theme.textFaint }}>
+                      Noch keine Projekte angelegt
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Add / Edit form */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, borderTop: editingProject ? "none" : `1px solid ${theme.borderFaint}`, paddingTop: editingProject ? 0 : 16 }}>
+                <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}>
+                  {editingProject ? "" : "Neues Projekt"}
+                </div>
+                <input
+                  value={projectForm.name}
+                  onChange={e => setProjectForm(p => ({ ...p, name: e.target.value }))}
+                  placeholder="Projektname..."
+                  autoFocus
+                  style={{
+                    background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`,
+                    borderRadius: 10, padding: "10px 14px", fontSize: 14, fontFamily: FONT,
+                    color: theme.text, outline: "none", caretColor: theme.accent,
+                  }}
+                />
+                {/* Logo upload area */}
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  {(logoPreview || projectForm.logo_url) ? (
+                    <div style={{ position: "relative" }}>
+                      <img src={logoPreview || projectForm.logo_url} alt="" style={{
+                        width: 56, height: 56, borderRadius: 12, objectFit: "cover",
+                        border: `1px solid ${theme.borderFaint}`,
+                      }} />
+                      <motion.div whileTap={{ scale: 0.9 }}
+                        onClick={removeProjectLogo}
+                        style={{
+                          position: "absolute", top: -6, right: -6, width: 18, height: 18,
+                          borderRadius: "50%", background: "#EF4444", color: "#fff",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 10, cursor: "pointer", border: `2px solid ${darkMode ? "#16161e" : "#fff"}`,
+                        }}
+                      >✕</motion.div>
+                    </div>
+                  ) : (
+                    <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                      onClick={() => projectLogoInputRef.current?.click()}
+                      style={{
+                        width: 56, height: 56, borderRadius: 12, cursor: "pointer",
+                        border: `2px dashed ${theme.border}`,
+                        background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
+                        display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 2,
+                      }}
+                    >
+                      {logoUploading ? (
+                        <div style={{ width: 16, height: 16, border: `2px solid ${theme.accent}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                      ) : (
+                        <>
+                          <span style={{ fontSize: 18, color: theme.textDim }}>+</span>
+                        </>
+                      )}
+                    </motion.div>
+                  )}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
+                      Logo
+                    </div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 2 }}>
+                      {logoUploading ? "Wird hochgeladen..." : (logoPreview || projectForm.logo_url) ? "Bild hochgeladen" : "Bild hochladen (PNG, JPG)"}
+                    </div>
+                    {!(logoPreview || projectForm.logo_url) && (
+                      <motion.button whileTap={{ scale: 0.97 }}
+                        onClick={() => projectLogoInputRef.current?.click()}
+                        disabled={logoUploading}
+                        style={{
+                          marginTop: 6, padding: "5px 12px", borderRadius: 8, cursor: "pointer",
+                          background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                          border: `1px solid ${theme.borderFaint}`,
+                          fontSize: 11, fontFamily: FONT, color: theme.textSub,
+                        }}
+                      >Datei auswählen</motion.button>
+                    )}
+                  </div>
+                </div>
+                <input
+                  ref={projectLogoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+                  style={{ display: "none" }}
+                  onChange={handleProjectLogoUpload}
+                />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    {editingProject && (
+                      <motion.button whileTap={{ scale: 0.97 }}
+                        onClick={() => { setEditingProject(null); setProjectForm({ name: "", logo_url: "", color: "#8B7AFF" }); setLogoPreview(null); }}
+                        style={{
+                          padding: "10px 20px", borderRadius: 12, cursor: "pointer",
+                          background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`,
+                          fontSize: 13, fontFamily: FONT, color: theme.textSub,
+                        }}
+                      >Zurück</motion.button>
+                    )}
+                  </div>
+                  <motion.button whileTap={{ scale: 0.97 }}
+                    onClick={saveProject}
+                    style={{
+                      padding: "10px 24px", borderRadius: 12, cursor: "pointer",
+                      background: projectForm.name.trim() ? theme.accent + "25" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
+                      border: `1px solid ${projectForm.name.trim() ? theme.accent + "40" : theme.borderFaint}`,
+                      fontSize: 13, fontFamily: FONT, fontWeight: 500,
+                      color: projectForm.name.trim() ? theme.accent : theme.textFaint,
+                    }}
+                  >{editingProject ? "Speichern" : "Erstellen"}</motion.button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
@@ -3725,6 +4008,7 @@ export default function CircularMenu() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [dashboardTasks, setDashboardTasks] = useState([]);
+  const [dashboardProjects, setDashboardProjects] = useState([]);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
@@ -4317,6 +4601,11 @@ export default function CircularMenu() {
           : supabase.from("tasks").select("*").eq("creator_id", session.user.id).order("position");
         const { data } = await query;
         setDashboardTasks(data || []);
+        // Also load projects for logo display
+        if (userOrg?.id) {
+          const { data: prj } = await supabase.from("projects").select("*").eq("org_id", userOrg.id);
+          setDashboardProjects(prj || []);
+        }
       } catch (e) {
         console.warn("Dashboard tasks load failed:", e.message);
       }
@@ -4403,16 +4692,21 @@ export default function CircularMenu() {
       .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
 
     const colLabel = (key) => ({ todo: t("kanban.todo"), in_progress: t("kanban.inProgress"), review: t("kanban.review") }[key] || key);
-    const taskCards = activeTasks.slice(0, 4).map(tk => ({
-      icon: tk.priority === "high" ? "⚡" : "◎",
-      iconBg: tk.priority === "high" ? "#C4624A" : "#5A7AB5",
-      name: tk.title,
-      desc: tk.project_name || colLabel(tk.column_key),
-      key: tk.id,
-      priority: tk.priority,
-      taskId: tk.id,
-      onClick: () => { setOpenTaskId(tk.id); setCurrentView("kanban"); },
-    }));
+    const getDashProjectLogo = (name) => dashboardProjects.find(p => p.name === name)?.logo_url || null;
+    const taskCards = activeTasks.slice(0, 4).map(tk => {
+      const projLogo = tk.project_name ? getDashProjectLogo(tk.project_name) : null;
+      return {
+        icon: projLogo ? null : (tk.priority === "high" ? "⚡" : "◎"),
+        iconBg: tk.priority === "high" ? "#C4624A" : "#5A7AB5",
+        logoUrl: projLogo,
+        name: tk.title,
+        desc: tk.project_name || colLabel(tk.column_key),
+        key: tk.id,
+        priority: tk.priority,
+        taskId: tk.id,
+        onClick: () => { setOpenTaskId(tk.id); setCurrentView("kanban"); },
+      };
+    });
 
     const eventCards = upcomingEvents.map(ev => {
       const startTime = ev.start ? new Date(ev.start) : null;
@@ -4452,7 +4746,7 @@ export default function CircularMenu() {
       pIdx++;
     }
     return cards;
-  }, [dashboardTasks, upcomingEvents, t, appLanguage]);
+  }, [dashboardTasks, dashboardProjects, upcomingEvents, t, appLanguage]);
 
   const getGreeting = () => {
     const h = new Date().getHours();
@@ -5565,11 +5859,18 @@ export default function CircularMenu() {
                     cursor: "pointer",
                   }}
                 >
-                  <div style={{
-                    width: 50, height: 50, borderRadius: "50%",
-                    background: task.iconBg, display: "flex", alignItems: "center",
-                    justifyContent: "center", fontSize: 22, flexShrink: 0,
-                  }}>{task.icon}</div>
+                  {task.logoUrl ? (
+                    <img src={task.logoUrl} alt="" style={{
+                      width: 50, height: 50, borderRadius: "50%",
+                      objectFit: "cover", flexShrink: 0,
+                    }} />
+                  ) : (
+                    <div style={{
+                      width: 50, height: 50, borderRadius: "50%",
+                      background: task.iconBg, display: "flex", alignItems: "center",
+                      justifyContent: "center", fontSize: 22, flexShrink: 0,
+                    }}>{task.icon}</div>
+                  )}
                   <div style={{ flex: 1 }}>
                     <div style={{
                       fontSize: 19, fontFamily: FONT, color: theme.text,
@@ -6065,6 +6366,7 @@ export default function CircularMenu() {
                 const mediumTasks = activeTasks.filter(tk => tk.priority === "medium");
                 const lowTasks = activeTasks.filter(tk => tk.priority === "low" || !tk.priority);
                 const iconMap = { "todo": "◻", "in_progress": "◎", "review": "◆", "done": "✓" };
+                const getDashProjLogo = (name) => dashboardProjects.find(p => p.name === name)?.logo_url || null;
                 const colLabel = (key) => {
                   const map = { "todo": t("kanban.todo"), "in_progress": t("kanban.inProgress"), "review": t("kanban.review") };
                   return map[key] || key;
@@ -6099,9 +6401,13 @@ export default function CircularMenu() {
                                 cursor: "pointer",
                               }}
                             >
-                              <div style={{ width: 22, height: 22, borderRadius: 6, border: "1.5px solid #E8439360", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                <div style={{ fontSize: 9, color: "#E84393" }}>{iconMap[tsk.column_key] || "◻"}</div>
-                              </div>
+                              {getDashProjLogo(tsk.project_name) ? (
+                                <img src={getDashProjLogo(tsk.project_name)} alt="" style={{ width: 22, height: 22, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
+                              ) : (
+                                <div style={{ width: 22, height: 22, borderRadius: 6, border: "1.5px solid #E8439360", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  <div style={{ fontSize: 9, color: "#E84393" }}>{iconMap[tsk.column_key] || "◻"}</div>
+                                </div>
+                              )}
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{tsk.title}</div>
                                 <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff35" : "#1a1a2e55", marginTop: 2 }}>{tsk.project_name || colLabel(tsk.column_key)}</div>
@@ -6139,9 +6445,13 @@ export default function CircularMenu() {
                                 cursor: "pointer",
                               }}
                             >
-                              <div style={{ width: 22, height: 22, borderRadius: 6, border: darkMode ? "1.5px solid #ffffff20" : "1.5px solid #1a1a2e20", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                <div style={{ fontSize: 9, color: darkMode ? "#ffffff40" : "#1a1a2e50" }}>{iconMap[tsk.column_key] || "◻"}</div>
-                              </div>
+                              {getDashProjLogo(tsk.project_name) ? (
+                                <img src={getDashProjLogo(tsk.project_name)} alt="" style={{ width: 22, height: 22, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
+                              ) : (
+                                <div style={{ width: 22, height: 22, borderRadius: 6, border: darkMode ? "1.5px solid #ffffff20" : "1.5px solid #1a1a2e20", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  <div style={{ fontSize: 9, color: darkMode ? "#ffffff40" : "#1a1a2e50" }}>{iconMap[tsk.column_key] || "◻"}</div>
+                                </div>
+                              )}
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{tsk.title}</div>
                                 <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff35" : "#1a1a2e55", marginTop: 2 }}>{tsk.project_name || colLabel(tsk.column_key)}</div>
@@ -6179,9 +6489,13 @@ export default function CircularMenu() {
                                 cursor: "pointer",
                               }}
                             >
-                              <div style={{ width: 22, height: 22, borderRadius: 6, border: darkMode ? "1.5px solid #ffffff15" : "1.5px solid #1a1a2e15", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                <div style={{ fontSize: 9, color: darkMode ? "#ffffff30" : "#1a1a2e40" }}>{iconMap[tsk.column_key] || "◻"}</div>
-                              </div>
+                              {getDashProjLogo(tsk.project_name) ? (
+                                <img src={getDashProjLogo(tsk.project_name)} alt="" style={{ width: 22, height: 22, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
+                              ) : (
+                                <div style={{ width: 22, height: 22, borderRadius: 6, border: darkMode ? "1.5px solid #ffffff15" : "1.5px solid #1a1a2e15", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  <div style={{ fontSize: 9, color: darkMode ? "#ffffff30" : "#1a1a2e40" }}>{iconMap[tsk.column_key] || "◻"}</div>
+                                </div>
+                              )}
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffff90" : "#1a1a2eBB", fontWeight: 400 }}>{tsk.title}</div>
                                 <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40", marginTop: 2 }}>{tsk.project_name || colLabel(tsk.column_key)}</div>
