@@ -5759,6 +5759,7 @@ export default function CircularMenu() {
   }, [session?.user?.id]);
 
   // ── Push setup: actual subscription flow (used by overlay button) ──
+  // Uses one-time setup token from email URL — works without login on the phone
   const performPushSubscribe = useCallback(async () => {
     setPushSetupOverlay({ status: "working", message: "Aktiviere Benachrichtigungen..." });
     try {
@@ -5766,6 +5767,10 @@ export default function CircularMenu() {
         setPushSetupOverlay({ status: "error", message: "Dieser Browser unterstützt keine Push-Benachrichtigungen. Nutze Chrome (Android) oder Safari (iOS 16.4+)." });
         return;
       }
+
+      // Get the setup token from localStorage (preserved across reloads)
+      const setupToken = localStorage.getItem("agencyos-push-setup-token");
+
       const reg = await navigator.serviceWorker.register("/sw-push.js");
       await navigator.serviceWorker.ready;
       console.log("[Push] Service worker registered");
@@ -5784,14 +5789,33 @@ export default function CircularMenu() {
       const subJson = subscription.toJSON();
       console.log("[Push] Subscription obtained, endpoint:", subJson.endpoint?.slice(0, 50));
 
-      const { error: dbErr } = await supabase.from("push_subscriptions").upsert({
-        user_id: session.user.id,
-        endpoint: subJson.endpoint,
-        p256dh: subJson.keys.p256dh,
-        auth: subJson.keys.auth,
-      }, { onConflict: "user_id,endpoint" });
-      if (dbErr) throw new Error("DB save failed: " + dbErr.message);
-      console.log("[Push] Subscription saved to DB");
+      // Save subscription — two paths:
+      // 1. If we have a setup token: redeem it (no login needed)
+      // 2. If user is logged in: direct upsert
+      if (setupToken) {
+        const { data, error } = await supabase.rpc("redeem_push_setup_token", {
+          p_token: setupToken,
+          p_endpoint: subJson.endpoint,
+          p_p256dh: subJson.keys.p256dh,
+          p_auth: subJson.keys.auth,
+        });
+        if (error) throw new Error("Token redemption failed: " + error.message);
+        if (!data?.success) throw new Error(data?.error || "Token ungültig");
+        console.log("[Push] Subscription saved via token, user_id:", data.user_id);
+        localStorage.removeItem("agencyos-push-setup-token");
+        localStorage.removeItem("agencyos-push-setup-pending");
+      } else if (session?.user?.id) {
+        const { error: dbErr } = await supabase.from("push_subscriptions").upsert({
+          user_id: session.user.id,
+          endpoint: subJson.endpoint,
+          p256dh: subJson.keys.p256dh,
+          auth: subJson.keys.auth,
+        }, { onConflict: "user_id,endpoint" });
+        if (dbErr) throw new Error("DB save failed: " + dbErr.message);
+        console.log("[Push] Subscription saved (logged-in user)");
+      } else {
+        throw new Error("Kein Setup-Token und nicht eingeloggt. Bitte den Link aus der E-Mail neu öffnen.");
+      }
 
       setPushSubExists(true);
 
@@ -5822,12 +5846,21 @@ export default function CircularMenu() {
     }
   }, [session?.user?.id]);
 
-  // ── Handle ?push-setup=true — show setup overlay ──
+  // ── Handle ?push-setup=true&token=... — show setup overlay (no login required) ──
   useEffect(() => {
-    if (!session?.user?.id) return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("push-setup") !== "true") return;
-    window.history.replaceState({}, "", window.location.pathname);
+    const urlFlag = params.get("push-setup") === "true";
+    const urlToken = params.get("token");
+    const storedFlag = localStorage.getItem("agencyos-push-setup-pending") === "true";
+    const storedToken = localStorage.getItem("agencyos-push-setup-token");
+
+    if (urlFlag) {
+      localStorage.setItem("agencyos-push-setup-pending", "true");
+      if (urlToken) localStorage.setItem("agencyos-push-setup-token", urlToken);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+
+    if (!urlFlag && !storedFlag) return;
 
     // Detect platform
     const ua = navigator.userAgent;
@@ -5836,19 +5869,34 @@ export default function CircularMenu() {
     const supported = "serviceWorker" in navigator && "PushManager" in window;
 
     if (!supported) {
-      setPushSetupOverlay({ status: "error", message: "Dieser Browser unterstützt keine Push-Benachrichtigungen.", needsPwa: false });
+      setPushSetupOverlay({ status: "error", message: "Dieser Browser unterstützt keine Push-Benachrichtigungen. Nutze Chrome (Android) oder Safari (iOS 16.4+)." });
+      localStorage.removeItem("agencyos-push-setup-pending");
+      localStorage.removeItem("agencyos-push-setup-token");
       return;
     }
 
+    // iOS requires PWA install first
     if (isIOS && !isStandalone) {
-      // iOS requires PWA install first
-      setPushSetupOverlay({ status: "needsPwa", message: "", needsPwa: true });
+      setPushSetupOverlay({ status: "needsPwa", message: "" });
       return;
     }
 
-    // Android / installed PWA / desktop — show ready-to-activate prompt
+    // Have token OR logged in → ready to activate
+    const hasToken = !!(urlToken || storedToken);
+    if (!hasToken && !session?.user?.id) {
+      setPushSetupOverlay({ status: "error", message: "Setup-Link ist unvollständig. Bitte erneut von der App aus 'Aktivieren' klicken." });
+      return;
+    }
+
     setPushSetupOverlay({ status: "ready", message: "" });
   }, [session?.user?.id]);
+
+  // Clear push-setup flags when overlay manually closed
+  useEffect(() => {
+    if (pushSetupOverlay === null) {
+      // Only clear pending flag, keep token for retry if user reopens
+    }
+  }, [pushSetupOverlay]);
 
   // ── Build startview cards (tasks + events + placeholders) ──
   const startviewCards = useMemo(() => {
@@ -8938,10 +8986,17 @@ export default function CircularMenu() {
                         }
                         setPushSetupSending(true);
                         try {
+                          // Create a one-time setup token so the phone doesn't need to log in
+                          const { data: tokenRow, error: tokenErr } = await supabase
+                            .from("push_setup_tokens")
+                            .insert({ user_id: session.user.id })
+                            .select()
+                            .single();
+                          if (tokenErr) throw tokenErr;
                           await fetch("/api/send-push-setup", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ email: userEmail, userName }),
+                            body: JSON.stringify({ email: userEmail, userName, token: tokenRow.token }),
                           });
                           setPushSetupSent(true);
                           setTimeout(() => setPushSetupSent(false), 5000);

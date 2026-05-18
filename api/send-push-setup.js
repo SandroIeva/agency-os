@@ -6,10 +6,10 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { email, userName } = req.body;
+  const { email, userName, token } = req.body;
 
-  if (!email) {
-    return res.status(400).json({ error: "Missing email" });
+  if (!email || !token) {
+    return res.status(400).json({ error: "Missing email or token" });
   }
 
   const resendKey = process.env.RESEND_API_KEY;
@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "RESEND_API_KEY not configured" });
   }
 
-  const setupUrl = "https://agency-os-ebon-phi.vercel.app/?push-setup=true";
+  const setupUrl = `https://agency-os-ebon-phi.vercel.app/?push-setup=true&token=${encodeURIComponent(token)}`;
 
   try {
     const response = await fetch("https://api.resend.com/emails", {
