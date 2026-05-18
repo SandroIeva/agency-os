@@ -3983,16 +3983,23 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
     // Check if a direct conversation already exists between these two users
     const existing = conversations.find(c => !c.is_group && c.otherIds.includes(otherUserId));
     if (existing) { setActiveConvId(existing.id); setShowNewChat(false); return; }
-    // Create new conversation + add both participants
-    const { data: conv } = await supabase.from("chat_conversations").insert({ org_id: userOrg.id, is_group: false }).select().single();
-    if (!conv) return;
-    await supabase.from("chat_participants").insert([
-      { conversation_id: conv.id, user_id: myId },
-      { conversation_id: conv.id, user_id: otherUserId },
-    ]);
-    setShowNewChat(false);
-    await loadConversations();
-    setActiveConvId(conv.id);
+    try {
+      // Create new conversation
+      const { data: conv, error: convErr } = await supabase.from("chat_conversations").insert({ org_id: userOrg.id, is_group: false }).select().single();
+      if (convErr) { console.error("Create conv error:", convErr); return; }
+      if (!conv) { console.error("No conv returned"); return; }
+      // Add both participants
+      const { error: partErr } = await supabase.from("chat_participants").insert([
+        { conversation_id: conv.id, user_id: myId },
+        { conversation_id: conv.id, user_id: otherUserId },
+      ]);
+      if (partErr) console.error("Add participants error:", partErr);
+      setShowNewChat(false);
+      await loadConversations();
+      setActiveConvId(conv.id);
+    } catch (err) {
+      console.error("startConversation failed:", err);
+    }
   };
 
   const activeConv = conversations.find(c => c.id === activeConvId);
