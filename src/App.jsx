@@ -4362,8 +4362,7 @@ function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers
                   }}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <path d="M22 2L11 13" stroke={msgInput.trim() ? "#fff" : (darkMode ? "#ffffff30" : "#00000030")} strokeWidth="2" strokeLinecap="round" />
-                    <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke={msgInput.trim() ? "#fff" : (darkMode ? "#ffffff30" : "#00000030")} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M5 12h14M12 5l7 7-7 7" stroke={msgInput.trim() ? "#fff" : (darkMode ? "#ffffff30" : "#00000030")} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </motion.div>
               </div>
