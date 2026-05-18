@@ -1219,12 +1219,6 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
               <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
                 {/* Left panel — main content */}
                 <div style={{ flex: 1, padding: 24, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
-                  {/* DEBUG — remove after testing */}
-                  {editingTask && (
-                    <div style={{ fontSize: 10, fontFamily: "monospace", color: "#EF4444", background: "rgba(239,68,68,0.1)", padding: "4px 8px", borderRadius: 6 }}>
-                      DEBUG: owner={isTaskOwner ? "YES" : "NO"} | creator={editingTask.creator_id?.slice(0,8)} | me={session?.user?.id?.slice(0,8)}
-                    </div>
-                  )}
                   {/* Title — view mode for existing tasks, edit on click */}
                   {editingTask && !editingTitle ? (
                     <div
