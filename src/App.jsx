@@ -1298,12 +1298,12 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
                     <div>
                       {editingTask && (
-                        <motion.button whileTap={{ scale: 0.95 }}
+                        <motion.button whileTap={{ scale: 0.97 }}
                           onClick={() => { resetForm(); requestDelete(editingTask.id); }}
                           style={{
-                            padding: "8px 16px", borderRadius: 10, cursor: "pointer",
+                            padding: "10px 20px", borderRadius: 12, cursor: "pointer",
                             background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)",
-                            fontSize: 12, fontFamily: FONT, color: "#EF4444",
+                            fontSize: 13, fontFamily: FONT, color: "#EF4444",
                           }}
                         >{t("common.delete")}</motion.button>
                       )}
