@@ -701,6 +701,8 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
     const task = tasks.find(tk => tk.id === openTaskId);
     if (task) {
       setEditingTask(task);
+      setEditingTitle(false);
+      setEditingDesc(false);
       setTaskForm({
         title: task.title || "",
         description: task.description || "",
@@ -936,6 +938,8 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
 
   const openEditTask = (task) => {
     setEditingTask(task);
+    setEditingTitle(false);
+    setEditingDesc(false);
     setTaskForm({
       title: task.title || "",
       description: task.description || "",
