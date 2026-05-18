@@ -576,6 +576,8 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
   const [tasks, setTasks] = useState([]);
   const [teamMembers, setTeamMembers] = useState({});
   const [filter, setFilter] = useState("all");
+  const [memberFilter, setMemberFilter] = useState("all");
+  const [showMemberDropdown, setShowMemberDropdown] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showNewTask, setShowNewTask] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
@@ -866,7 +868,11 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
     ...projects.map(p => p.name),
     ...tasks.map(t => t.project_name).filter(Boolean),
   ])];
-  const filtered = filter === "all" ? tasks : tasks.filter(t => t.project_name === filter);
+  const filtered = tasks.filter(t => {
+    if (filter !== "all" && t.project_name !== filter) return false;
+    if (memberFilter !== "all" && t.assignee_id !== memberFilter) return false;
+    return true;
+  });
 
   // Get project logo by name
   const getProjectLogo = (name) => projects.find(p => p.name === name)?.logo_url || null;
@@ -1107,6 +1113,139 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, userOrg,
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </motion.div>
+
+        {/* Member filter dropdown */}
+        <div style={{ position: "relative" }}>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+            onClick={() => setShowMemberDropdown(prev => !prev)}
+            style={{
+              display: "flex", alignItems: "center", gap: 5, cursor: "pointer",
+              padding: "5px 10px 5px 8px", borderRadius: 20,
+              background: memberFilter !== "all" ? (theme.accent + "15") : "transparent",
+              border: `1px solid ${memberFilter !== "all" ? (theme.accent + "30") : theme.borderFaint}`,
+              color: memberFilter !== "all" ? theme.accent : theme.textDim,
+              fontSize: 12, fontFamily: FONT, fontWeight: 400,
+            }}
+          >
+            {memberFilter !== "all" ? (() => {
+              const m = (orgMembers || []).find(om => om.user_id === memberFilter);
+              const name = m?.profiles?.display_name || "User";
+              return (
+                <>
+                  {m?.profiles?.avatar_url ? (
+                    <img src={m.profiles.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 16, height: 16, borderRadius: "50%" }} />
+                  ) : (
+                    <div style={{ width: 16, height: 16, borderRadius: "50%", background: theme.accent + "30", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 600, color: theme.accent }}>
+                      {(name).slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                  {name}
+                </>
+              );
+            })() : (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                  <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Alle
+              </>
+            )}
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 1 }}>
+              <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </motion.div>
+
+          {/* Dropdown */}
+          <AnimatePresence>
+            {showMemberDropdown && (
+              <>
+                <div onClick={() => setShowMemberDropdown(false)} style={{ position: "fixed", inset: 0, zIndex: 98 }} />
+                <motion.div
+                  initial={{ opacity: 0, y: -6, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.96 }}
+                  transition={{ duration: 0.15 }}
+                  style={{
+                    position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 99,
+                    minWidth: 200, maxHeight: 300, overflowY: "auto",
+                    background: darkMode ? "rgba(22,22,30,0.98)" : "rgba(255,255,255,0.99)",
+                    backdropFilter: "blur(40px)",
+                    border: `1px solid ${theme.border}`,
+                    borderRadius: 14, padding: "6px",
+                    boxShadow: "0 12px 40px rgba(0,0,0,0.2)",
+                  }}
+                >
+                  {/* All members option */}
+                  <motion.div whileTap={{ scale: 0.97 }}
+                    onClick={() => { setMemberFilter("all"); setShowMemberDropdown(false); }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
+                      borderRadius: 10, cursor: "pointer",
+                      background: memberFilter === "all" ? (darkMode ? "rgba(139,122,255,0.1)" : "rgba(139,122,255,0.08)") : "transparent",
+                    }}
+                    className={memberFilter === "all" ? "" : "hover-row"}
+                  >
+                    <div style={{
+                      width: 28, height: 28, borderRadius: "50%",
+                      background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                        <circle cx="9" cy="7" r="4" stroke={theme.textDim} strokeWidth="1.8"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: memberFilter === "all" ? 600 : 400, color: theme.text }}>Alle Mitglieder</div>
+                    </div>
+                    {memberFilter === "all" && <div style={{ marginLeft: "auto", color: theme.accent, fontSize: 13 }}>✓</div>}
+                  </motion.div>
+
+                  {/* Divider */}
+                  <div style={{ height: 1, background: theme.borderFaint, margin: "4px 8px" }} />
+
+                  {/* Individual members */}
+                  {(orgMembers || []).map(m => {
+                    const p = m.profiles || {};
+                    const name = p.display_name || "User";
+                    const isActive = memberFilter === m.user_id;
+                    const taskCount = tasks.filter(tk => tk.assignee_id === m.user_id).length;
+                    return (
+                      <motion.div key={m.user_id} whileTap={{ scale: 0.97 }}
+                        onClick={() => { setMemberFilter(m.user_id); setShowMemberDropdown(false); }}
+                        className={isActive ? "" : "hover-row"}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
+                          borderRadius: 10, cursor: "pointer",
+                          background: isActive ? (darkMode ? "rgba(139,122,255,0.1)" : "rgba(139,122,255,0.08)") : "transparent",
+                        }}
+                      >
+                        {p.avatar_url ? (
+                          <img src={p.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 28, height: 28, borderRadius: "50%" }} />
+                        ) : (
+                          <div style={{
+                            width: 28, height: 28, borderRadius: "50%",
+                            background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 10, fontWeight: 600, fontFamily: FONT, color: theme.textDim,
+                          }}>{(p.initials || name.slice(0, 2)).toUpperCase()}</div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: isActive ? 600 : 400, color: theme.text }}>{name}</div>
+                          <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim }}>{taskCount} {taskCount === 1 ? "Task" : "Tasks"}</div>
+                        </div>
+                        {isActive && <div style={{ color: theme.accent, fontSize: 13 }}>✓</div>}
+                      </motion.div>
+                    );
+                  })}
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
+
         <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
           onClick={() => openNewTask("todo")}
           style={{
