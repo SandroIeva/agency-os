@@ -1247,7 +1247,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                   />
                   {/* Create button */}
                   <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 4, paddingBottom: 8 }}>
-                    <motion.button whileTap={{ scale: 0.97 }} onClick={saveTask}
+                    <motion.button whileTap={{ scale: 0.97 }} onClick={createTask}
                       style={{
                         padding: "10px 24px", borderRadius: 12, cursor: "pointer",
                         background: taskForm.title.trim() ? theme.accent + "25" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
