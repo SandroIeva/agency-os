@@ -3863,90 +3863,146 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   );
 }
 
-const CHAT_CONVERSATIONS = [
-  { id: 1, name: "Lena Müller", role: "Design Lead", avatar: "#E88D67", lastMsg: "Updated the brand kit — take a look when you can", time: "2 min", unread: 2 },
-  { id: 2, name: "Max Fischer", role: "Developer", avatar: "#5B8DEF", lastMsg: "PR is up for the dashboard refactor", time: "15 min", unread: 0 },
-  { id: 3, name: "Sofia Petrov", role: "Strategist", avatar: "#8B7AFF", lastMsg: "Client meeting moved to Thursday 3pm", time: "1h", unread: 1 },
-  { id: 4, name: "AI Assistant", role: "Claude", avatar: "#6BC5A0", lastMsg: "Here's the competitive analysis you asked for", time: "2h", unread: 0 },
-  { id: 5, name: "Tom Wagner", role: "PM", avatar: "#F59E0B", lastMsg: "Sprint review notes attached", time: "3h", unread: 0 },
-  { id: 6, name: "Anna Schmidt", role: "Marketing", avatar: "#E84393", lastMsg: "Campaign draft ready for review", time: "5h", unread: 3 },
-  { id: 7, name: "Jonas Beck", role: "Sales", avatar: "#00B894", lastMsg: "New lead from the conference", time: "1d", unread: 0 },
-  { id: 8, name: "Clara Hoffmann", role: "Finance", avatar: "#FD79A8", lastMsg: "Q2 budget approved ✓", time: "1d", unread: 0 },
-];
+const CHAT_COLORS = ["#E88D67", "#5B8DEF", "#8B7AFF", "#6BC5A0", "#F59E0B", "#E84393", "#00B894", "#FD79A8"];
 
-const CHAT_TABS = ["Team", "Clients", "AI", "Channels", "Calls", "Archive"];
-
-const CHAT_MESSAGES = {
-  1: [
-    { id: 1, from: "them", text: "Hey, I just pushed the updated brand kit to the shared drive", time: "10:12" },
-    { id: 2, from: "them", text: "New color palette + updated logo variations are in there", time: "10:12" },
-    { id: 3, from: "me", text: "Nice! I'll check it out. Did you also update the Figma components?", time: "10:15" },
-    { id: 4, from: "them", text: "Yes, everything is synced. The typography scale changed slightly too", time: "10:18" },
-    { id: 5, from: "me", text: "Perfect. I'll review and give feedback by EOD", time: "10:20" },
-    { id: 6, from: "them", text: "Updated the brand kit — take a look when you can", time: "10:42" },
-  ],
-  2: [
-    { id: 1, from: "them", text: "Dashboard refactor PR is ready for review", time: "09:30" },
-    { id: 2, from: "me", text: "Cool, I'll take a look. Any breaking changes?", time: "09:35" },
-    { id: 3, from: "them", text: "Nope, just restructured the component tree. Performance is way better now", time: "09:36" },
-    { id: 4, from: "them", text: "Also added lazy loading for the chart widgets", time: "09:36" },
-    { id: 5, from: "me", text: "Sounds great. I'll test it on staging first", time: "09:40" },
-    { id: 6, from: "them", text: "PR is up for the dashboard refactor", time: "09:45" },
-  ],
-  3: [
-    { id: 1, from: "them", text: "Quick update — the Meridian client wants to reschedule", time: "08:00" },
-    { id: 2, from: "me", text: "When are they thinking?", time: "08:05" },
-    { id: 3, from: "them", text: "Thursday at 3pm works for them", time: "08:06" },
-    { id: 4, from: "me", text: "That works. Can you send the updated invite?", time: "08:10" },
-    { id: 5, from: "them", text: "Done! Also added the new deck to the agenda", time: "08:15" },
-    { id: 6, from: "them", text: "Client meeting moved to Thursday 3pm", time: "08:20" },
-  ],
-  4: [
-    { id: 1, from: "me", text: "Can you analyze our top 3 competitors in the SaaS space?", time: "14:00" },
-    { id: 2, from: "them", text: "Of course! I'll look at pricing, features, and market positioning. Give me a moment.", time: "14:01" },
-    { id: 3, from: "them", text: "Done. I found some interesting gaps in their onboarding flows we could exploit.", time: "14:08" },
-    { id: 4, from: "me", text: "Great, can you summarize the key findings?", time: "14:10" },
-    { id: 5, from: "them", text: "Here's the competitive analysis you asked for", time: "14:12" },
-  ],
-  5: [
-    { id: 1, from: "them", text: "Sprint review went well today", time: "16:00" },
-    { id: 2, from: "me", text: "Agreed! The team shipped a lot this cycle", time: "16:05" },
-    { id: 3, from: "them", text: "Velocity is up 20% compared to last sprint", time: "16:06" },
-    { id: 4, from: "them", text: "Sprint review notes attached", time: "16:10" },
-  ],
-  6: [
-    { id: 1, from: "them", text: "The Q2 campaign draft is ready — want to review?", time: "11:00" },
-    { id: 2, from: "me", text: "Sure, send it over", time: "11:05" },
-    { id: 3, from: "them", text: "It's in the shared folder. Focus is on the product launch narrative", time: "11:06" },
-    { id: 4, from: "me", text: "Love the direction. A few notes on the hero section though", time: "11:30" },
-    { id: 5, from: "them", text: "Got it, I'll revise. Also the social assets need your sign-off", time: "11:35" },
-    { id: 6, from: "them", text: "Campaign draft ready for review", time: "11:40" },
-  ],
-  7: [
-    { id: 1, from: "them", text: "Met a great lead at the Design Systems conference", time: "yesterday" },
-    { id: 2, from: "me", text: "Oh nice, what company?", time: "yesterday" },
-    { id: 3, from: "them", text: "Nexora — they're scaling their design team and need agency support", time: "yesterday" },
-    { id: 4, from: "them", text: "New lead from the conference", time: "yesterday" },
-  ],
-  8: [
-    { id: 1, from: "them", text: "Q2 budget has been approved by finance", time: "yesterday" },
-    { id: 2, from: "me", text: "Excellent! Any changes from what we proposed?", time: "yesterday" },
-    { id: 3, from: "them", text: "Nope, full amount approved. We can proceed with the new hires", time: "yesterday" },
-    { id: 4, from: "them", text: "Q2 budget approved ✓", time: "yesterday" },
-  ],
-};
-
-function ChatView({ onBack, initialTab = "Team", t }) {
+function ChatView({ onBack, initialTab = "Team", t, session, userOrg, orgMembers, darkMode, theme }) {
   const [search, setSearch] = useState("");
-  const [activeConversation, setActiveConversation] = useState(CHAT_CONVERSATIONS[0]);
+  const [conversations, setConversations] = useState([]);
+  const [activeConvId, setActiveConvId] = useState(null);
+  const [messages, setMessages] = useState([]);
   const [msgInput, setMsgInput] = useState("");
+  const [loadingConvs, setLoadingConvs] = useState(true);
+  const [showNewChat, setShowNewChat] = useState(false);
   const scrollRef = useRef(null);
-  const filtered = CHAT_CONVERSATIONS.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.lastMsg.toLowerCase().includes(search.toLowerCase()));
-  const messages = activeConversation ? (CHAT_MESSAGES[activeConversation.id] || []) : [];
+  const myId = session?.user?.id;
 
+  // Build member lookup from orgMembers
+  const memberMap = useMemo(() => {
+    const map = {};
+    (orgMembers || []).forEach((m, i) => {
+      const p = m.profiles || {};
+      map[m.user_id] = {
+        user_id: m.user_id,
+        display_name: p.display_name || "User",
+        avatar_url: p.avatar_url || null,
+        initials: (p.initials || (p.display_name || "U").slice(0, 2)).toUpperCase(),
+        color: CHAT_COLORS[i % CHAT_COLORS.length],
+      };
+    });
+    return map;
+  }, [orgMembers]);
+
+  // Load conversations
+  const loadConversations = useCallback(async () => {
+    if (!myId || !userOrg?.id) return;
+    const { data: convs } = await supabase
+      .from("chat_conversations")
+      .select("*, chat_participants(user_id), chat_messages(id, text, sender_id, created_at)")
+      .eq("org_id", userOrg.id)
+      .order("created_at", { ascending: false });
+    if (!convs) { setConversations([]); setLoadingConvs(false); return; }
+    // Build enriched conversation list
+    const enriched = convs.map(c => {
+      const participants = (c.chat_participants || []).map(p => p.user_id);
+      const otherIds = participants.filter(id => id !== myId);
+      const other = otherIds.length > 0 ? memberMap[otherIds[0]] : null;
+      const msgs = c.chat_messages || [];
+      const lastMsg = msgs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+      const name = c.is_group ? (c.name || "Gruppenchat") : (other?.display_name || "Unbekannt");
+      const avatar_url = !c.is_group ? other?.avatar_url : null;
+      const color = !c.is_group ? (other?.color || "#8B7AFF") : "#8B7AFF";
+      const initials = !c.is_group ? (other?.initials || "?") : (c.name || "G").slice(0, 2).toUpperCase();
+      // Time formatting
+      let timeStr = "";
+      if (lastMsg) {
+        const d = new Date(lastMsg.created_at);
+        const now = new Date();
+        const diffH = (now - d) / 3600000;
+        if (diffH < 1) timeStr = Math.round(diffH * 60) + " min";
+        else if (diffH < 24) timeStr = Math.round(diffH) + "h";
+        else timeStr = d.toLocaleDateString("de-DE", { day: "2-digit", month: "short" });
+      }
+      return {
+        id: c.id, name, avatar_url, color, initials, is_group: c.is_group,
+        lastMsg: lastMsg?.text || "", time: timeStr,
+        lastMsgAt: lastMsg?.created_at || c.created_at,
+        participants, otherIds,
+      };
+    }).sort((a, b) => new Date(b.lastMsgAt) - new Date(a.lastMsgAt));
+    setConversations(enriched);
+    setLoadingConvs(false);
+  }, [myId, userOrg?.id, memberMap]);
+
+  useEffect(() => { loadConversations(); }, [loadConversations]);
+
+  // Load messages for active conversation
+  useEffect(() => {
+    if (!activeConvId) { setMessages([]); return; }
+    const load = async () => {
+      const { data } = await supabase
+        .from("chat_messages")
+        .select("*")
+        .eq("conversation_id", activeConvId)
+        .order("created_at", { ascending: true });
+      setMessages(data || []);
+      setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 100);
+    };
+    load();
+  }, [activeConvId]);
+
+  // Realtime subscription for new messages
+  useEffect(() => {
+    if (!activeConvId) return;
+    const channel = supabase.channel("chat-" + activeConvId)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `conversation_id=eq.${activeConvId}` },
+        (payload) => {
+          setMessages(prev => {
+            if (prev.find(m => m.id === payload.new.id)) return prev;
+            return [...prev, payload.new];
+          });
+          setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 50);
+          // Also refresh conversation list to update last message
+          loadConversations();
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [activeConvId, loadConversations]);
+
+  // Send message
+  const sendMessage = async () => {
+    if (!msgInput.trim() || !activeConvId || !myId) return;
+    const text = msgInput.trim();
+    setMsgInput("");
+    await supabase.from("chat_messages").insert({ conversation_id: activeConvId, sender_id: myId, text });
+  };
+
+  // Start new direct conversation
+  const startConversation = async (otherUserId) => {
+    if (!myId || !userOrg?.id) return;
+    // Check if a direct conversation already exists between these two users
+    const existing = conversations.find(c => !c.is_group && c.otherIds.includes(otherUserId));
+    if (existing) { setActiveConvId(existing.id); setShowNewChat(false); return; }
+    // Create new conversation + add both participants
+    const { data: conv } = await supabase.from("chat_conversations").insert({ org_id: userOrg.id, is_group: false }).select().single();
+    if (!conv) return;
+    await supabase.from("chat_participants").insert([
+      { conversation_id: conv.id, user_id: myId },
+      { conversation_id: conv.id, user_id: otherUserId },
+    ]);
+    setShowNewChat(false);
+    await loadConversations();
+    setActiveConvId(conv.id);
+  };
+
+  const activeConv = conversations.find(c => c.id === activeConvId);
+  const filtered = conversations.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.lastMsg.toLowerCase().includes(search.toLowerCase()));
+  const otherMembers = Object.values(memberMap).filter(m => m.user_id !== myId);
+
+  // Auto-scroll when messages change
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [activeConversation]);
+  }, [messages]);
 
   return (
     <motion.div
@@ -3987,17 +4043,47 @@ function ChatView({ onBack, initialTab = "Team", t }) {
                 </svg>
               </motion.div>
               <span style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: "#ffffffdd", letterSpacing: -0.3 }}>
-                {t("chat.search") ? "Messages" : "Messages"}
+                Messages
               </span>
             </div>
             {/* New chat */}
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-              style={{ cursor: "pointer", padding: 6, borderRadius: 8, background: "rgba(255,255,255,0.05)" }}>
+              onClick={() => setShowNewChat(!showNewChat)}
+              style={{ cursor: "pointer", padding: 6, borderRadius: 8, background: showNewChat ? "rgba(139,122,255,0.15)" : "rgba(255,255,255,0.05)" }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path d="M12 5v14M5 12h14" stroke="#ffffff60" strokeWidth="2" strokeLinecap="round" />
+                <path d="M12 5v14M5 12h14" stroke={showNewChat ? "#8B7AFF" : "#ffffff60"} strokeWidth="2" strokeLinecap="round" />
               </svg>
             </motion.div>
           </div>
+
+          {/* New chat member picker */}
+          {showNewChat && (
+            <div style={{ padding: "8px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+              <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff50", padding: "4px 8px 8px" }}>Neues Gespräch starten</div>
+              {otherMembers.map(m => (
+                <motion.div key={m.user_id} whileTap={{ scale: 0.97 }}
+                  onClick={() => startConversation(m.user_id)}
+                  className="hover-row"
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 10, cursor: "pointer" }}
+                >
+                  {m.avatar_url ? (
+                    <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 32, height: 32, borderRadius: "50%" }} />
+                  ) : (
+                    <div style={{
+                      width: 32, height: 32, borderRadius: "50%",
+                      background: `linear-gradient(135deg, ${m.color}50, ${m.color}20)`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 11, fontWeight: 600, fontFamily: FONT, color: m.color,
+                    }}>{m.initials}</div>
+                  )}
+                  <span style={{ fontSize: 13, fontFamily: FONT, color: "#ffffffdd" }}>{m.display_name}</span>
+                </motion.div>
+              ))}
+              {otherMembers.length === 0 && (
+                <div style={{ padding: "12px 10px", fontSize: 12, fontFamily: FONT, color: "#ffffff30", textAlign: "center" }}>Keine Team-Mitglieder</div>
+              )}
+            </div>
+          )}
 
           {/* Search */}
           <div style={{ padding: "12px 16px 8px" }}>
@@ -4013,7 +4099,7 @@ function ChatView({ onBack, initialTab = "Team", t }) {
               </svg>
               <input
                 value={search} onChange={e => setSearch(e.target.value)}
-                placeholder={t("chat.search")}
+                placeholder="Suchen..."
                 style={{
                   flex: 1, background: "none", border: "none", outline: "none",
                   fontSize: 13, fontFamily: FONT, color: "#ffffffdd", caretColor: "#8B7AFF",
@@ -4032,15 +4118,24 @@ function ChatView({ onBack, initialTab = "Team", t }) {
             flex: 1, minHeight: 0, overflowY: "auto",
             padding: "4px 8px", display: "flex", flexDirection: "column", gap: 2,
           }}>
-            {filtered.map((conv, i) => {
-              const isActive = activeConversation?.id === conv.id;
+            {loadingConvs ? (
+              <div style={{ padding: 32, textAlign: "center", fontSize: 13, fontFamily: FONT, color: "#ffffff30" }}>Laden...</div>
+            ) : filtered.length === 0 ? (
+              <div style={{ padding: 32, textAlign: "center" }}>
+                <div style={{ fontSize: 28, marginBottom: 8, opacity: 0.2 }}>💬</div>
+                <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffff30" }}>
+                  {conversations.length === 0 ? "Starte ein neues Gespräch" : "Keine Ergebnisse"}
+                </div>
+              </div>
+            ) : filtered.map((conv, i) => {
+              const isActive = activeConvId === conv.id;
               return (
                 <motion.div
                   key={conv.id}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.03 + i * 0.025, duration: 0.25 }}
-                  onClick={() => setActiveConversation(conv)}
+                  onClick={() => setActiveConvId(conv.id)}
                   className={isActive ? "" : "hover-row"}
                   style={{
                     display: "flex", alignItems: "center", gap: 12,
@@ -4050,24 +4145,19 @@ function ChatView({ onBack, initialTab = "Team", t }) {
                     transition: "all 0.2s ease",
                   }}
                 >
-                  {/* Avatar with online dot */}
                   <div style={{ position: "relative", flexShrink: 0 }}>
-                    <div style={{
-                      width: 42, height: 42, borderRadius: "50%",
-                      background: `linear-gradient(135deg, ${conv.avatar}50, ${conv.avatar}20)`,
-                      border: `1px solid ${conv.avatar}40`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 14, fontWeight: 600, fontFamily: FONT, color: conv.avatar,
-                    }}>
-                      {conv.name.split(" ").map(n => n[0]).join("")}
-                    </div>
-                    <div style={{
-                      position: "absolute", bottom: 0, right: 0,
-                      width: 10, height: 10, borderRadius: "50%",
-                      background: "#6BC5A0", border: "2px solid #12121a",
-                    }} />
+                    {conv.avatar_url ? (
+                      <img src={conv.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 42, height: 42, borderRadius: "50%" }} />
+                    ) : (
+                      <div style={{
+                        width: 42, height: 42, borderRadius: "50%",
+                        background: `linear-gradient(135deg, ${conv.color}50, ${conv.color}20)`,
+                        border: `1px solid ${conv.color}40`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 14, fontWeight: 600, fontFamily: FONT, color: conv.color,
+                      }}>{conv.initials}</div>
+                    )}
                   </div>
-                  {/* Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd" }}>{conv.name}</div>
@@ -4076,29 +4166,16 @@ function ChatView({ onBack, initialTab = "Team", t }) {
                     <div style={{
                       fontSize: 12, fontFamily: FONT, color: "#ffffff45", marginTop: 2,
                       whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                    }}>{conv.lastMsg}</div>
+                    }}>{conv.lastMsg || "Noch keine Nachrichten"}</div>
                   </div>
-                  {/* Unread */}
-                  {conv.unread > 0 && (
-                    <div style={{
-                      minWidth: 20, height: 20, borderRadius: 10, padding: "0 6px",
-                      background: "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 10, fontWeight: 600, fontFamily: FONT, color: "#fff", flexShrink: 0,
-                    }}>{conv.unread}</div>
-                  )}
                 </motion.div>
               );
             })}
-            {filtered.length === 0 && (
-              <div style={{ padding: 32, textAlign: "center", fontSize: 13, fontFamily: FONT, color: "#ffffff30" }}>
-                No conversations found
-              </div>
-            )}
           </div>
         </div>
 
         {/* ── Right: Chat Window ── */}
-        {activeConversation ? (
+        {activeConv ? (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
             {/* Chat Header */}
             <div style={{
@@ -4106,44 +4183,21 @@ function ChatView({ onBack, initialTab = "Team", t }) {
               display: "flex", alignItems: "center", gap: 14,
             }}>
               <div style={{ position: "relative", flexShrink: 0 }}>
-                <div style={{
-                  width: 38, height: 38, borderRadius: "50%",
-                  background: `linear-gradient(135deg, ${activeConversation.avatar}50, ${activeConversation.avatar}20)`,
-                  border: `1px solid ${activeConversation.avatar}40`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 13, fontWeight: 600, fontFamily: FONT, color: activeConversation.avatar,
-                }}>
-                  {activeConversation.name.split(" ").map(n => n[0]).join("")}
-                </div>
-                <div style={{
-                  position: "absolute", bottom: -1, right: -1,
-                  width: 10, height: 10, borderRadius: "50%",
-                  background: "#6BC5A0", border: "2px solid #12121a",
-                }} />
+                {activeConv.avatar_url ? (
+                  <img src={activeConv.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 38, height: 38, borderRadius: "50%" }} />
+                ) : (
+                  <div style={{
+                    width: 38, height: 38, borderRadius: "50%",
+                    background: `linear-gradient(135deg, ${activeConv.color}50, ${activeConv.color}20)`,
+                    border: `1px solid ${activeConv.color}40`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 13, fontWeight: 600, fontFamily: FONT, color: activeConv.color,
+                  }}>{activeConv.initials}</div>
+                )}
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd" }}>{activeConversation.name}</div>
-                <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40" }}>{activeConversation.role} · Online</div>
-              </div>
-              {/* Action buttons */}
-              <div style={{ display: "flex", gap: 4 }}>
-                {[
-                  <><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" /></>,
-                  <><path d="M23 7l-7 5 7 5V7z" /><rect x="1" y="5" width="15" height="14" rx="2" /></>,
-                  <><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></>,
-                ].map((icon, idx) => (
-                  <motion.div key={idx} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                    style={{
-                      width: 34, height: 34, borderRadius: 10,
-                      background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)",
-                      display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-                    }}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-                      stroke="#ffffff50" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      {icon}
-                    </svg>
-                  </motion.div>
-                ))}
+                <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: "#ffffffdd" }}>{activeConv.name}</div>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff40" }}>Direkte Nachricht</div>
               </div>
             </div>
 
@@ -4152,54 +4206,60 @@ function ChatView({ onBack, initialTab = "Team", t }) {
               flex: 1, minHeight: 0, overflowY: "auto",
               padding: "20px 24px", display: "flex", flexDirection: "column", gap: 8,
             }}>
-              {/* Date separator */}
-              <div style={{
-                textAlign: "center", fontSize: 11, fontFamily: FONT, color: "#ffffff30",
-                padding: "8px 0 16px",
-              }}>Today</div>
-
-              {messages.map((msg, i) => (
-                <motion.div
-                  key={msg.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.02 + i * 0.03, duration: 0.25 }}
-                  style={{ display: "flex", justifyContent: msg.from === "me" ? "flex-end" : "flex-start", gap: 10 }}
-                >
-                  {msg.from !== "me" && (
-                    <div style={{
-                      width: 32, height: 32, borderRadius: "50%", flexShrink: 0, marginTop: 2,
-                      background: `linear-gradient(135deg, ${activeConversation.avatar}50, ${activeConversation.avatar}20)`,
-                      border: `1px solid ${activeConversation.avatar}30`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 11, fontWeight: 600, fontFamily: FONT, color: activeConversation.avatar,
-                    }}>
-                      {activeConversation.name.split(" ").map(n => n[0]).join("")}
+              {messages.length === 0 && (
+                <div style={{ textAlign: "center", padding: "60px 20px" }}>
+                  <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.2 }}>👋</div>
+                  <div style={{ fontSize: 13, fontFamily: FONT, color: "#ffffff40" }}>Sag Hallo!</div>
+                </div>
+              )}
+              {messages.map((msg, i) => {
+                const isMe = msg.sender_id === myId;
+                const sender = memberMap[msg.sender_id] || { display_name: "Unbekannt", initials: "?", color: "#888" };
+                const msgTime = new Date(msg.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+                return (
+                  <motion.div
+                    key={msg.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.25 }}
+                    style={{ display: "flex", justifyContent: isMe ? "flex-end" : "flex-start", gap: 10 }}
+                  >
+                    {!isMe && (
+                      sender.avatar_url ? (
+                        <img src={sender.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 32, height: 32, borderRadius: "50%", flexShrink: 0, marginTop: 2 }} />
+                      ) : (
+                        <div style={{
+                          width: 32, height: 32, borderRadius: "50%", flexShrink: 0, marginTop: 2,
+                          background: `linear-gradient(135deg, ${sender.color}50, ${sender.color}20)`,
+                          border: `1px solid ${sender.color}30`,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 11, fontWeight: 600, fontFamily: FONT, color: sender.color,
+                        }}>{sender.initials}</div>
+                      )
+                    )}
+                    <div style={{ maxWidth: "65%" }}>
+                      <div style={{
+                        fontSize: 11, fontFamily: FONT, marginBottom: 4,
+                        color: isMe ? "#ffffff50" : sender.color,
+                        textAlign: isMe ? "right" : "left",
+                      }}>
+                        {isMe ? "Du" : sender.display_name} · {msgTime}
+                      </div>
+                      <div style={{
+                        padding: "10px 16px",
+                        borderRadius: isMe ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                        background: isMe
+                          ? "linear-gradient(135deg, rgba(139, 122, 255, 0.2), rgba(100, 80, 220, 0.15))"
+                          : "rgba(255,255,255,0.05)",
+                        border: `1px solid ${isMe ? "rgba(139, 122, 255, 0.15)" : "rgba(255,255,255,0.06)"}`,
+                        fontSize: 13, fontFamily: FONT, color: "#ffffffcc", lineHeight: 1.55,
+                      }}>
+                        {msg.text}
+                      </div>
                     </div>
-                  )}
-                  <div style={{ maxWidth: "65%" }}>
-                    {/* Sender name + time */}
-                    <div style={{
-                      fontSize: 11, fontFamily: FONT, marginBottom: 4,
-                      color: msg.from === "me" ? "#ffffff50" : activeConversation.avatar,
-                      textAlign: msg.from === "me" ? "right" : "left",
-                    }}>
-                      {msg.from === "me" ? "You" : activeConversation.name.split(" ")[0]} · {msg.time}
-                    </div>
-                    <div style={{
-                      padding: "10px 16px",
-                      borderRadius: msg.from === "me" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-                      background: msg.from === "me"
-                        ? "linear-gradient(135deg, rgba(139, 122, 255, 0.2), rgba(100, 80, 220, 0.15))"
-                        : "rgba(255,255,255,0.05)",
-                      border: `1px solid ${msg.from === "me" ? "rgba(139, 122, 255, 0.15)" : "rgba(255,255,255,0.06)"}`,
-                      fontSize: 13, fontFamily: FONT, color: "#ffffffcc", lineHeight: 1.55,
-                    }}>
-                      {msg.text}
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
             </div>
 
             {/* Message Input */}
@@ -4212,59 +4272,41 @@ function ChatView({ onBack, initialTab = "Team", t }) {
                 border: "1px solid rgba(255,255,255,0.08)",
                 borderRadius: 16, padding: "10px 10px 10px 18px",
               }}>
-                {/* Attach */}
-                <motion.div whileTap={{ scale: 0.9 }} style={{ cursor: "pointer", flexShrink: 0 }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 5v14M5 12h14" stroke="#ffffff30" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
-                </motion.div>
                 <input
                   value={msgInput} onChange={e => setMsgInput(e.target.value)}
-                  placeholder={`Type a message...`}
-                  onKeyDown={e => { if (e.key === "Enter" && msgInput.trim()) setMsgInput(""); }}
+                  placeholder="Nachricht schreiben..."
+                  onKeyDown={e => { if (e.key === "Enter" && msgInput.trim()) sendMessage(); }}
                   style={{
                     flex: 1, background: "none", border: "none", outline: "none",
                     fontSize: 14, fontFamily: FONT, color: "#ffffffdd", caretColor: "#8B7AFF",
                   }}
                 />
-                {/* Emoji, GIF, Attach, Send */}
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  {["😊", "GIF", "📎"].map((icon, idx) => (
-                    <motion.div key={idx} whileTap={{ scale: 0.9 }}
-                      style={{
-                        width: 32, height: 32, borderRadius: 8,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        cursor: "pointer", fontSize: idx === 1 ? 10 : 14,
-                        fontFamily: FONT, color: "#ffffff35", fontWeight: idx === 1 ? 700 : 400,
-                      }}>
-                      {icon}
-                    </motion.div>
-                  ))}
-                  <motion.div
-                    whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
-                    style={{
-                      width: 36, height: 36, borderRadius: "50%",
-                      background: msgInput.trim() ? "#8B7AFF" : "rgba(255,255,255,0.06)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      cursor: msgInput.trim() ? "pointer" : "default",
-                      transition: "all 0.2s ease",
-                    }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                      <path d="M22 2L11 13" stroke={msgInput.trim() ? "#fff" : "#ffffff30"} strokeWidth="2" strokeLinecap="round" />
-                      <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke={msgInput.trim() ? "#fff" : "#ffffff30"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </motion.div>
-                </div>
+                <motion.div
+                  whileHover={msgInput.trim() ? { scale: 1.05 } : {}} whileTap={msgInput.trim() ? { scale: 0.9 } : {}}
+                  onClick={sendMessage}
+                  style={{
+                    width: 36, height: 36, borderRadius: "50%",
+                    background: msgInput.trim() ? "#8B7AFF" : "rgba(255,255,255,0.06)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    cursor: msgInput.trim() ? "pointer" : "default",
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M22 2L11 13" stroke={msgInput.trim() ? "#fff" : "#ffffff30"} strokeWidth="2" strokeLinecap="round" />
+                    <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke={msgInput.trim() ? "#fff" : "#ffffff30"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </motion.div>
               </div>
             </div>
           </div>
         ) : (
           <div style={{
-            flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+            flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12,
             color: "#ffffff25", fontSize: 14, fontFamily: FONT,
           }}>
-            Select a conversation
+            <div style={{ fontSize: 40, opacity: 0.15 }}>💬</div>
+            <div>Wähle ein Gespräch oder starte ein neues</div>
           </div>
         )}
       </div>
@@ -6292,6 +6334,11 @@ export default function CircularMenu() {
             <ChatView
               initialTab={chatTab}
               t={t}
+              session={session}
+              userOrg={userOrg}
+              orgMembers={orgMembers}
+              darkMode={darkMode}
+              theme={theme}
               onBack={() => {
                 setCurrentView("dashboard");
                 setMenuSource("grid");
