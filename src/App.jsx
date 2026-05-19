@@ -7234,7 +7234,7 @@ export default function CircularMenu() {
                   fontFamily: FONT, letterSpacing: -0.5, lineHeight: 1.2,
                 }}>{getGreeting()}, {(userName || "").split(" ")[0] || t("greet.fallbackName")}</div>
                 <div style={{
-                  fontSize: 43, fontWeight: 400, color: theme.textDim,
+                  fontSize: 43, fontWeight: 400, color: theme.textFaint,
                   fontFamily: FONT, letterSpacing: -0.5, lineHeight: 1.3,
                 }}>{t("dash.subtitle")}</div>
               </div>
