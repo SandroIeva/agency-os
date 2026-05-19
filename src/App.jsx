@@ -9019,7 +9019,8 @@ export default function CircularMenu() {
                 </div>
               </motion.div>
 
-              {/* Push Notifications */}
+              {/* Push Notifications — removed; reminders now use Google Calendar sync */}
+              {false && (
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -9124,6 +9125,7 @@ export default function CircularMenu() {
                   )}
                 </div>
               </motion.div>
+              )}
 
               {/* Logout */}
               <motion.div
