@@ -7923,11 +7923,11 @@ export default function CircularMenu() {
                         </motion.div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                           {dashboardReminders.map((rem, i) => {
+                            // Reminder time = when user wants to be notified
+                            // Legacy reminders had lead_minutes; new ones store remind_at = event time
                             const remindDate = new Date(rem.remind_at);
-                            const eventDate = new Date(remindDate.getTime() + rem.lead_minutes * 60000);
-                            const dateStr = eventDate.toLocaleDateString("de-DE", { day: "2-digit", month: "short" });
-                            const timeStr = eventDate.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
-                            const leadLabel = rem.lead_minutes === 60 ? "1 Std vorher" : `${rem.lead_minutes} Min vorher`;
+                            const dateStr = remindDate.toLocaleDateString("de-DE", { day: "2-digit", month: "short" });
+                            const timeStr = remindDate.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
                             return (
                               <motion.div key={rem.id}
                                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -7949,7 +7949,6 @@ export default function CircularMenu() {
                                 </div>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{rem.title}</div>
-                                  <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff35" : "#1a1a2e55", marginTop: 2 }}>{leadLabel}</div>
                                 </div>
                                 <div style={{ fontSize: 11, fontFamily: FONT, color: "#00B89490", flexShrink: 0, textAlign: "right" }}>
                                   <div>{dateStr}</div>
@@ -9391,14 +9390,13 @@ export default function CircularMenu() {
             const [remTitle, setRemTitle] = useState("");
             const [remDate, setRemDate] = useState("");
             const [remTime, setRemTime] = useState("");
-            const [remLead, setRemLead] = useState(15);
             const [saving, setSaving] = useState(false);
 
             const handleSaveReminder = async () => {
               if (!remTitle.trim() || !remDate || !remTime) return;
               setSaving(true);
               const eventTime = new Date(`${remDate}T${remTime}`);
-              const remindAt = new Date(eventTime.getTime() - remLead * 60000);
+              const remindAt = eventTime;
 
               // Try to create a Google Calendar event with a popup reminder
               // This gives the user native OS notifications on their phone — no PWA needed
@@ -9423,9 +9421,9 @@ export default function CircularMenu() {
                       useDefault: false,
                       overrides: [
                         // Popup: works with Google Calendar app on phone
-                        { method: "popup", minutes: remLead },
+                        { method: "popup", minutes: 0 },
                         // Email: guaranteed delivery via Gmail (which is on every iPhone)
-                        { method: "email", minutes: remLead },
+                        { method: "email", minutes: 0 },
                       ],
                     },
                     transparency: "transparent",
@@ -9459,7 +9457,7 @@ export default function CircularMenu() {
                 org_id: userOrg?.id || null,
                 title: remTitle.trim(),
                 remind_at: remindAt.toISOString(),
-                lead_minutes: remLead,
+                lead_minutes: 0,
                 google_event_id: googleEventId,
               }).select().single();
               if (newRem) setDashboardReminders(prev => [...prev, newRem].sort((a, b) => new Date(a.remind_at) - new Date(b.remind_at)));
@@ -9552,25 +9550,6 @@ export default function CircularMenu() {
                       </div>
                     </div>
 
-                    {/* Lead time selector */}
-                    <div>
-                      <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Erinnere mich</label>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        {[{ val: 15, label: "15 Min vorher" }, { val: 30, label: "30 Min vorher" }, { val: 60, label: "1 Std vorher" }].map(opt => (
-                          <motion.div key={opt.val} whileTap={{ scale: 0.95 }}
-                            onClick={() => setRemLead(opt.val)}
-                            style={{
-                              flex: 1, padding: "10px 8px", borderRadius: 10, cursor: "pointer",
-                              textAlign: "center", fontSize: 12, fontFamily: FONT, fontWeight: 500,
-                              background: remLead === opt.val ? theme.accent + "15" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
-                              color: remLead === opt.val ? theme.accent : theme.textDim,
-                              border: `1px solid ${remLead === opt.val ? theme.accent + "40" : theme.borderFaint}`,
-                              transition: "all 0.2s ease",
-                            }}
-                          >{opt.label}</motion.div>
-                        ))}
-                      </div>
-                    </div>
 
                     {/* Info hint */}
                     <div style={{
