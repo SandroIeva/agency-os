@@ -9659,8 +9659,14 @@ export default function CircularMenu() {
             whileTap={{ scale: 0.95 }}
             transition={smoothSpring}
             onClick={() => {
-              if (currentView !== "dashboard") { setCurrentView("dashboard"); return; }
-              if (menuOpen && menuSource === "grid") { handleClose(); } else { setMenuSource("grid"); setActiveIndex(0); try { sounds.menuOpen(); } catch(e) {} setMenuOpen(true); setSubOpen(false); }
+              if (menuOpen && menuSource === "grid") { handleClose(); return; }
+              const openMenu = () => { setMenuSource("grid"); setActiveIndex(0); try { sounds.menuOpen(); } catch(e) {} setMenuOpen(true); setSubOpen(false); };
+              if (currentView !== "dashboard") {
+                setCurrentView("dashboard");
+                setTimeout(openMenu, 450);
+              } else {
+                openMenu();
+              }
             }}
             style={{ cursor: "pointer" }}>
             <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
@@ -9692,9 +9698,14 @@ export default function CircularMenu() {
             transition={smoothSpring}
             onClick={() => {
               if (menuOpen && menuSource === "plus") { handleClose(); return; }
-              // Close any open view first so the menu doesn't overlap it
-              if (currentView !== "dashboard") setCurrentView("dashboard");
-              setMenuSource("plus"); setActiveIndex(0); try { sounds.menuOpen(); } catch(e) {} setMenuOpen(true); setSubOpen(false);
+              const openMenu = () => { setMenuSource("plus"); setActiveIndex(0); try { sounds.menuOpen(); } catch(e) {} setMenuOpen(true); setSubOpen(false); };
+              if (currentView !== "dashboard") {
+                // Fade the current view out first, then open the menu so they don't overlap
+                setCurrentView("dashboard");
+                setTimeout(openMenu, 450);
+              } else {
+                openMenu();
+              }
             }}
             style={{ cursor: "pointer" }}>
             <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
