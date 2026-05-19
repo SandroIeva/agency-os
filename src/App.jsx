@@ -4930,12 +4930,18 @@ const NOTE_COLORS = {
 function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
   const [notes, setNotes] = useState([]);
   const [search, setSearch] = useState("");
-  const [viewMode, setViewMode] = useState("bento"); // 'bento' or 'stream'
-  const [editingId, setEditingId] = useState(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [filterMode, setFilterMode] = useState("all"); // all | pinned | today | week | tag:xxx
+  const [sortMode, setSortMode] = useState("updated"); // updated | created | alpha | shuffle
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState(null); // expanded-to-edit overlay
   const [colorPickerId, setColorPickerId] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [hoveredId, setHoveredId] = useState(null);
+  const [mouseOnCard, setMouseOnCard] = useState({});
   const saveTimersRef = useRef({});
+  const rotationMapRef = useRef({}); // stable random rotation per note id
 
   // Load notes
   useEffect(() => {
@@ -4952,16 +4958,26 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
     })();
   }, [session?.user?.id]);
 
+  // Stable rotation per note (looks organic but doesn't jitter on re-render)
+  const getRotation = (id) => {
+    if (!rotationMapRef.current[id]) {
+      rotationMapRef.current[id] = (Math.random() * 3 - 1.5).toFixed(2);
+    }
+    return parseFloat(rotationMapRef.current[id]);
+  };
+
   const createNote = async (color = "sand") => {
+    const colors = Object.keys(NOTE_COLORS);
+    const randomColor = color === "sand" ? colors[Math.floor(Math.random() * colors.length)] : color;
     const { data } = await supabase.from("notes").insert({
       user_id: session.user.id,
       org_id: userOrg?.id || null,
       content: "",
-      color,
+      color: randomColor,
     }).select().single();
     if (data) {
       setNotes(prev => [data, ...prev]);
-      setEditingId(data.id);
+      setExpandedId(data.id);
     }
   };
 
@@ -4969,12 +4985,11 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
     setNotes(prev => prev.map(n => n.id === id ? { ...n, ...patch } : n));
   };
 
-  // Debounced save while typing
   const updateContent = (id, content) => {
     updateNoteLocal(id, { content });
     if (saveTimersRef.current[id]) clearTimeout(saveTimersRef.current[id]);
     saveTimersRef.current[id] = setTimeout(async () => {
-      await supabase.from("notes").update({ content }).eq("id", id);
+      await supabase.from("notes").update({ content, updated_at: new Date().toISOString() }).eq("id", id);
       delete saveTimersRef.current[id];
     }, 500);
   };
@@ -4991,47 +5006,66 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
     const newPinned = !note.pinned;
     updateNoteLocal(id, { pinned: newPinned });
     await supabase.from("notes").update({ pinned: newPinned }).eq("id", id);
-    // Re-sort
-    setNotes(prev => [...prev].sort((a, b) => {
-      if (a.pinned !== b.pinned) return b.pinned ? 1 : -1;
-      return new Date(b.updated_at) - new Date(a.updated_at);
-    }));
   };
 
   const deleteNote = async (id) => {
     setNotes(prev => prev.filter(n => n.id !== id));
     setConfirmDelete(null);
+    if (expandedId === id) setExpandedId(null);
     await supabase.from("notes").delete().eq("id", id);
   };
 
-  // Filter
-  const visibleNotes = useMemo(() => {
-    const s = search.trim().toLowerCase();
-    if (!s) return notes;
-    return notes.filter(n => n.content.toLowerCase().includes(s));
-  }, [notes, search]);
-
-  // Group by day for stream view
-  const groupedNotes = useMemo(() => {
-    const groups = {};
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const yesterday = new Date(today.getTime() - 86400000);
-    const weekAgo = new Date(today.getTime() - 7 * 86400000);
-
-    visibleNotes.forEach(n => {
-      const d = new Date(n.updated_at);
-      let key;
-      if (d >= today) key = "Heute";
-      else if (d >= yesterday) key = "Gestern";
-      else if (d >= weekAgo) key = "Diese Woche";
-      else if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) key = "Diesen Monat";
-      else key = d.toLocaleDateString("de-DE", { month: "long", year: "numeric" });
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(n);
+  // Extract hashtags for filter chips
+  const allTags = useMemo(() => {
+    const tags = new Set();
+    notes.forEach(n => {
+      const matches = (n.content || "").match(/#[\wäöüÄÖÜß]+/g);
+      if (matches) matches.forEach(t => tags.add(t.toLowerCase()));
     });
-    return groups;
-  }, [visibleNotes]);
+    return Array.from(tags).slice(0, 6);
+  }, [notes]);
+
+  // Filter + search + sort
+  const visibleNotes = useMemo(() => {
+    let arr = [...notes];
+    const s = search.trim().toLowerCase();
+    if (s) arr = arr.filter(n => n.content.toLowerCase().includes(s));
+
+    // Filter mode
+    if (filterMode === "pinned") arr = arr.filter(n => n.pinned);
+    else if (filterMode === "today") {
+      const now = new Date();
+      const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      arr = arr.filter(n => new Date(n.updated_at).getTime() >= today0);
+    } else if (filterMode === "week") {
+      const weekAgo = Date.now() - 7 * 86400000;
+      arr = arr.filter(n => new Date(n.updated_at).getTime() >= weekAgo);
+    } else if (filterMode.startsWith("tag:")) {
+      const tag = filterMode.slice(4);
+      arr = arr.filter(n => (n.content || "").toLowerCase().includes(tag));
+    }
+
+    // Sort
+    if (sortMode === "updated") {
+      arr.sort((a, b) => {
+        if (a.pinned !== b.pinned) return b.pinned ? 1 : -1;
+        return new Date(b.updated_at) - new Date(a.updated_at);
+      });
+    } else if (sortMode === "created") {
+      arr.sort((a, b) => {
+        if (a.pinned !== b.pinned) return b.pinned ? 1 : -1;
+        return new Date(b.created_at) - new Date(a.created_at);
+      });
+    } else if (sortMode === "alpha") {
+      arr.sort((a, b) => {
+        if (a.pinned !== b.pinned) return b.pinned ? 1 : -1;
+        return (a.content || "").localeCompare(b.content || "");
+      });
+    } else if (sortMode === "shuffle") {
+      arr.sort(() => Math.random() - 0.5);
+    }
+    return arr;
+  }, [notes, search, filterMode, sortMode]);
 
   // Helper: first line as title, rest as body
   const splitContent = (content) => {
@@ -5041,7 +5075,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
     return { title: trimmed.slice(0, newlineIdx), body: trimmed.slice(newlineIdx + 1).trimStart() };
   };
 
-  // Bento sizing: smaller notes get smaller spans
+  // Bento sizing
   const getSpan = (content) => {
     const len = (content || "").length;
     if (len < 30) return { col: 1, row: 1 };
@@ -5050,26 +5084,49 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
     return { col: 2, row: 3 };
   };
 
+  // Mouse-tilt handler
+  const handleCardMouseMove = (e, id) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    setMouseOnCard(prev => ({ ...prev, [id]: { x, y } }));
+  };
+  const handleCardMouseLeave = (id) => {
+    setHoveredId(null);
+    setMouseOnCard(prev => { const next = { ...prev }; delete next[id]; return next; });
+  };
+
   const renderCard = (note, idx) => {
     const palette = NOTE_COLORS[note.color] || NOTE_COLORS.sand;
     const bg = darkMode ? palette.dark : palette.light;
     const border = palette.border;
     const accent = palette.accent;
     const { title, body } = splitContent(note.content);
-    const isEditing = editingId === note.id;
     const showColorPicker = colorPickerId === note.id;
-    const span = viewMode === "bento" ? getSpan(note.content) : { col: 1, row: 1 };
+    const span = getSpan(note.content);
+    const rotation = note.pinned ? 0 : getRotation(note.id);
+    const mouse = mouseOnCard[note.id] || { x: 0, y: 0 };
+    const isHovered = hoveredId === note.id;
+    const tiltX = isHovered ? mouse.y * -4 : 0;
+    const tiltY = isHovered ? mouse.x * 4 : 0;
 
     return (
       <motion.div
         key={note.id}
         layout
-        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.92, y: -10 }}
-        transition={{ duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0], delay: idx * 0.02 }}
-        whileHover={{ y: -2, scale: 1.01 }}
-        onClick={() => { if (!isEditing) setEditingId(note.id); }}
+        layoutId={`note-${note.id}`}
+        initial={{ opacity: 0, scale: 0.7, rotate: rotation * 3, y: 20 }}
+        animate={{ opacity: 1, scale: 1, rotate: rotation, y: 0 }}
+        exit={{ opacity: 0, scale: 0.85, rotate: rotation + 8, y: -20, filter: "blur(4px)" }}
+        transition={{
+          type: "spring", stiffness: 220, damping: 22,
+          delay: idx * 0.04,
+        }}
+        whileHover={{ scale: 1.03, zIndex: 10 }}
+        onMouseMove={(e) => handleCardMouseMove(e, note.id)}
+        onMouseEnter={() => setHoveredId(note.id)}
+        onMouseLeave={() => handleCardMouseLeave(note.id)}
+        onClick={() => setExpandedId(note.id)}
         style={{
           gridColumn: `span ${span.col}`,
           gridRow: `span ${span.row}`,
@@ -5078,117 +5135,131 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
           border: `1px solid ${border}`,
           borderRadius: 18,
           padding: "16px 18px",
-          cursor: isEditing ? "text" : "pointer",
+          cursor: "pointer",
           position: "relative",
           display: "flex",
           flexDirection: "column",
           gap: 6,
-          transition: "box-shadow 0.2s ease",
-          boxShadow: darkMode ? "0 4px 14px rgba(0,0,0,0.18)" : "0 2px 10px rgba(0,0,0,0.04)",
+          boxShadow: isHovered
+            ? (darkMode ? "0 16px 40px rgba(0,0,0,0.45), 0 0 0 1px " + border : "0 18px 38px rgba(0,0,0,0.12), 0 6px 14px rgba(0,0,0,0.06)")
+            : (darkMode ? "0 4px 14px rgba(0,0,0,0.2)" : "0 3px 10px rgba(0,0,0,0.05)"),
+          transform: `perspective(1000px) rotateX(${tiltX}deg) rotateY(${tiltY}deg)`,
+          transformStyle: "preserve-3d",
+          transition: "box-shadow 0.25s ease, transform 0.15s ease",
           overflow: "hidden",
         }}
       >
         {/* Pin indicator */}
         {note.pinned && (
-          <div style={{ position: "absolute", top: 10, right: 12, fontSize: 14, color: accent }}>📌</div>
+          <motion.div
+            initial={{ scale: 0, rotate: -45 }} animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 15 }}
+            style={{ position: "absolute", top: 10, right: 12, fontSize: 14, color: accent }}
+          >📌</motion.div>
         )}
 
-        {/* Editing mode */}
-        {isEditing ? (
-          <textarea
-            value={note.content}
-            onChange={(e) => updateContent(note.id, e.target.value)}
-            onBlur={() => setEditingId(null)}
-            onClick={(e) => e.stopPropagation()}
-            placeholder="Tippe etwas..."
-            autoFocus
-            style={{
-              flex: 1, width: "100%", minHeight: 60,
-              background: "transparent", border: "none", outline: "none", resize: "none",
-              fontFamily: FONT, fontSize: 14, lineHeight: 1.55,
-              color: darkMode ? "#fff" : "#1a1a2e",
-              caretColor: accent,
-            }}
-          />
-        ) : (
-          <>
-            <div style={{
-              fontSize: 14, fontWeight: 600, fontFamily: FONT,
-              color: darkMode ? "#fff" : "#1a1a2e",
-              lineHeight: 1.35,
-              wordBreak: "break-word",
-              whiteSpace: "pre-wrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}>
-              {title || <span style={{ color: darkMode ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.3)", fontWeight: 400, fontStyle: "italic" }}>Leere Notiz — klick zum bearbeiten</span>}
-            </div>
-            {body && (
-              <div style={{
-                fontSize: 13, fontFamily: FONT,
-                color: darkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.65)",
-                lineHeight: 1.55, flex: 1,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                overflow: "hidden",
-              }}>{body}</div>
-            )}
-          </>
-        )}
-
-        {/* Footer: timestamp + actions on hover */}
-        <div className="note-footer" style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          marginTop: "auto", paddingTop: 8, gap: 8,
+        <div style={{
+          fontSize: 14, fontWeight: 600, fontFamily: FONT,
+          color: darkMode ? "#fff" : "#1a1a2e",
+          lineHeight: 1.35,
+          wordBreak: "break-word",
+          whiteSpace: "pre-wrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          flexShrink: 0,
         }}>
-          <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.4)" }}>
-            {new Date(note.updated_at).toLocaleDateString("de-DE", { day: "2-digit", month: "short" })}
-          </div>
-          <div style={{ display: "flex", gap: 4, opacity: 0.6 }} onClick={(e) => e.stopPropagation()}>
-            <motion.button whileTap={{ scale: 0.9 }} onClick={() => togglePin(note.id)} title="Pin"
-              style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, fontSize: 12, color: accent }}>
-              {note.pinned ? "📌" : "📍"}
-            </motion.button>
-            <motion.button whileTap={{ scale: 0.9 }} onClick={() => setColorPickerId(showColorPicker ? null : note.id)} title="Farbe"
-              style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, fontSize: 12 }}>
-              <div style={{ width: 12, height: 12, borderRadius: "50%", background: accent }} />
-            </motion.button>
-            <motion.button whileTap={{ scale: 0.9 }} onClick={() => setConfirmDelete(note)} title="Löschen"
-              style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, fontSize: 13, color: darkMode ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)" }}>
-              🗑
-            </motion.button>
-          </div>
+          {title || <span style={{ color: darkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.28)", fontWeight: 400, fontStyle: "italic" }}>Leere Notiz</span>}
         </div>
+        {body && (
+          <div style={{
+            fontSize: 13, fontFamily: FONT,
+            color: darkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.65)",
+            lineHeight: 1.55, flex: 1,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            overflow: "hidden",
+          }}>{body}</div>
+        )}
+
+        {/* Action bar — only visible on hover */}
+        <AnimatePresence>
+          {isHovered && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.18 }}
+              style={{
+                position: "absolute", bottom: 10, right: 10,
+                display: "flex", gap: 4, alignItems: "center",
+                padding: 4, borderRadius: 10,
+                background: darkMode ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.75)",
+                backdropFilter: "blur(8px)",
+                border: `1px solid ${darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)"}`,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => togglePin(note.id)} title="Pin"
+                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, fontSize: 12, lineHeight: 1, color: accent, width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {note.pinned ? "📌" : "📍"}
+              </motion.button>
+              <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => setColorPickerId(showColorPicker ? null : note.id)} title="Farbe"
+                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, lineHeight: 1, width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ width: 12, height: 12, borderRadius: "50%", background: accent }} />
+              </motion.button>
+              <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => setConfirmDelete(note)} title="Löschen"
+                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, fontSize: 12, lineHeight: 1, color: darkMode ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                🗑
+              </motion.button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Color picker popover */}
-        {showColorPicker && (
-          <div onClick={(e) => e.stopPropagation()}
-            style={{
-              position: "absolute", bottom: 40, right: 10, zIndex: 10,
-              padding: 8, borderRadius: 12,
-              background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.98)",
-              border: `1px solid ${theme.border}`,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
-              display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6,
-            }}
-          >
-            {Object.entries(NOTE_COLORS).map(([key, c]) => (
-              <motion.div key={key} whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.9 }}
-                onClick={() => setColor(note.id, key)}
-                style={{
-                  width: 22, height: 22, borderRadius: "50%",
-                  background: c.accent,
-                  cursor: "pointer",
-                  border: note.color === key ? `2px solid ${darkMode ? "#fff" : "#000"}` : "2px solid transparent",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
-                }}
-              />
-            ))}
-          </div>
-        )}
+        <AnimatePresence>
+          {showColorPicker && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 6 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 6 }}
+              transition={{ duration: 0.18 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: "absolute", bottom: 44, right: 10, zIndex: 15,
+                padding: 8, borderRadius: 12,
+                background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.98)",
+                border: `1px solid ${theme.border}`,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+                display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6,
+              }}
+            >
+              {Object.entries(NOTE_COLORS).map(([key, c]) => (
+                <motion.div key={key} whileHover={{ scale: 1.2 }} whileTap={{ scale: 0.9 }}
+                  onClick={() => setColor(note.id, key)}
+                  style={{
+                    width: 22, height: 22, borderRadius: "50%",
+                    background: c.accent,
+                    cursor: "pointer",
+                    border: note.color === key ? `2px solid ${darkMode ? "#fff" : "#000"}` : "2px solid transparent",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                  }}
+                />
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     );
   };
+
+  const expandedNote = expandedId ? notes.find(n => n.id === expandedId) : null;
+  const expandedPalette = expandedNote ? (NOTE_COLORS[expandedNote.color] || NOTE_COLORS.sand) : null;
+  const expandedBg = expandedNote ? (darkMode ? expandedPalette.dark : expandedPalette.light) : "transparent";
+
+  // Filter chips config
+  const filterChips = [
+    { id: "all", label: "Alle", count: notes.length },
+    { id: "pinned", label: "📌 Gepinnt", count: notes.filter(n => n.pinned).length },
+    { id: "today", label: "Heute", count: notes.filter(n => { const t0 = new Date(); t0.setHours(0,0,0,0); return new Date(n.updated_at) >= t0; }).length },
+    { id: "week", label: "Diese Woche", count: notes.filter(n => Date.now() - new Date(n.updated_at).getTime() < 7*86400000).length },
+    ...allTags.map(tag => ({ id: "tag:" + tag, label: tag, count: notes.filter(n => (n.content || "").toLowerCase().includes(tag)).length })),
+  ].filter(c => c.id === "all" || c.count > 0);
 
   return (
     <motion.div
@@ -5196,67 +5267,139 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
-      style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", zIndex: 5, background: theme.bg }}
+      style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", zIndex: 5, background: theme.bg, overflow: "hidden" }}
     >
-      {/* Top bar */}
-      <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "24px 32px 16px" }}>
-        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={onBack}
-          style={{ width: 32, height: 32, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim }}
+      {/* Floating toolbar — minimal, only filter chips + sort + search + new */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "24px 32px 16px",
+        flexWrap: "wrap",
+      }}>
+        {/* Filter chips */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1 }}>
+          {filterChips.map(chip => {
+            const active = filterMode === chip.id;
+            return (
+              <motion.div key={chip.id} whileTap={{ scale: 0.96 }} whileHover={{ y: -1 }}
+                onClick={() => setFilterMode(chip.id)}
+                style={{
+                  padding: "6px 12px", borderRadius: 999, cursor: "pointer",
+                  fontSize: 12, fontFamily: FONT, fontWeight: 500,
+                  background: active ? (darkMode ? "rgba(255,255,255,0.12)" : "#1a1a2e") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
+                  color: active ? (darkMode ? "#fff" : "#fff") : theme.textDim,
+                  border: `1px solid ${active ? "transparent" : theme.borderFaint}`,
+                  display: "flex", alignItems: "center", gap: 6,
+                  transition: "background 0.2s ease, color 0.2s ease",
+                }}
+              >
+                {chip.label}
+                {chip.count > 0 && (
+                  <span style={{ fontSize: 10, opacity: 0.7 }}>{chip.count}</span>
+                )}
+              </motion.div>
+            );
+          })}
+        </div>
+
+        {/* Sort dropdown — small icon */}
+        <div style={{ position: "relative" }}>
+          <motion.div whileTap={{ scale: 0.95 }} whileHover={{ y: -1 }}
+            onClick={() => setSortMenuOpen(!sortMenuOpen)}
+            style={{
+              width: 32, height: 32, borderRadius: 10, cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: theme.textDim, background: sortMenuOpen ? (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)") : "transparent",
+            }}
+            title="Sortieren"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M6 12h12M10 18h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </motion.div>
+          <AnimatePresence>
+            {sortMenuOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -6, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.96 }}
+                transition={{ duration: 0.15 }}
+                style={{
+                  position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 20,
+                  minWidth: 180, padding: 6, borderRadius: 12,
+                  background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
+                  border: `1px solid ${theme.border}`,
+                  boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
+                }}
+              >
+                {[
+                  { id: "updated", label: "Zuletzt bearbeitet" },
+                  { id: "created", label: "Erstellt" },
+                  { id: "alpha", label: "A → Z" },
+                  { id: "shuffle", label: "Zufällig 🎲" },
+                ].map(s => (
+                  <motion.div key={s.id} whileHover={{ background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
+                    onClick={() => { setSortMode(s.id); setSortMenuOpen(false); }}
+                    style={{
+                      padding: "8px 12px", borderRadius: 8, cursor: "pointer",
+                      fontSize: 13, fontFamily: FONT,
+                      color: sortMode === s.id ? theme.accent : theme.text,
+                      fontWeight: sortMode === s.id ? 600 : 400,
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                    }}
+                  >
+                    {s.label}
+                    {sortMode === s.id && <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={theme.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </motion.div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Search — minimal: icon collapses to input on click */}
+        <motion.div layout
+          style={{
+            display: "flex", alignItems: "center",
+            height: 32,
+            background: searchOpen ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)") : "transparent",
+            border: `1px solid ${searchOpen ? theme.borderFaint : "transparent"}`,
+            borderRadius: 10,
+            overflow: "hidden",
+          }}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <motion.div whileTap={{ scale: 0.95 }} whileHover={{ y: -1 }}
+            onClick={() => { setSearchOpen(true); }}
+            style={{
+              width: 32, height: 32, cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: theme.textDim,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M21 21l-4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </motion.div>
+          <AnimatePresence>
+            {searchOpen && (
+              <motion.input
+                initial={{ width: 0, opacity: 0 }} animate={{ width: 180, opacity: 1 }} exit={{ width: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onBlur={() => { if (!search.trim()) setSearchOpen(false); }}
+                placeholder="Suchen..."
+                autoFocus
+                style={{
+                  height: 32, background: "transparent", border: "none", outline: "none",
+                  fontSize: 13, fontFamily: FONT, color: theme.text,
+                  padding: "0 10px 0 0",
+                }}
+              />
+            )}
+          </AnimatePresence>
         </motion.div>
 
-        <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 500, color: theme.text }}>Notizen</div>
-
-        <div style={{ flex: 1 }} />
-
-        {/* Search */}
-        <div style={{ position: "relative" }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
-            <circle cx="11" cy="11" r="7" stroke={theme.textDim} strokeWidth="1.5"/><path d="M21 21l-4-4" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Suchen..."
-            style={{
-              padding: "8px 14px 8px 34px", borderRadius: 12,
-              background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-              border: `1px solid ${theme.borderFaint}`,
-              fontSize: 13, fontFamily: FONT, color: theme.text,
-              outline: "none", width: 220,
-            }}
-          />
-        </div>
-
-        {/* View toggle */}
-        <div style={{ display: "flex", padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}` }}>
-          {[
-            { id: "bento", label: "Bento", icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5"/></svg> },
-            { id: "stream", label: "Stream", icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><line x1="4" y1="6" x2="20" y2="6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><line x1="4" y1="18" x2="20" y2="18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> },
-          ].map(v => (
-            <motion.div key={v.id} whileTap={{ scale: 0.95 }} onClick={() => setViewMode(v.id)}
-              style={{
-                padding: "6px 12px", borderRadius: 8, cursor: "pointer",
-                background: viewMode === v.id ? (darkMode ? "rgba(255,255,255,0.08)" : "#fff") : "transparent",
-                color: viewMode === v.id ? theme.text : theme.textDim,
-                fontSize: 12, fontFamily: FONT, fontWeight: 500,
-                display: "flex", alignItems: "center", gap: 6,
-                boxShadow: viewMode === v.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-              }}
-            >
-              {v.icon}
-              {v.label}
-            </motion.div>
-          ))}
-        </div>
-
-        {/* New note */}
+        {/* New note button */}
         <motion.button
-          whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+          whileHover={{ scale: 1.05, y: -1 }} whileTap={{ scale: 0.94 }}
+          transition={{ type: "spring", stiffness: 400, damping: 22 }}
           onClick={() => createNote()}
           style={{
-            padding: "8px 18px", borderRadius: 12,
+            padding: "8px 16px", borderRadius: 12,
             background: theme.accent + "22", border: `1px solid ${theme.accent}40`,
             color: theme.accent, fontSize: 13, fontWeight: 500, fontFamily: FONT,
             cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
@@ -5267,8 +5410,13 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
         </motion.button>
       </div>
 
-      {/* Content area */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "8px 32px 32px" }}>
+      {/* Content area — extends to bottom of viewport */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "8px 32px 100px", minHeight: 0 }}
+        onDoubleClick={(e) => {
+          // Double-click on empty area → create note
+          if (e.target === e.currentTarget) createNote();
+        }}
+      >
         {loading ? (
           <div style={{ textAlign: "center", padding: 60, color: theme.textDim, fontFamily: FONT, fontSize: 13 }}>Lädt...</div>
         ) : visibleNotes.length === 0 ? (
@@ -5277,14 +5425,18 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
             transition={{ delay: 0.1, duration: 0.4 }}
             style={{ textAlign: "center", padding: "80px 20px" }}
           >
-            <div style={{ fontSize: 40, marginBottom: 16, opacity: 0.4 }}>📝</div>
+            <motion.div
+              initial={{ rotate: -10, scale: 0.8 }} animate={{ rotate: 0, scale: 1 }}
+              transition={{ type: "spring", stiffness: 200, damping: 14 }}
+              style={{ fontSize: 44, marginBottom: 20, opacity: 0.5, display: "inline-block" }}
+            >📝</motion.div>
             <div style={{ fontSize: 16, fontFamily: FONT, color: theme.text, marginBottom: 6 }}>
-              {search ? "Keine Treffer" : "Noch keine Notizen"}
+              {search ? "Keine Treffer" : filterMode !== "all" ? "Hier ist noch leer" : "Noch keine Notizen"}
             </div>
             <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 24 }}>
-              {search ? "Versuche einen anderen Suchbegriff" : "Klicke auf 'Neue Notiz' um zu starten"}
+              {search ? "Versuche einen anderen Suchbegriff" : 'Klicke auf "Neue Notiz" — oder doppelklicke irgendwo'}
             </div>
-            {!search && (
+            {!search && filterMode === "all" && (
               <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => createNote()}
                 style={{
                   padding: "10px 22px", borderRadius: 12,
@@ -5294,38 +5446,144 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
               >Erste Notiz erstellen</motion.button>
             )}
           </motion.div>
-        ) : viewMode === "bento" ? (
+        ) : (
           <div style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
             gridAutoRows: "90px",
-            gap: 14,
+            gap: 16,
             paddingBottom: 40,
           }}>
-            <AnimatePresence>
+            <AnimatePresence mode="popLayout">
               {visibleNotes.map((note, idx) => renderCard(note, idx))}
             </AnimatePresence>
           </div>
-        ) : (
-          // Stream view
-          <div style={{ maxWidth: 720, margin: "0 auto", paddingBottom: 40 }}>
-            {Object.entries(groupedNotes).map(([groupName, groupNotes], gIdx) => (
-              <div key={groupName} style={{ marginBottom: 28 }}>
-                <div style={{
-                  fontSize: 10, fontFamily: FONT, fontWeight: 600, letterSpacing: 2,
-                  color: theme.textFaint, textTransform: "uppercase",
-                  marginBottom: 12, paddingLeft: 4,
-                }}>{groupName}</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <AnimatePresence>
-                    {groupNotes.map((note, idx) => renderCard(note, gIdx * 10 + idx))}
-                  </AnimatePresence>
-                </div>
-              </div>
-            ))}
-          </div>
         )}
       </div>
+
+      {/* Expanded note editor — shared layout for smooth zoom */}
+      <AnimatePresence>
+        {expandedNote && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            onClick={() => setExpandedId(null)}
+            style={{
+              position: "fixed", inset: 0, zIndex: 150,
+              background: darkMode ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.35)",
+              backdropFilter: "blur(14px)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              padding: "5vh 24px",
+            }}
+          >
+            <motion.div
+              layoutId={`note-${expandedNote.id}`}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "100%", maxWidth: 720, maxHeight: "90vh",
+                background: expandedBg,
+                border: `1px solid ${expandedPalette.border}`,
+                borderRadius: 24,
+                padding: "28px 32px 24px",
+                display: "flex", flexDirection: "column",
+                boxShadow: darkMode ? "0 30px 80px rgba(0,0,0,0.6)" : "0 30px 80px rgba(0,0,0,0.18)",
+                overflow: "hidden",
+              }}
+            >
+              {/* Action bar inside expanded view */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <motion.button whileTap={{ scale: 0.9 }} onClick={() => togglePin(expandedNote.id)}
+                    style={{
+                      width: 32, height: 32, borderRadius: 10, cursor: "pointer",
+                      background: expandedNote.pinned ? expandedPalette.accent + "22" : "transparent",
+                      border: `1px solid ${expandedNote.pinned ? expandedPalette.accent + "40" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)")}`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 13, color: expandedPalette.accent,
+                    }}
+                  >📌</motion.button>
+                  <div style={{ position: "relative" }}>
+                    <motion.button whileTap={{ scale: 0.9 }} onClick={() => setColorPickerId(colorPickerId === expandedNote.id ? null : expandedNote.id)}
+                      style={{
+                        width: 32, height: 32, borderRadius: 10, cursor: "pointer",
+                        background: "transparent",
+                        border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}
+                    >
+                      <div style={{ width: 14, height: 14, borderRadius: "50%", background: expandedPalette.accent }} />
+                    </motion.button>
+                    <AnimatePresence>
+                      {colorPickerId === expandedNote.id && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
+                          style={{
+                            position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 20,
+                            padding: 8, borderRadius: 12,
+                            background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
+                            border: `1px solid ${theme.border}`,
+                            boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+                            display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6,
+                          }}
+                        >
+                          {Object.entries(NOTE_COLORS).map(([key, c]) => (
+                            <motion.div key={key} whileHover={{ scale: 1.2 }} whileTap={{ scale: 0.9 }}
+                              onClick={() => setColor(expandedNote.id, key)}
+                              style={{
+                                width: 22, height: 22, borderRadius: "50%",
+                                background: c.accent, cursor: "pointer",
+                                border: expandedNote.color === key ? `2px solid ${darkMode ? "#fff" : "#000"}` : "2px solid transparent",
+                                boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                              }}
+                            />
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                  <motion.button whileTap={{ scale: 0.9 }} onClick={() => setConfirmDelete(expandedNote)}
+                    style={{
+                      width: 32, height: 32, borderRadius: 10, cursor: "pointer",
+                      background: "transparent",
+                      border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 13, color: darkMode ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.5)",
+                    }}
+                  >🗑</motion.button>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.45)" }}>
+                    {new Date(expandedNote.updated_at).toLocaleString("de-DE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                  <motion.button whileTap={{ scale: 0.9 }} onClick={() => setExpandedId(null)}
+                    style={{
+                      width: 32, height: 32, borderRadius: 10, cursor: "pointer",
+                      background: "transparent",
+                      border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: theme.textDim, fontSize: 16,
+                    }}
+                  >✕</motion.button>
+                </div>
+              </div>
+
+              <textarea
+                value={expandedNote.content}
+                onChange={(e) => updateContent(expandedNote.id, e.target.value)}
+                placeholder={"Titel der Notiz...\n\nDann hier weiterschreiben."}
+                autoFocus
+                style={{
+                  flex: 1, minHeight: 200, maxHeight: "70vh",
+                  background: "transparent", border: "none", outline: "none", resize: "none",
+                  fontFamily: FONT, fontSize: 15, lineHeight: 1.6,
+                  color: darkMode ? "#fff" : "#1a1a2e",
+                  caretColor: expandedPalette.accent,
+                }}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Delete confirm */}
       {createPortal(<AnimatePresence>
@@ -5333,10 +5591,11 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={() => setConfirmDelete(null)}
-            style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+            style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(10px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 10 }}
+              transition={{ type: "spring", stiffness: 280, damping: 22 }}
               onClick={(e) => e.stopPropagation()}
               style={{
                 width: "100%", maxWidth: 380, padding: 28, borderRadius: 20,
@@ -5367,7 +5626,6 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
     </motion.div>
   );
 }
-
 export default function CircularMenu() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
