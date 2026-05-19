@@ -4967,13 +4967,8 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
       .then(({ data }) => setProjects(data || []));
   }, [userOrg?.id]);
 
-  // Stable rotation per note (looks organic but doesn't jitter on re-render)
-  const getRotation = (id) => {
-    if (!rotationMapRef.current[id]) {
-      rotationMapRef.current[id] = (Math.random() * 3 - 1.5).toFixed(2);
-    }
-    return parseFloat(rotationMapRef.current[id]);
-  };
+  // Rotation disabled per user feedback — cards stay aligned
+  const getRotation = () => 0;
 
   const createNote = async (color = "sand") => {
     const colors = Object.keys(NOTE_COLORS);
@@ -5159,11 +5154,15 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
         {/* Pin indicator */}
         {note.pinned && (
           <motion.div
-            initial={{ scale: 0, rotate: -45 }} animate={{ scale: 1, rotate: 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 15 }}
-            style={{ position: "absolute", top: 10, right: 12, color: accent, display: "flex", alignItems: "center", justifyContent: "center" }}
+            initial={{ scale: 0 }} animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 300, damping: 18 }}
+            style={{
+              position: "absolute", top: 10, right: 12,
+              color: darkMode ? "rgba(255,255,255,0.65)" : "rgba(26,26,46,0.65)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z"/></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z"/></svg>
           </motion.div>
         )}
 
@@ -5207,8 +5206,8 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
               onClick={(e) => e.stopPropagation()}
             >
               <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => togglePin(note.id)} title={note.pinned ? "Entpinnen" : "Pinnen"}
-                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, color: note.pinned ? accent : (darkMode ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.5)"), width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill={note.pinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.6"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, color: darkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={note.pinned ? "2" : "1.6"} strokeLinecap="round" strokeLinejoin="round"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z"/></svg>
               </motion.button>
               <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => setColorPickerId(showColorPicker ? null : note.id)} title="Farbe"
                 style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, lineHeight: 1, width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -5275,7 +5274,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
       color: p.color,
     })),
     { id: "private", label: "Privat", count: notes.filter(n => !n.project_name).length, icon: "lock" },
-  ].filter(c => c.id === "all" || c.count > 0);
+  ].filter(c => c.id === "all" || c.id === "private" || c.id.startsWith("project:") || c.count > 0);
 
   return (
     <motion.div
@@ -5283,7 +5282,15 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
-      style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", zIndex: 5, background: theme.bg, overflow: "hidden" }}
+      style={{
+        position: "absolute", inset: 0, display: "flex", flexDirection: "column", zIndex: 5,
+        background: theme.bg,
+        // Fade the whole view to transparent at the bottom so the dashboard's
+        // gradient blob / nav bar reads cleanly underneath without a hard edge
+        WebkitMaskImage: "linear-gradient(to bottom, black 0, black calc(100% - 80px), transparent 100%)",
+        maskImage: "linear-gradient(to bottom, black 0, black calc(100% - 80px), transparent 100%)",
+        overflow: "hidden",
+      }}
     >
       {/* Floating toolbar — minimal, only filter chips + sort + search + new */}
       <div style={{
@@ -5309,7 +5316,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
                 }}
               >
                 {chip.icon === "pin" && (
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z"/></svg>
                 )}
                 {chip.icon === "lock" && (
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -5437,12 +5444,9 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
         </motion.button>
       </div>
 
-      {/* Content area — extends to bottom of viewport with fade mask so the
-          bottom navigation gradient is visible underneath without a hard edge */}
+      {/* Content area — extends to bottom of viewport */}
       <div style={{
-        flex: 1, overflowY: "auto", padding: "8px 32px 140px", minHeight: 0,
-        WebkitMaskImage: "linear-gradient(to bottom, black 0, black calc(100% - 60px), transparent 100%)",
-        maskImage: "linear-gradient(to bottom, black 0, black calc(100% - 60px), transparent 100%)",
+        flex: 1, overflowY: "auto", padding: "8px 32px 120px", minHeight: 0,
       }}
         onDoubleClick={(e) => {
           // Double-click on empty area → create note
@@ -5529,13 +5533,13 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
                     title={expandedNote.pinned ? "Entpinnen" : "Pinnen"}
                     style={{
                       width: 32, height: 32, borderRadius: 10, cursor: "pointer",
-                      background: expandedNote.pinned ? expandedPalette.accent + "22" : "transparent",
-                      border: `1px solid ${expandedNote.pinned ? expandedPalette.accent + "40" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)")}`,
+                      background: expandedNote.pinned ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)") : "transparent",
+                      border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      color: expandedNote.pinned ? expandedPalette.accent : (darkMode ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)"),
+                      color: darkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)",
                     }}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill={expandedNote.pinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={expandedNote.pinned ? "2" : "1.5"} strokeLinecap="round" strokeLinejoin="round"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z"/></svg>
                   </motion.button>
                   {/* Project chooser */}
                   <div style={{ position: "relative" }}>
