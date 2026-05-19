@@ -8536,7 +8536,7 @@ export default function CircularMenu() {
                 width: 180, height: 180,
                 borderRadius: "50%", cursor: "pointer",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                position: "relative", zIndex: 5,
+                position: "relative", zIndex: 12,
               }}
             >
               <AnimatePresence mode="popLayout">
