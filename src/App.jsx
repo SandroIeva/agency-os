@@ -8486,20 +8486,20 @@ export default function CircularMenu() {
           )}
         </AnimatePresence>
 
-        {/* Backdrop: dims & blurs the underlying view so menu sits cleanly on top.
-            zIndex must be HIGHER than view containers (which use zIndex: 5) but
-            lower than menu items (zIndex: 25). */}
+        {/* Solid backdrop: covers the underlying view with neutral theme bg
+            so menu opens on a clean canvas. zIndex must be HIGHER than view
+            containers (zIndex: 5) but lower than menu items (zIndex: 25). */}
         <AnimatePresence>
           {menuOpen && currentView !== "dashboard" && (
             <motion.div
-              initial={{ opacity: 0, backdropFilter: "blur(0px)" }}
-              animate={{ opacity: 1, backdropFilter: "blur(18px)" }}
-              exit={{ opacity: 0, backdropFilter: "blur(0px)" }}
-              transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
               onClick={handleClose}
               style={{
                 position: "absolute", inset: 0, zIndex: 10,
-                background: darkMode ? "rgba(10,10,15,0.55)" : "rgba(255,255,255,0.5)",
+                background: theme.bg,
               }}
             />
           )}
