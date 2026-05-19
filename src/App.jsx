@@ -4940,6 +4940,8 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
   const [loading, setLoading] = useState(true);
   const [hoveredId, setHoveredId] = useState(null);
   const [mouseOnCard, setMouseOnCard] = useState({});
+  const [projects, setProjects] = useState([]);
+  const [projectMenuOpenFor, setProjectMenuOpenFor] = useState(null);
   const saveTimersRef = useRef({});
   const rotationMapRef = useRef({}); // stable random rotation per note id
 
@@ -4958,6 +4960,13 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
     })();
   }, [session?.user?.id]);
 
+  // Load projects (same source as Kanban brands)
+  useEffect(() => {
+    if (!userOrg?.id) return;
+    supabase.from("projects").select("*").eq("org_id", userOrg.id)
+      .then(({ data }) => setProjects(data || []));
+  }, [userOrg?.id]);
+
   // Stable rotation per note (looks organic but doesn't jitter on re-render)
   const getRotation = (id) => {
     if (!rotationMapRef.current[id]) {
@@ -4969,16 +4978,30 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
   const createNote = async (color = "sand") => {
     const colors = Object.keys(NOTE_COLORS);
     const randomColor = color === "sand" ? colors[Math.floor(Math.random() * colors.length)] : color;
+    // If user is filtering by a project, new notes inherit that project
+    let inheritProject = null;
+    if (filterMode.startsWith("project:")) {
+      inheritProject = filterMode.slice(8);
+    } else if (filterMode === "private") {
+      inheritProject = null;
+    }
     const { data } = await supabase.from("notes").insert({
       user_id: session.user.id,
       org_id: userOrg?.id || null,
       content: "",
       color: randomColor,
+      project_name: inheritProject,
     }).select().single();
     if (data) {
       setNotes(prev => [data, ...prev]);
       setExpandedId(data.id);
     }
+  };
+
+  const setNoteProject = async (id, projectName) => {
+    updateNoteLocal(id, { project_name: projectName });
+    setProjectMenuOpenFor(null);
+    await supabase.from("notes").update({ project_name: projectName }).eq("id", id);
   };
 
   const updateNoteLocal = (id, patch) => {
@@ -5015,16 +5038,6 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
     await supabase.from("notes").delete().eq("id", id);
   };
 
-  // Extract hashtags for filter chips
-  const allTags = useMemo(() => {
-    const tags = new Set();
-    notes.forEach(n => {
-      const matches = (n.content || "").match(/#[\wäöüÄÖÜß]+/g);
-      if (matches) matches.forEach(t => tags.add(t.toLowerCase()));
-    });
-    return Array.from(tags).slice(0, 6);
-  }, [notes]);
-
   // Filter + search + sort
   const visibleNotes = useMemo(() => {
     let arr = [...notes];
@@ -5033,16 +5046,10 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
 
     // Filter mode
     if (filterMode === "pinned") arr = arr.filter(n => n.pinned);
-    else if (filterMode === "today") {
-      const now = new Date();
-      const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-      arr = arr.filter(n => new Date(n.updated_at).getTime() >= today0);
-    } else if (filterMode === "week") {
-      const weekAgo = Date.now() - 7 * 86400000;
-      arr = arr.filter(n => new Date(n.updated_at).getTime() >= weekAgo);
-    } else if (filterMode.startsWith("tag:")) {
-      const tag = filterMode.slice(4);
-      arr = arr.filter(n => (n.content || "").toLowerCase().includes(tag));
+    else if (filterMode === "private") arr = arr.filter(n => !n.project_name);
+    else if (filterMode.startsWith("project:")) {
+      const projName = filterMode.slice(8);
+      arr = arr.filter(n => n.project_name === projName);
     }
 
     // Sort
@@ -5154,8 +5161,10 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
           <motion.div
             initial={{ scale: 0, rotate: -45 }} animate={{ scale: 1, rotate: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 15 }}
-            style={{ position: "absolute", top: 10, right: 12, fontSize: 14, color: accent }}
-          >📌</motion.div>
+            style={{ position: "absolute", top: 10, right: 12, color: accent, display: "flex", alignItems: "center", justifyContent: "center" }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z"/></svg>
+          </motion.div>
         )}
 
         <div style={{
@@ -5197,47 +5206,49 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
               }}
               onClick={(e) => e.stopPropagation()}
             >
-              <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => togglePin(note.id)} title="Pin"
-                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, fontSize: 12, lineHeight: 1, color: accent, width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                {note.pinned ? "📌" : "📍"}
+              <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => togglePin(note.id)} title={note.pinned ? "Entpinnen" : "Pinnen"}
+                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, color: note.pinned ? accent : (darkMode ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.5)"), width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill={note.pinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.6"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </motion.button>
               <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => setColorPickerId(showColorPicker ? null : note.id)} title="Farbe"
                 style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, lineHeight: 1, width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <div style={{ width: 12, height: 12, borderRadius: "50%", background: accent }} />
               </motion.button>
               <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => setConfirmDelete(note)} title="Löschen"
-                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, fontSize: 12, lineHeight: 1, color: darkMode ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                🗑
+                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, color: darkMode ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.5)", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </motion.button>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Color picker popover */}
+        {/* Color picker popover — inline row, doesn't overflow card */}
         <AnimatePresence>
           {showColorPicker && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 6 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 6 }}
+              initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.92 }}
               transition={{ duration: 0.18 }}
               onClick={(e) => e.stopPropagation()}
               style={{
-                position: "absolute", bottom: 44, right: 10, zIndex: 15,
-                padding: 8, borderRadius: 12,
-                background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.98)",
+                position: "absolute", bottom: 8, left: 8, right: 8, zIndex: 15,
+                padding: "6px 8px", borderRadius: 12,
+                background: darkMode ? "rgba(28,28,38,0.96)" : "rgba(255,255,255,0.96)",
+                backdropFilter: "blur(8px)",
                 border: `1px solid ${theme.border}`,
-                boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
-                display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6,
+                boxShadow: "0 8px 20px rgba(0,0,0,0.18)",
+                display: "flex", justifyContent: "space-between", gap: 4,
               }}
             >
               {Object.entries(NOTE_COLORS).map(([key, c]) => (
-                <motion.div key={key} whileHover={{ scale: 1.2 }} whileTap={{ scale: 0.9 }}
+                <motion.div key={key} whileHover={{ scale: 1.25 }} whileTap={{ scale: 0.9 }}
                   onClick={() => setColor(note.id, key)}
                   style={{
-                    width: 22, height: 22, borderRadius: "50%",
+                    width: 20, height: 20, borderRadius: "50%",
                     background: c.accent,
                     cursor: "pointer",
-                    border: note.color === key ? `2px solid ${darkMode ? "#fff" : "#000"}` : "2px solid transparent",
+                    border: note.color === key ? `2px solid ${darkMode ? "#fff" : "#1a1a2e"}` : "2px solid transparent",
                     boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                    flexShrink: 0,
                   }}
                 />
               ))}
@@ -5252,13 +5263,18 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
   const expandedPalette = expandedNote ? (NOTE_COLORS[expandedNote.color] || NOTE_COLORS.sand) : null;
   const expandedBg = expandedNote ? (darkMode ? expandedPalette.dark : expandedPalette.light) : "transparent";
 
-  // Filter chips config
+  // Filter chips config — project-based (mirrors Kanban brands) + Privat + Gepinnt
   const filterChips = [
     { id: "all", label: "Alle", count: notes.length },
-    { id: "pinned", label: "📌 Gepinnt", count: notes.filter(n => n.pinned).length },
-    { id: "today", label: "Heute", count: notes.filter(n => { const t0 = new Date(); t0.setHours(0,0,0,0); return new Date(n.updated_at) >= t0; }).length },
-    { id: "week", label: "Diese Woche", count: notes.filter(n => Date.now() - new Date(n.updated_at).getTime() < 7*86400000).length },
-    ...allTags.map(tag => ({ id: "tag:" + tag, label: tag, count: notes.filter(n => (n.content || "").toLowerCase().includes(tag)).length })),
+    { id: "pinned", label: "Gepinnt", count: notes.filter(n => n.pinned).length, icon: "pin" },
+    ...projects.map(p => ({
+      id: "project:" + p.name,
+      label: p.name,
+      count: notes.filter(n => n.project_name === p.name).length,
+      logo: p.logo_url,
+      color: p.color,
+    })),
+    { id: "private", label: "Privat", count: notes.filter(n => !n.project_name).length, icon: "lock" },
   ].filter(c => c.id === "all" || c.count > 0);
 
   return (
@@ -5283,15 +5299,24 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
               <motion.div key={chip.id} whileTap={{ scale: 0.96 }} whileHover={{ y: -1 }}
                 onClick={() => setFilterMode(chip.id)}
                 style={{
-                  padding: "6px 12px", borderRadius: 999, cursor: "pointer",
+                  padding: chip.logo ? "4px 12px 4px 6px" : "6px 12px", borderRadius: 999, cursor: "pointer",
                   fontSize: 12, fontFamily: FONT, fontWeight: 500,
                   background: active ? (darkMode ? "rgba(255,255,255,0.12)" : "#1a1a2e") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
-                  color: active ? (darkMode ? "#fff" : "#fff") : theme.textDim,
+                  color: active ? "#fff" : theme.textDim,
                   border: `1px solid ${active ? "transparent" : theme.borderFaint}`,
                   display: "flex", alignItems: "center", gap: 6,
                   transition: "background 0.2s ease, color 0.2s ease",
                 }}
               >
+                {chip.icon === "pin" && (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                )}
+                {chip.icon === "lock" && (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                )}
+                {chip.logo && (
+                  <img src={chip.logo} alt="" style={{ width: 18, height: 18, borderRadius: 4, objectFit: "cover", flexShrink: 0 }} />
+                )}
                 {chip.label}
                 {chip.count > 0 && (
                   <span style={{ fontSize: 10, opacity: 0.7 }}>{chip.count}</span>
@@ -5352,8 +5377,10 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
           </AnimatePresence>
         </div>
 
-        {/* Search — minimal: icon collapses to input on click */}
-        <motion.div layout
+        {/* Search — clean width expand, no shape morph */}
+        <motion.div
+          animate={{ width: searchOpen ? 220 : 32 }}
+          transition={{ type: "spring", stiffness: 320, damping: 28 }}
           style={{
             display: "flex", alignItems: "center",
             height: 32,
@@ -5366,7 +5393,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
           <motion.div whileTap={{ scale: 0.95 }} whileHover={{ y: -1 }}
             onClick={() => { setSearchOpen(true); }}
             style={{
-              width: 32, height: 32, cursor: "pointer",
+              width: 32, height: 32, cursor: "pointer", flexShrink: 0,
               display: "flex", alignItems: "center", justifyContent: "center",
               color: theme.textDim,
             }}
@@ -5376,17 +5403,17 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
           <AnimatePresence>
             {searchOpen && (
               <motion.input
-                initial={{ width: 0, opacity: 0 }} animate={{ width: 180, opacity: 1 }} exit={{ width: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                transition={{ duration: 0.2, delay: 0.1 }}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onBlur={() => { if (!search.trim()) setSearchOpen(false); }}
                 placeholder="Suchen..."
                 autoFocus
                 style={{
-                  height: 32, background: "transparent", border: "none", outline: "none",
+                  flex: 1, height: 32, background: "transparent", border: "none", outline: "none",
                   fontSize: 13, fontFamily: FONT, color: theme.text,
-                  padding: "0 10px 0 0",
+                  padding: "0 10px 0 0", minWidth: 0,
                 }}
               />
             )}
@@ -5410,8 +5437,13 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
         </motion.button>
       </div>
 
-      {/* Content area — extends to bottom of viewport */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "8px 32px 100px", minHeight: 0 }}
+      {/* Content area — extends to bottom of viewport with fade mask so the
+          bottom navigation gradient is visible underneath without a hard edge */}
+      <div style={{
+        flex: 1, overflowY: "auto", padding: "8px 32px 140px", minHeight: 0,
+        WebkitMaskImage: "linear-gradient(to bottom, black 0, black calc(100% - 60px), transparent 100%)",
+        maskImage: "linear-gradient(to bottom, black 0, black calc(100% - 60px), transparent 100%)",
+      }}
         onDoubleClick={(e) => {
           // Double-click on empty area → create note
           if (e.target === e.currentTarget) createNote();
@@ -5494,14 +5526,82 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <motion.button whileTap={{ scale: 0.9 }} onClick={() => togglePin(expandedNote.id)}
+                    title={expandedNote.pinned ? "Entpinnen" : "Pinnen"}
                     style={{
                       width: 32, height: 32, borderRadius: 10, cursor: "pointer",
                       background: expandedNote.pinned ? expandedPalette.accent + "22" : "transparent",
                       border: `1px solid ${expandedNote.pinned ? expandedPalette.accent + "40" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)")}`,
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 13, color: expandedPalette.accent,
+                      color: expandedNote.pinned ? expandedPalette.accent : (darkMode ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)"),
                     }}
-                  >📌</motion.button>
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill={expandedNote.pinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </motion.button>
+                  {/* Project chooser */}
+                  <div style={{ position: "relative" }}>
+                    <motion.button whileTap={{ scale: 0.95 }} onClick={() => setProjectMenuOpenFor(projectMenuOpenFor === expandedNote.id ? null : expandedNote.id)}
+                      title="Projekt"
+                      style={{
+                        height: 32, padding: "0 12px", borderRadius: 10, cursor: "pointer",
+                        background: expandedNote.project_name ? expandedPalette.accent + "15" : "transparent",
+                        border: `1px solid ${expandedNote.project_name ? expandedPalette.accent + "30" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)")}`,
+                        display: "flex", alignItems: "center", gap: 6,
+                        fontSize: 12, fontFamily: FONT, fontWeight: 500,
+                        color: expandedNote.project_name ? expandedPalette.accent : (darkMode ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)"),
+                      }}
+                    >
+                      {expandedNote.project_name ? (() => {
+                        const p = projects.find(pj => pj.name === expandedNote.project_name);
+                        return p?.logo_url ? (
+                          <img src={p.logo_url} alt="" style={{ width: 16, height: 16, borderRadius: 3, objectFit: "cover" }} />
+                        ) : (
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M3 10h18M9 6V4h6v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                        );
+                      })() : (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                      )}
+                      {expandedNote.project_name || "Privat"}
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.6 }}><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </motion.button>
+                    <AnimatePresence>
+                      {projectMenuOpenFor === expandedNote.id && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 6, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                          transition={{ duration: 0.15 }}
+                          style={{
+                            position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 30,
+                            minWidth: 180, padding: 6, borderRadius: 12,
+                            background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
+                            border: `1px solid ${theme.border}`,
+                            boxShadow: "0 12px 32px rgba(0,0,0,0.2)",
+                          }}
+                        >
+                          <motion.div whileHover={{ background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
+                            onClick={() => setNoteProject(expandedNote.id, null)}
+                            style={{ padding: "8px 10px", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: FONT, color: !expandedNote.project_name ? theme.accent : theme.text, fontWeight: !expandedNote.project_name ? 600 : 400 }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                            Privat
+                            {!expandedNote.project_name && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ marginLeft: "auto" }}><path d="M5 13l4 4L19 7" stroke={theme.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          </motion.div>
+                          {projects.map(p => (
+                            <motion.div key={p.id} whileHover={{ background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
+                              onClick={() => setNoteProject(expandedNote.id, p.name)}
+                              style={{ padding: "8px 10px", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: FONT, color: expandedNote.project_name === p.name ? theme.accent : theme.text, fontWeight: expandedNote.project_name === p.name ? 600 : 400 }}
+                            >
+                              {p.logo_url ? (
+                                <img src={p.logo_url} alt="" style={{ width: 18, height: 18, borderRadius: 4, objectFit: "cover" }} />
+                              ) : (
+                                <div style={{ width: 18, height: 18, borderRadius: 4, background: (p.color || "#8B7AFF") + "30" }} />
+                              )}
+                              {p.name}
+                              {expandedNote.project_name === p.name && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ marginLeft: "auto" }}><path d="M5 13l4 4L19 7" stroke={theme.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                            </motion.div>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                   <div style={{ position: "relative" }}>
                     <motion.button whileTap={{ scale: 0.9 }} onClick={() => setColorPickerId(colorPickerId === expandedNote.id ? null : expandedNote.id)}
                       style={{
@@ -5542,14 +5642,17 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
                     </AnimatePresence>
                   </div>
                   <motion.button whileTap={{ scale: 0.9 }} onClick={() => setConfirmDelete(expandedNote)}
+                    title="Löschen"
                     style={{
                       width: 32, height: 32, borderRadius: 10, cursor: "pointer",
                       background: "transparent",
                       border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 13, color: darkMode ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.5)",
+                      color: darkMode ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.5)",
                     }}
-                  >🗑</motion.button>
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </motion.button>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.45)" }}>
