@@ -9293,14 +9293,55 @@ export default function CircularMenu() {
             const handleSaveReminder = async () => {
               if (!remTitle.trim() || !remDate || !remTime) return;
               setSaving(true);
-              const remindAtFull = new Date(`${remDate}T${remTime}`);
-              const remindAt = new Date(remindAtFull.getTime() - remLead * 60000);
+              const eventTime = new Date(`${remDate}T${remTime}`);
+              const remindAt = new Date(eventTime.getTime() - remLead * 60000);
+
+              // Try to create a Google Calendar event with a popup reminder
+              // This gives the user native OS notifications on their phone — no PWA needed
+              let googleEventId = null;
+              try {
+                const providerToken = await ensureValidToken();
+                if (providerToken) {
+                  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                  const eventEnd = new Date(eventTime.getTime() + 15 * 60000); // 15-min event
+                  const calBody = {
+                    summary: "⏰ " + remTitle.trim(),
+                    description: "Erinnerung aus i7 OS",
+                    start: { dateTime: eventTime.toISOString(), timeZone: tz },
+                    end: { dateTime: eventEnd.toISOString(), timeZone: tz },
+                    reminders: {
+                      useDefault: false,
+                      overrides: [{ method: "popup", minutes: remLead }],
+                    },
+                    transparency: "transparent", // doesn't block calendar availability
+                  };
+                  const calRes = await fetch(
+                    "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+                    {
+                      method: "POST",
+                      headers: { Authorization: `Bearer ${providerToken}`, "Content-Type": "application/json" },
+                      body: JSON.stringify(calBody),
+                    }
+                  );
+                  if (calRes.ok) {
+                    const calData = await calRes.json();
+                    googleEventId = calData.id;
+                    console.log("[Reminder] Google Calendar event created:", googleEventId);
+                  } else {
+                    console.warn("[Reminder] Calendar event creation failed:", calRes.status);
+                  }
+                }
+              } catch (e) {
+                console.warn("[Reminder] Calendar sync failed (non-fatal):", e.message);
+              }
+
               const { data: newRem } = await supabase.from("reminders").insert({
                 user_id: session.user.id,
                 org_id: userOrg?.id || null,
                 title: remTitle.trim(),
                 remind_at: remindAt.toISOString(),
                 lead_minutes: remLead,
+                google_event_id: googleEventId,
               }).select().single();
               if (newRem) setDashboardReminders(prev => [...prev, newRem].sort((a, b) => new Date(a.remind_at) - new Date(b.remind_at)));
               setSaving(false);
@@ -9398,6 +9439,19 @@ export default function CircularMenu() {
                             }}
                           >{opt.label}</motion.div>
                         ))}
+                      </div>
+                    </div>
+
+                    {/* Info hint */}
+                    <div style={{
+                      padding: "10px 12px", borderRadius: 10,
+                      background: darkMode ? "rgba(0,184,148,0.06)" : "rgba(0,184,148,0.08)",
+                      border: `1px solid ${darkMode ? "rgba(0,184,148,0.15)" : "rgba(0,184,148,0.2)"}`,
+                      display: "flex", alignItems: "flex-start", gap: 8,
+                    }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 1 }}><path d="M3 9l9-6 9 6v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke="#00B894" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 22V12h6v10" stroke="#00B894" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
+                        Wird auch als Google Calendar Event angelegt — du erhältst eine native Notification auf deinem Handy zum richtigen Zeitpunkt.
                       </div>
                     </div>
 
