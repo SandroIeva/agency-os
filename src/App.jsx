@@ -9661,12 +9661,8 @@ export default function CircularMenu() {
             onClick={() => {
               if (menuOpen && menuSource === "grid") { handleClose(); return; }
               const openMenu = () => { setMenuSource("grid"); setActiveIndex(0); try { sounds.menuOpen(); } catch(e) {} setMenuOpen(true); setSubOpen(false); };
-              if (currentView !== "dashboard") {
-                setCurrentView("dashboard");
-                setTimeout(openMenu, 450);
-              } else {
-                openMenu();
-              }
+              if (currentView !== "dashboard") setCurrentView("dashboard");
+              setTimeout(openMenu, currentView !== "dashboard" ? 450 : 300);
             }}
             style={{ cursor: "pointer" }}>
             <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
@@ -9699,13 +9695,9 @@ export default function CircularMenu() {
             onClick={() => {
               if (menuOpen && menuSource === "plus") { handleClose(); return; }
               const openMenu = () => { setMenuSource("plus"); setActiveIndex(0); try { sounds.menuOpen(); } catch(e) {} setMenuOpen(true); setSubOpen(false); };
-              if (currentView !== "dashboard") {
-                // Fade the current view out first, then open the menu so they don't overlap
-                setCurrentView("dashboard");
-                setTimeout(openMenu, 450);
-              } else {
-                openMenu();
-              }
+              // Always stagger menu open so it feels deliberate (consistent across all views)
+              if (currentView !== "dashboard") setCurrentView("dashboard");
+              setTimeout(openMenu, currentView !== "dashboard" ? 450 : 300);
             }}
             style={{ cursor: "pointer" }}>
             <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
