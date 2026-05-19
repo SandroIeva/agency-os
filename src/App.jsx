@@ -6995,9 +6995,9 @@ export default function CircularMenu() {
       {/* Click-away for notification dropdown */}
       {notifOpen && <div onClick={() => setNotifOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 49 }} />}
 
-      {/* Top-right bar: Bell + Weather */}
+      {/* Top-right bar: Bell + Weather — only visible on dashboard */}
       <AnimatePresence>
-        {!panelOpen && !tasksOpen && currentView !== "chat" && (
+        {!panelOpen && !tasksOpen && currentView === "dashboard" && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, filter: "blur(4px)" }}
             transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
