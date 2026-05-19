@@ -5287,8 +5287,8 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
         background: theme.bg,
         // Fade the whole view to transparent at the bottom so the dashboard's
         // gradient blob / nav bar reads cleanly underneath without a hard edge
-        WebkitMaskImage: "linear-gradient(to bottom, black 0, black calc(100% - 80px), transparent 100%)",
-        maskImage: "linear-gradient(to bottom, black 0, black calc(100% - 80px), transparent 100%)",
+        WebkitMaskImage: "linear-gradient(to bottom, black 0, black calc(100% - 220px), transparent calc(100% - 40px))",
+        maskImage: "linear-gradient(to bottom, black 0, black calc(100% - 220px), transparent calc(100% - 40px))",
         overflow: "hidden",
       }}
     >
@@ -5363,7 +5363,6 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
                   { id: "updated", label: "Zuletzt bearbeitet" },
                   { id: "created", label: "Erstellt" },
                   { id: "alpha", label: "A → Z" },
-                  { id: "shuffle", label: "Zufällig 🎲" },
                 ].map(s => (
                   <motion.div key={s.id} whileHover={{ background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
                     onClick={() => { setSortMode(s.id); setSortMenuOpen(false); }}
