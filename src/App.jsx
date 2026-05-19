@@ -4583,6 +4583,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       style={{
         position: "absolute", inset: 0, display: "flex",
         padding: "24px 24px 24px 24px",
+        zIndex: 5,
       }}
     >
       <div style={{
@@ -9227,7 +9228,10 @@ export default function CircularMenu() {
             whileTap={{ scale: 0.95 }}
             transition={smoothSpring}
             onClick={() => {
-              if (menuOpen && menuSource === "plus") { handleClose(); } else { setMenuSource("plus"); setActiveIndex(0); try { sounds.menuOpen(); } catch(e) {} setMenuOpen(true); setSubOpen(false); }
+              if (menuOpen && menuSource === "plus") { handleClose(); return; }
+              // Close any open view first so the menu doesn't overlap it
+              if (currentView !== "dashboard") setCurrentView("dashboard");
+              setMenuSource("plus"); setActiveIndex(0); try { sounds.menuOpen(); } catch(e) {} setMenuOpen(true); setSubOpen(false);
             }}
             style={{ cursor: "pointer" }}>
             <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
