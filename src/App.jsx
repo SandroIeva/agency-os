@@ -8486,6 +8486,23 @@ export default function CircularMenu() {
           )}
         </AnimatePresence>
 
+        {/* Backdrop: dims & blurs the underlying view so menu sits cleanly on top */}
+        <AnimatePresence>
+          {menuOpen && currentView !== "dashboard" && (
+            <motion.div
+              initial={{ opacity: 0, backdropFilter: "blur(0px)" }}
+              animate={{ opacity: 1, backdropFilter: "blur(18px)" }}
+              exit={{ opacity: 0, backdropFilter: "blur(0px)" }}
+              transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+              onClick={handleClose}
+              style={{
+                position: "absolute", inset: 0, zIndex: 3,
+                background: darkMode ? "rgba(10,10,15,0.55)" : "rgba(255,255,255,0.5)",
+              }}
+            />
+          )}
+        </AnimatePresence>
+
         {/* Mask circle */}
         <AnimatePresence>
           {menuOpen && (
@@ -10181,10 +10198,10 @@ export default function CircularMenu() {
             transition={smoothSpring}
             onClick={() => {
               if (menuOpen && menuSource === "plus") { handleClose(); return; }
-              const openMenu = () => { setMenuSource("plus"); setActiveIndex(0); try { sounds.menuOpen(); } catch(e) {} setMenuOpen(true); setSubOpen(false); };
-              // Always stagger menu open so it feels deliberate (consistent across all views)
-              if (currentView !== "dashboard") setCurrentView("dashboard");
-              setTimeout(openMenu, currentView !== "dashboard" ? 450 : 300);
+              // Open menu directly — view stays mounted behind. Menu has its
+              // own dark center + blur backdrop, so no need to switch views first.
+              setMenuSource("plus"); setActiveIndex(0); try { sounds.menuOpen(); } catch(e) {}
+              setMenuOpen(true); setSubOpen(false);
             }}
             style={{ cursor: "pointer" }}>
             <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
