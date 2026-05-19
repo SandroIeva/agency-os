@@ -9299,11 +9299,16 @@ export default function CircularMenu() {
               // Try to create a Google Calendar event with a popup reminder
               // This gives the user native OS notifications on their phone — no PWA needed
               let googleEventId = null;
+              let calendarError = null;
               try {
+                console.log("[Reminder] Requesting fresh Google token...");
                 const providerToken = await ensureValidToken();
-                if (providerToken) {
+                console.log("[Reminder] Token result:", providerToken ? `got token (${providerToken.slice(0, 20)}...)` : "NULL — refresh failed");
+                if (!providerToken) {
+                  calendarError = "Kein Google-Zugriff (Token abgelaufen). Bitte einmal aus- und wieder einloggen.";
+                } else {
                   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                  const eventEnd = new Date(eventTime.getTime() + 15 * 60000); // 15-min event
+                  const eventEnd = new Date(eventTime.getTime() + 15 * 60000);
                   const calBody = {
                     summary: "⏰ " + remTitle.trim(),
                     description: "Erinnerung aus i7 OS",
@@ -9313,8 +9318,9 @@ export default function CircularMenu() {
                       useDefault: false,
                       overrides: [{ method: "popup", minutes: remLead }],
                     },
-                    transparency: "transparent", // doesn't block calendar availability
+                    transparency: "transparent",
                   };
+                  console.log("[Reminder] Creating calendar event:", calBody);
                   const calRes = await fetch(
                     "https://www.googleapis.com/calendar/v3/calendars/primary/events",
                     {
@@ -9326,13 +9332,16 @@ export default function CircularMenu() {
                   if (calRes.ok) {
                     const calData = await calRes.json();
                     googleEventId = calData.id;
-                    console.log("[Reminder] Google Calendar event created:", googleEventId);
+                    console.log("[Reminder] Google Calendar event created:", googleEventId, calData.htmlLink);
                   } else {
-                    console.warn("[Reminder] Calendar event creation failed:", calRes.status);
+                    const errBody = await calRes.text().catch(() => "");
+                    calendarError = `Calendar API: ${calRes.status} ${errBody.slice(0, 100)}`;
+                    console.warn("[Reminder] Calendar event creation failed:", calRes.status, errBody);
                   }
                 }
               } catch (e) {
-                console.warn("[Reminder] Calendar sync failed (non-fatal):", e.message);
+                calendarError = "Calendar sync error: " + e.message;
+                console.warn("[Reminder] Calendar sync failed:", e);
               }
 
               const { data: newRem } = await supabase.from("reminders").insert({
@@ -9346,6 +9355,17 @@ export default function CircularMenu() {
               if (newRem) setDashboardReminders(prev => [...prev, newRem].sort((a, b) => new Date(a.remind_at) - new Date(b.remind_at)));
               setSaving(false);
               setShowReminderModal(false);
+              if (calendarError && !googleEventId) {
+                // Surface as in-app notification so user knows phone push won't work
+                setNotifications(prev => [{
+                  id: "rem-calendar-error-" + Date.now(),
+                  type: "reminder",
+                  title: "⚠️ Reminder ohne Handy-Notification",
+                  body: "Reminder gespeichert, aber Google Calendar Sync fehlgeschlagen: " + calendarError,
+                  read: false,
+                  created_at: new Date().toISOString(),
+                }, ...prev]);
+              }
             };
 
             return (
