@@ -8458,6 +8458,7 @@ export default function CircularMenu() {
                 position: "absolute", top: "50%", left: "50%",
                 transform: "translate(-50%, -50%)",
                 pointerEvents: "none",
+                zIndex: 13,
               }}
             >
               <SegmentedRing count={itemCount} activeIndex={activeIndex} darkMode={darkMode} />
@@ -8477,6 +8478,7 @@ export default function CircularMenu() {
                 position: "absolute", top: "50%", left: "50%",
                 transform: "translate(-50%, -50%)",
                 pointerEvents: "none",
+                zIndex: 13,
               }}
             >
               <svg width={200} height={200}>
@@ -8487,8 +8489,8 @@ export default function CircularMenu() {
         </AnimatePresence>
 
         {/* Solid backdrop: covers the underlying view with neutral theme bg
-            so menu opens on a clean canvas. zIndex must be HIGHER than view
-            containers (zIndex: 5) but lower than menu items (zIndex: 25). */}
+            so menu opens on a clean canvas. pointer-events:none so the wheel
+            handler on the outer container still receives scroll events. */}
         <AnimatePresence>
           {menuOpen && currentView !== "dashboard" && (
             <motion.div
@@ -8496,10 +8498,10 @@ export default function CircularMenu() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
-              onClick={handleClose}
               style={{
                 position: "absolute", inset: 0, zIndex: 10,
                 background: theme.bg,
+                pointerEvents: "none",
               }}
             />
           )}
