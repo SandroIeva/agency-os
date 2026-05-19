@@ -9417,7 +9417,12 @@ export default function CircularMenu() {
                     end: { dateTime: eventEnd.toISOString(), timeZone: tz },
                     reminders: {
                       useDefault: false,
-                      overrides: [{ method: "popup", minutes: remLead }],
+                      overrides: [
+                        // Popup: works with Google Calendar app on phone
+                        { method: "popup", minutes: remLead },
+                        // Email: guaranteed delivery via Gmail (which is on every iPhone)
+                        { method: "email", minutes: remLead },
+                      ],
                     },
                     transparency: "transparent",
                   };
