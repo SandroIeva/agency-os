@@ -4941,6 +4941,7 @@ export default function CircularMenu() {
   const [triggerNewTask, setTriggerNewTask] = useState(false);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [pushSubExists, setPushSubExists] = useState(false);
+  const [googleConnectionBroken, setGoogleConnectionBroken] = useState(false);
   const [pushSetupSending, setPushSetupSending] = useState(false);
   const [pushSetupSent, setPushSetupSent] = useState(false);
   // Push-setup overlay (shown when ?push-setup=true)
@@ -5261,12 +5262,35 @@ export default function CircularMenu() {
     return session?.provider_token || googleTokenRef.current || null;
   }, [session]);
 
+  // Persist Google refresh_token to DB (survives logout, cookie clear, device switch)
+  const persistGoogleRefreshToken = useCallback(async (token, userId) => {
+    if (!token || !userId || token.length < 20) return;
+    localStorage.setItem("agencyos-google-refresh-token", token);
+    try {
+      await supabase.from("google_oauth_tokens").upsert({
+        user_id: userId,
+        refresh_token: token,
+        updated_at: new Date().toISOString(),
+      });
+      console.log("[Auth] Refresh token persisted to DB");
+    } catch (e) {
+      console.warn("[Auth] Failed to persist refresh token to DB:", e.message);
+    }
+  }, []);
+
   // Listen for auth state changes — persist provider_token and refresh_token
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
+    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
       if (s?.provider_token) storeGoogleToken(s.provider_token);
       if (s?.provider_refresh_token) {
-        localStorage.setItem("agencyos-google-refresh-token", s.provider_refresh_token);
+        await persistGoogleRefreshToken(s.provider_refresh_token, s.user.id);
+      } else if (s?.user?.id) {
+        // Try to load from DB if not in current session
+        const { data } = await supabase.from("google_oauth_tokens").select("refresh_token").eq("user_id", s.user.id).maybeSingle();
+        if (data?.refresh_token) {
+          localStorage.setItem("agencyos-google-refresh-token", data.refresh_token);
+          console.log("[Auth] Refresh token loaded from DB");
+        }
       }
       setSession(s);
       setAuthLoading(false);
@@ -5275,8 +5299,8 @@ export default function CircularMenu() {
       console.log("[Auth]", event, s ? "session present" : "no session");
 
       if (s?.provider_token) storeGoogleToken(s.provider_token);
-      if (s?.provider_refresh_token) {
-        localStorage.setItem("agencyos-google-refresh-token", s.provider_refresh_token);
+      if (s?.provider_refresh_token && s?.user?.id) {
+        persistGoogleRefreshToken(s.provider_refresh_token, s.user.id);
       }
 
       // TOKEN_REFRESHED with a valid session — update normally
@@ -5310,7 +5334,7 @@ export default function CircularMenu() {
       setAuthLoading(false);
     });
     return () => subscription.unsubscribe();
-  }, [storeGoogleToken]);
+  }, [storeGoogleToken, persistGoogleRefreshToken]);
 
   // Auto-detect language from Google profile locale (only if user hasn't manually set one)
   useEffect(() => {
@@ -5392,8 +5416,14 @@ export default function CircularMenu() {
               return onSuccess(data.access_token);
             }
           } else if (res.status === 400 || res.status === 401) {
-            // Refresh token is invalid/revoked — remove it so we don't keep retrying
+            // Refresh token is invalid/revoked — remove from local AND DB
             localStorage.removeItem("agencyos-google-refresh-token");
+            try {
+              const { data: { session: s } } = await supabase.auth.getSession();
+              if (s?.user?.id) await supabase.from("google_oauth_tokens").delete().eq("user_id", s.user.id);
+            } catch (e) { /* ignore */ }
+            // Mark connection as broken so we can show re-auth UI
+            setGoogleConnectionBroken(true);
           }
         } catch (e) {
           console.warn("Server refresh failed:", e.message);
@@ -5405,10 +5435,11 @@ export default function CircularMenu() {
         const { data: { session: freshSession } } = await supabase.auth.refreshSession();
         if (freshSession?.provider_token) {
           storeGoogleToken(freshSession.provider_token);
-          if (freshSession.provider_refresh_token) {
-            localStorage.setItem("agencyos-google-refresh-token", freshSession.provider_refresh_token);
+          if (freshSession.provider_refresh_token && freshSession.user?.id) {
+            await persistGoogleRefreshToken(freshSession.provider_refresh_token, freshSession.user.id);
           }
           setSession(freshSession);
+          setGoogleConnectionBroken(false);
           return onSuccess(freshSession.provider_token);
         }
       } catch (e) {
@@ -5420,7 +5451,23 @@ export default function CircularMenu() {
 
     refreshPromiseRef.current = doRefresh();
     return refreshPromiseRef.current;
-  }, [storeGoogleToken]);
+  }, [storeGoogleToken, persistGoogleRefreshToken]);
+
+  // Manual re-connect: force fresh OAuth consent to get new refresh_token
+  const reconnectGoogle = useCallback(async () => {
+    refreshFailCountRef.current = 0;
+    refreshBackoffUntilRef.current = 0;
+    setGoogleConnectionBroken(false);
+    // Trigger Google OAuth with prompt:consent to ensure refresh_token comes back
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin,
+        scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/generative-language.retriever https://www.googleapis.com/auth/cloud-platform",
+        queryParams: { access_type: "offline", prompt: "consent" },
+      },
+    });
+  }, []);
 
   // ── ensureValidToken: async getter that guarantees a fresh token ──
   // Call this BEFORE any Google API request instead of getProviderToken()
@@ -5474,8 +5521,8 @@ export default function CircularMenu() {
       supabase.auth.refreshSession().then(({ data: { session: s } }) => {
         if (s) {
           if (s.provider_token) storeGoogleToken(s.provider_token);
-          if (s.provider_refresh_token) {
-            localStorage.setItem("agencyos-google-refresh-token", s.provider_refresh_token);
+          if (s.provider_refresh_token && s.user?.id) {
+            persistGoogleRefreshToken(s.provider_refresh_token, s.user.id);
           }
           setSession(s);
         }
@@ -5494,8 +5541,8 @@ export default function CircularMenu() {
         const { data: { session: refreshed } } = await supabase.auth.refreshSession();
         if (refreshed) {
           if (refreshed.provider_token) storeGoogleToken(refreshed.provider_token);
-          if (refreshed.provider_refresh_token) {
-            localStorage.setItem("agencyos-google-refresh-token", refreshed.provider_refresh_token);
+          if (refreshed.provider_refresh_token && refreshed.user?.id) {
+            await persistGoogleRefreshToken(refreshed.provider_refresh_token, refreshed.user.id);
           }
           setSession(refreshed);
           console.log("[Auth] Session recovered on tab focus");
@@ -8921,6 +8968,57 @@ export default function CircularMenu() {
               </div>{/* end right column */}
               </div>{/* end grid */}
 
+              {/* Google Connection Status */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+                style={{ marginTop: 24 }}
+              >
+                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
+                  Google-Verbindung
+                </div>
+                <div style={{
+                  borderRadius: 20,
+                  background: googleConnectionBroken ? "rgba(239, 68, 68, 0.06)" : theme.cardBg,
+                  border: `1px solid ${googleConnectionBroken ? "rgba(239, 68, 68, 0.2)" : theme.border}`,
+                  padding: "20px 24px",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    <div style={{
+                      width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                      background: googleConnectionBroken ? "rgba(239, 68, 68, 0.1)" : "rgba(0, 184, 148, 0.1)",
+                      border: `1px solid ${googleConnectionBroken ? "rgba(239, 68, 68, 0.2)" : "rgba(0, 184, 148, 0.2)"}`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 20,
+                    }}>{googleConnectionBroken ? "⚠️" : "✓"}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
+                        {googleConnectionBroken ? "Verbindung unterbrochen" : "Google verbunden"}
+                      </div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.4 }}>
+                        {googleConnectionBroken
+                          ? "Calendar & Drive funktionieren nicht. Bitte neu verbinden — danach läuft alles automatisch."
+                          : "Calendar, Drive und Reminder-Sync sind aktiv. Token wird automatisch erneuert."
+                        }
+                      </div>
+                    </div>
+                    {googleConnectionBroken && (
+                      <motion.button
+                        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                        onClick={reconnectGoogle}
+                        style={{
+                          padding: "10px 18px", borderRadius: 12,
+                          background: "#8B7AFF", border: "none",
+                          color: "#fff", fontSize: 13, fontWeight: 500, fontFamily: FONT, cursor: "pointer",
+                          whiteSpace: "nowrap",
+                        }}
+                      >Neu verbinden</motion.button>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+
               {/* Push Notifications */}
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
@@ -9305,7 +9403,8 @@ export default function CircularMenu() {
                 const providerToken = await ensureValidToken();
                 console.log("[Reminder] Token result:", providerToken ? `got token (${providerToken.slice(0, 20)}...)` : "NULL — refresh failed");
                 if (!providerToken) {
-                  calendarError = "Kein Google-Zugriff (Token abgelaufen). Bitte einmal aus- und wieder einloggen.";
+                  calendarError = "Kein Google-Zugriff. Bitte in Settings → Google-Verbindung auf 'Neu verbinden' klicken.";
+                  setGoogleConnectionBroken(true);
                 } else {
                   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
                   const eventEnd = new Date(eventTime.getTime() + 15 * 60000);
