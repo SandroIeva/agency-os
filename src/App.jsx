@@ -10024,9 +10024,11 @@ export default function CircularMenu() {
             transition={smoothSpring}
             onClick={() => {
               if (menuOpen && menuSource === "grid") { handleClose(); return; }
-              const openMenu = () => { setMenuSource("grid"); setActiveIndex(0); try { sounds.menuOpen(); } catch(e) {} setMenuOpen(true); setSubOpen(false); };
-              if (currentView !== "dashboard") setCurrentView("dashboard");
-              setTimeout(openMenu, currentView !== "dashboard" ? 450 : 300);
+              // First click in a non-dashboard view → just navigate back to dashboard
+              if (currentView !== "dashboard") { setCurrentView("dashboard"); return; }
+              // Already on dashboard → open the menu
+              setMenuSource("grid"); setActiveIndex(0); try { sounds.menuOpen(); } catch(e) {}
+              setTimeout(() => { setMenuOpen(true); setSubOpen(false); }, 300);
             }}
             style={{ cursor: "pointer" }}>
             <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
