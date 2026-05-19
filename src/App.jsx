@@ -4927,7 +4927,7 @@ const NOTE_COLORS = {
   stone:    { light: "#EFEDEA", dark: "rgba(180, 175, 170, 0.10)", accent: "#7A7570", border: "rgba(122, 117, 112, 0.25)" },
 };
 
-function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
+function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidToken, llmKeys, llmProvider }) {
   const [notes, setNotes] = useState([]);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -4942,6 +4942,10 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
   const [mouseOnCard, setMouseOnCard] = useState({});
   const [projects, setProjects] = useState([]);
   const [projectMenuOpenFor, setProjectMenuOpenFor] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [polishing, setPolishing] = useState(false);
+  const recognitionRef = useRef(null);
+  const dictationStartContentRef = useRef("");
   const saveTimersRef = useRef({});
   const rotationMapRef = useRef({}); // stable random rotation per note id
 
@@ -4998,6 +5002,102 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
     setProjectMenuOpenFor(null);
     await supabase.from("notes").update({ project_name: projectName }).eq("id", id);
   };
+
+  // ── Dictation with optional AI grammar polish ──
+  const startDictation = (noteId) => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) { alert("Spracherkennung wird in diesem Browser nicht unterstützt. Bitte Chrome oder Safari verwenden."); return; }
+    if (isRecording) { stopDictation(); return; }
+
+    const note = notes.find(n => n.id === noteId);
+    if (!note) return;
+
+    dictationStartContentRef.current = note.content || "";
+    const recognition = new SpeechRecognition();
+    recognition.lang = "de-DE";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    let finalTranscript = note.content || "";
+    let needsSpace = finalTranscript.length > 0 && !finalTranscript.endsWith(" ") && !finalTranscript.endsWith("\n");
+
+    recognition.onresult = (event) => {
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          let cleaned = t.trim();
+          if (cleaned.length > 0) {
+            const prevChar = finalTranscript.trim().slice(-1);
+            if (!prevChar || prevChar === "." || prevChar === "!" || prevChar === "?" || prevChar === "\n") {
+              cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+            }
+          }
+          const lastChar = cleaned.slice(-1);
+          if (cleaned.length > 0 && !/[.!?,;:\n]/.test(lastChar)) cleaned += ".";
+          finalTranscript += (needsSpace ? " " : "") + cleaned;
+          needsSpace = true;
+          updateContent(noteId, finalTranscript);
+        }
+      }
+    };
+    recognition.onerror = (e) => { if (e.error !== "no-speech") console.error("Speech error:", e.error); };
+    recognition.onend = () => {
+      setIsRecording(false);
+      recognitionRef.current = null;
+      // After recording stops, polish the dictated portion with AI for grammar
+      polishDictation(noteId);
+    };
+    recognition.start();
+    recognitionRef.current = recognition;
+    setIsRecording(true);
+  };
+
+  const stopDictation = () => {
+    if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; }
+    setIsRecording(false);
+  };
+
+  const polishDictation = async (noteId) => {
+    const note = notes.find(n => n.id === noteId);
+    if (!note) return;
+    const startContent = dictationStartContentRef.current;
+    const dictatedPart = (note.content || "").slice(startContent.length).trim();
+    if (!dictatedPart || dictatedPart.length < 8) return; // nothing to polish
+
+    try {
+      setPolishing(true);
+      // Use the user's Google OAuth token to call Gemini via /api/chat-multi
+      const oauthToken = ensureValidToken ? await ensureValidToken() : null;
+      const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
+      const provider = llmProvider || "gemini";
+
+      const response = await fetch("/api/chat-multi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: dictatedPart,
+          systemPrompt: "Du bist ein Text-Editor. Korrigiere Grammatik, Rechtschreibung und Zeichensetzung des folgenden diktierten Texts auf Deutsch. Behalte den Sinn und den lockeren Sprachstil bei. Gib NUR den korrigierten Text zurück, ohne Anmerkungen oder Anführungszeichen.",
+          provider,
+          apiKey: apiKey || undefined,
+          oauthToken: (!apiKey && oauthToken) ? oauthToken : undefined,
+        }),
+      });
+      const data = await response.json();
+      const polished = data?.content?.[0]?.text?.trim();
+      if (polished && polished.length > 0 && polished !== dictatedPart) {
+        // Replace the dictated tail with the polished version
+        const newContent = startContent + (startContent && !startContent.endsWith("\n") && !startContent.endsWith(" ") ? " " : "") + polished;
+        updateContent(noteId, newContent);
+      }
+    } catch (e) {
+      console.warn("[Notes] Polish failed:", e.message);
+    } finally {
+      setPolishing(false);
+    }
+  };
+
+  // Cleanup recognition on unmount
+  useEffect(() => { return () => { if (recognitionRef.current) recognitionRef.current.stop(); }; }, []);
 
   const updateNoteLocal = (id, patch) => {
     setNotes(prev => prev.map(n => n.id === id ? { ...n, ...patch } : n));
@@ -5502,11 +5602,11 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            onClick={() => setExpandedId(null)}
+            onClick={() => { stopDictation(); setExpandedId(null); }}
             style={{
               position: "fixed", inset: 0, zIndex: 150,
-              background: darkMode ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.35)",
-              backdropFilter: "blur(14px)",
+              background: darkMode ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.55)",
+              backdropFilter: "blur(20px)",
               display: "flex", alignItems: "center", justifyContent: "center",
               padding: "5vh 24px",
             }}
@@ -5644,6 +5744,27 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
                       )}
                     </AnimatePresence>
                   </div>
+                  {/* Dictation button */}
+                  <motion.button whileTap={{ scale: 0.9 }} onClick={() => startDictation(expandedNote.id)}
+                    title={isRecording ? "Aufnahme stoppen" : "Diktieren"}
+                    animate={isRecording ? { scale: [1, 1.06, 1] } : { scale: 1 }}
+                    transition={isRecording ? { repeat: Infinity, duration: 1.2 } : { duration: 0.2 }}
+                    style={{
+                      width: 32, height: 32, borderRadius: 10, cursor: "pointer",
+                      background: isRecording ? "rgba(239, 68, 68, 0.12)" : (polishing ? expandedPalette.accent + "15" : "transparent"),
+                      border: `1px solid ${isRecording ? "rgba(239, 68, 68, 0.35)" : (polishing ? expandedPalette.accent + "30" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"))}`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: isRecording ? "#EF4444" : (polishing ? expandedPalette.accent : (darkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)")),
+                    }}
+                  >
+                    {polishing ? (
+                      <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+                      </motion.div>
+                    ) : (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0M12 19v3M8 22h8"/></svg>
+                    )}
+                  </motion.button>
                   <motion.button whileTap={{ scale: 0.9 }} onClick={() => setConfirmDelete(expandedNote)}
                     title="Löschen"
                     style={{
@@ -5661,7 +5782,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t }) {
                   <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.45)" }}>
                     {new Date(expandedNote.updated_at).toLocaleString("de-DE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
                   </div>
-                  <motion.button whileTap={{ scale: 0.9 }} onClick={() => setExpandedId(null)}
+                  <motion.button whileTap={{ scale: 0.9 }} onClick={() => { stopDictation(); setExpandedId(null); }}
                     style={{
                       width: 32, height: 32, borderRadius: 10, cursor: "pointer",
                       background: "transparent",
@@ -7995,7 +8116,7 @@ export default function CircularMenu() {
         {/* NOTES VIEW */}
         <AnimatePresence>
           {currentView === "notes" && (
-            <NotesView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} />
+            <NotesView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} ensureValidToken={ensureValidToken} llmKeys={llmKeys} llmProvider={llmProvider} />
           )}
         </AnimatePresence>
 
