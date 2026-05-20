@@ -4394,7 +4394,10 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
   const [msgInput, setMsgInput] = useState("");
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
+  const [pendingAttachment, setPendingAttachment] = useState(null); // { file, previewUrl }
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const recognitionRef = useRef(null);
+  const fileInputRef = useRef(null);
   const scrollRef = useRef(null);
   const myId = session?.user?.id;
 
@@ -4561,22 +4564,73 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
   }, [activeConvId, loadConversations]);
 
   // Send message
+  const handleAttachmentSelect = async (file) => {
+    if (!file) return;
+    const previewUrl = file.type?.startsWith("image/") ? URL.createObjectURL(file) : null;
+    setPendingAttachment({ file, previewUrl });
+  };
+
+  const removePendingAttachment = () => {
+    if (pendingAttachment?.previewUrl) URL.revokeObjectURL(pendingAttachment.previewUrl);
+    setPendingAttachment(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const uploadAttachmentAndSend = async (textPart) => {
+    if (!pendingAttachment) return null;
+    setUploadingAttachment(true);
+    try {
+      const file = pendingAttachment.file;
+      const ext = file.name.split(".").pop();
+      const safeName = file.name.replace(/[^\w.-]/g, "_");
+      const path = `${myId}/${Date.now()}_${safeName}`;
+      const { data: up, error } = await supabase.storage.from("chat-attachments").upload(path, file, { contentType: file.type });
+      if (error) { console.error("Upload error:", error); alert("Upload fehlgeschlagen: " + error.message); setUploadingAttachment(false); return null; }
+      const { data: pub } = supabase.storage.from("chat-attachments").getPublicUrl(up.path);
+      setUploadingAttachment(false);
+      return { url: pub.publicUrl, name: file.name, type: file.type, size: file.size };
+    } catch (e) {
+      console.error("Upload exception:", e);
+      setUploadingAttachment(false);
+      return null;
+    }
+  };
+
   const sendMessage = async () => {
-    if (!msgInput.trim() || !activeConvId || !myId) return;
+    if ((!msgInput.trim() && !pendingAttachment) || !activeConvId || !myId) return;
     const text = msgInput.trim();
+    let attachment = null;
+    if (pendingAttachment) {
+      attachment = await uploadAttachmentAndSend(text);
+      if (!attachment) return; // upload failed, keep state for retry
+    }
     setMsgInput("");
-    await supabase.from("chat_messages").insert({ conversation_id: activeConvId, sender_id: myId, text });
+    setPendingAttachment(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
+    await supabase.from("chat_messages").insert({
+      conversation_id: activeConvId,
+      sender_id: myId,
+      text: text || null,
+      attachment_url: attachment?.url || null,
+      attachment_name: attachment?.name || null,
+      attachment_type: attachment?.type || null,
+      attachment_size: attachment?.size || null,
+    });
     // Notify other participants
     if (createNotification) {
       const myName = memberMap[myId]?.display_name || "Jemand";
       const { data: parts } = await supabase.from("chat_participants").select("user_id").eq("conversation_id", activeConvId);
       const recipientIds = (parts || []).map(p => p.user_id).filter(uid => uid !== myId);
+      const notifBody = text
+        ? (text.length > 80 ? text.slice(0, 80) + "…" : text)
+        : (attachment ? `📎 ${attachment.name}` : "Neue Nachricht");
       recipientIds.forEach(uid => {
         createNotification({
           userId: uid,
           type: "chat_message",
           title: `Neue Nachricht von ${myName}`,
-          body: text.length > 80 ? text.slice(0, 80) + "…" : text,
+          body: notifBody,
           metadata: { conversation_id: activeConvId },
         });
       });
@@ -4896,15 +4950,47 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                         {isMe ? "Du" : sender.display_name} · {msgTime}
                       </div>
                       <div style={{
-                        padding: "10px 16px",
+                        padding: msg.attachment_url && !msg.text ? 4 : "10px 16px",
                         borderRadius: isMe ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
                         background: isMe
                           ? (darkMode ? "linear-gradient(135deg, rgba(139, 122, 255, 0.2), rgba(100, 80, 220, 0.15))" : "linear-gradient(135deg, rgba(139, 122, 255, 0.15), rgba(100, 80, 220, 0.1))")
                           : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
                         border: `1px solid ${isMe ? "rgba(139, 122, 255, 0.15)" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)")}`,
                         fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.55,
+                        overflow: "hidden",
                       }}>
-                        {msg.text}
+                        {msg.attachment_url && (
+                          msg.attachment_type?.startsWith("image/") ? (
+                            <a href={msg.attachment_url} target="_blank" rel="noopener noreferrer" style={{ display: "block", marginBottom: msg.text ? 8 : 0 }}>
+                              <img src={msg.attachment_url} alt={msg.attachment_name} style={{ maxWidth: 280, maxHeight: 280, borderRadius: 10, display: "block", cursor: "pointer" }} />
+                            </a>
+                          ) : (
+                            <a href={msg.attachment_url} target="_blank" rel="noopener noreferrer"
+                              style={{
+                                display: "flex", alignItems: "center", gap: 10,
+                                padding: "8px 10px", borderRadius: 10,
+                                background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                                border: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}`,
+                                textDecoration: "none", color: theme.text,
+                                marginBottom: msg.text ? 8 : 0,
+                                minWidth: 200,
+                              }}
+                            >
+                              <div style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(139,122,255,0.18)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8B7AFF" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{msg.attachment_name}</div>
+                                {msg.attachment_size && (
+                                  <div style={{ fontSize: 11, color: theme.textDim }}>
+                                    {msg.attachment_size < 1024 ? msg.attachment_size + " B" : msg.attachment_size < 1048576 ? (msg.attachment_size/1024).toFixed(1) + " KB" : (msg.attachment_size/1048576).toFixed(1) + " MB"}
+                                  </div>
+                                )}
+                              </div>
+                            </a>
+                          )
+                        )}
+                        {msg.text && <div style={{ padding: msg.attachment_url ? "0 12px 6px" : 0 }}>{msg.text}</div>}
                       </div>
                     </div>
                   </motion.div>
@@ -4916,12 +5002,62 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
             <div style={{
               padding: "14px 24px 18px", borderTop: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)"}`,
             }}>
+              {/* Pending attachment chip */}
+              {pendingAttachment && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 10, marginBottom: 10,
+                    padding: 6, paddingRight: 10, borderRadius: 12,
+                    background: darkMode ? "rgba(139,122,255,0.10)" : "rgba(139,122,255,0.10)",
+                    border: "1px solid rgba(139,122,255,0.25)",
+                  }}
+                >
+                  {pendingAttachment.previewUrl ? (
+                    <img src={pendingAttachment.previewUrl} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover" }} />
+                  ) : (
+                    <div style={{ width: 40, height: 40, borderRadius: 8, background: "rgba(139,122,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", color: "#8B7AFF" }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    </div>
+                  )}
+                  <div style={{ minWidth: 0, maxWidth: 220 }}>
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 500 }}>{pendingAttachment.file.name}</div>
+                    <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim }}>
+                      {pendingAttachment.file.size < 1024 ? pendingAttachment.file.size + " B" : pendingAttachment.file.size < 1048576 ? (pendingAttachment.file.size/1024).toFixed(1) + " KB" : (pendingAttachment.file.size/1048576).toFixed(1) + " MB"}
+                    </div>
+                  </div>
+                  <motion.div whileTap={{ scale: 0.9 }} onClick={removePendingAttachment}
+                    style={{ width: 22, height: 22, borderRadius: "50%", background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 12 }}
+                  >✕</motion.div>
+                </motion.div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip"
+                style={{ display: "none" }}
+                onChange={(e) => handleAttachmentSelect(e.target.files?.[0])}
+              />
               <div style={{
                 display: "flex", alignItems: "center", gap: 8,
                 background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
                 border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
                 borderRadius: 16, padding: 10,
               }}>
+                <motion.div
+                  whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Datei anhängen"
+                  style={{
+                    width: 36, height: 36, borderRadius: "50%",
+                    background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    cursor: "pointer", flexShrink: 0,
+                    color: darkMode ? "#ffffff90" : "#1a1a2eAA",
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                </motion.div>
                 <motion.div
                   whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
                   animate={isRecording ? { scale: [1, 1.08, 1] } : { scale: 1 }}
@@ -4949,21 +5085,32 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                     fontSize: 14, fontFamily: FONT, color: theme.text, caretColor: "#8B7AFF",
                   }}
                 />
-                <motion.div
-                  whileHover={msgInput.trim() ? { scale: 1.05 } : {}} whileTap={msgInput.trim() ? { scale: 0.9 } : {}}
-                  onClick={sendMessage}
-                  style={{
-                    width: 36, height: 36, borderRadius: "50%",
-                    background: msgInput.trim() ? "#8B7AFF" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"),
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    cursor: msgInput.trim() ? "pointer" : "default",
-                    transition: "all 0.2s ease",
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <path d="M5 12h14M12 5l7 7-7 7" stroke={msgInput.trim() ? "#fff" : (darkMode ? "#ffffff30" : "#00000030")} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </motion.div>
+                {(() => {
+                  const canSend = (msgInput.trim() || pendingAttachment) && !uploadingAttachment;
+                  return (
+                    <motion.div
+                      whileHover={canSend ? { scale: 1.05 } : {}} whileTap={canSend ? { scale: 0.9 } : {}}
+                      onClick={canSend ? sendMessage : undefined}
+                      style={{
+                        width: 36, height: 36, borderRadius: "50%",
+                        background: canSend ? "#8B7AFF" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"),
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        cursor: canSend ? "pointer" : "default",
+                        transition: "all 0.2s ease",
+                      }}
+                    >
+                      {uploadingAttachment ? (
+                        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+                        </motion.div>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                          <path d="M5 12h14M12 5l7 7-7 7" stroke={canSend ? "#fff" : (darkMode ? "#ffffff30" : "#00000030")} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </motion.div>
+                  );
+                })()}
               </div>
             </div>
           </div>
