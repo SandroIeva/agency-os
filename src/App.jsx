@@ -7655,6 +7655,23 @@ export default function CircularMenu() {
   };
 
   const handleWheel = useCallback((e) => {
+    // When menu is open, always route wheel to menu navigation — regardless
+    // of which view is behind it
+    if (menuOpen) {
+      e.preventDefault();
+      if (subOpen) return;
+      scrollAccum.current += e.deltaY;
+      const clamped = Math.max(-60, Math.min(60, scrollAccum.current));
+      scrollAccum.current = clamped;
+      if (Math.abs(scrollAccum.current) >= 50) {
+        const dir = scrollAccum.current > 0 ? 1 : -1;
+        scrollAccum.current = 0;
+        setActiveIndex(prev => ((prev + dir) % itemCount + itemCount) % itemCount);
+        try { sounds.scroll(); } catch(e) {}
+      }
+      return;
+    }
+
     // Let views with their own scrolling handle scroll natively
     if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "settings" || currentView === "notes") {
       return;
