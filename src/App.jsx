@@ -4991,7 +4991,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
 
             {/* Message Input */}
             <div style={{
-              padding: "14px 24px 18px", borderTop: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)"}`,
+              padding: 16, borderTop: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)"}`,
             }}>
               {/* Pending attachment chip */}
               {pendingAttachment && (
