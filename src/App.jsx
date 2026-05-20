@@ -10241,42 +10241,39 @@ export default function CircularMenu() {
               </div>{/* end right column */}
               </div>{/* end grid */}
 
-              {/* Google Connection Status */}
-              <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
-                style={{ marginTop: 24 }}
-              >
-                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
-                  Google-Verbindung
-                </div>
-                <div style={{
-                  borderRadius: 20,
-                  background: googleConnectionBroken ? "rgba(239, 68, 68, 0.06)" : theme.cardBg,
-                  border: `1px solid ${googleConnectionBroken ? "rgba(239, 68, 68, 0.2)" : theme.border}`,
-                  padding: "20px 24px",
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                    <div style={{
-                      width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-                      background: googleConnectionBroken ? "rgba(239, 68, 68, 0.1)" : "rgba(0, 184, 148, 0.1)",
-                      border: `1px solid ${googleConnectionBroken ? "rgba(239, 68, 68, 0.2)" : "rgba(0, 184, 148, 0.2)"}`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 20,
-                    }}>{googleConnectionBroken ? "⚠️" : "✓"}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
-                        {googleConnectionBroken ? "Verbindung unterbrochen" : "Google verbunden"}
+              {/* Google Connection Status — only shown when broken so user can reconnect */}
+              {googleConnectionBroken && (
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+                  style={{ marginTop: 24 }}
+                >
+                  <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
+                    Google-Verbindung
+                  </div>
+                  <div style={{
+                    borderRadius: 20,
+                    background: "rgba(239, 68, 68, 0.06)",
+                    border: "1px solid rgba(239, 68, 68, 0.2)",
+                    padding: "20px 24px",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                      <div style={{
+                        width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                        background: "rgba(239, 68, 68, 0.1)",
+                        border: "1px solid rgba(239, 68, 68, 0.2)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 20,
+                      }}>⚠️</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
+                          Verbindung unterbrochen
+                        </div>
+                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.4 }}>
+                          Calendar & Drive funktionieren nicht. Bitte neu verbinden — danach läuft alles automatisch.
+                        </div>
                       </div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.4 }}>
-                        {googleConnectionBroken
-                          ? "Calendar & Drive funktionieren nicht. Bitte neu verbinden — danach läuft alles automatisch."
-                          : "Calendar, Drive und Reminder-Sync sind aktiv. Token wird automatisch erneuert."
-                        }
-                      </div>
-                    </div>
-                    {googleConnectionBroken && (
                       <motion.button
                         whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
                         onClick={reconnectGoogle}
@@ -10287,10 +10284,10 @@ export default function CircularMenu() {
                           whiteSpace: "nowrap",
                         }}
                       >Neu verbinden</motion.button>
-                    )}
+                    </div>
                   </div>
-                </div>
-              </motion.div>
+                </motion.div>
+              )}
 
               {/* Push Notifications — removed; reminders now use Google Calendar sync */}
               {false && (
