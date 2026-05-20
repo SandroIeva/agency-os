@@ -5084,7 +5084,17 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0M12 19v3M8 22h8"/></svg>
                 </motion.div>
-                {/* Emoji picker button */}
+                <input
+                  value={msgInput} onChange={e => setMsgInput(e.target.value)}
+                  placeholder={isRecording ? "Spricht..." : "Nachricht schreiben..."}
+                  onKeyDown={e => { if (e.key === "Enter" && msgInput.trim()) sendMessage(); }}
+                  style={{
+                    flex: 1, background: "none", border: "none", outline: "none",
+                    padding: "0 8px",
+                    fontSize: 14, fontFamily: FONT, color: theme.text, caretColor: "#8B7AFF",
+                  }}
+                />
+                {/* Emoji picker button — right side */}
                 <div style={{ position: "relative" }}>
                   <motion.div
                     whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
@@ -5094,13 +5104,20 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                       width: 36, height: 36, borderRadius: "50%",
                       background: emojiPickerOpen ? (darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)") : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"),
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      cursor: "pointer", flexShrink: 0, fontSize: 18, lineHeight: 1,
+                      cursor: "pointer", flexShrink: 0,
+                      color: darkMode ? "#ffffff90" : "#1a1a2eAA",
                     }}
-                  >😊</motion.div>
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="9"/>
+                      <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                      <line x1="9" y1="9" x2="9.01" y2="9"/>
+                      <line x1="15" y1="9" x2="15.01" y2="9"/>
+                    </svg>
+                  </motion.div>
                   <AnimatePresence>
                     {emojiPickerOpen && (
                       <>
-                        {/* Click-outside catcher */}
                         <div onClick={() => setEmojiPickerOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
                         <motion.div
                           initial={{ opacity: 0, y: 10, scale: 0.96 }}
@@ -5109,7 +5126,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                           transition={{ duration: 0.18 }}
                           onClick={(e) => e.stopPropagation()}
                           style={{
-                            position: "absolute", bottom: "calc(100% + 10px)", left: 0,
+                            position: "absolute", bottom: "calc(100% + 10px)", right: 0,
                             width: 320, height: 280,
                             background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
                             border: `1px solid ${theme.border}`,
@@ -5118,7 +5135,6 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                             display: "flex", flexDirection: "column", zIndex: 31,
                           }}
                         >
-                          {/* Tab row */}
                           <div style={{ display: "flex", borderBottom: `1px solid ${theme.borderFaint}`, padding: 4 }}>
                             {[
                               { id: "smileys", icon: "😀" },
@@ -5136,7 +5152,6 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                               >{t.icon}</motion.div>
                             ))}
                           </div>
-                          {/* Emoji grid */}
                           <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
                             <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 2 }}>
                               {EMOJI_GROUPS[emojiTab].map((emoji, i) => (
@@ -5156,16 +5171,6 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                     )}
                   </AnimatePresence>
                 </div>
-                <input
-                  value={msgInput} onChange={e => setMsgInput(e.target.value)}
-                  placeholder={isRecording ? "Spricht..." : "Nachricht schreiben..."}
-                  onKeyDown={e => { if (e.key === "Enter" && msgInput.trim()) sendMessage(); }}
-                  style={{
-                    flex: 1, background: "none", border: "none", outline: "none",
-                    padding: "0 8px",
-                    fontSize: 14, fontFamily: FONT, color: theme.text, caretColor: "#8B7AFF",
-                  }}
-                />
                 {(() => {
                   const canSend = (msgInput.trim() || pendingAttachment) && !uploadingAttachment;
                   return (
