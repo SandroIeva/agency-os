@@ -4917,20 +4917,11 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               padding: "14px 24px 18px", borderTop: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)"}`,
             }}>
               <div style={{
-                display: "flex", alignItems: "center", gap: 12,
+                display: "flex", alignItems: "center", gap: 8,
                 background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
                 border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
-                borderRadius: 16, padding: "10px 10px 10px 18px",
+                borderRadius: 16, padding: 10,
               }}>
-                <input
-                  value={msgInput} onChange={e => setMsgInput(e.target.value)}
-                  placeholder={isRecording ? "Spricht..." : "Nachricht schreiben..."}
-                  onKeyDown={e => { if (e.key === "Enter" && msgInput.trim()) sendMessage(); }}
-                  style={{
-                    flex: 1, background: "none", border: "none", outline: "none",
-                    fontSize: 14, fontFamily: FONT, color: theme.text, caretColor: "#8B7AFF",
-                  }}
-                />
                 <motion.div
                   whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
                   animate={isRecording ? { scale: [1, 1.08, 1] } : { scale: 1 }}
@@ -4948,6 +4939,16 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0M12 19v3M8 22h8"/></svg>
                 </motion.div>
+                <input
+                  value={msgInput} onChange={e => setMsgInput(e.target.value)}
+                  placeholder={isRecording ? "Spricht..." : "Nachricht schreiben..."}
+                  onKeyDown={e => { if (e.key === "Enter" && msgInput.trim()) sendMessage(); }}
+                  style={{
+                    flex: 1, background: "none", border: "none", outline: "none",
+                    padding: "0 8px",
+                    fontSize: 14, fontFamily: FONT, color: theme.text, caretColor: "#8B7AFF",
+                  }}
+                />
                 <motion.div
                   whileHover={msgInput.trim() ? { scale: 1.05 } : {}} whileTap={msgInput.trim() ? { scale: 0.9 } : {}}
                   onClick={sendMessage}
