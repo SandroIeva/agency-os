@@ -4393,8 +4393,58 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
   const [messages, setMessages] = useState([]);
   const [msgInput, setMsgInput] = useState("");
   const [loadingConvs, setLoadingConvs] = useState(true);
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef(null);
   const scrollRef = useRef(null);
   const myId = session?.user?.id;
+
+  // ── Dictation: voice-to-text for the message input ──
+  const startChatDictation = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) { alert("Spracherkennung wird in diesem Browser nicht unterstützt. Bitte Chrome oder Safari verwenden."); return; }
+    if (isRecording) { stopChatDictation(); return; }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "de-DE";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    let baseText = msgInput;
+    let needsSpace = baseText.length > 0 && !baseText.endsWith(" ");
+    recognition.onresult = (event) => {
+      let workingText = baseText;
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          let cleaned = t.trim();
+          if (cleaned.length > 0) {
+            const prevChar = workingText.trim().slice(-1);
+            if (!prevChar || prevChar === "." || prevChar === "!" || prevChar === "?") {
+              cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+            }
+          }
+          workingText += (needsSpace ? " " : "") + cleaned;
+          baseText = workingText;
+          needsSpace = true;
+        } else {
+          // Show interim transcript in real-time
+          workingText = baseText + (needsSpace ? " " : "") + t;
+        }
+        setMsgInput(workingText);
+      }
+    };
+    recognition.onerror = (e) => { if (e.error !== "no-speech") console.error("Speech error:", e.error); };
+    recognition.onend = () => { setIsRecording(false); recognitionRef.current = null; };
+    recognition.start();
+    recognitionRef.current = recognition;
+    setIsRecording(true);
+  };
+
+  const stopChatDictation = () => {
+    if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; }
+    setIsRecording(false);
+  };
+
+  // Cleanup on unmount
+  useEffect(() => { return () => { if (recognitionRef.current) recognitionRef.current.stop(); }; }, []);
 
   // Compute unread chat notifications per conversation
   const unreadByConv = useMemo(() => {
@@ -4874,13 +4924,30 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               }}>
                 <input
                   value={msgInput} onChange={e => setMsgInput(e.target.value)}
-                  placeholder="Nachricht schreiben..."
+                  placeholder={isRecording ? "Spricht..." : "Nachricht schreiben..."}
                   onKeyDown={e => { if (e.key === "Enter" && msgInput.trim()) sendMessage(); }}
                   style={{
                     flex: 1, background: "none", border: "none", outline: "none",
                     fontSize: 14, fontFamily: FONT, color: theme.text, caretColor: "#8B7AFF",
                   }}
                 />
+                <motion.div
+                  whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
+                  animate={isRecording ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+                  transition={isRecording ? { repeat: Infinity, duration: 1.2 } : { duration: 0.2 }}
+                  onClick={startChatDictation}
+                  title={isRecording ? "Aufnahme stoppen" : "Diktieren"}
+                  style={{
+                    width: 36, height: 36, borderRadius: "50%",
+                    background: isRecording ? "rgba(239, 68, 68, 0.15)" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"),
+                    border: isRecording ? "1px solid rgba(239, 68, 68, 0.35)" : "none",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    cursor: "pointer", flexShrink: 0,
+                    color: isRecording ? "#EF4444" : (darkMode ? "#ffffff90" : "#1a1a2eAA"),
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0M12 19v3M8 22h8"/></svg>
+                </motion.div>
                 <motion.div
                   whileHover={msgInput.trim() ? { scale: 1.05 } : {}} whileTap={msgInput.trim() ? { scale: 0.9 } : {}}
                   onClick={sendMessage}
