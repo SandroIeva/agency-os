@@ -8704,8 +8704,9 @@ export default function CircularMenu() {
         </AnimatePresence>
 
         {/* Solid backdrop: covers the underlying view with neutral theme bg
-            so menu opens on a clean canvas. pointer-events:none so the wheel
-            handler on the outer container still receives scroll events. */}
+            so menu opens on a clean canvas. Fades to transparent at the
+            bottom so the dashboard gradient/nav bar reads cleanly underneath.
+            pointer-events:none so wheel events reach the menu container. */}
         <AnimatePresence>
           {menuOpen && currentView !== "dashboard" && (
             <motion.div
@@ -8717,6 +8718,8 @@ export default function CircularMenu() {
                 position: "absolute", inset: 0, zIndex: 10,
                 background: theme.bg,
                 pointerEvents: "none",
+                WebkitMaskImage: "linear-gradient(to bottom, black 0, black calc(100% - 220px), transparent calc(100% - 40px))",
+                maskImage: "linear-gradient(to bottom, black 0, black calc(100% - 220px), transparent calc(100% - 40px))",
               }}
             />
           )}
