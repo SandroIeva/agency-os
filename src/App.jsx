@@ -4714,26 +4714,8 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
           borderRight: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)"}`,
           background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
         }}>
-          {/* Header */}
-          <div style={{
-            padding: "18px 20px 14px", display: "flex", alignItems: "center", justifyContent: "space-between",
-            borderBottom: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)"}`,
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <motion.div onClick={onBack} className="hover-back" whileTap={{ scale: 0.95 }}
-                style={{ cursor: "pointer", padding: "4px 6px", borderRadius: 8 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M15 18l-6-6 6-6" stroke={darkMode ? "#ffffff50" : "#00000050"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </motion.div>
-              <span style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>
-                Messages
-              </span>
-            </div>
-          </div>
-
           {/* Search */}
-          <div style={{ padding: "12px 16px 8px" }}>
+          <div style={{ padding: "18px 16px 8px" }}>
             <div style={{
               display: "flex", alignItems: "center", gap: 10,
               background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
