@@ -65,6 +65,13 @@ const PLUS_MENU_ITEMS_DEF = [
 const FONT = "'Geist', -apple-system, sans-serif";
 const VAPID_PUBLIC_KEY = "BJJ_TXEs7qnwTKLnYO5_pvuuzr6oB59d4xpSCssTZCkfujAaQYlCwxptfnUPXxhSnikKcG4rPH1FuU4CTYh4gvg";
 
+const EMOJI_GROUPS = {
+  smileys: ["😀","😃","😄","😁","😆","😅","🤣","😂","🙂","🙃","😉","😊","😇","🥰","😍","🤩","😘","😗","😚","😙","🥲","😋","😛","😜","🤪","😝","🤑","🤗","🤭","🫢","🫣","🤫","🤔","🫡","🤐","🤨","😐","😑","😶","😏","😒","🙄","😬","🤥","🫨","🫠","😌","😔","😪","🤤","😴","😷","🤒","🤕","🤢","🤮","🤧","🥵","🥶","🥴","😵","🤯","🤠","🥳","🥸","😎","🤓","🧐","😕","🫤","😟","🙁","☹️","😮","😯","😲","😳","🥺","🥹","😦","😧","😨","😰","😥","😢","😭","😱","😖","😣","😞","😓","😩","😫","🥱","😤","😡","😠","🤬","😈","👿","💀","☠️","💩","🤡","👹","👺","👻","👽","👾","🤖"],
+  gestures: ["👋","🤚","✋","🖖","👌","🤌","🤏","✌️","🤞","🫰","🤟","🤘","🤙","🫵","🫱","🫲","🫳","🫴","👈","👉","👆","🖕","👇","☝️","👍","👎","✊","👊","🤛","🤜","👏","🙌","🫶","👐","🤲","🤝","🙏","✍️","💅","🤳","💪","🦾","🦵","🦿","🦶","👂","🦻","👃","🧠","🫀","🫁","🦷","🦴","👀","👁️","👅","👄","🫦","💋"],
+  hearts: ["❤️","🧡","💛","💚","💙","💜","🖤","🤍","🤎","💔","❤️‍🔥","❤️‍🩹","💖","💗","💓","💞","💕","💟","💘","💝","💌","💋"],
+  objects: ["🎉","🎊","✨","⭐","🌟","💫","💥","🔥","☀️","🌈","☁️","⚡","❄️","💧","💦","☕","🍕","🍔","🍟","🌮","🍿","🍰","🎂","🍩","🍪","🍫","🍦","🍺","🍷","🥂","🍾","🎁","🎈","🎀","🎵","🎶","💡","🔔","📌","📍","✏️","📝","📎","🔗","✅","❌","⚠️","ℹ️","💯","🆗","🆕","🚀","⏰","📅","💰"],
+};
+
 const smoothSpring = { type: "spring", stiffness: 120, damping: 20, mass: 0.8 };
 const softSpring = { type: "spring", stiffness: 80, damping: 18, mass: 1 };
 const gentleTween = { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] };
@@ -4396,6 +4403,8 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
   const [isRecording, setIsRecording] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState(null); // { file, previewUrl }
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [emojiTab, setEmojiTab] = useState("smileys");
   const recognitionRef = useRef(null);
   const fileInputRef = useRef(null);
   const scrollRef = useRef(null);
@@ -5075,6 +5084,78 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0M12 19v3M8 22h8"/></svg>
                 </motion.div>
+                {/* Emoji picker button */}
+                <div style={{ position: "relative" }}>
+                  <motion.div
+                    whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
+                    onClick={() => setEmojiPickerOpen(!emojiPickerOpen)}
+                    title="Emoji"
+                    style={{
+                      width: 36, height: 36, borderRadius: "50%",
+                      background: emojiPickerOpen ? (darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)") : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"),
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      cursor: "pointer", flexShrink: 0, fontSize: 18, lineHeight: 1,
+                    }}
+                  >😊</motion.div>
+                  <AnimatePresence>
+                    {emojiPickerOpen && (
+                      <>
+                        {/* Click-outside catcher */}
+                        <div onClick={() => setEmojiPickerOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
+                        <motion.div
+                          initial={{ opacity: 0, y: 10, scale: 0.96 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 10, scale: 0.96 }}
+                          transition={{ duration: 0.18 }}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            position: "absolute", bottom: "calc(100% + 10px)", left: 0,
+                            width: 320, height: 280,
+                            background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
+                            border: `1px solid ${theme.border}`,
+                            borderRadius: 16, overflow: "hidden",
+                            boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+                            display: "flex", flexDirection: "column", zIndex: 31,
+                          }}
+                        >
+                          {/* Tab row */}
+                          <div style={{ display: "flex", borderBottom: `1px solid ${theme.borderFaint}`, padding: 4 }}>
+                            {[
+                              { id: "smileys", icon: "😀" },
+                              { id: "gestures", icon: "👋" },
+                              { id: "hearts", icon: "❤️" },
+                              { id: "objects", icon: "🎉" },
+                            ].map(t => (
+                              <motion.div key={t.id} whileTap={{ scale: 0.92 }}
+                                onClick={() => setEmojiTab(t.id)}
+                                style={{
+                                  flex: 1, padding: "8px 0", borderRadius: 10, cursor: "pointer",
+                                  textAlign: "center", fontSize: 18,
+                                  background: emojiTab === t.id ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") : "transparent",
+                                }}
+                              >{t.icon}</motion.div>
+                            ))}
+                          </div>
+                          {/* Emoji grid */}
+                          <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 2 }}>
+                              {EMOJI_GROUPS[emojiTab].map((emoji, i) => (
+                                <motion.div key={emoji + i} whileHover={{ scale: 1.25, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }} whileTap={{ scale: 0.9 }}
+                                  onClick={() => { setMsgInput(prev => prev + emoji); }}
+                                  style={{
+                                    width: 34, height: 34, borderRadius: 8,
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    cursor: "pointer", fontSize: 20, lineHeight: 1,
+                                  }}
+                                >{emoji}</motion.div>
+                              ))}
+                            </div>
+                          </div>
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                </div>
                 <input
                   value={msgInput} onChange={e => setMsgInput(e.target.value)}
                   placeholder={isRecording ? "Spricht..." : "Nachricht schreiben..."}
