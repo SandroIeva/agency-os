@@ -3801,7 +3801,7 @@ function getFileExtension(name, mimeType) {
   return "FILE";
 }
 
-function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValidToken, theme, darkMode, t }) {
+function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValidToken, theme, darkMode, t, filesFilter = "all", setFilesFilter }) {
   const [search, setSearch] = useState("");
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -3880,7 +3880,35 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
     fetchFiles();
   }, [session, currentFolder]);
 
-  const filtered = files.filter(f => f.name.toLowerCase().includes(search.toLowerCase()));
+  // File-type matchers for the menu sub-filters. Folders are ALWAYS kept so
+  // navigation works regardless of which filter is active.
+  const matchesTypeFilter = (f) => {
+    const isFolder = f.mimeType === "application/vnd.google-apps.folder";
+    if (isFolder) return true;
+    if (filesFilter === "all") return true;
+    const mime = (f.mimeType || "").toLowerCase();
+    const name = (f.name || "").toLowerCase();
+    const ext = name.includes(".") ? name.split(".").pop() : "";
+    if (filesFilter === "images") {
+      return mime.startsWith("image/") || ["jpg","jpeg","png","gif","webp","svg","bmp","tiff","heic","avif"].includes(ext);
+    }
+    if (filesFilter === "videos") {
+      return mime.startsWith("video/") || ["mp4","mov","avi","mkv","webm","m4v","wmv","flv","3gp","mpg","mpeg"].includes(ext);
+    }
+    if (filesFilter === "fonts") {
+      return mime.includes("font") || ["ttf","otf","woff","woff2","eot","fon"].includes(ext);
+    }
+    if (filesFilter === "raw") {
+      // Camera raw + uncompressed audio + lossless
+      return ["raw","cr2","cr3","nef","arw","dng","orf","rw2","raf","sr2","srw","pef","wav","aiff","flac","alac"].includes(ext);
+    }
+    if (filesFilter === "links") {
+      return mime === "application/vnd.google-apps.shortcut" || ext === "url" || ext === "webloc";
+    }
+    return true;
+  };
+
+  const filtered = files.filter(f => f.name.toLowerCase().includes(search.toLowerCase()) && matchesTypeFilter(f));
 
   const navigateToFolder = (folder) => {
     setFolderPath(prev => [...prev, { id: currentFolder, name: folder.name }]);
@@ -4075,6 +4103,38 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
           </div>
         </motion.div>
 
+        {/* Type filter chips */}
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.04, duration: 0.3 }}
+          style={{ padding: "10px 20px 0", display: "flex", gap: 6, flexWrap: "wrap" }}
+        >
+          {[
+            { id: "all", label: "Alle" },
+            { id: "images", label: "Bilder" },
+            { id: "videos", label: "Videos" },
+            { id: "fonts", label: "Fonts" },
+            { id: "raw", label: "Raw" },
+            { id: "links", label: "Links" },
+          ].map(chip => {
+            const active = filesFilter === chip.id;
+            return (
+              <motion.div key={chip.id} whileTap={{ scale: 0.96 }} whileHover={{ y: -1 }}
+                onClick={() => { if (setFilesFilter) setFilesFilter(chip.id); }}
+                style={{
+                  padding: "5px 12px", borderRadius: 999, cursor: "pointer",
+                  fontSize: 12, fontFamily: FONT, fontWeight: 500,
+                  background: active ? (darkMode ? "rgba(255,255,255,0.12)" : "#1a1a2e") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
+                  color: active ? "#fff" : theme.textDim,
+                  border: `1px solid ${active ? "transparent" : theme.borderFaint}`,
+                  transition: "background 0.2s ease, color 0.2s ease",
+                }}
+              >{chip.label}</motion.div>
+            );
+          })}
+        </motion.div>
+
         {/* Search bar */}
         <motion.div
           initial={{ opacity: 0, y: -8 }}
@@ -4203,7 +4263,17 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
 
           {!loading && !error && filtered.length === 0 && (
             <div style={{ padding: 32, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textFaint }}>
-              {files.length === 0 ? t("files.empty") : t("files.noResults")}
+              {files.length === 0
+                ? t("files.empty")
+                : (filesFilter !== "all"
+                    ? `Keine ${{
+                        images: "Bilder",
+                        videos: "Videos",
+                        fonts: "Fonts",
+                        raw: "Raw-Dateien",
+                        links: "Links",
+                      }[filesFilter] || "Dateien"} in diesem Ordner`
+                    : t("files.noResults"))}
             </div>
           )}
         </div>
@@ -6160,6 +6230,7 @@ export default function CircularMenu() {
     return "dashboard";
   });
   const [chatTab, setChatTab] = useState("Team");
+  const [filesFilter, setFilesFilter] = useState("all"); // all | images | videos | fonts | raw | links
   const [openChatConvId, setOpenChatConvId] = useState(null);
   const [openTaskId, setOpenTaskId] = useState(null);
   const [triggerNewTask, setTriggerNewTask] = useState(false);
@@ -7756,6 +7827,7 @@ export default function CircularMenu() {
     } else if (subItem.id === "calendar") {
       setCurrentView("calendar");
     } else if (["images", "videos", "all", "fonts", "raw", "links"].includes(subItem.id)) {
+      setFilesFilter(subItem.id);
       setCurrentView("files");
     } else if (["team", "clients", "ai", "channels", "calls", "archive"].includes(subItem.id)) {
       setCurrentView("chat");
@@ -8423,7 +8495,7 @@ export default function CircularMenu() {
         {/* FILES VIEW */}
         <AnimatePresence>
           {currentView === "files" && (
-            <FilesView session={session} getProviderToken={getProviderToken} autoReLogin={autoReLogin} ensureValidToken={ensureValidToken} theme={theme} darkMode={darkMode} t={t} onBack={() => {
+            <FilesView session={session} getProviderToken={getProviderToken} autoReLogin={autoReLogin} ensureValidToken={ensureValidToken} theme={theme} darkMode={darkMode} t={t} filesFilter={filesFilter} setFilesFilter={setFilesFilter} onBack={() => {
               setCurrentView("dashboard");
               setMenuSource("grid");
               setActiveIndex(4);
