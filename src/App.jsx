@@ -819,10 +819,18 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
 
   // Checklist CRUD
   const addChecklistItem = async () => {
-    if (!newChecklistText.trim() || !editingTask) return;
+    const text = newChecklistText.trim();
+    if (!text) return;
+    // New-task mode: no editingTask yet — store locally; createTask will bulk-insert
+    if (!editingTask) {
+      setTaskChecklist(prev => [...prev, { _localId: Date.now() + Math.random(), text, checked: false }]);
+      setNewChecklistText("");
+      return;
+    }
+    // Edit-task mode: persist immediately
     const pos = taskChecklist.length;
     const { data } = await supabase.from("task_checklist_items").insert({
-      task_id: editingTask.id, text: newChecklistText.trim(), position: pos,
+      task_id: editingTask.id, text, position: pos,
     }).select().single();
     if (data) setTaskChecklist(prev => [...prev, data]);
     setNewChecklistText("");
@@ -2072,7 +2080,13 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                         <input
                           value={newChecklistText}
                           onChange={e => setNewChecklistText(e.target.value)}
-                          onKeyDown={e => { if (e.key === "Enter" && newChecklistText.trim()) addChecklistItem(); }}
+                          onKeyDown={e => {
+                            if (e.nativeEvent?.isComposing || e.keyCode === 229) return;
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              if (newChecklistText.trim()) addChecklistItem();
+                            }
+                          }}
                           placeholder="Neuer Punkt..."
                           style={{
                             flex: 1, background: "transparent", border: "none", borderBottom: `1px solid transparent`,
