@@ -6346,7 +6346,10 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
   };
 
   const currentUserRole = editing?.id ? (members.find(m => m.user_id === session?.user?.id)?.role || null) : null;
-  const isOwner = currentUserRole === "owner";
+  // Fallback: if the membership list hasn't loaded yet OR the user is just the
+  // project's owner_id, treat them as owner. This way the Add button shows
+  // immediately even if loadMembers is slow / fails.
+  const isOwner = currentUserRole === "owner" || (editing?.id && editing?.owner_id === session?.user?.id);
 
   const sendInvite = async () => {
     const email = inviteEmail.trim().toLowerCase();
