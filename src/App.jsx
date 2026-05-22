@@ -597,7 +597,7 @@ const DEFAULT_COLUMNS = [
   { id: "col-done", key: "done", labelKey: "kanban.done", color: "#00B894", position: 3 },
 ];
 
-function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerNewTask, onNewTaskTriggered, userOrg, orgMembers, createNotification }) {
+function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerNewTask, onNewTaskTriggered, userOrg, orgMembers, createNotification, myProjectNames = new Set() }) {
   const [tasks, setTasks] = useState([]);
   const [teamMembers, setTeamMembers] = useState({});
   const [filter, setFilter] = useState("all");
@@ -895,12 +895,17 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
   // Cleanup recognition on unmount
   useEffect(() => { return () => { if (recognitionRef.current) recognitionRef.current.stop(); }; }, []);
 
-  // Merge DB projects + task-derived names for filter
+  // Merge DB projects + task-derived names for filter, restricted to projects
+  // the user is a member of.
   const projectNames = [...new Set([
-    ...projects.map(p => p.name),
-    ...tasks.map(t => t.project_name).filter(Boolean),
+    ...projects.filter(p => myProjectNames.has(p.name)).map(p => p.name),
+    ...tasks.map(t => t.project_name).filter(name => name && myProjectNames.has(name)),
   ])];
-  const filtered = tasks.filter(t => {
+  // Visibility: only show tasks for projects the user is a member of, OR tasks
+  // without a project, OR tasks the user created/owns/is assigned to.
+  const myUid = session?.user?.id;
+  const visibleTasks = tasks.filter(t => !t.project_name || myProjectNames.has(t.project_name) || t.creator_id === myUid || t.assignee_id === myUid);
+  const filtered = visibleTasks.filter(t => {
     if (filter !== "all" && t.project_name !== filter) return false;
     if (memberFilter !== "all" && t.assignee_id !== memberFilter) return false;
     return true;
@@ -6227,7 +6232,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
 // PROJECTS VIEW — Files-style grid backed by the projects table
 // (same data source as the Kanban brand chips)
 // ═══════════════════════════════════════════════════════════════
-function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKanban, orgMembers = [] }) {
+function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKanban, orgMembers = [], myProjectIds = [] }) {
   const [projects, setProjects] = useState([]);
   const [taskCounts, setTaskCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -6404,7 +6409,11 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
     loadProjects();
   };
 
-  const filtered = projects.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+  // Only show projects the user is a member of
+  const myIdSet = new Set(myProjectIds);
+  const filtered = projects
+    .filter(p => myIdSet.has(p.id))
+    .filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <motion.div
@@ -6883,6 +6892,13 @@ export default function CircularMenu() {
   const [dashboardTasks, setDashboardTasks] = useState([]);
   const [dashboardReminders, setDashboardReminders] = useState([]);
   const [dashboardProjects, setDashboardProjects] = useState([]);
+  // Per-user project memberships — used to filter projects/tasks visibility
+  const [myProjectIds, setMyProjectIds] = useState([]);
+  // Names of projects the user is a member of (derived from membership + project list)
+  const myProjectNames = useMemo(() => {
+    const idSet = new Set(myProjectIds);
+    return new Set(dashboardProjects.filter(p => idSet.has(p.id)).map(p => p.name));
+  }, [myProjectIds, dashboardProjects]);
   // OS visuals: per-user custom icons keyed by slot_key (e.g. calendar_event, reminder)
   const [osVisuals, setOsVisuals] = useState({});
   const [osVisualsModalOpen, setOsVisualsModalOpen] = useState(false);
@@ -7550,6 +7566,21 @@ export default function CircularMenu() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id, userOrg?.id]);
 
+  // ── Load this user's project memberships + subscribe to changes ──
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    const loadMemberships = async () => {
+      const { data } = await supabase.from("project_members").select("project_id").eq("user_id", session.user.id);
+      setMyProjectIds((data || []).map(r => r.project_id));
+    };
+    loadMemberships();
+    const ch = supabase
+      .channel("my-project-memberships")
+      .on("postgres_changes", { event: "*", schema: "public", table: "project_members", filter: `user_id=eq.${session.user.id}` }, () => loadMemberships())
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  }, [session?.user?.id]);
+
   // Re-fetch dashboard projects whenever the user returns to the dashboard.
   // Fallback in case realtime drops/lags after editing in Kanban view.
   useEffect(() => {
@@ -8007,8 +8038,11 @@ export default function CircularMenu() {
   // ── Build startview cards (tasks + events + placeholders) ──
   const startviewCards = useMemo(() => {
     const priorityOrder = { high: 0, medium: 1, low: 2 };
+    // Visibility: own creator OR private (no project) OR member of the task's project
+    const myUid = session?.user?.id;
     const activeTasks = dashboardTasks
       .filter(tk => tk.column_key !== "done")
+      .filter(tk => !tk.project_name || myProjectNames.has(tk.project_name) || tk.creator_id === myUid || tk.assignee_id === myUid)
       .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
 
     const colLabel = (key) => ({ todo: t("kanban.todo"), in_progress: t("kanban.inProgress"), review: t("kanban.review") }[key] || key);
@@ -8084,7 +8118,7 @@ export default function CircularMenu() {
       pIdx++;
     }
     return cards;
-  }, [dashboardTasks, dashboardProjects, upcomingEvents, t, appLanguage, osVisuals]);
+  }, [dashboardTasks, dashboardProjects, upcomingEvents, t, appLanguage, osVisuals, myProjectNames, session?.user?.id]);
 
   const getGreeting = () => {
     const h = new Date().getHours();
@@ -9262,7 +9296,7 @@ export default function CircularMenu() {
         {/* KANBAN VIEW */}
         <AnimatePresence>
           {currentView === "kanban" && (
-            <KanbanBoard session={session} onBack={() => { setOpenTaskId(null); setTriggerNewTask(false); setCurrentView("dashboard"); }} theme={theme} darkMode={darkMode} t={t} openTaskId={openTaskId} triggerNewTask={triggerNewTask} onNewTaskTriggered={() => setTriggerNewTask(false)} userOrg={userOrg} orgMembers={orgMembers} createNotification={createNotification} />
+            <KanbanBoard session={session} onBack={() => { setOpenTaskId(null); setTriggerNewTask(false); setCurrentView("dashboard"); }} theme={theme} darkMode={darkMode} t={t} openTaskId={openTaskId} triggerNewTask={triggerNewTask} onNewTaskTriggered={() => setTriggerNewTask(false)} userOrg={userOrg} orgMembers={orgMembers} createNotification={createNotification} myProjectNames={myProjectNames} />
           )}
         </AnimatePresence>
 
@@ -9283,7 +9317,7 @@ export default function CircularMenu() {
         {/* PROJECTS VIEW */}
         <AnimatePresence>
           {currentView === "projects" && (
-            <ProjectsView session={session} userOrg={userOrg} orgMembers={orgMembers} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} onOpenInKanban={(projectName) => { setCurrentView("kanban"); }} />
+            <ProjectsView session={session} userOrg={userOrg} orgMembers={orgMembers} myProjectIds={myProjectIds} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} onOpenInKanban={(projectName) => { setCurrentView("kanban"); }} />
           )}
         </AnimatePresence>
 
@@ -9913,8 +9947,11 @@ export default function CircularMenu() {
 
               {/* Task sections — real data from Kanban board */}
               {(() => {
-                // Split tasks by priority, exclude "done" column
-                const activeTasks = dashboardTasks.filter(tk => tk.column_key !== "done");
+                // Split tasks by priority, exclude "done" column. Filter by project membership.
+                const myUid = session?.user?.id;
+                const activeTasks = dashboardTasks
+                  .filter(tk => tk.column_key !== "done")
+                  .filter(tk => !tk.project_name || myProjectNames.has(tk.project_name) || tk.creator_id === myUid || tk.assignee_id === myUid);
                 const highTasks = activeTasks.filter(tk => tk.priority === "high");
                 const mediumTasks = activeTasks.filter(tk => tk.priority === "medium");
                 const lowTasks = activeTasks.filter(tk => tk.priority === "low" || !tk.priority);
