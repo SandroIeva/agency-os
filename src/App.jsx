@@ -7096,7 +7096,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BRAND VIEW — Onboarding wizard + sub-views (Identity, Assets, ...)
+// BRAND VIEW — Multi-step onboarding wizard + sub-views
 // ═══════════════════════════════════════════════════════════════
 const BRAND_SUBVIEW_LABELS = {
   identity: "Identity",
@@ -7107,10 +7107,18 @@ const BRAND_SUBVIEW_LABELS = {
   guidelines: "Guidelines",
 };
 
+const BRAND_ACCENT_PALETTE = [
+  "#8B7AFF", "#E84393", "#00B894", "#F59E0B", "#5B8DEF",
+  "#E88D67", "#6C5CE7", "#FD79A8", "#1a1a2e", "#FFFFFF",
+];
+
 function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, setBrandTab }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  // Onboarding form state
+  const [editMode, setEditMode] = useState(false);
+  // Wizard state
+  const [step, setStep] = useState(0);
+  const [stepDir, setStepDir] = useState(1); // 1 = forward, -1 = back
   const [form, setForm] = useState({
     name: "", claim: "", logo_url: "", website_url: "",
     colors: [], description: "", pdf_url: "", pdf_name: "",
@@ -7119,32 +7127,30 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
   const [logoPreview, setLogoPreview] = useState(null);
   const [pdfUploading, setPdfUploading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [editMode, setEditMode] = useState(false);
   const [colorInput, setColorInput] = useState("#8B7AFF");
+  const [contextTab, setContextTab] = useState("text"); // text | url | pdf
   const logoInputRef = useRef(null);
   const pdfInputRef = useRef(null);
 
-  // Load existing profile
+  // Load existing profile + prefill name from workspace
   useEffect(() => {
     if (!userOrg?.id) { setLoading(false); return; }
     (async () => {
       const { data } = await supabase.from("brand_profile").select("*").eq("org_id", userOrg.id).maybeSingle();
       setProfile(data);
-      if (data) {
-        setForm({
-          name: data.name || "",
-          claim: data.claim || "",
-          logo_url: data.logo_url || "",
-          website_url: data.website_url || "",
-          colors: data.colors || [],
-          description: data.description || "",
-          pdf_url: data.pdf_url || "",
-          pdf_name: data.pdf_name || "",
-        });
-      }
+      setForm({
+        name: data?.name || userOrg?.name || "",
+        claim: data?.claim || "",
+        logo_url: data?.logo_url || "",
+        website_url: data?.website_url || "",
+        colors: data?.colors || [],
+        description: data?.description || "",
+        pdf_url: data?.pdf_url || "",
+        pdf_name: data?.pdf_name || "",
+      });
       setLoading(false);
     })();
-  }, [userOrg?.id]);
+  }, [userOrg?.id, userOrg?.name]);
 
   // Realtime
   useEffect(() => {
@@ -7193,16 +7199,15 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
     }
   };
 
-  const addColor = () => {
-    const c = colorInput.trim();
+  const addColor = (val) => {
+    const c = (val || colorInput).trim();
     if (!c || form.colors.includes(c)) return;
     setForm(prev => ({ ...prev, colors: [...prev.colors, c] }));
   };
-
   const removeColor = (c) => setForm(prev => ({ ...prev, colors: prev.colors.filter(x => x !== c) }));
 
   const saveProfile = async () => {
-    if (!form.name.trim()) { alert("Bitte mindestens einen Brand-Namen eingeben."); return; }
+    if (!form.name.trim()) return;
     setSaving(true);
     try {
       const payload = {
@@ -7224,7 +7229,9 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         const { data } = await supabase.from("brand_profile").insert(payload).select().single();
         setProfile(data);
       }
-      setEditMode(false);
+      // Smoothly end the wizard
+      setStep(5); // celebration screen
+      setTimeout(() => { setEditMode(false); setStep(0); }, 1800);
     } catch (e) {
       alert("Speichern fehlgeschlagen: " + (e.message || "Unbekannter Fehler"));
     } finally {
@@ -7232,7 +7239,470 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
     }
   };
 
+  const goTo = (n) => { setStepDir(n > step ? 1 : -1); setStep(n); };
+  const next = () => goTo(Math.min(step + 1, 4));
+  const back = () => goTo(Math.max(step - 1, 0));
+
   const isOnboarding = !profile || editMode;
+  const totalSteps = 5; // 0..4 (5 = done)
+
+  // ── Step content factory ──
+  const stepVariants = {
+    enter: (dir) => ({ opacity: 0, x: dir * 60, filter: "blur(6px)" }),
+    center: { opacity: 1, x: 0, filter: "blur(0px)" },
+    exit: (dir) => ({ opacity: 0, x: dir * -60, filter: "blur(6px)" }),
+  };
+
+  const renderStep = () => {
+    if (step === 0) {
+      // WELCOME — set name (prefilled from workspace)
+      return (
+        <motion.div key="0" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
+          transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
+          style={{ display: "flex", flexDirection: "column", gap: 32, alignItems: "center", textAlign: "center", maxWidth: 520, margin: "0 auto" }}
+        >
+          <motion.div
+            initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.1, type: "spring", stiffness: 200, damping: 18 }}
+            style={{
+              width: 88, height: 88, borderRadius: 24,
+              background: "linear-gradient(135deg, #8B7AFF, #6C5CE7)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 14px 40px rgba(139, 122, 255, 0.35)",
+            }}
+          >
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="#fff" strokeWidth="1.6" strokeLinejoin="round" fill="#ffffff20"/>
+            </svg>
+          </motion.div>
+          <div>
+            <motion.div
+              initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2, duration: 0.5 }}
+              style={{ fontSize: 32, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 12, lineHeight: 1.2 }}
+            >Lass uns deine Brand definieren</motion.div>
+            <motion.div
+              initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3, duration: 0.5 }}
+              style={{ fontSize: 15, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}
+            >
+              In ein paar Schritten gibst du i7 OS den nötigen Kontext, damit alle Assets, Texte und Insights perfekt zu deiner Marke passen.
+            </motion.div>
+          </div>
+          <motion.div
+            initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4, duration: 0.5 }}
+            style={{ width: "100%" }}
+          >
+            <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Wie heißt deine Brand?</label>
+            <input value={form.name} onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
+              autoFocus placeholder="z.B. Agency OS"
+              onKeyDown={(e) => { if (e.key === "Enter" && form.name.trim()) next(); }}
+              style={{
+                width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
+                padding: "14px 18px", fontSize: 18, fontFamily: FONT, fontWeight: 500,
+                color: theme.text, outline: "none", caretColor: theme.accent, textAlign: "center",
+              }}
+            />
+            <input value={form.claim} onChange={(e) => setForm(prev => ({ ...prev, claim: e.target.value }))}
+              placeholder="Optional: Claim oder Tagline"
+              style={{
+                marginTop: 10, width: "100%",
+                background: "transparent",
+                border: "none", borderBottom: `1px solid ${theme.borderFaint}`,
+                padding: "8px 4px", fontSize: 13, fontFamily: FONT,
+                color: theme.textSub, outline: "none", caretColor: theme.accent, textAlign: "center",
+              }}
+            />
+          </motion.div>
+        </motion.div>
+      );
+    }
+
+    if (step === 1) {
+      // LOGO
+      return (
+        <motion.div key="1" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
+          transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
+          style={{ display: "flex", flexDirection: "column", gap: 32, alignItems: "center", textAlign: "center", maxWidth: 520, margin: "0 auto" }}
+        >
+          <div>
+            <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
+              Wie sieht deine Brand aus?
+            </div>
+            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+              Lade dein Logo hoch — quadratisch und transparent ist ideal.
+            </div>
+          </div>
+          {(logoPreview || form.logo_url) ? (
+            <motion.div
+              initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 250, damping: 22 }}
+              style={{ position: "relative" }}
+            >
+              <img src={logoPreview || form.logo_url} alt=""
+                style={{
+                  width: 180, height: 180, borderRadius: 32, objectFit: "cover",
+                  border: `1px solid ${theme.borderFaint}`,
+                  boxShadow: "0 24px 60px rgba(0,0,0,0.12)",
+                }}
+              />
+              <motion.div whileTap={{ scale: 0.9 }}
+                onClick={() => { setLogoPreview(null); setForm(prev => ({ ...prev, logo_url: "" })); }}
+                style={{ position: "absolute", top: -10, right: -10, width: 30, height: 30, borderRadius: "50%", background: "#EF4444", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, cursor: "pointer", border: `3px solid ${darkMode ? "#16161e" : "#fff"}`, boxShadow: "0 4px 12px rgba(239,68,68,0.4)" }}
+              >✕</motion.div>
+            </motion.div>
+          ) : (
+            <motion.div
+              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+              onClick={() => logoInputRef.current?.click()}
+              style={{
+                width: 180, height: 180, borderRadius: 32, cursor: "pointer",
+                border: `2px dashed ${theme.border}`,
+                background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, color: theme.textFaint,
+                transition: "border-color 0.2s",
+              }}
+            >
+              <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="3"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <path d="M21 15l-5-5L5 21"/>
+              </svg>
+              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>Logo hochladen</div>
+            </motion.div>
+          )}
+          <motion.button whileTap={{ scale: 0.97 }}
+            onClick={() => logoInputRef.current?.click()} disabled={logoUploading}
+            style={{
+              padding: "10px 22px", borderRadius: 12, cursor: logoUploading ? "wait" : "pointer",
+              background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+              border: `1px solid ${theme.borderFaint}`,
+              fontSize: 13, fontFamily: FONT, color: theme.textSub, fontWeight: 500,
+              opacity: logoUploading ? 0.6 : 1,
+            }}
+          >{logoUploading ? "Lädt..." : (form.logo_url ? "Anderes Logo wählen" : "Datei auswählen")}</motion.button>
+          <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" style={{ display: "none" }} onChange={(e) => handleLogoUpload(e.target.files?.[0])} />
+        </motion.div>
+      );
+    }
+
+    if (step === 2) {
+      // COLORS
+      return (
+        <motion.div key="2" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
+          transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
+          style={{ display: "flex", flexDirection: "column", gap: 28, alignItems: "center", textAlign: "center", maxWidth: 520, margin: "0 auto" }}
+        >
+          <div>
+            <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
+              Welche Farben sprechen für dich?
+            </div>
+            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+              Wähle die Farben, die deine Brand ausmachen. Du kannst beliebig viele kombinieren.
+            </div>
+          </div>
+
+          {/* Color stack */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 14, justifyContent: "center", minHeight: 88 }}>
+            {form.colors.map((c, i) => (
+              <motion.div key={c}
+                initial={{ scale: 0, rotate: -30 }} animate={{ scale: 1, rotate: 0 }}
+                transition={{ type: "spring", stiffness: 260, damping: 20, delay: i * 0.04 }}
+                style={{ position: "relative" }}
+              >
+                <div style={{
+                  width: 72, height: 72, borderRadius: 20, background: c,
+                  border: `1px solid ${theme.borderFaint}`,
+                  boxShadow: `0 8px 24px ${c}55`,
+                }} />
+                <motion.div whileTap={{ scale: 0.9 }} onClick={() => removeColor(c)}
+                  style={{ position: "absolute", top: -6, right: -6, width: 22, height: 22, borderRadius: "50%", background: darkMode ? "#1a1a2e" : "#fff", color: theme.textSub, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 2px 6px rgba(0,0,0,0.15)" }}
+                >✕</motion.div>
+                <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, textAlign: "center", marginTop: 6, letterSpacing: 0.5 }}>{c.toUpperCase()}</div>
+              </motion.div>
+            ))}
+            {form.colors.length === 0 && (
+              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint, fontStyle: "italic", padding: "20px 0" }}>
+                Noch keine Farben gewählt
+              </div>
+            )}
+          </div>
+
+          {/* Palette suggestions */}
+          <div>
+            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.5 }}>Vorschläge</div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+              {BRAND_ACCENT_PALETTE.filter(c => !form.colors.includes(c)).map(c => (
+                <motion.div key={c} whileHover={{ scale: 1.15, y: -2 }} whileTap={{ scale: 0.9 }}
+                  onClick={() => addColor(c)}
+                  style={{
+                    width: 32, height: 32, borderRadius: 10, background: c, cursor: "pointer",
+                    border: `1px solid ${theme.borderFaint}`,
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Custom picker */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: colorInput, border: `2px solid ${theme.borderFaint}` }}>
+                <input type="color" value={colorInput} onChange={(e) => setColorInput(e.target.value)}
+                  style={{ opacity: 0, width: "100%", height: "100%", cursor: "pointer" }}
+                />
+              </div>
+              <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub, letterSpacing: 0.3 }}>{colorInput.toUpperCase()}</span>
+            </label>
+            <motion.button whileTap={{ scale: 0.97 }} onClick={() => addColor()}
+              style={{
+                padding: "8px 16px", borderRadius: 10, cursor: "pointer",
+                background: theme.accent + "20", border: `1px solid ${theme.accent}40`,
+                color: theme.accent, fontSize: 12, fontFamily: FONT, fontWeight: 500,
+              }}
+            >+ Hinzufügen</motion.button>
+          </div>
+        </motion.div>
+      );
+    }
+
+    if (step === 3) {
+      // CONTEXT — Text / URL / PDF tabs
+      return (
+        <motion.div key="3" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
+          transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
+          style={{ display: "flex", flexDirection: "column", gap: 26, maxWidth: 560, margin: "0 auto", width: "100%" }}
+        >
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
+              Erzähl uns mehr über deine Brand
+            </div>
+            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+              Je mehr Kontext wir haben, desto besser können wir später Inhalte für dich generieren.
+            </div>
+          </div>
+
+          {/* Tab switcher */}
+          <div style={{ display: "flex", gap: 6, padding: 4, borderRadius: 14, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, alignSelf: "center" }}>
+            {[
+              { id: "text", label: "Beschreibung", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h16M4 18h12"/></svg> },
+              { id: "url", label: "Website", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg> },
+              { id: "pdf", label: "PDF", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> },
+            ].map(t => {
+              const active = contextTab === t.id;
+              return (
+                <motion.div key={t.id} whileTap={{ scale: 0.95 }}
+                  onClick={() => setContextTab(t.id)}
+                  style={{
+                    padding: "8px 16px", borderRadius: 10, cursor: "pointer",
+                    background: active ? (darkMode ? "rgba(255,255,255,0.08)" : "#fff") : "transparent",
+                    color: active ? theme.text : theme.textDim,
+                    fontSize: 12, fontFamily: FONT, fontWeight: 500,
+                    display: "flex", alignItems: "center", gap: 6,
+                    boxShadow: active ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
+                    transition: "background 0.2s, color 0.2s",
+                  }}
+                >{t.icon} {t.label}</motion.div>
+              );
+            })}
+          </div>
+
+          {/* Tab content */}
+          <AnimatePresence mode="wait">
+            {contextTab === "text" && (
+              <motion.div key="text" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
+                <textarea value={form.description} onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Was macht deine Brand aus? Zielgruppe, Werte, Tonalität, USPs ..."
+                  rows={9}
+                  style={{
+                    width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                    border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
+                    padding: "16px 18px", fontSize: 14, fontFamily: FONT,
+                    color: theme.text, outline: "none", caretColor: theme.accent, resize: "vertical", minHeight: 160, lineHeight: 1.55,
+                  }}
+                />
+              </motion.div>
+            )}
+            {contextTab === "url" && (
+              <motion.div key="url" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}
+                style={{ display: "flex", flexDirection: "column", gap: 12 }}
+              >
+                <input value={form.website_url} onChange={(e) => setForm(prev => ({ ...prev, website_url: e.target.value }))}
+                  placeholder="https://deine-brand.com"
+                  style={{
+                    width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                    border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
+                    padding: "14px 18px", fontSize: 16, fontFamily: FONT,
+                    color: theme.text, outline: "none", caretColor: theme.accent,
+                  }}
+                />
+                <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint, lineHeight: 1.6 }}>
+                  Wir speichern die URL und ziehen später automatisch Informationen wie Texte, Farben und Tonalität.
+                  <br/><span style={{ opacity: 0.7 }}>Auto-Import folgt in Kürze.</span>
+                </div>
+              </motion.div>
+            )}
+            {contextTab === "pdf" && (
+              <motion.div key="pdf" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
+                {form.pdf_url ? (
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: 14, borderRadius: 14,
+                    background: darkMode ? "rgba(139,122,255,0.08)" : "rgba(139,122,255,0.06)",
+                    border: "1px solid rgba(139,122,255,0.22)",
+                  }}>
+                    <div style={{ width: 46, height: 46, borderRadius: 11, background: "rgba(139,122,255,0.2)", color: "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <a href={form.pdf_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 14, fontFamily: FONT, color: theme.text, textDecoration: "none", fontWeight: 500, display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{form.pdf_name}</a>
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Hochgeladen · Klicken zum Öffnen</div>
+                    </div>
+                    <motion.div whileTap={{ scale: 0.9 }} onClick={() => setForm(prev => ({ ...prev, pdf_url: "", pdf_name: "" }))}
+                      style={{ width: 28, height: 28, borderRadius: "50%", background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 12, flexShrink: 0 }}
+                    >✕</motion.div>
+                  </div>
+                ) : (
+                  <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
+                    onClick={() => pdfInputRef.current?.click()}
+                    style={{
+                      padding: "32px 20px", borderRadius: 14, cursor: pdfUploading ? "wait" : "pointer",
+                      border: `2px dashed ${theme.border}`,
+                      background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
+                      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12,
+                      color: theme.textDim, fontFamily: FONT, textAlign: "center",
+                      opacity: pdfUploading ? 0.6 : 1,
+                    }}
+                  >
+                    <div style={{ width: 50, height: 50, borderRadius: 14, background: theme.accent + "15", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 14, color: theme.text, fontWeight: 500, marginBottom: 4 }}>
+                        {pdfUploading ? "Lädt..." : "Brand-Dokument hochladen"}
+                      </div>
+                      <div style={{ fontSize: 12, color: theme.textFaint }}>
+                        Brand Manual, Pitch Deck, Style Guide ...
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+                <input ref={pdfInputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => handlePdfUpload(e.target.files?.[0])} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      );
+    }
+
+    if (step === 4) {
+      // RECAP
+      return (
+        <motion.div key="4" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
+          transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
+          style={{ display: "flex", flexDirection: "column", gap: 24, alignItems: "center", textAlign: "center", maxWidth: 520, margin: "0 auto" }}
+        >
+          <div>
+            <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
+              Sieht gut aus, oder?
+            </div>
+            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+              Hier ist deine Brand auf einen Blick. Du kannst alles später jederzeit anpassen.
+            </div>
+          </div>
+
+          {/* Big preview card */}
+          <motion.div
+            initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 240, damping: 22 }}
+            style={{
+              width: "100%", padding: 24, borderRadius: 22,
+              background: form.colors[0] ? `linear-gradient(135deg, ${form.colors[0]}08, transparent 60%)` : (darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)"),
+              border: `1px solid ${theme.borderFaint}`,
+              display: "flex", alignItems: "center", gap: 18, textAlign: "left",
+            }}
+          >
+            {form.logo_url ? (
+              <img src={form.logo_url} alt="" style={{ width: 72, height: 72, borderRadius: 18, objectFit: "cover", flexShrink: 0, border: `1px solid ${theme.borderFaint}` }} />
+            ) : (
+              <div style={{ width: 72, height: 72, borderRadius: 18, background: (form.colors[0] || theme.accent) + "22", color: form.colors[0] || theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{(form.name || "?")[0]}</div>
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{form.name}</div>
+              {form.claim && <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 4, lineHeight: 1.5 }}>{form.claim}</div>}
+              {form.colors.length > 0 && (
+                <div style={{ display: "flex", gap: 4, marginTop: 10 }}>
+                  {form.colors.slice(0, 6).map(c => (
+                    <div key={c} style={{ width: 14, height: 14, borderRadius: 5, background: c, border: `1px solid ${theme.borderFaint}` }} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+
+          {/* Stats row */}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+            {form.description && (
+              <div style={{ padding: "5px 12px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", fontSize: 11, fontFamily: FONT, color: theme.textSub }}>
+                ✓ Beschreibung
+              </div>
+            )}
+            {form.website_url && (
+              <div style={{ padding: "5px 12px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", fontSize: 11, fontFamily: FONT, color: theme.textSub }}>
+                ✓ Website
+              </div>
+            )}
+            {form.pdf_url && (
+              <div style={{ padding: "5px 12px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", fontSize: 11, fontFamily: FONT, color: theme.textSub }}>
+                ✓ Dokument
+              </div>
+            )}
+            {form.colors.length > 0 && (
+              <div style={{ padding: "5px 12px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", fontSize: 11, fontFamily: FONT, color: theme.textSub }}>
+                ✓ {form.colors.length} Farben
+              </div>
+            )}
+          </div>
+        </motion.div>
+      );
+    }
+
+    if (step === 5) {
+      // CELEBRATION
+      return (
+        <motion.div key="5" initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+          transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
+          style={{ display: "flex", flexDirection: "column", gap: 24, alignItems: "center", textAlign: "center" }}
+        >
+          <motion.div
+            initial={{ scale: 0, rotate: -180 }} animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: "spring", stiffness: 200, damping: 16 }}
+            style={{
+              width: 96, height: 96, borderRadius: "50%",
+              background: "linear-gradient(135deg, #00B894, #00997A)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 14px 40px rgba(0, 184, 148, 0.4)",
+            }}
+          >
+            <svg width="50" height="50" viewBox="0 0 24 24" fill="none">
+              <path d="M5 13l4 4L19 7" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </motion.div>
+          <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5 }}>
+            Brand ist live!
+          </div>
+          <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 360 }}>
+            Du kannst jetzt loslegen. Wir leiten dich gleich weiter ...
+          </div>
+        </motion.div>
+      );
+    }
+  };
+
+  const canAdvance = () => {
+    if (step === 0) return form.name.trim().length > 0;
+    return true;
+  };
 
   return (
     <motion.div
@@ -7247,282 +7717,149 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
       }}
     >
       <div style={{
-        width: "100%", maxWidth: 720, height: "100%",
+        width: "100%", maxWidth: 760, height: "100%",
         background: theme.cardBg, backdropFilter: "blur(40px)",
         border: `1px solid ${theme.borderFaint}`,
-        borderRadius: 24, overflow: "hidden",
+        borderRadius: 26, overflow: "hidden",
         display: "flex", flexDirection: "column",
+        position: "relative",
       }}>
-        {/* Header */}
-        <div style={{ padding: "16px 24px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${theme.borderFaint}` }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke={theme.accent} strokeWidth="1.5" strokeLinejoin="round"/>
-          </svg>
-          <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
-            {isOnboarding ? "Brand Setup" : (profile?.name || "Brand")}
-          </div>
-          {!isOnboarding && profile?.claim && (
-            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>· {profile.claim}</div>
-          )}
-          <div style={{ flex: 1 }} />
-          {!isOnboarding && (
-            <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              onClick={() => setEditMode(true)}
-              style={{
-                padding: "7px 14px", borderRadius: 10, cursor: "pointer",
-                background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                border: `1px solid ${theme.borderFaint}`,
-                color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT,
-              }}
-            >Bearbeiten</motion.button>
-          )}
-        </div>
-
-        {/* Tabs row — only shown when not in onboarding */}
-        {!isOnboarding && (
-          <div style={{ display: "flex", gap: 4, padding: "10px 20px 0", borderBottom: `1px solid ${theme.borderFaint}` }}>
-            {Object.entries(BRAND_SUBVIEW_LABELS).map(([key, label]) => {
-              const active = brandTab === key;
-              return (
-                <motion.div key={key} whileTap={{ scale: 0.96 }}
-                  onClick={() => setBrandTab(key)}
-                  style={{
-                    padding: "8px 14px", borderRadius: "10px 10px 0 0", cursor: "pointer",
-                    fontSize: 12, fontFamily: FONT, fontWeight: active ? 600 : 500,
-                    color: active ? theme.text : theme.textDim,
-                    borderBottom: active ? `2px solid ${theme.accent}` : "2px solid transparent",
-                    marginBottom: -1,
-                    transition: "color 0.15s",
-                  }}
-                >{label}</motion.div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Content */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px 32px" }}>
-          {loading ? (
-            <div style={{ padding: 40, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>Lädt...</div>
-          ) : isOnboarding ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 22, maxWidth: 540, margin: "0 auto" }}>
-              {!profile && (
-                <div style={{ marginBottom: 4 }}>
-                  <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 500, color: theme.text, marginBottom: 6, letterSpacing: -0.3 }}>
-                    Lass uns deine Brand definieren
-                  </div>
-                  <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
-                    Damit i7 OS dir später relevante Assets, Texte und Insights liefern kann, brauchen wir erst etwas Kontext zu deiner Marke.
-                  </div>
-                </div>
-              )}
-
-              {/* Logo */}
-              <div>
-                <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Logo</label>
-                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                  {(logoPreview || form.logo_url) ? (
-                    <div style={{ position: "relative" }}>
-                      <img src={logoPreview || form.logo_url} alt="" style={{ width: 72, height: 72, borderRadius: 14, objectFit: "cover", border: `1px solid ${theme.borderFaint}` }} />
-                      <motion.div whileTap={{ scale: 0.9 }}
-                        onClick={() => { setLogoPreview(null); setForm(prev => ({ ...prev, logo_url: "" })); }}
-                        style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: "#EF4444", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, cursor: "pointer", border: `2px solid ${darkMode ? "#16161e" : "#fff"}` }}
-                      >✕</motion.div>
-                    </div>
-                  ) : (
-                    <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                      onClick={() => logoInputRef.current?.click()}
-                      style={{
-                        width: 72, height: 72, borderRadius: 14, cursor: "pointer",
-                        border: `2px dashed ${theme.border}`,
-                        background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
-                        display: "flex", alignItems: "center", justifyContent: "center", color: theme.textFaint,
-                      }}
-                    >
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                    </motion.div>
-                  )}
-                  <div style={{ flex: 1 }}>
-                    <motion.button whileTap={{ scale: 0.97 }} onClick={() => logoInputRef.current?.click()} disabled={logoUploading}
-                      style={{
-                        padding: "8px 14px", borderRadius: 10, cursor: logoUploading ? "wait" : "pointer",
-                        background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-                        border: `1px solid ${theme.borderFaint}`,
-                        fontSize: 12, fontFamily: FONT, color: theme.textSub,
-                        opacity: logoUploading ? 0.6 : 1,
-                      }}
-                    >{logoUploading ? "Lädt..." : (form.logo_url ? "Ersetzen" : "Logo hochladen")}</motion.button>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 6 }}>PNG/JPG/SVG, quadratisch ideal</div>
-                  </div>
-                </div>
-                <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" style={{ display: "none" }} onChange={(e) => handleLogoUpload(e.target.files?.[0])} />
-              </div>
-
-              {/* Name */}
-              <div>
-                <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Brand-Name *</label>
-                <input value={form.name} onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="z.B. Agency OS"
-                  style={{
-                    width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                    border: `1px solid ${theme.borderFaint}`, borderRadius: 12,
-                    padding: "11px 14px", fontSize: 14, fontFamily: FONT,
-                    color: theme.text, outline: "none", caretColor: theme.accent,
-                  }}
-                />
-              </div>
-
-              {/* Claim */}
-              <div>
-                <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Claim / Tagline</label>
-                <input value={form.claim} onChange={(e) => setForm(prev => ({ ...prev, claim: e.target.value }))}
-                  placeholder="z.B. Das Betriebssystem für moderne Agenturen"
-                  style={{
-                    width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                    border: `1px solid ${theme.borderFaint}`, borderRadius: 12,
-                    padding: "11px 14px", fontSize: 14, fontFamily: FONT,
-                    color: theme.text, outline: "none", caretColor: theme.accent,
-                  }}
-                />
-              </div>
-
-              {/* Website */}
-              <div>
-                <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Website (für späteren Import)</label>
-                <input value={form.website_url} onChange={(e) => setForm(prev => ({ ...prev, website_url: e.target.value }))}
-                  placeholder="https://..."
-                  style={{
-                    width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                    border: `1px solid ${theme.borderFaint}`, borderRadius: 12,
-                    padding: "11px 14px", fontSize: 14, fontFamily: FONT,
-                    color: theme.text, outline: "none", caretColor: theme.accent,
-                  }}
-                />
-                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 6 }}>Wir speichern die URL — Auto-Import von Inhalten kommt später</div>
-              </div>
-
-              {/* Colors */}
-              <div>
-                <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Brand-Farben</label>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  {form.colors.map(c => (
-                    <div key={c} style={{
-                      display: "flex", alignItems: "center", gap: 6,
-                      padding: "4px 10px 4px 4px", borderRadius: 999,
-                      background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                      border: `1px solid ${theme.borderFaint}`,
-                    }}>
-                      <div style={{ width: 20, height: 20, borderRadius: "50%", background: c, border: "1px solid rgba(0,0,0,0.1)" }} />
-                      <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textSub, letterSpacing: 0.2 }}>{c}</span>
-                      <motion.div whileTap={{ scale: 0.9 }} onClick={() => removeColor(c)}
-                        style={{ cursor: "pointer", color: theme.textFaint, fontSize: 11, marginLeft: 2 }}
-                      >✕</motion.div>
-                    </div>
-                  ))}
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <label style={{ width: 26, height: 26, borderRadius: "50%", cursor: "pointer", background: colorInput, border: `2px solid ${theme.borderFaint}` }}>
-                      <input type="color" value={colorInput} onChange={(e) => setColorInput(e.target.value)}
-                        style={{ opacity: 0, width: 0, height: 0 }}
-                      />
-                    </label>
-                    <motion.button whileTap={{ scale: 0.97 }} onClick={addColor}
-                      style={{
-                        padding: "5px 12px", borderRadius: 999, cursor: "pointer",
-                        background: theme.accent + "20", border: `1px solid ${theme.accent}40`,
-                        color: theme.accent, fontSize: 11, fontFamily: FONT, fontWeight: 500,
-                      }}
-                    >+ Hinzufügen</motion.button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Description */}
-              <div>
-                <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Beschreibung / Kontext</label>
-                <textarea value={form.description} onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Was macht deine Brand aus? Zielgruppe, Werte, Tonalität, USPs ..."
-                  rows={6}
-                  style={{
-                    width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                    border: `1px solid ${theme.borderFaint}`, borderRadius: 12,
-                    padding: "11px 14px", fontSize: 14, fontFamily: FONT,
-                    color: theme.text, outline: "none", caretColor: theme.accent, resize: "vertical", minHeight: 100,
-                  }}
-                />
-              </div>
-
-              {/* PDF upload */}
-              <div>
-                <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Brand-Dokument (PDF)</label>
-                {form.pdf_url ? (
-                  <div style={{
-                    display: "flex", alignItems: "center", gap: 10,
-                    padding: "10px 12px", borderRadius: 12,
-                    background: darkMode ? "rgba(139,122,255,0.08)" : "rgba(139,122,255,0.06)",
-                    border: "1px solid rgba(139,122,255,0.2)",
-                  }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(139,122,255,0.18)", color: "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <a href={form.pdf_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontFamily: FONT, color: theme.text, textDecoration: "none", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>{form.pdf_name}</a>
-                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>PDF hochgeladen · klicken zum Öffnen</div>
-                    </div>
-                    <motion.div whileTap={{ scale: 0.9 }} onClick={() => setForm(prev => ({ ...prev, pdf_url: "", pdf_name: "" }))}
-                      style={{ width: 26, height: 26, borderRadius: "50%", background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 11 }}
-                    >✕</motion.div>
-                  </div>
-                ) : (
-                  <motion.div whileTap={{ scale: 0.98 }}
-                    onClick={() => pdfInputRef.current?.click()}
+        {loading ? (
+          <div style={{ padding: 40, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim, margin: "auto" }}>Lädt...</div>
+        ) : isOnboarding ? (
+          <>
+            {/* Progress bar */}
+            {step < 5 && (
+              <div style={{ padding: "20px 28px 0", display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ flex: 1, height: 4, borderRadius: 2, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", overflow: "hidden" }}>
+                  <motion.div
+                    animate={{ width: `${((step + 1) / totalSteps) * 100}%` }}
+                    transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
                     style={{
-                      padding: "16px", borderRadius: 12, cursor: pdfUploading ? "wait" : "pointer",
-                      border: `2px dashed ${theme.border}`,
-                      background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
-                      display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-                      color: theme.textDim, fontSize: 13, fontFamily: FONT,
-                      opacity: pdfUploading ? 0.6 : 1,
+                      height: "100%", background: "linear-gradient(90deg, #8B7AFF, #6C5CE7)",
+                      borderRadius: 2,
+                    }}
+                  />
+                </div>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 500, letterSpacing: 0.5, whiteSpace: "nowrap" }}>
+                  Schritt {step + 1} / {totalSteps}
+                </div>
+              </div>
+            )}
+
+            {/* Step content */}
+            <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", padding: "48px 40px 24px", position: "relative" }}>
+              <AnimatePresence mode="wait" custom={stepDir}>
+                {renderStep()}
+              </AnimatePresence>
+            </div>
+
+            {/* Footer with navigation */}
+            {step < 5 && (
+              <div style={{ padding: "16px 28px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: `1px solid ${theme.borderFaint}` }}>
+                {step > 0 ? (
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={back}
+                    style={{
+                      padding: "10px 18px", borderRadius: 12, cursor: "pointer",
+                      background: "transparent", border: `1px solid ${theme.borderFaint}`,
+                      color: theme.textSub, fontSize: 13, fontWeight: 500, fontFamily: FONT,
+                      display: "flex", alignItems: "center", gap: 6,
                     }}
                   >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-                    {pdfUploading ? "Lädt..." : "PDF hochladen (z.B. Brand-Manual, Pitch-Deck)"}
-                  </motion.div>
-                )}
-                <input ref={pdfInputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => handlePdfUpload(e.target.files?.[0])} />
-                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 6 }}>Wir speichern das Dokument — automatische Inhaltsextraktion kommt später</div>
-              </div>
-
-              {/* Save / Cancel */}
-              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
-                {profile && (
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => { setEditMode(false); setLogoPreview(null); }}
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                    Zurück
+                  </motion.button>
+                ) : profile ? (
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => { setEditMode(false); setStep(0); }}
                     style={{
-                      padding: "11px 22px", borderRadius: 12, cursor: "pointer",
-                      background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-                      border: `1px solid ${theme.borderFaint}`,
+                      padding: "10px 18px", borderRadius: 12, cursor: "pointer",
+                      background: "transparent", border: `1px solid ${theme.borderFaint}`,
                       color: theme.textSub, fontSize: 13, fontWeight: 500, fontFamily: FONT,
                     }}
                   >Abbrechen</motion.button>
+                ) : <div />}
+
+                {step < 4 ? (
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={next} disabled={!canAdvance()}
+                    style={{
+                      padding: "10px 22px", borderRadius: 12, cursor: canAdvance() ? "pointer" : "not-allowed",
+                      background: canAdvance() ? "linear-gradient(135deg, #8B7AFF, #6C5CE7)" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+                      border: "none",
+                      color: canAdvance() ? "#fff" : theme.textFaint,
+                      fontSize: 13, fontWeight: 600, fontFamily: FONT,
+                      display: "flex", alignItems: "center", gap: 6,
+                      boxShadow: canAdvance() ? "0 8px 22px rgba(139,122,255,0.35)" : "none",
+                    }}
+                  >
+                    Weiter
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  </motion.button>
+                ) : (
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={saveProfile} disabled={saving}
+                    style={{
+                      padding: "10px 24px", borderRadius: 12, cursor: saving ? "wait" : "pointer",
+                      background: "linear-gradient(135deg, #00B894, #00997A)",
+                      border: "none",
+                      color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT,
+                      display: "flex", alignItems: "center", gap: 6,
+                      boxShadow: "0 8px 22px rgba(0,184,148,0.35)",
+                      opacity: saving ? 0.6 : 1,
+                    }}
+                  >
+                    {saving ? "Speichert..." : "Brand anlegen"}
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                  </motion.button>
                 )}
-                <motion.button whileTap={{ scale: 0.97 }} onClick={saveProfile}
-                  disabled={!form.name.trim() || saving}
-                  style={{
-                    padding: "11px 26px", borderRadius: 12, cursor: form.name.trim() && !saving ? "pointer" : "not-allowed",
-                    background: form.name.trim() ? theme.accent + "22" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
-                    border: `1px solid ${form.name.trim() ? theme.accent + "40" : theme.borderFaint}`,
-                    color: form.name.trim() ? theme.accent : theme.textFaint,
-                    fontSize: 13, fontWeight: 600, fontFamily: FONT,
-                    opacity: saving ? 0.6 : 1,
-                  }}
-                >{saving ? "Speichert..." : (profile ? "Speichern" : "Brand anlegen")}</motion.button>
               </div>
+            )}
+          </>
+        ) : (
+          // Post-onboarding: tabs + summary
+          <>
+            <div style={{ padding: "16px 24px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${theme.borderFaint}` }}>
+              {profile.logo_url ? (
+                <img src={profile.logo_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+              ) : (
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: theme.accent + "22", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{(profile.name || "?")[0]}</div>
+              )}
+              <div>
+                <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{profile.name}</div>
+                {profile.claim && <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>{profile.claim}</div>}
+              </div>
+              <div style={{ flex: 1 }} />
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => { setEditMode(true); setStep(0); }}
+                style={{
+                  padding: "8px 16px", borderRadius: 10, cursor: "pointer",
+                  background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                  border: `1px solid ${theme.borderFaint}`,
+                  color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT,
+                }}
+              >Bearbeiten</motion.button>
             </div>
-          ) : (
-            // Active sub-view (Identity / Assets / etc.) — placeholder for now
-            <div style={{ maxWidth: 540, margin: "0 auto" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+
+            {/* Tabs */}
+            <div style={{ display: "flex", gap: 4, padding: "10px 20px 0", borderBottom: `1px solid ${theme.borderFaint}` }}>
+              {Object.entries(BRAND_SUBVIEW_LABELS).map(([key, label]) => {
+                const active = brandTab === key;
+                return (
+                  <motion.div key={key} whileTap={{ scale: 0.96 }}
+                    onClick={() => setBrandTab(key)}
+                    style={{
+                      padding: "8px 14px", borderRadius: "10px 10px 0 0", cursor: "pointer",
+                      fontSize: 12, fontFamily: FONT, fontWeight: active ? 600 : 500,
+                      color: active ? theme.text : theme.textDim,
+                      borderBottom: active ? `2px solid ${theme.accent}` : "2px solid transparent",
+                      marginBottom: -1,
+                    }}
+                  >{label}</motion.div>
+                );
+              })}
+            </div>
+
+            <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px 32px" }}>
+              <div style={{ maxWidth: 540, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
                 <div>
-                  <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 500, color: theme.text, marginBottom: 6, letterSpacing: -0.3 }}>
+                  <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 6, letterSpacing: -0.3 }}>
                     {BRAND_SUBVIEW_LABELS[brandTab] || "Brand"}
                   </div>
                   <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
@@ -7530,76 +7867,72 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   </div>
                 </div>
 
-                {/* Brand summary card */}
+                {/* Big brand card */}
                 <div style={{
-                  padding: 20, borderRadius: 16,
-                  background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)",
+                  padding: 22, borderRadius: 18,
+                  background: profile.colors?.[0] ? `linear-gradient(135deg, ${profile.colors[0]}10, transparent 60%)` : (darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)"),
                   border: `1px solid ${theme.borderFaint}`,
-                  display: "flex", gap: 16, alignItems: "flex-start",
+                  display: "flex", gap: 18, alignItems: "center",
                 }}>
                   {profile.logo_url ? (
-                    <img src={profile.logo_url} alt="" style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />
+                    <img src={profile.logo_url} alt="" style={{ width: 64, height: 64, borderRadius: 14, objectFit: "cover", flexShrink: 0 }} />
                   ) : (
-                    <div style={{ width: 56, height: 56, borderRadius: 12, background: theme.accent + "22", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{(profile.name || "?")[0]}</div>
+                    <div style={{ width: 64, height: 64, borderRadius: 14, background: (profile.colors?.[0] || theme.accent) + "22", color: profile.colors?.[0] || theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{(profile.name || "?")[0]}</div>
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{profile.name}</div>
-                    {profile.claim && <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 4 }}>{profile.claim}</div>}
+                    <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{profile.name}</div>
+                    {profile.claim && <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 4 }}>{profile.claim}</div>}
                     {profile.website_url && (
                       <a href={profile.website_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontFamily: FONT, color: theme.accent, marginTop: 8, display: "inline-block", textDecoration: "none" }}>{profile.website_url}</a>
                     )}
                   </div>
                 </div>
 
-                {/* Colors */}
                 {profile.colors?.length > 0 && (
                   <div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Brand-Farben</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Brand-Farben</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
                       {profile.colors.map(c => (
-                        <div key={c} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px 4px 4px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}>
-                          <div style={{ width: 20, height: 20, borderRadius: "50%", background: c, border: "1px solid rgba(0,0,0,0.1)" }} />
-                          <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textSub }}>{c}</span>
+                        <div key={c} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                          <div style={{ width: 48, height: 48, borderRadius: 12, background: c, border: `1px solid ${theme.borderFaint}`, boxShadow: `0 4px 14px ${c}33` }} />
+                          <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.3 }}>{c.toUpperCase()}</span>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {/* Description */}
                 {profile.description && (
                   <div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Beschreibung</div>
-                    <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{profile.description}</div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>Beschreibung</div>
+                    <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{profile.description}</div>
                   </div>
                 )}
 
-                {/* PDF */}
                 {profile.pdf_url && (
-                  <div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Brand-Dokument</div>
-                    <a href={profile.pdf_url} target="_blank" rel="noopener noreferrer" style={{
-                      display: "flex", alignItems: "center", gap: 10,
-                      padding: "10px 12px", borderRadius: 12, textDecoration: "none",
-                      background: darkMode ? "rgba(139,122,255,0.06)" : "rgba(139,122,255,0.05)",
-                      border: "1px solid rgba(139,122,255,0.15)",
-                    }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(139,122,255,0.18)", color: "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                      </div>
+                  <a href={profile.pdf_url} target="_blank" rel="noopener noreferrer" style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: 14, borderRadius: 14, textDecoration: "none",
+                    background: darkMode ? "rgba(139,122,255,0.06)" : "rgba(139,122,255,0.05)",
+                    border: "1px solid rgba(139,122,255,0.18)",
+                  }}>
+                    <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(139,122,255,0.2)", color: "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{profile.pdf_name}</div>
-                    </a>
-                  </div>
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>Brand-Dokument</div>
+                    </div>
+                  </a>
                 )}
               </div>
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
     </motion.div>
   );
 }
-
 export default function CircularMenu() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
