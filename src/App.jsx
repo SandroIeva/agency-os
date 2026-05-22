@@ -6248,6 +6248,8 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
   const [pendingInvites, setPendingInvites] = useState([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteSending, setInviteSending] = useState(false);
+  const [showAddPicker, setShowAddPicker] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState("");
   const [userName] = useState(session?.user?.user_metadata?.full_name || session?.user?.email?.split("@")[0] || "");
 
   const loadProjects = async () => {
@@ -6296,7 +6298,21 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
     setMembers([]);
     setPendingInvites([]);
     setInviteEmail("");
+    setShowAddPicker(false);
+    setPickerSearch("");
     if (logoInputRef.current) logoInputRef.current.value = "";
+  };
+
+  // Add an existing org member to the project directly (no email invite needed)
+  const addOrgMemberDirectly = async (userId) => {
+    if (!editing?.id) return;
+    const { error } = await supabase.from("project_members").insert({
+      project_id: editing.id,
+      user_id: userId,
+      role: "member",
+    });
+    if (error) { alert("Fehler beim Hinzufügen: " + error.message); return; }
+    loadMembers(editing.id);
   };
 
   const loadMembers = async (projectId) => {
@@ -6760,33 +6776,157 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
                       </>
                     )}
 
-                    {/* Invite form — only for owners */}
-                    {isOwner && (
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter") sendInvite(); }}
-                          placeholder="E-Mail-Adresse eingeben..."
-                          style={{
-                            flex: 1, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                            border: `1px solid ${theme.borderFaint}`, borderRadius: 10,
-                            padding: "10px 12px", fontSize: 13, fontFamily: FONT,
-                            color: theme.text, outline: "none", caretColor: theme.accent,
-                          }}
-                        />
-                        <motion.button whileTap={{ scale: 0.97 }}
-                          onClick={sendInvite}
-                          disabled={!inviteEmail.includes("@") || inviteSending}
-                          style={{
-                            padding: "10px 16px", borderRadius: 10, cursor: inviteEmail.includes("@") && !inviteSending ? "pointer" : "not-allowed",
-                            background: inviteEmail.includes("@") ? "#8B7AFF" : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
-                            color: inviteEmail.includes("@") ? "#fff" : theme.textFaint,
-                            border: "none",
-                            fontSize: 13, fontWeight: 500, fontFamily: FONT,
-                            opacity: inviteSending ? 0.6 : 1,
-                          }}
-                        >{inviteSending ? "Sende..." : "Einladen"}</motion.button>
-                      </div>
-                    )}
+                    {/* Add members — only for owners */}
+                    {isOwner && (() => {
+                      const memberIds = new Set(members.map(m => m.user_id));
+                      const invitedEmails = new Set(pendingInvites.map(i => i.email.toLowerCase()));
+                      // Available org members: not already in project + has profile
+                      const available = (orgMembers || []).filter(om => {
+                        const uid = om.user_id;
+                        if (memberIds.has(uid)) return false;
+                        if (uid === session?.user?.id) return false; // self
+                        const p = om.profiles || {};
+                        const email = (p.email || "").toLowerCase();
+                        if (invitedEmails.has(email)) return false;
+                        const name = (p.display_name || p.email || "").toLowerCase();
+                        return name.includes(pickerSearch.toLowerCase());
+                      });
+                      const looksLikeEmail = pickerSearch.includes("@") && pickerSearch.includes(".");
+
+                      return (
+                        <div style={{ position: "relative" }}>
+                          <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.97 }}
+                            onClick={() => setShowAddPicker(!showAddPicker)}
+                            style={{
+                              width: "100%", padding: "10px 14px", borderRadius: 10, cursor: "pointer",
+                              background: darkMode ? "rgba(139, 122, 255, 0.08)" : "rgba(139, 122, 255, 0.08)",
+                              border: "1px dashed rgba(139, 122, 255, 0.35)",
+                              color: "#8B7AFF",
+                              fontSize: 13, fontFamily: FONT, fontWeight: 500,
+                              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                            }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                            Mitglied hinzufügen
+                          </motion.button>
+
+                          <AnimatePresence>
+                            {showAddPicker && (
+                              <>
+                                <div onClick={() => { setShowAddPicker(false); setPickerSearch(""); }}
+                                  style={{ position: "fixed", inset: 0, zIndex: 250 }}
+                                />
+                                <motion.div
+                                  initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                                  exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                                  transition={{ duration: 0.18 }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 251,
+                                    background: darkMode ? "rgba(28,28,38,0.99)" : "rgba(255,255,255,0.99)",
+                                    border: `1px solid ${theme.border}`,
+                                    borderRadius: 14, overflow: "hidden",
+                                    boxShadow: "0 16px 40px rgba(0,0,0,0.25)",
+                                    maxHeight: 320, display: "flex", flexDirection: "column",
+                                  }}
+                                >
+                                  {/* Search input */}
+                                  <div style={{ padding: 10, borderBottom: `1px solid ${theme.borderFaint}` }}>
+                                    <input
+                                      autoFocus
+                                      value={pickerSearch}
+                                      onChange={(e) => setPickerSearch(e.target.value)}
+                                      placeholder="Name oder E-Mail-Adresse..."
+                                      style={{
+                                        width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                                        border: `1px solid ${theme.borderFaint}`, borderRadius: 9,
+                                        padding: "8px 12px", fontSize: 13, fontFamily: FONT,
+                                        color: theme.text, outline: "none", caretColor: theme.accent,
+                                      }}
+                                    />
+                                  </div>
+
+                                  {/* Workspace member list */}
+                                  <div style={{ flex: 1, overflowY: "auto", padding: 4 }}>
+                                    {available.length > 0 ? (
+                                      available.map(om => {
+                                        const p = om.profiles || {};
+                                        return (
+                                          <motion.div key={om.user_id}
+                                            whileTap={{ scale: 0.98 }}
+                                            whileHover={{ background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
+                                            onClick={() => { addOrgMemberDirectly(om.user_id); setPickerSearch(""); setShowAddPicker(false); }}
+                                            style={{
+                                              display: "flex", alignItems: "center", gap: 10,
+                                              padding: "8px 10px", borderRadius: 8, cursor: "pointer",
+                                            }}
+                                          >
+                                            {p.avatar_url ? (
+                                              <img src={p.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 28, height: 28, borderRadius: "50%", flexShrink: 0 }} />
+                                            ) : (
+                                              <div style={{
+                                                width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
+                                                background: (p.avatar_color || "#8B7AFF") + "30", color: p.avatar_color || "#8B7AFF",
+                                                display: "flex", alignItems: "center", justifyContent: "center",
+                                                fontSize: 11, fontFamily: FONT, fontWeight: 600,
+                                              }}>{p.initials || (p.display_name || "?")[0]}</div>
+                                            )}
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.display_name || p.email || "Unbekannt"}</div>
+                                              {p.email && p.display_name && (
+                                                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.email}</div>
+                                              )}
+                                            </div>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ color: theme.textDim, flexShrink: 0 }}><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                                          </motion.div>
+                                        );
+                                      })
+                                    ) : (
+                                      <div style={{ padding: "20px 12px", textAlign: "center", fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
+                                        {(orgMembers || []).length <= 1
+                                          ? "Keine weiteren Workspace-Mitglieder"
+                                          : pickerSearch ? "Keine Treffer" : "Alle bereits hinzugefügt"}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Email invite footer — for external users */}
+                                  {looksLikeEmail && !available.some(om => (om.profiles?.email || "").toLowerCase() === pickerSearch.toLowerCase()) && (
+                                    <div style={{ borderTop: `1px solid ${theme.borderFaint}`, padding: 10 }}>
+                                      <motion.div whileTap={{ scale: 0.98 }}
+                                        onClick={async () => {
+                                          setInviteEmail(pickerSearch);
+                                          // small delay so state lands
+                                          setTimeout(async () => {
+                                            await sendInvite();
+                                            setPickerSearch("");
+                                            setShowAddPicker(false);
+                                          }, 50);
+                                        }}
+                                        style={{
+                                          display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
+                                          borderRadius: 8, cursor: "pointer", background: "rgba(139, 122, 255, 0.08)",
+                                          border: "1px solid rgba(139, 122, 255, 0.2)",
+                                        }}
+                                      >
+                                        <div style={{ width: 28, height: 28, borderRadius: "50%", flexShrink: 0, background: "rgba(139, 122, 255, 0.18)", color: "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                                        </div>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                          <div style={{ fontSize: 13, fontFamily: FONT, color: "#8B7AFF", fontWeight: 500 }}>Per E-Mail einladen</div>
+                                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pickerSearch}</div>
+                                        </div>
+                                      </motion.div>
+                                    </div>
+                                  )}
+                                </motion.div>
+                              </>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
