@@ -6894,11 +6894,13 @@ export default function CircularMenu() {
   const [dashboardProjects, setDashboardProjects] = useState([]);
   // Per-user project memberships — used to filter projects/tasks visibility
   const [myProjectIds, setMyProjectIds] = useState([]);
-  // Names of projects the user is a member of (derived from membership + project list)
-  const myProjectNames = useMemo(() => {
-    const idSet = new Set(myProjectIds);
-    return new Set(dashboardProjects.filter(p => idSet.has(p.id)).map(p => p.name));
-  }, [myProjectIds, dashboardProjects]);
+  // Names of projects the user is a member of — loaded directly with a join
+  // so we don't depend on dashboardProjects being populated first.
+  const [myProjectNamesArr, setMyProjectNamesArr] = useState([]);
+  const myProjectNames = useMemo(() => new Set(myProjectNamesArr), [myProjectNamesArr]);
+  // Membership state has loaded at least once (so we don't show stale "no access" UI
+  // before the first fetch completes)
+  const [membershipLoaded, setMembershipLoaded] = useState(false);
   // OS visuals: per-user custom icons keyed by slot_key (e.g. calendar_event, reminder)
   const [osVisuals, setOsVisuals] = useState({});
   const [osVisualsModalOpen, setOsVisualsModalOpen] = useState(false);
@@ -7568,10 +7570,24 @@ export default function CircularMenu() {
 
   // ── Load this user's project memberships + subscribe to changes ──
   useEffect(() => {
-    if (!session?.user?.id) return;
+    if (!session?.user?.id) {
+      setMembershipLoaded(false);
+      setMyProjectIds([]);
+      setMyProjectNamesArr([]);
+      return;
+    }
     const loadMemberships = async () => {
-      const { data } = await supabase.from("project_members").select("project_id").eq("user_id", session.user.id);
-      setMyProjectIds((data || []).map(r => r.project_id));
+      // Join projects so we get both the IDs and names in one shot — independent
+      // of whether dashboardProjects has loaded
+      const { data } = await supabase
+        .from("project_members")
+        .select("project_id, projects:projects!project_members_project_id_fkey(name)")
+        .eq("user_id", session.user.id);
+      const ids = (data || []).map(r => r.project_id);
+      const names = (data || []).map(r => r.projects?.name).filter(Boolean);
+      setMyProjectIds(ids);
+      setMyProjectNamesArr(names);
+      setMembershipLoaded(true);
     };
     loadMemberships();
     const ch = supabase
