@@ -10163,7 +10163,7 @@ export default function CircularMenu() {
                 style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
               >
                 <div>
-                  <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff70" : "#6B7280", letterSpacing: 3, textTransform: "uppercase", marginBottom: 6, fontWeight: 600 }}>Deine Aufgaben</div>
+                  <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff60" : "#8A8F99", letterSpacing: 3, textTransform: "uppercase", marginBottom: 6, fontWeight: 600 }}>Deine Aufgaben</div>
                   <div style={{ fontSize: 28, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 300 }}>Was steht an</div>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
@@ -10209,9 +10209,9 @@ export default function CircularMenu() {
                         <motion.div
                           initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.1, duration: 0.3 }}
-                          style={{ fontSize: 10, fontFamily: FONT, color: "#B82474", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}
+                          style={{ fontSize: 10, fontFamily: FONT, color: "#C9437E", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}
                         >
-                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#B82474" }} />
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#C9437E" }} />
                           {t("dash.priority")}
                         </motion.div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -10238,9 +10238,9 @@ export default function CircularMenu() {
                               )}
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{tsk.title}</div>
-                                <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff35" : "#1a1a2e55", marginTop: 2 }}>{tsk.project_name || colLabel(tsk.column_key)}</div>
+                                <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff60" : "#1a1a2e80", marginTop: 2 }}>{tsk.project_name || colLabel(tsk.column_key)}</div>
                               </div>
-                              <div style={{ fontSize: 11, fontFamily: FONT, color: "#B82474", flexShrink: 0, fontWeight: 500 }}>{colLabel(tsk.column_key)}</div>
+                              <div style={{ fontSize: 11, fontFamily: FONT, color: "#C9437E", flexShrink: 0, fontWeight: 500 }}>{colLabel(tsk.column_key)}</div>
                             </motion.div>
                           ))}
                         </div>
@@ -10253,9 +10253,9 @@ export default function CircularMenu() {
                         <motion.div
                           initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.2, duration: 0.3 }}
-                          style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff60" : "#6B7280", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}
+                          style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff50" : "#8A8F99", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}
                         >
-                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: darkMode ? "#ffffff60" : "#6B7280" }} />
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: darkMode ? "#ffffff50" : "#8A8F99" }} />
                           {t("dash.today")}
                         </motion.div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -10282,9 +10282,9 @@ export default function CircularMenu() {
                               )}
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{tsk.title}</div>
-                                <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff35" : "#1a1a2e55", marginTop: 2 }}>{tsk.project_name || colLabel(tsk.column_key)}</div>
+                                <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff60" : "#1a1a2e80", marginTop: 2 }}>{tsk.project_name || colLabel(tsk.column_key)}</div>
                               </div>
-                              <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff80" : "#6B7280", flexShrink: 0, fontWeight: 500 }}>{colLabel(tsk.column_key)}</div>
+                              <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff60" : "#8A8F99", flexShrink: 0, fontWeight: 500 }}>{colLabel(tsk.column_key)}</div>
                             </motion.div>
                           ))}
                         </div>
@@ -10341,9 +10341,9 @@ export default function CircularMenu() {
                         <motion.div
                           initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.35, duration: 0.3 }}
-                          style={{ fontSize: 10, fontFamily: FONT, color: "#3FA388", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}
+                          style={{ fontSize: 10, fontFamily: FONT, color: "#5DB89E", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}
                         >
-                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#3FA388" }} />
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#5DB89E" }} />
                           Reminder
                         </motion.div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -10367,15 +10367,15 @@ export default function CircularMenu() {
                               >
                                 <div style={{
                                   width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                                  border: "1.5px solid #3FA38860",
+                                  border: "1.5px solid #5DB89E60",
                                   display: "flex", alignItems: "center", justifyContent: "center",
                                 }}>
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#3FA388" strokeWidth="1.5"/><path d="M12 7v5l3 3" stroke="#3FA388" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#5DB89E" strokeWidth="1.5"/><path d="M12 7v5l3 3" stroke="#5DB89E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                                 </div>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{rem.title}</div>
                                 </div>
-                                <div style={{ fontSize: 11, fontFamily: FONT, color: "#3FA388", flexShrink: 0, textAlign: "right" }}>
+                                <div style={{ fontSize: 11, fontFamily: FONT, color: "#5DB89E", flexShrink: 0, textAlign: "right" }}>
                                   <div>{dateStr}</div>
                                   <div style={{ fontSize: 10, opacity: 0.7 }}>{timeStr}</div>
                                 </div>
