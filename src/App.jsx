@@ -6303,15 +6303,20 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
     if (logoInputRef.current) logoInputRef.current.value = "";
   };
 
-  // Add an existing org member to the project directly (no email invite needed)
+  // Add an existing org member to the project directly (no email invite needed).
+  // Idempotent: silently ignores the unique-constraint error if the user is
+  // already a member (which happens when the picker has stale data).
   const addOrgMemberDirectly = async (userId) => {
     if (!editing?.id) return;
-    const { error } = await supabase.from("project_members").insert({
+    const { error } = await supabase.from("project_members").upsert({
       project_id: editing.id,
       user_id: userId,
       role: "member",
-    });
-    if (error) { alert("Fehler beim Hinzufügen: " + error.message); return; }
+    }, { onConflict: "project_id,user_id", ignoreDuplicates: true });
+    if (error && !/duplicate/i.test(error.message || "")) {
+      alert("Fehler beim Hinzufügen: " + error.message);
+      return;
+    }
     loadMembers(editing.id);
   };
 
