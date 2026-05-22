@@ -6316,11 +6316,27 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
   };
 
   const loadMembers = async (projectId) => {
-    const { data: pm } = await supabase
+    // Step 1: load membership rows (no join — there's no FK from
+    // project_members to profiles, only to auth.users)
+    const { data: pm, error } = await supabase
       .from("project_members")
-      .select("user_id, role, added_at, profiles:profiles!project_members_user_id_fkey(display_name, avatar_url, initials, email, avatar_color)")
+      .select("user_id, role, added_at")
       .eq("project_id", projectId);
-    setMembers(pm || []);
+    if (error) { console.warn("[ProjectsView] loadMembers failed:", error.message); setMembers([]); return; }
+
+    // Step 2: enrich with profile data from the org's profiles
+    const ids = (pm || []).map(r => r.user_id);
+    let profilesMap = {};
+    if (ids.length > 0) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, display_name, avatar_url, initials, email, avatar_color")
+        .in("id", ids);
+      (profs || []).forEach(p => { profilesMap[p.id] = p; });
+    }
+    setMembers((pm || []).map(m => ({ ...m, profiles: profilesMap[m.user_id] || {} })));
+
+    // Step 3: pending invitations
     const { data: inv } = await supabase
       .from("project_invitations")
       .select("id, email, created_at, expires_at, status")
