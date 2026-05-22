@@ -7357,7 +7357,9 @@ export default function CircularMenu() {
         icon: projLogo || customIcon ? null : (tk.priority === "high" ? "⚡" : "◎"),
         iconBg: customBg || slotDef?.defaultBg || (tk.priority === "high" ? "#C4624A" : "#5A7AB5"),
         logoUrl: projLogo || customIcon,
-        fullbleed: !projLogo && fullbleed,
+        // Project logos always fill the full circle (not affected by OS visual modes).
+        // OS visual icons only fill when explicitly set to fullbleed mode.
+        fullbleed: projLogo ? true : fullbleed,
         name: tk.title,
         desc: tk.project_name || colLabel(tk.column_key),
         key: tk.id,
