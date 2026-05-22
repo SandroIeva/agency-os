@@ -6321,22 +6321,25 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
   };
 
   const loadMembers = async (projectId) => {
+    console.log("[ProjectsView] loadMembers START for", projectId);
     // Step 1: load membership rows (no join — there's no FK from
     // project_members to profiles, only to auth.users)
     const { data: pm, error } = await supabase
       .from("project_members")
       .select("user_id, role, added_at")
       .eq("project_id", projectId);
-    if (error) { console.warn("[ProjectsView] loadMembers failed:", error.message); setMembers([]); return; }
+    if (error) { console.warn("[ProjectsView] loadMembers failed:", error.message, error); setMembers([]); return; }
+    console.log("[ProjectsView] loadMembers got", pm?.length, "rows:", pm);
 
     // Step 2: enrich with profile data from the org's profiles
     const ids = (pm || []).map(r => r.user_id);
     let profilesMap = {};
     if (ids.length > 0) {
-      const { data: profs } = await supabase
+      const { data: profs, error: pErr } = await supabase
         .from("profiles")
         .select("id, display_name, avatar_url, initials, email, avatar_color")
         .in("id", ids);
+      console.log("[ProjectsView] profiles fetched:", profs?.length, "error:", pErr);
       (profs || []).forEach(p => { profilesMap[p.id] = p; });
     }
     setMembers((pm || []).map(m => ({ ...m, profiles: profilesMap[m.user_id] || {} })));
@@ -6349,6 +6352,18 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
       .eq("status", "pending");
     setPendingInvites(inv || []);
   };
+
+  // ── Realtime: keep member list in sync while editor is open ──
+  useEffect(() => {
+    if (!editing?.id) return;
+    const ch = supabase
+      .channel("project-members-" + editing.id)
+      .on("postgres_changes", { event: "*", schema: "public", table: "project_members", filter: `project_id=eq.${editing.id}` }, () => loadMembers(editing.id))
+      .on("postgres_changes", { event: "*", schema: "public", table: "project_invitations", filter: `project_id=eq.${editing.id}` }, () => loadMembers(editing.id))
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing?.id]);
 
   const currentUserRole = editing?.id ? (members.find(m => m.user_id === session?.user?.id)?.role || null) : null;
   // Fallback: if the membership list hasn't loaded yet OR the user is just the
