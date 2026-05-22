@@ -10163,7 +10163,7 @@ export default function CircularMenu() {
                 style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
               >
                 <div>
-                  <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 6 }}>Deine Aufgaben</div>
+                  <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff70" : "#6B7280", letterSpacing: 3, textTransform: "uppercase", marginBottom: 6, fontWeight: 600 }}>Deine Aufgaben</div>
                   <div style={{ fontSize: 28, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 300 }}>Was steht an</div>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
@@ -10240,7 +10240,7 @@ export default function CircularMenu() {
                                 <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{tsk.title}</div>
                                 <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff35" : "#1a1a2e55", marginTop: 2 }}>{tsk.project_name || colLabel(tsk.column_key)}</div>
                               </div>
-                              <div style={{ fontSize: 11, fontFamily: FONT, color: "#E8439390", flexShrink: 0 }}>{colLabel(tsk.column_key)}</div>
+                              <div style={{ fontSize: 11, fontFamily: FONT, color: "#B82474", flexShrink: 0, fontWeight: 500 }}>{colLabel(tsk.column_key)}</div>
                             </motion.div>
                           ))}
                         </div>
@@ -10284,7 +10284,7 @@ export default function CircularMenu() {
                                 <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{tsk.title}</div>
                                 <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff35" : "#1a1a2e55", marginTop: 2 }}>{tsk.project_name || colLabel(tsk.column_key)}</div>
                               </div>
-                              <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e60", flexShrink: 0 }}>{colLabel(tsk.column_key)}</div>
+                              <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff80" : "#6B7280", flexShrink: 0, fontWeight: 500 }}>{colLabel(tsk.column_key)}</div>
                             </motion.div>
                           ))}
                         </div>
