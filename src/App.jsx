@@ -10253,9 +10253,9 @@ export default function CircularMenu() {
                         <motion.div
                           initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.2, duration: 0.3 }}
-                          style={{ fontSize: 10, fontFamily: FONT, color: "#F59E0B80", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}
+                          style={{ fontSize: 10, fontFamily: FONT, color: "#B36A00", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}
                         >
-                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#F59E0B" }} />
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#B36A00" }} />
                           {t("dash.today")}
                         </motion.div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -10341,9 +10341,9 @@ export default function CircularMenu() {
                         <motion.div
                           initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.35, duration: 0.3 }}
-                          style={{ fontSize: 10, fontFamily: FONT, color: "#00B89480", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}
+                          style={{ fontSize: 10, fontFamily: FONT, color: "#007D62", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}
                         >
-                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#00B894" }} />
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#007D62" }} />
                           Reminder
                         </motion.div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -10367,15 +10367,15 @@ export default function CircularMenu() {
                               >
                                 <div style={{
                                   width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                                  border: "1.5px solid #00B89450",
+                                  border: "1.5px solid #007D6260",
                                   display: "flex", alignItems: "center", justifyContent: "center",
                                 }}>
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#00B894" strokeWidth="1.5"/><path d="M12 7v5l3 3" stroke="#00B894" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#007D62" strokeWidth="1.5"/><path d="M12 7v5l3 3" stroke="#007D62" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                                 </div>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{rem.title}</div>
                                 </div>
-                                <div style={{ fontSize: 11, fontFamily: FONT, color: "#00B89490", flexShrink: 0, textAlign: "right" }}>
+                                <div style={{ fontSize: 11, fontFamily: FONT, color: "#007D62", flexShrink: 0, textAlign: "right" }}>
                                   <div>{dateStr}</div>
                                   <div style={{ fontSize: 10, opacity: 0.7 }}>{timeStr}</div>
                                 </div>
