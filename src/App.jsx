@@ -6836,13 +6836,13 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
                                   style={{ position: "fixed", inset: 0, zIndex: 250 }}
                                 />
                                 <motion.div
-                                  initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                                  initial={{ opacity: 0, y: 6, scale: 0.97 }}
                                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                                  exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                                  exit={{ opacity: 0, y: 6, scale: 0.97 }}
                                   transition={{ duration: 0.18 }}
                                   onClick={(e) => e.stopPropagation()}
                                   style={{
-                                    position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 251,
+                                    position: "absolute", bottom: "calc(100% + 6px)", left: 0, right: 0, zIndex: 251,
                                     background: darkMode ? "rgba(28,28,38,0.99)" : "rgba(255,255,255,0.99)",
                                     border: `1px solid ${theme.border}`,
                                     borderRadius: 14, overflow: "hidden",
