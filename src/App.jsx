@@ -591,7 +591,7 @@ const ASSIGNEE_COLORS = ["#8B7AFF", "#E84393", "#00B894", "#F59E0B", "#5B8DEF", 
 
 // Hardcoded fallback columns — always visible even if Supabase fails
 const DEFAULT_COLUMNS = [
-  { id: "col-todo", key: "todo", labelKey: "kanban.todo", color: "#ffffff50", position: 0 },
+  { id: "col-todo", key: "todo", labelKey: "kanban.todo", color: "#8E94A3", position: 0 },
   { id: "col-progress", key: "progress", labelKey: "kanban.inProgress", color: "#F59E0B", position: 1 },
   { id: "col-review", key: "review", labelKey: "kanban.review", color: "#8B7AFF", position: 2 },
   { id: "col-done", key: "done", labelKey: "kanban.done", color: "#00B894", position: 3 },
@@ -1921,18 +1921,22 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
 
                   {/* Column selector — separate row */}
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {colEntries.map(c => (
-                      <motion.div key={c.key} whileTap={isTaskOwner ? { scale: 0.95 } : {}}
-                        onClick={() => { if (isTaskOwner) setTaskForm(prev => ({ ...prev, column_key: c.key })); }}
-                        style={{
-                          padding: "5px 10px", borderRadius: 8, cursor: isTaskOwner ? "pointer" : "default", fontSize: 11, fontFamily: FONT,
-                          background: taskForm.column_key === c.key ? c.color + "18" : "transparent",
-                          color: taskForm.column_key === c.key ? (c.key === "todo" ? theme.textSub : c.color) : theme.textFaint,
-                          border: `1px solid ${taskForm.column_key === c.key ? (c.key === "todo" ? theme.textSub + "30" : c.color + "35") : theme.borderFaint}`,
-                          opacity: !isTaskOwner && taskForm.column_key !== c.key ? 0.4 : 1,
-                        }}
-                      >{t(c.labelKey)}</motion.div>
-                    ))}
+                    {colEntries.map(c => {
+                      const active = taskForm.column_key === c.key;
+                      return (
+                        <motion.div key={c.key} whileTap={isTaskOwner ? { scale: 0.95 } : {}}
+                          onClick={() => { if (isTaskOwner) setTaskForm(prev => ({ ...prev, column_key: c.key })); }}
+                          style={{
+                            padding: "5px 10px", borderRadius: 8, cursor: isTaskOwner ? "pointer" : "default", fontSize: 11, fontFamily: FONT,
+                            background: active ? c.color + "1F" : "transparent",
+                            color: active ? c.color : theme.textFaint,
+                            border: `1px solid ${active ? c.color + "55" : theme.borderFaint}`,
+                            opacity: !isTaskOwner && !active ? 0.4 : 1,
+                            transition: "background 0.15s, color 0.15s, border-color 0.15s",
+                          }}
+                        >{t(c.labelKey)}</motion.div>
+                      );
+                    })}
                   </div>
 
                   {/* Description */}
