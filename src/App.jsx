@@ -6930,6 +6930,16 @@ export default function CircularMenu() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id, userOrg?.id]);
 
+  // Re-fetch dashboard projects whenever the user returns to the dashboard.
+  // Fallback in case realtime drops/lags after editing in Kanban view.
+  useEffect(() => {
+    if (currentView !== "dashboard" || !userOrg?.id) return;
+    (async () => {
+      const { data: prj } = await supabase.from("projects").select("*").eq("org_id", userOrg.id);
+      setDashboardProjects(prj || []);
+    })();
+  }, [currentView, userOrg?.id]);
+
   // ── Load OS visuals (custom icons + bg color + mode per slot) ──
   useEffect(() => {
     if (!session?.user?.id) return;
