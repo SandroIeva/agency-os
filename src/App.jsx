@@ -10209,9 +10209,9 @@ export default function CircularMenu() {
                         <motion.div
                           initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.1, duration: 0.3 }}
-                          style={{ fontSize: 10, fontFamily: FONT, color: "#E8436380", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}
+                          style={{ fontSize: 10, fontFamily: FONT, color: "#B82474", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}
                         >
-                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#E84393" }} />
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#B82474" }} />
                           {t("dash.priority")}
                         </motion.div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -10253,9 +10253,9 @@ export default function CircularMenu() {
                         <motion.div
                           initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.2, duration: 0.3 }}
-                          style={{ fontSize: 10, fontFamily: FONT, color: "#B36A00", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}
+                          style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff60" : "#6B7280", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}
                         >
-                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#B36A00" }} />
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: darkMode ? "#ffffff60" : "#6B7280" }} />
                           {t("dash.today")}
                         </motion.div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -10341,9 +10341,9 @@ export default function CircularMenu() {
                         <motion.div
                           initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.35, duration: 0.3 }}
-                          style={{ fontSize: 10, fontFamily: FONT, color: "#007D62", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}
+                          style={{ fontSize: 10, fontFamily: FONT, color: "#3FA388", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}
                         >
-                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#007D62" }} />
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#3FA388" }} />
                           Reminder
                         </motion.div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -10367,15 +10367,15 @@ export default function CircularMenu() {
                               >
                                 <div style={{
                                   width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                                  border: "1.5px solid #007D6260",
+                                  border: "1.5px solid #3FA38860",
                                   display: "flex", alignItems: "center", justifyContent: "center",
                                 }}>
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#007D62" strokeWidth="1.5"/><path d="M12 7v5l3 3" stroke="#007D62" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#3FA388" strokeWidth="1.5"/><path d="M12 7v5l3 3" stroke="#3FA388" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                                 </div>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <div style={{ fontSize: 14, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{rem.title}</div>
                                 </div>
-                                <div style={{ fontSize: 11, fontFamily: FONT, color: "#007D62", flexShrink: 0, textAlign: "right" }}>
+                                <div style={{ fontSize: 11, fontFamily: FONT, color: "#3FA388", flexShrink: 0, textAlign: "right" }}>
                                   <div>{dateStr}</div>
                                   <div style={{ fontSize: 10, opacity: 0.7 }}>{timeStr}</div>
                                 </div>
