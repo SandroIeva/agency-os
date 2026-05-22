@@ -8495,6 +8495,10 @@ export default function CircularMenu() {
   const startVoice = () => {
     setMenuOpen(false);
     setSubOpen(false);
+    // Close any open view so the voice UI doesn't overlay it
+    if (currentView !== "dashboard") setCurrentView("dashboard");
+    if (panelOpen) setPanelOpen(false);
+    if (tasksOpen) setTasksOpen(false);
     setVoiceMode(true);
     setAiSpeaking(false);
     setTranscript("");
