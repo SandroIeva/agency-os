@@ -12028,15 +12028,27 @@ export default function CircularMenu() {
       {createPortal(<AnimatePresence>
         {showReminderModal && (() => {
           const ReminderModalInner = () => {
+            // Smart defaults: today's date + now rounded up to next 15 min
+            const _now = new Date();
+            const _defaultDate = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}-${String(_now.getDate()).padStart(2, "0")}`;
+            const _rounded = new Date(_now.getTime() + (15 - (_now.getMinutes() % 15)) * 60000);
+            const _defaultTime = `${String(_rounded.getHours()).padStart(2, "0")}:${String(_rounded.getMinutes()).padStart(2, "0")}`;
             const [remTitle, setRemTitle] = useState("");
-            const [remDate, setRemDate] = useState("");
-            const [remTime, setRemTime] = useState("");
+            const [remDate, setRemDate] = useState(_defaultDate);
+            const [remTime, setRemTime] = useState(_defaultTime);
             const [saving, setSaving] = useState(false);
 
             const handleSaveReminder = async () => {
-              if (!remTitle.trim() || !remDate || !remTime) return;
-              setSaving(true);
+              if (!remTitle.trim()) { alert("Bitte einen Titel eingeben."); return; }
+              if (!remDate) { alert("Bitte ein Datum auswählen."); return; }
+              if (!remTime) { alert("Bitte eine Uhrzeit auswählen."); return; }
               const eventTime = new Date(`${remDate}T${remTime}`);
+              if (Number.isNaN(eventTime.getTime())) { alert("Ungültige Uhrzeit. Bitte prüfen."); return; }
+              if (eventTime.getTime() < Date.now() - 60_000) {
+                const ok = confirm("Die Erinnerungszeit liegt in der Vergangenheit. Trotzdem erstellen?");
+                if (!ok) return;
+              }
+              setSaving(true);
               const remindAt = eventTime;
 
               // Try to create a Google Calendar event with a popup reminder
