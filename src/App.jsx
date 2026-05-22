@@ -7096,7 +7096,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BRAND VIEW — Multi-step onboarding wizard + sub-views
+// BRAND VIEW — Smart multi-step onboarding wizard + sub-views
 // ═══════════════════════════════════════════════════════════════
 const BRAND_SUBVIEW_LABELS = {
   identity: "Identity",
@@ -7112,27 +7112,48 @@ const BRAND_ACCENT_PALETTE = [
   "#E88D67", "#6C5CE7", "#FD79A8", "#1a1a2e", "#FFFFFF",
 ];
 
+// Predefined logo slots — user can also add custom ones
+const LOGO_SLOTS = [
+  { key: "primary",  label: "Primary",  hint: "Standard-Logo",       accept: "image/*" },
+  { key: "svg",      label: "Vektor",   hint: "SVG für skalierbares Rendering", accept: "image/svg+xml,.svg" },
+  { key: "dark",     label: "Dark Mode", hint: "Variante für dunkle Hintergründe", accept: "image/*" },
+  { key: "light",    label: "Light Mode", hint: "Variante für helle Hintergründe", accept: "image/*" },
+  { key: "icon",     label: "Icon",     hint: "Favicon / App-Icon",  accept: "image/*" },
+];
+
+const TONE_OF_VOICE_OPTIONS = [
+  "Freundlich", "Professionell", "Mutig", "Verspielt", "Minimalistisch",
+  "Premium", "Inspirierend", "Technisch", "Warm", "Direkt", "Cinematic", "Vertraut",
+];
+
 function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, setBrandTab }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
-  // Wizard state
+  // Wizard
   const [step, setStep] = useState(0);
-  const [stepDir, setStepDir] = useState(1); // 1 = forward, -1 = back
+  const [stepDir, setStepDir] = useState(1);
   const [form, setForm] = useState({
-    name: "", claim: "", logo_url: "", website_url: "",
-    colors: [], description: "", pdf_url: "", pdf_name: "",
+    name: "", claim: "", description: "",
+    website_url: "", figma_url: "",
+    colors: [], logos: [], sources: [], tone_of_voice: [],
+    logo_url: "", pdf_url: "", pdf_name: "",
   });
-  const [logoUploading, setLogoUploading] = useState(false);
-  const [logoPreview, setLogoPreview] = useState(null);
-  const [pdfUploading, setPdfUploading] = useState(false);
+  const [logoUploading, setLogoUploading] = useState({});
+  const [sourceUploading, setSourceUploading] = useState({});
   const [saving, setSaving] = useState(false);
   const [colorInput, setColorInput] = useState("#8B7AFF");
-  const [contextTab, setContextTab] = useState("text"); // text | url | pdf
-  const logoInputRef = useRef(null);
-  const pdfInputRef = useRef(null);
+  const [hasSourcesIntent, setHasSourcesIntent] = useState(null); // null = not chosen, true = yes, false = starting fresh
 
-  // Load existing profile + prefill name from workspace
+  // Refs for per-slot inputs
+  const slotInputRefs = useRef({});
+  const customSlotInputRef = useRef(null);
+  const [customSlotLabel, setCustomSlotLabel] = useState("");
+  const zipInputRef = useRef(null);
+  const pdfBrandbookInputRef = useRef(null);
+  const zipSourceInputRef = useRef(null);
+
+  // Load
   useEffect(() => {
     if (!userOrg?.id) { setLoading(false); return; }
     (async () => {
@@ -7141,10 +7162,14 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
       setForm({
         name: data?.name || userOrg?.name || "",
         claim: data?.claim || "",
-        logo_url: data?.logo_url || "",
-        website_url: data?.website_url || "",
-        colors: data?.colors || [],
         description: data?.description || "",
+        website_url: data?.website_url || "",
+        figma_url: data?.figma_url || "",
+        colors: data?.colors || [],
+        logos: data?.logos || [],
+        sources: data?.sources || [],
+        tone_of_voice: data?.tone_of_voice || [],
+        logo_url: data?.logo_url || "",
         pdf_url: data?.pdf_url || "",
         pdf_name: data?.pdf_name || "",
       });
@@ -7165,40 +7190,76 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
     return () => supabase.removeChannel(ch);
   }, [userOrg?.id]);
 
-  const handleLogoUpload = async (file) => {
+  // ── Upload helpers ──
+  const uploadFile = async (file, pathPrefix) => {
+    const safeName = file.name.replace(/[^\w.-]/g, "_");
+    const path = `${userOrg.id}/${pathPrefix}-${Date.now()}-${safeName}`;
+    const { error } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type || "application/octet-stream", upsert: true });
+    if (error) throw error;
+    const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
+    return { url: pub.publicUrl, name: file.name, size: file.size, type: file.type };
+  };
+
+  const uploadLogoSlot = async (slotKey, label, file) => {
     if (!file) return;
-    setLogoUploading(true);
-    setLogoPreview(URL.createObjectURL(file));
+    setLogoUploading(p => ({ ...p, [slotKey]: true }));
     try {
-      const ext = (file.name.split(".").pop() || "png").toLowerCase();
-      const path = `${userOrg.id}/logo-${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type, upsert: true });
-      if (error) throw error;
-      const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
-      setForm(prev => ({ ...prev, logo_url: pub.publicUrl }));
+      const r = await uploadFile(file, `logo-${slotKey}`);
+      setForm(prev => {
+        const others = prev.logos.filter(l => l.key !== slotKey);
+        const next = [...others, { key: slotKey, label, url: r.url, name: r.name, format: r.type || "" }];
+        // First logo also becomes the primary logo_url for compatibility
+        const primary = next.find(l => l.key === "primary") || next[0];
+        return { ...prev, logos: next, logo_url: primary?.url || prev.logo_url };
+      });
     } catch (e) {
-      alert("Logo Upload fehlgeschlagen: " + (e.message || "Unbekannter Fehler"));
+      alert("Upload fehlgeschlagen: " + (e.message || ""));
     } finally {
-      setLogoUploading(false);
+      setLogoUploading(p => ({ ...p, [slotKey]: false }));
     }
   };
 
-  const handlePdfUpload = async (file) => {
+  const addCustomLogoSlot = async (file) => {
+    const label = customSlotLabel.trim() || "Variante";
+    const key = "custom-" + Date.now();
+    await uploadLogoSlot(key, label, file);
+    setCustomSlotLabel("");
+  };
+
+  const removeLogoSlot = (key) => {
+    setForm(prev => {
+      const next = prev.logos.filter(l => l.key !== key);
+      const primary = next.find(l => l.key === "primary") || next[0];
+      return { ...prev, logos: next, logo_url: primary?.url || "" };
+    });
+  };
+
+  const uploadSource = async (type, file) => {
     if (!file) return;
-    setPdfUploading(true);
+    setSourceUploading(p => ({ ...p, [type]: true }));
     try {
-      const path = `${userOrg.id}/doc-${Date.now()}-${file.name.replace(/[^\w.-]/g, "_")}`;
-      const { error } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type, upsert: true });
-      if (error) throw error;
-      const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
-      setForm(prev => ({ ...prev, pdf_url: pub.publicUrl, pdf_name: file.name }));
+      const r = await uploadFile(file, `source-${type}`);
+      setForm(prev => {
+        const others = prev.sources.filter(s => s.type !== type);
+        return { ...prev, sources: [...others, { type, ...r }] };
+      });
+      // Legacy compat: brandbook also maps to pdf_url
+      if (type === "brandbook") {
+        setForm(prev => ({ ...prev, pdf_url: r.url, pdf_name: r.name }));
+      }
     } catch (e) {
-      alert("PDF Upload fehlgeschlagen: " + (e.message || "Unbekannter Fehler"));
+      alert("Upload fehlgeschlagen: " + (e.message || ""));
     } finally {
-      setPdfUploading(false);
+      setSourceUploading(p => ({ ...p, [type]: false }));
     }
   };
 
+  const removeSource = (type) => {
+    setForm(prev => ({ ...prev, sources: prev.sources.filter(s => s.type !== type) }));
+    if (type === "brandbook") setForm(prev => ({ ...prev, pdf_url: "", pdf_name: "" }));
+  };
+
+  // ── Color helpers ──
   const addColor = (val) => {
     const c = (val || colorInput).trim();
     if (!c || form.colors.includes(c)) return;
@@ -7206,6 +7267,17 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
   };
   const removeColor = (c) => setForm(prev => ({ ...prev, colors: prev.colors.filter(x => x !== c) }));
 
+  // ── Tone of voice helpers ──
+  const toggleTone = (t) => {
+    setForm(prev => ({
+      ...prev,
+      tone_of_voice: prev.tone_of_voice.includes(t)
+        ? prev.tone_of_voice.filter(x => x !== t)
+        : [...prev.tone_of_voice, t],
+    }));
+  };
+
+  // ── Save ──
   const saveProfile = async () => {
     if (!form.name.trim()) return;
     setSaving(true);
@@ -7216,7 +7288,11 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         claim: form.claim.trim() || null,
         logo_url: form.logo_url || null,
         website_url: form.website_url.trim() || null,
+        figma_url: form.figma_url.trim() || null,
         colors: form.colors,
+        logos: form.logos,
+        sources: form.sources,
+        tone_of_voice: form.tone_of_voice,
         description: form.description.trim() || null,
         pdf_url: form.pdf_url || null,
         pdf_name: form.pdf_name || null,
@@ -7229,37 +7305,43 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         const { data } = await supabase.from("brand_profile").insert(payload).select().single();
         setProfile(data);
       }
-      // Smoothly end the wizard
-      setStep(5); // celebration screen
+      setStep(6);
       setTimeout(() => { setEditMode(false); setStep(0); }, 1800);
     } catch (e) {
-      alert("Speichern fehlgeschlagen: " + (e.message || "Unbekannter Fehler"));
+      alert("Speichern fehlgeschlagen: " + (e.message || ""));
     } finally {
       setSaving(false);
     }
   };
 
   const goTo = (n) => { setStepDir(n > step ? 1 : -1); setStep(n); };
-  const next = () => goTo(Math.min(step + 1, 4));
+  const next = () => goTo(Math.min(step + 1, 5));
   const back = () => goTo(Math.max(step - 1, 0));
 
   const isOnboarding = !profile || editMode;
-  const totalSteps = 5; // 0..4 (5 = done)
-
-  // ── Step content factory ──
+  const totalSteps = 6;
   const stepVariants = {
-    enter: (dir) => ({ opacity: 0, x: dir * 60, filter: "blur(6px)" }),
+    enter: (d) => ({ opacity: 0, x: d * 60, filter: "blur(6px)" }),
     center: { opacity: 1, x: 0, filter: "blur(0px)" },
-    exit: (dir) => ({ opacity: 0, x: dir * -60, filter: "blur(6px)" }),
+    exit: (d) => ({ opacity: 0, x: d * -60, filter: "blur(6px)" }),
   };
 
+  // Quick check if user has provided ANY upstream source
+  const hasAnySource = !!(form.website_url || form.figma_url || form.sources.length);
+
+  const canAdvance = () => {
+    if (step === 0) return form.name.trim().length > 0;
+    return true;
+  };
+
+  // ── Render each step ──
   const renderStep = () => {
+    // STEP 0 — Brand Name only (no slogan field here)
     if (step === 0) {
-      // WELCOME — set name (prefilled from workspace)
       return (
         <motion.div key="0" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
           transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
-          style={{ display: "flex", flexDirection: "column", gap: 32, alignItems: "center", textAlign: "center", maxWidth: 520, margin: "0 auto" }}
+          style={{ display: "flex", flexDirection: "column", gap: 36, alignItems: "center", textAlign: "center", maxWidth: 520, margin: "0 auto" }}
         >
           <motion.div
             initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
@@ -7276,40 +7358,23 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
             </svg>
           </motion.div>
           <div>
-            <motion.div
-              initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2, duration: 0.5 }}
+            <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2, duration: 0.5 }}
               style={{ fontSize: 32, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 12, lineHeight: 1.2 }}
             >Lass uns deine Brand definieren</motion.div>
-            <motion.div
-              initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3, duration: 0.5 }}
+            <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3, duration: 0.5 }}
               style={{ fontSize: 15, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}
-            >
-              In ein paar Schritten gibst du i7 OS den nötigen Kontext, damit alle Assets, Texte und Insights perfekt zu deiner Marke passen.
-            </motion.div>
+            >Wir gehen Schritt für Schritt durch, was wir wissen sollten — du kannst überall überspringen, was du noch nicht hast.</motion.div>
           </div>
-          <motion.div
-            initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4, duration: 0.5 }}
-            style={{ width: "100%" }}
-          >
-            <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Wie heißt deine Brand?</label>
+          <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4, duration: 0.5 }} style={{ width: "100%" }}>
+            <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5, textAlign: "left" }}>Brand-Name</label>
             <input value={form.name} onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
               autoFocus placeholder="z.B. Agency OS"
               onKeyDown={(e) => { if (e.key === "Enter" && form.name.trim()) next(); }}
               style={{
                 width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
                 border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
-                padding: "14px 18px", fontSize: 18, fontFamily: FONT, fontWeight: 500,
+                padding: "16px 20px", fontSize: 20, fontFamily: FONT, fontWeight: 500,
                 color: theme.text, outline: "none", caretColor: theme.accent, textAlign: "center",
-              }}
-            />
-            <input value={form.claim} onChange={(e) => setForm(prev => ({ ...prev, claim: e.target.value }))}
-              placeholder="Optional: Claim oder Tagline"
-              style={{
-                marginTop: 10, width: "100%",
-                background: "transparent",
-                border: "none", borderBottom: `1px solid ${theme.borderFaint}`,
-                padding: "8px 4px", fontSize: 13, fontFamily: FONT,
-                color: theme.textSub, outline: "none", caretColor: theme.accent, textAlign: "center",
               }}
             />
           </motion.div>
@@ -7317,87 +7382,317 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
       );
     }
 
+    // STEP 1 — What do you already have?
     if (step === 1) {
-      // LOGO
+      const sourceCards = [
+        {
+          type: "website",
+          icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg>,
+          label: "Website",
+          hint: "Wir ziehen später Texte, Farben und Tonalität automatisch",
+          render: () => (
+            <input value={form.website_url} onChange={(e) => setForm(prev => ({ ...prev, website_url: e.target.value }))}
+              placeholder="https://..."
+              style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${theme.borderFaint}`, padding: "8px 0", fontSize: 14, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent }}
+            />
+          ),
+          isActive: !!form.website_url,
+        },
+        {
+          type: "figma",
+          icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="9" r="3"/><path d="M9 6h6a3 3 0 010 6H9a3 3 0 010-6zM9 12h3v3a3 3 0 11-3-3z"/></svg>,
+          label: "Figma / Design System",
+          hint: "Link zur Figma-Datei oder Library",
+          render: () => (
+            <input value={form.figma_url} onChange={(e) => setForm(prev => ({ ...prev, figma_url: e.target.value }))}
+              placeholder="https://figma.com/file/..."
+              style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${theme.borderFaint}`, padding: "8px 0", fontSize: 14, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent }}
+            />
+          ),
+          isActive: !!form.figma_url,
+        },
+        {
+          type: "brandbook",
+          icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h12a2 2 0 012 2v14a2 2 0 01-2 2H4z M4 4v18M16 8h2a2 2 0 012 2v10a2 2 0 01-2 2h-2"/></svg>,
+          label: "Brand Book (PDF)",
+          hint: "Style Guide, Identity Manual, Pitch Deck",
+          render: () => {
+            const existing = form.sources.find(s => s.type === "brandbook");
+            if (existing) {
+              return (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <a href={existing.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, textDecoration: "none", flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{existing.name}</a>
+                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => removeSource("brandbook")} style={{ cursor: "pointer", color: theme.textDim, fontSize: 12, padding: 4 }}>✕</motion.div>
+                </div>
+              );
+            }
+            return (
+              <motion.div whileTap={{ scale: 0.97 }} onClick={() => pdfBrandbookInputRef.current?.click()}
+                style={{ fontSize: 12, fontFamily: FONT, color: theme.accent, cursor: "pointer", fontWeight: 500 }}
+              >{sourceUploading.brandbook ? "Lädt..." : "PDF auswählen →"}</motion.div>
+            );
+          },
+          isActive: !!form.sources.find(s => s.type === "brandbook"),
+        },
+        {
+          type: "zip",
+          icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8v13a2 2 0 01-2 2H5a2 2 0 01-2-2V8M1 8h22M16 3l-4 5-4-5"/></svg>,
+          label: "Brand-Paket (ZIP)",
+          hint: "Logos, Schriften, Templates — alles in einem Archiv",
+          render: () => {
+            const existing = form.sources.find(s => s.type === "zip");
+            if (existing) {
+              return (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <a href={existing.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, textDecoration: "none", flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{existing.name}</a>
+                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => removeSource("zip")} style={{ cursor: "pointer", color: theme.textDim, fontSize: 12, padding: 4 }}>✕</motion.div>
+                </div>
+              );
+            }
+            return (
+              <motion.div whileTap={{ scale: 0.97 }} onClick={() => zipSourceInputRef.current?.click()}
+                style={{ fontSize: 12, fontFamily: FONT, color: theme.accent, cursor: "pointer", fontWeight: 500 }}
+              >{sourceUploading.zip ? "Lädt..." : "ZIP auswählen →"}</motion.div>
+            );
+          },
+          isActive: !!form.sources.find(s => s.type === "zip"),
+        },
+      ];
+
       return (
         <motion.div key="1" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
           transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
-          style={{ display: "flex", flexDirection: "column", gap: 32, alignItems: "center", textAlign: "center", maxWidth: 520, margin: "0 auto" }}
+          style={{ display: "flex", flexDirection: "column", gap: 28, maxWidth: 620, margin: "0 auto", width: "100%" }}
         >
-          <div>
+          <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
-              Wie sieht deine Brand aus?
+              Was hast du schon?
             </div>
             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
-              Lade dein Logo hoch — quadratisch und transparent ist ideal.
+              Vorhandene Quellen sparen dir später viel Zeit — wir extrahieren Farben, Texte und Style automatisch.
             </div>
           </div>
-          {(logoPreview || form.logo_url) ? (
-            <motion.div
-              initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: "spring", stiffness: 250, damping: 22 }}
-              style={{ position: "relative" }}
-            >
-              <img src={logoPreview || form.logo_url} alt=""
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+            {sourceCards.map((card, i) => (
+              <motion.div key={card.type}
+                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.04 + i * 0.05, duration: 0.3 }}
                 style={{
-                  width: 180, height: 180, borderRadius: 32, objectFit: "cover",
-                  border: `1px solid ${theme.borderFaint}`,
-                  boxShadow: "0 24px 60px rgba(0,0,0,0.12)",
+                  padding: 16, borderRadius: 16,
+                  background: card.isActive ? (darkMode ? "rgba(139,122,255,0.08)" : "rgba(139,122,255,0.06)") : (darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)"),
+                  border: `1px solid ${card.isActive ? "rgba(139,122,255,0.3)" : theme.borderFaint}`,
+                  display: "flex", flexDirection: "column", gap: 10,
+                  transition: "background 0.2s, border-color 0.2s",
+                  minHeight: 140,
                 }}
-              />
-              <motion.div whileTap={{ scale: 0.9 }}
-                onClick={() => { setLogoPreview(null); setForm(prev => ({ ...prev, logo_url: "" })); }}
-                style={{ position: "absolute", top: -10, right: -10, width: 30, height: 30, borderRadius: "50%", background: "#EF4444", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, cursor: "pointer", border: `3px solid ${darkMode ? "#16161e" : "#fff"}`, boxShadow: "0 4px 12px rgba(239,68,68,0.4)" }}
-              >✕</motion.div>
-            </motion.div>
-          ) : (
-            <motion.div
-              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-              onClick={() => logoInputRef.current?.click()}
-              style={{
-                width: 180, height: 180, borderRadius: 32, cursor: "pointer",
-                border: `2px dashed ${theme.border}`,
-                background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, color: theme.textFaint,
-                transition: "border-color 0.2s",
-              }}
-            >
-              <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="3"/>
-                <circle cx="8.5" cy="8.5" r="1.5"/>
-                <path d="M21 15l-5-5L5 21"/>
-              </svg>
-              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>Logo hochladen</div>
-            </motion.div>
-          )}
-          <motion.button whileTap={{ scale: 0.97 }}
-            onClick={() => logoInputRef.current?.click()} disabled={logoUploading}
-            style={{
-              padding: "10px 22px", borderRadius: 12, cursor: logoUploading ? "wait" : "pointer",
-              background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-              border: `1px solid ${theme.borderFaint}`,
-              fontSize: 13, fontFamily: FONT, color: theme.textSub, fontWeight: 500,
-              opacity: logoUploading ? 0.6 : 1,
-            }}
-          >{logoUploading ? "Lädt..." : (form.logo_url ? "Anderes Logo wählen" : "Datei auswählen")}</motion.button>
-          <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" style={{ display: "none" }} onChange={(e) => handleLogoUpload(e.target.files?.[0])} />
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 10,
+                    background: card.isActive ? (theme.accent + "20") : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+                    color: card.isActive ? theme.accent : theme.textDim,
+                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                  }}>{card.icon}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{card.label}</div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, lineHeight: 1.4, marginTop: 1 }}>{card.hint}</div>
+                  </div>
+                </div>
+                <div style={{ marginTop: "auto" }}>{card.render()}</div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* "Starting fresh" hint */}
+          <div style={{ textAlign: "center", fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>
+            Du hast noch nichts? Kein Problem — überspring den nächsten Schritt mit „Weiter".
+          </div>
+
+          {/* Hidden inputs */}
+          <input ref={pdfBrandbookInputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => uploadSource("brandbook", e.target.files?.[0])} />
+          <input ref={zipSourceInputRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" style={{ display: "none" }} onChange={(e) => uploadSource("zip", e.target.files?.[0])} />
         </motion.div>
       );
     }
 
+    // STEP 2 — Logo Variants
     if (step === 2) {
-      // COLORS
+      const customSlots = form.logos.filter(l => !LOGO_SLOTS.find(s => s.key === l.key));
+
       return (
         <motion.div key="2" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
           transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
-          style={{ display: "flex", flexDirection: "column", gap: 28, alignItems: "center", textAlign: "center", maxWidth: 520, margin: "0 auto" }}
+          style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 620, margin: "0 auto", width: "100%" }}
+        >
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
+              Logo-Varianten
+            </div>
+            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+              Lade alle Varianten hoch, die du hast. Du kannst alles überspringen — was wir nicht haben, brauchen wir nicht.
+            </div>
+          </div>
+
+          {/* ZIP shortcut */}
+          <motion.div whileTap={{ scale: 0.99 }} onClick={() => zipInputRef.current?.click()}
+            style={{
+              display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
+              borderRadius: 12, cursor: "pointer",
+              background: darkMode ? "rgba(139,122,255,0.06)" : "rgba(139,122,255,0.05)",
+              border: "1px dashed rgba(139,122,255,0.35)",
+            }}
+          >
+            <div style={{ width: 34, height: 34, borderRadius: 8, background: "rgba(139,122,255,0.18)", color: "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8v13a2 2 0 01-2 2H5a2 2 0 01-2-2V8M1 8h22M16 3l-4 5-4-5"/></svg>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                Alle Logos als ZIP hochladen
+              </div>
+              <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>
+                Wenn du dein komplettes Logo-Paket schon gepackt hast
+              </div>
+            </div>
+            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.accent, fontWeight: 500 }}>
+              {sourceUploading["logo-zip"] ? "Lädt..." : "ZIP wählen →"}
+            </div>
+          </motion.div>
+          <input ref={zipInputRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" style={{ display: "none" }}
+            onChange={async (e) => {
+              const f = e.target.files?.[0]; if (!f) return;
+              setSourceUploading(p => ({ ...p, "logo-zip": true }));
+              try {
+                const r = await uploadFile(f, "logo-zip");
+                setForm(prev => ({ ...prev, sources: [...prev.sources.filter(s => s.type !== "logo-zip"), { type: "logo-zip", ...r }] }));
+              } catch (err) { alert("Upload fehlgeschlagen: " + err.message); }
+              finally { setSourceUploading(p => ({ ...p, "logo-zip": false })); }
+            }}
+          />
+
+          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, textTransform: "uppercase", letterSpacing: 0.8, textAlign: "center", marginTop: 4 }}>
+            oder einzelne Varianten
+          </div>
+
+          {/* Slot grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12 }}>
+            {LOGO_SLOTS.map(slot => {
+              const existing = form.logos.find(l => l.key === slot.key);
+              const uploading = logoUploading[slot.key];
+              return (
+                <motion.div key={slot.key}
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}
+                  style={{
+                    padding: 14, borderRadius: 14,
+                    background: existing ? (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.025)") : (darkMode ? "rgba(255,255,255,0.015)" : "rgba(0,0,0,0.012)"),
+                    border: `1px ${existing ? "solid" : "dashed"} ${existing ? theme.borderFaint : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)")}`,
+                    display: "flex", flexDirection: "column", gap: 10,
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{slot.label}</div>
+                    <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, lineHeight: 1.4, marginTop: 1 }}>{slot.hint}</div>
+                  </div>
+                  {existing ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      {existing.url.match(/\.(svg)$/i) || existing.format?.includes("svg") ? (
+                        <img src={existing.url} alt="" style={{ width: 56, height: 56, objectFit: "contain", borderRadius: 8, background: slot.key === "dark" ? "#1a1a2e" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)"), padding: 6 }} />
+                      ) : (
+                        <img src={existing.url} alt="" style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover", background: slot.key === "dark" ? "#1a1a2e" : "transparent" }} />
+                      )}
+                      <div style={{ flex: 1, minWidth: 0, fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{existing.name}</div>
+                      <motion.div whileTap={{ scale: 0.9 }} onClick={() => removeLogoSlot(slot.key)} style={{ cursor: "pointer", color: theme.textDim, fontSize: 12, padding: 4 }}>✕</motion.div>
+                    </div>
+                  ) : (
+                    <motion.div whileTap={{ scale: 0.98 }}
+                      onClick={() => slotInputRefs.current[slot.key]?.click()}
+                      style={{
+                        padding: "16px 10px", borderRadius: 10, cursor: uploading ? "wait" : "pointer",
+                        background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
+                        textAlign: "center", fontSize: 11, fontFamily: FONT, color: theme.textDim,
+                        border: `1px dashed ${theme.borderFaint}`,
+                        opacity: uploading ? 0.6 : 1,
+                      }}
+                    >
+                      {uploading ? "Lädt..." : "+ Hochladen"}
+                    </motion.div>
+                  )}
+                  <input ref={el => slotInputRefs.current[slot.key] = el} type="file" accept={slot.accept} style={{ display: "none" }}
+                    onChange={(e) => uploadLogoSlot(slot.key, slot.label, e.target.files?.[0])}
+                  />
+                </motion.div>
+              );
+            })}
+
+            {/* Custom slots */}
+            {customSlots.map(s => (
+              <motion.div key={s.key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                style={{
+                  padding: 14, borderRadius: 14,
+                  background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.025)",
+                  border: `1px solid ${theme.borderFaint}`,
+                  display: "flex", flexDirection: "column", gap: 10,
+                }}
+              >
+                <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{s.label}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <img src={s.url} alt="" style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover" }} />
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</div>
+                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => removeLogoSlot(s.key)} style={{ cursor: "pointer", color: theme.textDim, fontSize: 12, padding: 4 }}>✕</motion.div>
+                </div>
+              </motion.div>
+            ))}
+
+            {/* Add custom slot */}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}
+              style={{
+                padding: 14, borderRadius: 14,
+                border: `1px dashed ${theme.borderFaint}`,
+                display: "flex", flexDirection: "column", gap: 8, justifyContent: "center",
+              }}
+            >
+              <input value={customSlotLabel} onChange={(e) => setCustomSlotLabel(e.target.value)}
+                placeholder="z.B. Mono, Stamp ..."
+                style={{
+                  background: "transparent", border: "none", borderBottom: `1px solid ${theme.borderFaint}`,
+                  padding: "6px 0", fontSize: 12, fontFamily: FONT, color: theme.text,
+                  outline: "none", caretColor: theme.accent,
+                }}
+              />
+              <motion.div whileTap={{ scale: 0.97 }} onClick={() => customSlotInputRef.current?.click()}
+                style={{
+                  padding: "8px 10px", borderRadius: 8, cursor: customSlotLabel.trim() ? "pointer" : "not-allowed",
+                  background: customSlotLabel.trim() ? theme.accent + "15" : "transparent",
+                  textAlign: "center", fontSize: 11, fontFamily: FONT,
+                  color: customSlotLabel.trim() ? theme.accent : theme.textFaint, fontWeight: 500,
+                  border: `1px solid ${customSlotLabel.trim() ? theme.accent + "30" : theme.borderFaint}`,
+                  opacity: customSlotLabel.trim() ? 1 : 0.5,
+                }}
+              >+ Variante hinzufügen</motion.div>
+              <input ref={customSlotInputRef} type="file" accept="image/*" style={{ display: "none" }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f && customSlotLabel.trim()) addCustomLogoSlot(f); e.target.value = ""; }}
+              />
+            </motion.div>
+          </div>
+        </motion.div>
+      );
+    }
+
+    // STEP 3 — Colors (conditional intro)
+    if (step === 3) {
+      return (
+        <motion.div key="3" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
+          transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
+          style={{ display: "flex", flexDirection: "column", gap: 24, alignItems: "center", textAlign: "center", maxWidth: 560, margin: "0 auto", width: "100%" }}
         >
           <div>
             <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
-              Welche Farben sprechen für dich?
+              {hasAnySource ? "Farben — optional" : "Welche Farben sprechen für dich?"}
             </div>
             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
-              Wähle die Farben, die deine Brand ausmachen. Du kannst beliebig viele kombinieren.
+              {hasAnySource
+                ? "Wir extrahieren die Farben automatisch aus deinen Quellen (kommt bald). Falls du sie schon kennst, kannst du sie hier hinterlegen."
+                : "Wähle die Farben, die deine Brand ausmachen. Du kannst beliebig viele kombinieren."}
             </div>
           </div>
 
@@ -7422,29 +7717,25 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
             ))}
             {form.colors.length === 0 && (
               <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint, fontStyle: "italic", padding: "20px 0" }}>
-                Noch keine Farben gewählt
+                {hasAnySource ? "Nichts hinzugefügt — kein Problem" : "Noch keine Farben gewählt"}
               </div>
             )}
           </div>
 
-          {/* Palette suggestions */}
+          {/* Quick palette */}
           <div>
             <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.5 }}>Vorschläge</div>
             <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
               {BRAND_ACCENT_PALETTE.filter(c => !form.colors.includes(c)).map(c => (
                 <motion.div key={c} whileHover={{ scale: 1.15, y: -2 }} whileTap={{ scale: 0.9 }}
                   onClick={() => addColor(c)}
-                  style={{
-                    width: 32, height: 32, borderRadius: 10, background: c, cursor: "pointer",
-                    border: `1px solid ${theme.borderFaint}`,
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-                  }}
+                  style={{ width: 32, height: 32, borderRadius: 10, background: c, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
                 />
               ))}
             </div>
           </div>
 
-          {/* Custom picker */}
+          {/* Custom HEX */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
               <div style={{ width: 36, height: 36, borderRadius: 10, background: colorInput, border: `2px solid ${theme.borderFaint}` }}>
@@ -7466,164 +7757,107 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
       );
     }
 
-    if (step === 3) {
-      // CONTEXT — Text / URL / PDF tabs
+    // STEP 4 — Voice & Description
+    if (step === 4) {
       return (
-        <motion.div key="3" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
+        <motion.div key="4" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
           transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
           style={{ display: "flex", flexDirection: "column", gap: 26, maxWidth: 560, margin: "0 auto", width: "100%" }}
         >
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
-              Erzähl uns mehr über deine Brand
+              Stimme & Persönlichkeit
             </div>
             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
-              Je mehr Kontext wir haben, desto besser können wir später Inhalte für dich generieren.
+              Wie kommuniziert deine Brand? Diese Hinweise helfen uns später, Inhalte in deinem Stil zu generieren.
             </div>
           </div>
 
-          {/* Tab switcher */}
-          <div style={{ display: "flex", gap: 6, padding: 4, borderRadius: 14, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, alignSelf: "center" }}>
-            {[
-              { id: "text", label: "Beschreibung", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h16M4 18h12"/></svg> },
-              { id: "url", label: "Website", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg> },
-              { id: "pdf", label: "PDF", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> },
-            ].map(t => {
-              const active = contextTab === t.id;
-              return (
-                <motion.div key={t.id} whileTap={{ scale: 0.95 }}
-                  onClick={() => setContextTab(t.id)}
-                  style={{
-                    padding: "8px 16px", borderRadius: 10, cursor: "pointer",
-                    background: active ? (darkMode ? "rgba(255,255,255,0.08)" : "#fff") : "transparent",
-                    color: active ? theme.text : theme.textDim,
-                    fontSize: 12, fontFamily: FONT, fontWeight: 500,
-                    display: "flex", alignItems: "center", gap: 6,
-                    boxShadow: active ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
-                    transition: "background 0.2s, color 0.2s",
-                  }}
-                >{t.icon} {t.label}</motion.div>
-              );
-            })}
+          {/* Tagline */}
+          <div>
+            <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Claim / Tagline</label>
+            <input value={form.claim} onChange={(e) => setForm(prev => ({ ...prev, claim: e.target.value }))}
+              placeholder="z.B. Das Betriebssystem für moderne Agenturen"
+              style={{
+                width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                border: `1px solid ${theme.borderFaint}`, borderRadius: 12,
+                padding: "12px 16px", fontSize: 15, fontFamily: FONT,
+                color: theme.text, outline: "none", caretColor: theme.accent,
+              }}
+            />
           </div>
 
-          {/* Tab content */}
-          <AnimatePresence mode="wait">
-            {contextTab === "text" && (
-              <motion.div key="text" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
-                <textarea value={form.description} onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Was macht deine Brand aus? Zielgruppe, Werte, Tonalität, USPs ..."
-                  rows={9}
-                  style={{
-                    width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                    border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
-                    padding: "16px 18px", fontSize: 14, fontFamily: FONT,
-                    color: theme.text, outline: "none", caretColor: theme.accent, resize: "vertical", minHeight: 160, lineHeight: 1.55,
-                  }}
-                />
-              </motion.div>
-            )}
-            {contextTab === "url" && (
-              <motion.div key="url" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}
-                style={{ display: "flex", flexDirection: "column", gap: 12 }}
-              >
-                <input value={form.website_url} onChange={(e) => setForm(prev => ({ ...prev, website_url: e.target.value }))}
-                  placeholder="https://deine-brand.com"
-                  style={{
-                    width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                    border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
-                    padding: "14px 18px", fontSize: 16, fontFamily: FONT,
-                    color: theme.text, outline: "none", caretColor: theme.accent,
-                  }}
-                />
-                <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint, lineHeight: 1.6 }}>
-                  Wir speichern die URL und ziehen später automatisch Informationen wie Texte, Farben und Tonalität.
-                  <br/><span style={{ opacity: 0.7 }}>Auto-Import folgt in Kürze.</span>
-                </div>
-              </motion.div>
-            )}
-            {contextTab === "pdf" && (
-              <motion.div key="pdf" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
-                {form.pdf_url ? (
-                  <div style={{
-                    display: "flex", alignItems: "center", gap: 14,
-                    padding: 14, borderRadius: 14,
-                    background: darkMode ? "rgba(139,122,255,0.08)" : "rgba(139,122,255,0.06)",
-                    border: "1px solid rgba(139,122,255,0.22)",
-                  }}>
-                    <div style={{ width: 46, height: 46, borderRadius: 11, background: "rgba(139,122,255,0.2)", color: "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <a href={form.pdf_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 14, fontFamily: FONT, color: theme.text, textDecoration: "none", fontWeight: 500, display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{form.pdf_name}</a>
-                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Hochgeladen · Klicken zum Öffnen</div>
-                    </div>
-                    <motion.div whileTap={{ scale: 0.9 }} onClick={() => setForm(prev => ({ ...prev, pdf_url: "", pdf_name: "" }))}
-                      style={{ width: 28, height: 28, borderRadius: "50%", background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 12, flexShrink: 0 }}
-                    >✕</motion.div>
-                  </div>
-                ) : (
-                  <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
-                    onClick={() => pdfInputRef.current?.click()}
+          {/* Tone chips */}
+          <div>
+            <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 10, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>
+              Tonalität (mehrere möglich)
+            </label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {TONE_OF_VOICE_OPTIONS.map(t => {
+                const active = form.tone_of_voice.includes(t);
+                return (
+                  <motion.div key={t} whileTap={{ scale: 0.95 }} whileHover={{ y: -1 }}
+                    onClick={() => toggleTone(t)}
                     style={{
-                      padding: "32px 20px", borderRadius: 14, cursor: pdfUploading ? "wait" : "pointer",
-                      border: `2px dashed ${theme.border}`,
-                      background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
-                      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12,
-                      color: theme.textDim, fontFamily: FONT, textAlign: "center",
-                      opacity: pdfUploading ? 0.6 : 1,
+                      padding: "7px 14px", borderRadius: 999, cursor: "pointer",
+                      background: active ? (theme.accent + "20") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
+                      color: active ? theme.accent : theme.textSub,
+                      border: `1px solid ${active ? (theme.accent + "40") : theme.borderFaint}`,
+                      fontSize: 12, fontFamily: FONT, fontWeight: 500,
+                      transition: "background 0.15s, color 0.15s",
                     }}
-                  >
-                    <div style={{ width: 50, height: 50, borderRadius: 14, background: theme.accent + "15", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 14, color: theme.text, fontWeight: 500, marginBottom: 4 }}>
-                        {pdfUploading ? "Lädt..." : "Brand-Dokument hochladen"}
-                      </div>
-                      <div style={{ fontSize: 12, color: theme.textFaint }}>
-                        Brand Manual, Pitch Deck, Style Guide ...
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-                <input ref={pdfInputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => handlePdfUpload(e.target.files?.[0])} />
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  >{t}</motion.div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Description */}
+          <div>
+            <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Mehr Kontext (optional)</label>
+            <textarea value={form.description} onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))}
+              placeholder="Zielgruppe, Werte, USPs, was du explizit vermeiden willst ..."
+              rows={5}
+              style={{
+                width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                border: `1px solid ${theme.borderFaint}`, borderRadius: 12,
+                padding: "12px 16px", fontSize: 14, fontFamily: FONT,
+                color: theme.text, outline: "none", caretColor: theme.accent, resize: "vertical", minHeight: 100, lineHeight: 1.55,
+              }}
+            />
+          </div>
         </motion.div>
       );
     }
 
-    if (step === 4) {
-      // RECAP
+    // STEP 5 — Recap
+    if (step === 5) {
+      const primaryLogo = form.logos.find(l => l.key === "primary")?.url || form.logos[0]?.url || form.logo_url;
       return (
-        <motion.div key="4" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
+        <motion.div key="5" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
           transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
-          style={{ display: "flex", flexDirection: "column", gap: 24, alignItems: "center", textAlign: "center", maxWidth: 520, margin: "0 auto" }}
+          style={{ display: "flex", flexDirection: "column", gap: 22, alignItems: "center", textAlign: "center", maxWidth: 560, margin: "0 auto" }}
         >
           <div>
             <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
               Sieht gut aus, oder?
             </div>
             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
-              Hier ist deine Brand auf einen Blick. Du kannst alles später jederzeit anpassen.
+              Du kannst alles später jederzeit anpassen — auch noch fehlende Stücke ergänzen.
             </div>
           </div>
 
-          {/* Big preview card */}
-          <motion.div
-            initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+          <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
             transition={{ type: "spring", stiffness: 240, damping: 22 }}
             style={{
               width: "100%", padding: 24, borderRadius: 22,
-              background: form.colors[0] ? `linear-gradient(135deg, ${form.colors[0]}08, transparent 60%)` : (darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)"),
+              background: form.colors[0] ? `linear-gradient(135deg, ${form.colors[0]}10, transparent 60%)` : (darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)"),
               border: `1px solid ${theme.borderFaint}`,
               display: "flex", alignItems: "center", gap: 18, textAlign: "left",
             }}
           >
-            {form.logo_url ? (
-              <img src={form.logo_url} alt="" style={{ width: 72, height: 72, borderRadius: 18, objectFit: "cover", flexShrink: 0, border: `1px solid ${theme.borderFaint}` }} />
+            {primaryLogo ? (
+              <img src={primaryLogo} alt="" style={{ width: 72, height: 72, borderRadius: 18, objectFit: "cover", flexShrink: 0, border: `1px solid ${theme.borderFaint}` }} />
             ) : (
               <div style={{ width: 72, height: 72, borderRadius: 18, background: (form.colors[0] || theme.accent) + "22", color: form.colors[0] || theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{(form.name || "?")[0]}</div>
             )}
@@ -7632,7 +7866,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
               {form.claim && <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 4, lineHeight: 1.5 }}>{form.claim}</div>}
               {form.colors.length > 0 && (
                 <div style={{ display: "flex", gap: 4, marginTop: 10 }}>
-                  {form.colors.slice(0, 6).map(c => (
+                  {form.colors.slice(0, 8).map(c => (
                     <div key={c} style={{ width: 14, height: 14, borderRadius: 5, background: c, border: `1px solid ${theme.borderFaint}` }} />
                   ))}
                 </div>
@@ -7640,37 +7874,23 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
             </div>
           </motion.div>
 
-          {/* Stats row */}
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
-            {form.description && (
-              <div style={{ padding: "5px 12px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", fontSize: 11, fontFamily: FONT, color: theme.textSub }}>
-                ✓ Beschreibung
-              </div>
-            )}
-            {form.website_url && (
-              <div style={{ padding: "5px 12px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", fontSize: 11, fontFamily: FONT, color: theme.textSub }}>
-                ✓ Website
-              </div>
-            )}
-            {form.pdf_url && (
-              <div style={{ padding: "5px 12px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", fontSize: 11, fontFamily: FONT, color: theme.textSub }}>
-                ✓ Dokument
-              </div>
-            )}
-            {form.colors.length > 0 && (
-              <div style={{ padding: "5px 12px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", fontSize: 11, fontFamily: FONT, color: theme.textSub }}>
-                ✓ {form.colors.length} Farben
-              </div>
-            )}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+            {form.logos.length > 0 && <SummaryChip>✓ {form.logos.length} Logo-Varianten</SummaryChip>}
+            {form.website_url && <SummaryChip>✓ Website</SummaryChip>}
+            {form.figma_url && <SummaryChip>✓ Figma</SummaryChip>}
+            {form.sources.length > 0 && <SummaryChip>✓ {form.sources.length} Quelle{form.sources.length === 1 ? "" : "n"}</SummaryChip>}
+            {form.colors.length > 0 && <SummaryChip>✓ {form.colors.length} Farben</SummaryChip>}
+            {form.tone_of_voice.length > 0 && <SummaryChip>✓ {form.tone_of_voice.length} Tonalitäten</SummaryChip>}
+            {form.description && <SummaryChip>✓ Beschreibung</SummaryChip>}
           </div>
         </motion.div>
       );
     }
 
-    if (step === 5) {
-      // CELEBRATION
+    // STEP 6 — Celebration
+    if (step === 6) {
       return (
-        <motion.div key="5" initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+        <motion.div key="6" initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
           transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
           style={{ display: "flex", flexDirection: "column", gap: 24, alignItems: "center", textAlign: "center" }}
         >
@@ -7692,17 +7912,21 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
             Brand ist live!
           </div>
           <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 360 }}>
-            Du kannst jetzt loslegen. Wir leiten dich gleich weiter ...
+            Wir leiten dich gleich weiter ...
           </div>
         </motion.div>
       );
     }
   };
 
-  const canAdvance = () => {
-    if (step === 0) return form.name.trim().length > 0;
-    return true;
-  };
+  // Small helper component
+  function SummaryChip({ children }) {
+    return (
+      <div style={{ padding: "5px 12px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", fontSize: 11, fontFamily: FONT, color: theme.textSub }}>
+        {children}
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -7722,23 +7946,18 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         border: `1px solid ${theme.borderFaint}`,
         borderRadius: 26, overflow: "hidden",
         display: "flex", flexDirection: "column",
-        position: "relative",
       }}>
         {loading ? (
           <div style={{ padding: 40, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim, margin: "auto" }}>Lädt...</div>
         ) : isOnboarding ? (
           <>
-            {/* Progress bar */}
-            {step < 5 && (
+            {step < 6 && (
               <div style={{ padding: "20px 28px 0", display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={{ flex: 1, height: 4, borderRadius: 2, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", overflow: "hidden" }}>
                   <motion.div
                     animate={{ width: `${((step + 1) / totalSteps) * 100}%` }}
                     transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
-                    style={{
-                      height: "100%", background: "linear-gradient(90deg, #8B7AFF, #6C5CE7)",
-                      borderRadius: 2,
-                    }}
+                    style={{ height: "100%", background: "linear-gradient(90deg, #8B7AFF, #6C5CE7)", borderRadius: 2 }}
                   />
                 </div>
                 <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 500, letterSpacing: 0.5, whiteSpace: "nowrap" }}>
@@ -7747,15 +7966,13 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
               </div>
             )}
 
-            {/* Step content */}
-            <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", padding: "48px 40px 24px", position: "relative" }}>
+            <div style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column", padding: "40px 36px 20px" }}>
               <AnimatePresence mode="wait" custom={stepDir}>
                 {renderStep()}
               </AnimatePresence>
             </div>
 
-            {/* Footer with navigation */}
-            {step < 5 && (
+            {step < 6 && (
               <div style={{ padding: "16px 28px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: `1px solid ${theme.borderFaint}` }}>
                 {step > 0 ? (
                   <motion.button whileTap={{ scale: 0.97 }} onClick={back}
@@ -7779,7 +7996,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   >Abbrechen</motion.button>
                 ) : <div />}
 
-                {step < 4 ? (
+                {step < 5 ? (
                   <motion.button whileTap={{ scale: 0.97 }} onClick={next} disabled={!canAdvance()}
                     style={{
                       padding: "10px 22px", borderRadius: 12, cursor: canAdvance() ? "pointer" : "not-allowed",
@@ -7817,8 +8034,8 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
           // Post-onboarding: tabs + summary
           <>
             <div style={{ padding: "16px 24px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${theme.borderFaint}` }}>
-              {profile.logo_url ? (
-                <img src={profile.logo_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+              {(profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url) ? (
+                <img src={profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
               ) : (
                 <div style={{ width: 32, height: 32, borderRadius: 8, background: theme.accent + "22", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{(profile.name || "?")[0]}</div>
               )}
@@ -7837,13 +8054,11 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
               >Bearbeiten</motion.button>
             </div>
 
-            {/* Tabs */}
             <div style={{ display: "flex", gap: 4, padding: "10px 20px 0", borderBottom: `1px solid ${theme.borderFaint}` }}>
               {Object.entries(BRAND_SUBVIEW_LABELS).map(([key, label]) => {
                 const active = brandTab === key;
                 return (
-                  <motion.div key={key} whileTap={{ scale: 0.96 }}
-                    onClick={() => setBrandTab(key)}
+                  <motion.div key={key} whileTap={{ scale: 0.96 }} onClick={() => setBrandTab(key)}
                     style={{
                       padding: "8px 14px", borderRadius: "10px 10px 0 0", cursor: "pointer",
                       fontSize: 12, fontFamily: FONT, fontWeight: active ? 600 : 500,
@@ -7867,26 +8082,36 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   </div>
                 </div>
 
-                {/* Big brand card */}
                 <div style={{
                   padding: 22, borderRadius: 18,
                   background: profile.colors?.[0] ? `linear-gradient(135deg, ${profile.colors[0]}10, transparent 60%)` : (darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)"),
                   border: `1px solid ${theme.borderFaint}`,
                   display: "flex", gap: 18, alignItems: "center",
                 }}>
-                  {profile.logo_url ? (
-                    <img src={profile.logo_url} alt="" style={{ width: 64, height: 64, borderRadius: 14, objectFit: "cover", flexShrink: 0 }} />
+                  {(profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url) ? (
+                    <img src={profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url} alt="" style={{ width: 64, height: 64, borderRadius: 14, objectFit: "cover", flexShrink: 0 }} />
                   ) : (
                     <div style={{ width: 64, height: 64, borderRadius: 14, background: (profile.colors?.[0] || theme.accent) + "22", color: profile.colors?.[0] || theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{(profile.name || "?")[0]}</div>
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{profile.name}</div>
                     {profile.claim && <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 4 }}>{profile.claim}</div>}
-                    {profile.website_url && (
-                      <a href={profile.website_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontFamily: FONT, color: theme.accent, marginTop: 8, display: "inline-block", textDecoration: "none" }}>{profile.website_url}</a>
-                    )}
                   </div>
                 </div>
+
+                {profile.logos?.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Logo-Varianten</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                      {profile.logos.map(l => (
+                        <div key={l.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: 8, borderRadius: 12, background: l.key === "dark" ? "#1a1a2e" : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)"), border: `1px solid ${theme.borderFaint}` }}>
+                          <img src={l.url} alt="" style={{ width: 56, height: 56, objectFit: "contain", borderRadius: 6 }} />
+                          <div style={{ fontSize: 10, fontFamily: FONT, color: l.key === "dark" ? "#ffffff90" : theme.textDim, letterSpacing: 0.3 }}>{l.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {profile.colors?.length > 0 && (
                   <div>
@@ -7902,6 +8127,17 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   </div>
                 )}
 
+                {profile.tone_of_voice?.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Tonalität</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {profile.tone_of_voice.map(t => (
+                        <div key={t} style={{ padding: "5px 12px", borderRadius: 999, background: theme.accent + "15", color: theme.accent, fontSize: 11, fontFamily: FONT, fontWeight: 500, border: `1px solid ${theme.accent}30` }}>{t}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {profile.description && (
                   <div>
                     <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>Beschreibung</div>
@@ -7909,21 +8145,36 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   </div>
                 )}
 
-                {profile.pdf_url && (
-                  <a href={profile.pdf_url} target="_blank" rel="noopener noreferrer" style={{
-                    display: "flex", alignItems: "center", gap: 12,
-                    padding: 14, borderRadius: 14, textDecoration: "none",
-                    background: darkMode ? "rgba(139,122,255,0.06)" : "rgba(139,122,255,0.05)",
-                    border: "1px solid rgba(139,122,255,0.18)",
-                  }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(139,122,255,0.2)", color: "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                {/* Sources */}
+                {(profile.website_url || profile.figma_url || profile.sources?.length > 0) && (
+                  <div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Quellen</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {profile.website_url && (
+                        <a href={profile.website_url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg>
+                          <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{profile.website_url}</span>
+                        </a>
+                      )}
+                      {profile.figma_url && (
+                        <a href={profile.figma_url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="9" r="3"/><path d="M9 6h6a3 3 0 010 6H9a3 3 0 010-6zM9 12h3v3a3 3 0 11-3-3z"/></svg>
+                          <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Figma-Datei</span>
+                        </a>
+                      )}
+                      {(profile.sources || []).map(s => (
+                        <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
+                          <div style={{ width: 28, height: 28, borderRadius: 7, background: "rgba(139,122,255,0.15)", color: "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</div>
+                            <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.4 }}>{s.type}</div>
+                          </div>
+                        </a>
+                      ))}
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{profile.pdf_name}</div>
-                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>Brand-Dokument</div>
-                    </div>
-                  </a>
+                  </div>
                 )}
               </div>
             </div>
