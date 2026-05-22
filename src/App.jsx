@@ -67,13 +67,19 @@ const VAPID_PUBLIC_KEY = "BJJ_TXEs7qnwTKLnYO5_pvuuzr6oB59d4xpSCssTZCkfujAaQYlCwx
 
 // OS visual slots — user-customizable icons (key → metadata)
 const OS_VISUAL_SLOTS = [
-  { key: "calendar_event", label: "Kalender-Termin", description: "Symbol für normale Calendar-Events", defaultEmoji: "📅" },
-  { key: "calendar_meet", label: "Google Meet", description: "Symbol für Meet/Video-Termine", defaultEmoji: "📹" },
-  { key: "reminder", label: "Erinnerung", description: "Symbol für Reminder", defaultEmoji: "⏰" },
-  { key: "task_high", label: "Task — High Priority", description: "Symbol für Tasks mit hoher Priorität", defaultEmoji: "⚡" },
-  { key: "task_default", label: "Task — Standard", description: "Symbol für Standard-Tasks ohne Logo", defaultEmoji: "◎" },
-  { key: "note", label: "Notiz", description: "Symbol für Notizen", defaultEmoji: "📝" },
-  { key: "chat_message", label: "Chat-Nachricht", description: "Symbol für Chat-Notifications", defaultEmoji: "💬" },
+  { key: "calendar_event", label: "Kalender-Termin", description: "Symbol für normale Calendar-Events", defaultEmoji: "📅", defaultBg: "#4A6FA5" },
+  { key: "calendar_meet", label: "Google Meet", description: "Symbol für Meet/Video-Termine", defaultEmoji: "📹", defaultBg: "#2D7A6A" },
+  { key: "reminder", label: "Erinnerung", description: "Symbol für Reminder", defaultEmoji: "⏰", defaultBg: "#D4A85A" },
+  { key: "task_high", label: "Task — High Priority", description: "Symbol für Tasks mit hoher Priorität", defaultEmoji: "⚡", defaultBg: "#C4624A" },
+  { key: "task_default", label: "Task — Standard", description: "Symbol für Standard-Tasks ohne Logo", defaultEmoji: "◎", defaultBg: "#5A7AB5" },
+  { key: "note", label: "Notiz", description: "Symbol für Notizen", defaultEmoji: "📝", defaultBg: "#7E6FB5" },
+  { key: "chat_message", label: "Chat-Nachricht", description: "Symbol für Chat-Notifications", defaultEmoji: "💬", defaultBg: "#5BA889" },
+];
+
+// Curated background color palette for OS visual slots
+const OS_VISUAL_BG_PALETTE = [
+  "#4A6FA5", "#2D7A6A", "#D4A85A", "#C4624A", "#5A7AB5", "#7E6FB5",
+  "#5BA889", "#D67885", "#7A9560", "#C68460", "#7A7570", "#1a1a2e",
 ];
 
 const EMOJI_GROUPS = {
@@ -6924,18 +6930,36 @@ export default function CircularMenu() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id, userOrg?.id]);
 
-  // ── Load OS visuals (custom icons per slot) ──
+  // ── Load OS visuals (custom icons + bg color + mode per slot) ──
   useEffect(() => {
     if (!session?.user?.id) return;
     (async () => {
-      const { data } = await supabase.from("os_visuals").select("slot_key, icon_url").eq("user_id", session.user.id);
+      const { data } = await supabase.from("os_visuals").select("slot_key, icon_url, bg_color, mode").eq("user_id", session.user.id);
       const map = {};
-      (data || []).forEach(row => { map[row.slot_key] = row.icon_url; });
+      (data || []).forEach(row => {
+        map[row.slot_key] = { icon_url: row.icon_url, bg_color: row.bg_color, mode: row.mode || "icon" };
+      });
       setOsVisuals(map);
     })();
   }, [session?.user?.id]);
 
-  const uploadOsVisual = async (slotKey, file) => {
+  // Upsert helper that merges patch into existing slot row
+  const upsertOsVisual = async (slotKey, patch) => {
+    if (!session?.user?.id) return;
+    const current = osVisuals[slotKey] || {};
+    const next = { ...current, ...patch };
+    setOsVisuals(prev => ({ ...prev, [slotKey]: next }));
+    await supabase.from("os_visuals").upsert({
+      user_id: session.user.id,
+      slot_key: slotKey,
+      icon_url: next.icon_url || null,
+      bg_color: next.bg_color || null,
+      mode: next.mode || "icon",
+      updated_at: new Date().toISOString(),
+    });
+  };
+
+  const uploadOsVisual = async (slotKey, file, mode = "icon") => {
     if (!file || !session?.user?.id) return;
     setOsVisualUploading(slotKey);
     try {
@@ -6945,16 +6969,21 @@ export default function CircularMenu() {
       if (upErr) throw upErr;
       const { data: pub } = supabase.storage.from("os-visuals").getPublicUrl(path);
       const iconUrl = pub.publicUrl + "?t=" + Date.now(); // cache-bust
-      await supabase.from("os_visuals").upsert({
-        user_id: session.user.id, slot_key: slotKey, icon_url: iconUrl, updated_at: new Date().toISOString(),
-      });
-      setOsVisuals(prev => ({ ...prev, [slotKey]: iconUrl }));
+      await upsertOsVisual(slotKey, { icon_url: iconUrl, mode });
     } catch (e) {
       console.error("[OS Visuals] Upload failed:", e);
       alert("Upload fehlgeschlagen: " + (e.message || "Unbekannter Fehler"));
     } finally {
       setOsVisualUploading(null);
     }
+  };
+
+  const setOsVisualBgColor = async (slotKey, color) => {
+    await upsertOsVisual(slotKey, { bg_color: color });
+  };
+
+  const setOsVisualMode = async (slotKey, mode) => {
+    await upsertOsVisual(slotKey, { mode });
   };
 
   const resetOsVisual = async (slotKey) => {
@@ -7319,11 +7348,16 @@ export default function CircularMenu() {
       const projLogo = tk.project_name ? getDashProjectLogo(tk.project_name) : null;
       // Custom OS visual override for task slot if no project logo
       const slotKey = tk.priority === "high" ? "task_high" : "task_default";
-      const customIcon = !projLogo ? osVisuals[slotKey] : null;
+      const slotDef = OS_VISUAL_SLOTS.find(s => s.key === slotKey);
+      const slotData = !projLogo ? osVisuals[slotKey] : null;
+      const customIcon = slotData?.icon_url || null;
+      const customBg = slotData?.bg_color || null;
+      const fullbleed = slotData?.mode === "fullbleed" && customIcon;
       return {
         icon: projLogo || customIcon ? null : (tk.priority === "high" ? "⚡" : "◎"),
-        iconBg: tk.priority === "high" ? "#C4624A" : "#5A7AB5",
+        iconBg: customBg || slotDef?.defaultBg || (tk.priority === "high" ? "#C4624A" : "#5A7AB5"),
         logoUrl: projLogo || customIcon,
+        fullbleed: !projLogo && fullbleed,
         name: tk.title,
         desc: tk.project_name || colLabel(tk.column_key),
         key: tk.id,
@@ -7337,11 +7371,16 @@ export default function CircularMenu() {
       const startTime = ev.start ? new Date(ev.start) : null;
       const timeStr = startTime ? startTime.toLocaleTimeString(appLanguage === "de" ? "de-DE" : "en-US", { hour: "2-digit", minute: "2-digit" }) : "";
       const slotKey = ev.isMeet ? "calendar_meet" : "calendar_event";
-      const customIcon = osVisuals[slotKey];
+      const slotDef = OS_VISUAL_SLOTS.find(s => s.key === slotKey);
+      const slotData = osVisuals[slotKey];
+      const customIcon = slotData?.icon_url || null;
+      const customBg = slotData?.bg_color || null;
+      const fullbleed = slotData?.mode === "fullbleed" && customIcon;
       return {
         icon: customIcon ? null : (ev.isMeet ? "📹" : "📅"),
-        iconBg: ev.isMeet ? "#2D7A6A" : "#4A6FA5",
-        logoUrl: customIcon || null,
+        iconBg: customBg || slotDef?.defaultBg || (ev.isMeet ? "#2D7A6A" : "#4A6FA5"),
+        logoUrl: customIcon,
+        fullbleed,
         name: ev.title,
         desc: timeStr + (ev.isMeet ? " · Google Meet" : ""),
         key: "ev-" + ev.id,
@@ -8656,10 +8695,20 @@ export default function CircularMenu() {
                   }}
                 >
                   {task.logoUrl ? (
-                    <img src={task.logoUrl} alt="" style={{
-                      width: 50, height: 50, borderRadius: "50%",
-                      objectFit: "cover", flexShrink: 0,
-                    }} />
+                    task.fullbleed ? (
+                      <img src={task.logoUrl} alt="" style={{
+                        width: 50, height: 50, borderRadius: "50%",
+                        objectFit: "cover", flexShrink: 0,
+                      }} />
+                    ) : (
+                      <div style={{
+                        width: 50, height: 50, borderRadius: "50%",
+                        background: task.iconBg, display: "flex", alignItems: "center",
+                        justifyContent: "center", flexShrink: 0, overflow: "hidden",
+                      }}>
+                        <img src={task.logoUrl} alt="" style={{ width: 30, height: 30, objectFit: "contain" }} />
+                      </div>
+                    )
                   ) : (
                     <div style={{
                       width: 50, height: 50, borderRadius: "50%",
@@ -10769,38 +10818,86 @@ export default function CircularMenu() {
                 >✕</motion.div>
               </div>
               {/* Slot list */}
-              <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
                 {OS_VISUAL_SLOTS.map(slot => {
-                  const customIcon = osVisuals[slot.key];
+                  const slotData = osVisuals[slot.key] || {};
+                  const customIcon = slotData.icon_url;
+                  const customBg = slotData.bg_color;
+                  const mode = slotData.mode || "icon";
+                  const fullbleed = mode === "fullbleed" && customIcon;
                   const uploading = osVisualUploading === slot.key;
+                  const effectiveBg = customBg || slot.defaultBg;
+                  const hasAnyOverride = !!(customIcon || customBg || mode === "fullbleed");
+
                   return (
                     <div key={slot.key} style={{
-                      display: "flex", alignItems: "center", gap: 14,
                       padding: "14px 16px", borderRadius: 14,
                       background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)",
                       border: `1px solid ${theme.borderFaint}`,
+                      display: "flex", flexDirection: "column", gap: 12,
                     }}>
-                      {/* Preview */}
-                      <div style={{
-                        width: 48, height: 48, borderRadius: 12, flexShrink: 0,
-                        background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                        border: `1px solid ${theme.borderFaint}`,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        overflow: "hidden",
-                        fontSize: 24,
-                      }}>
-                        {customIcon ? (
-                          <img src={customIcon} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        ) : (
-                          slot.defaultEmoji
+                      {/* Top row: preview + label + reset */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                        {/* Live preview matching dashboard rendering */}
+                        <div style={{
+                          width: 50, height: 50, borderRadius: "50%", flexShrink: 0,
+                          background: fullbleed ? "transparent" : effectiveBg,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          overflow: "hidden", fontSize: 22, color: "#fff",
+                        }}>
+                          {customIcon ? (
+                            fullbleed ? (
+                              <img src={customIcon} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            ) : (
+                              <img src={customIcon} alt="" style={{ width: 30, height: 30, objectFit: "contain" }} />
+                            )
+                          ) : (
+                            slot.defaultEmoji
+                          )}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{slot.label}</div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{slot.description}</div>
+                        </div>
+                        {hasAnyOverride && (
+                          <motion.button whileTap={{ scale: 0.95 }}
+                            onClick={() => resetOsVisual(slot.key)}
+                            title="Zurücksetzen"
+                            style={{
+                              width: 32, height: 32, borderRadius: 10, cursor: "pointer",
+                              background: "transparent",
+                              border: `1px solid ${theme.borderFaint}`,
+                              color: theme.textDim,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              flexShrink: 0,
+                            }}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                          </motion.button>
                         )}
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{slot.label}</div>
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{slot.description}</div>
+
+                      {/* Mode toggle: Icon vs Fullbleed */}
+                      <div style={{ display: "flex", gap: 4, padding: 3, borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}` }}>
+                        {[
+                          { id: "icon", label: "Icon + Farbe" },
+                          { id: "fullbleed", label: "Vollflächiges Bild" },
+                        ].map(m => (
+                          <motion.div key={m.id} whileTap={{ scale: 0.96 }}
+                            onClick={() => setOsVisualMode(slot.key, m.id)}
+                            style={{
+                              flex: 1, padding: "6px 10px", borderRadius: 7, cursor: "pointer",
+                              textAlign: "center", fontSize: 11, fontFamily: FONT, fontWeight: 500,
+                              background: mode === m.id ? (darkMode ? "rgba(255,255,255,0.08)" : "#fff") : "transparent",
+                              color: mode === m.id ? theme.text : theme.textDim,
+                              boxShadow: mode === m.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                            }}
+                          >{m.label}</motion.div>
+                        ))}
                       </div>
-                      {/* Upload + reset buttons */}
-                      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+
+                      {/* Upload + (Color picker when mode is icon) */}
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                         <label style={{
                           padding: "8px 14px", borderRadius: 10, cursor: uploading ? "wait" : "pointer",
                           background: customIcon ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)") : "#8B7AFF",
@@ -10810,26 +10907,46 @@ export default function CircularMenu() {
                           opacity: uploading ? 0.6 : 1,
                           display: "flex", alignItems: "center", gap: 6,
                         }}>
-                          {uploading ? "Lädt..." : customIcon ? "Ersetzen" : "Hochladen"}
+                          {uploading ? "Lädt..." : customIcon ? "Bild ersetzen" : (mode === "fullbleed" ? "Bild hochladen" : "Icon hochladen")}
                           <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml"
                             style={{ display: "none" }}
-                            onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadOsVisual(slot.key, f); e.target.value = ""; }}
+                            onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadOsVisual(slot.key, f, mode); e.target.value = ""; }}
                           />
                         </label>
-                        {customIcon && (
-                          <motion.button whileTap={{ scale: 0.95 }}
-                            onClick={() => resetOsVisual(slot.key)}
-                            title="Zurücksetzen"
-                            style={{
-                              width: 34, height: 34, borderRadius: 10, cursor: "pointer",
-                              background: "transparent",
-                              border: `1px solid ${theme.borderFaint}`,
-                              color: theme.textDim,
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                            }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-                          </motion.button>
+
+                        {/* Background color palette — only in icon mode */}
+                        {mode === "icon" && (
+                          <>
+                            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginLeft: 4 }}>BG:</div>
+                            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                              {OS_VISUAL_BG_PALETTE.map(color => {
+                                const active = effectiveBg.toLowerCase() === color.toLowerCase();
+                                return (
+                                  <motion.div key={color} whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.9 }}
+                                    onClick={() => setOsVisualBgColor(slot.key, color)}
+                                    style={{
+                                      width: 22, height: 22, borderRadius: "50%",
+                                      background: color, cursor: "pointer",
+                                      border: active ? `2px solid ${darkMode ? "#fff" : "#1a1a2e"}` : "2px solid transparent",
+                                      boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                                    }}
+                                  />
+                                );
+                              })}
+                              {/* Custom color input */}
+                              <label style={{
+                                width: 22, height: 22, borderRadius: "50%", cursor: "pointer",
+                                background: `conic-gradient(from 0deg, #ff5e3a, #ffdb4d, #5bd1d7, #8b7aff, #ff5e3a)`,
+                                border: "2px solid transparent",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                              }}>
+                                <input type="color" value={effectiveBg}
+                                  onChange={(e) => setOsVisualBgColor(slot.key, e.target.value)}
+                                  style={{ opacity: 0, width: 0, height: 0 }}
+                                />
+                              </label>
+                            </div>
+                          </>
                         )}
                       </div>
                     </div>
