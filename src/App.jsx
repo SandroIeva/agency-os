@@ -6892,9 +6892,22 @@ export default function CircularMenu() {
       })
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    // Also subscribe to project changes (e.g. logo upload) so dashboard cards
+    // pick up updated logos immediately without a page reload
+    const projectsChannel = userOrg?.id ? supabase
+      .channel("dashboard-projects")
+      .on("postgres_changes", { event: "*", schema: "public", table: "projects", filter: `org_id=eq.${userOrg.id}` }, async () => {
+        const { data: prj } = await supabase.from("projects").select("*").eq("org_id", userOrg.id);
+        setDashboardProjects(prj || []);
+      })
+      .subscribe() : null;
+
+    return () => {
+      supabase.removeChannel(channel);
+      if (projectsChannel) supabase.removeChannel(projectsChannel);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user?.id]);
+  }, [session?.user?.id, userOrg?.id]);
 
   // ── Fetch upcoming Google Calendar events for startview ──
   useEffect(() => {
