@@ -65,6 +65,17 @@ const PLUS_MENU_ITEMS_DEF = [
 const FONT = "'Geist', -apple-system, sans-serif";
 const VAPID_PUBLIC_KEY = "BJJ_TXEs7qnwTKLnYO5_pvuuzr6oB59d4xpSCssTZCkfujAaQYlCwxptfnUPXxhSnikKcG4rPH1FuU4CTYh4gvg";
 
+// OS visual slots — user-customizable icons (key → metadata)
+const OS_VISUAL_SLOTS = [
+  { key: "calendar_event", label: "Kalender-Termin", description: "Symbol für normale Calendar-Events", defaultEmoji: "📅" },
+  { key: "calendar_meet", label: "Google Meet", description: "Symbol für Meet/Video-Termine", defaultEmoji: "📹" },
+  { key: "reminder", label: "Erinnerung", description: "Symbol für Reminder", defaultEmoji: "⏰" },
+  { key: "task_high", label: "Task — High Priority", description: "Symbol für Tasks mit hoher Priorität", defaultEmoji: "⚡" },
+  { key: "task_default", label: "Task — Standard", description: "Symbol für Standard-Tasks ohne Logo", defaultEmoji: "◎" },
+  { key: "note", label: "Notiz", description: "Symbol für Notizen", defaultEmoji: "📝" },
+  { key: "chat_message", label: "Chat-Nachricht", description: "Symbol für Chat-Notifications", defaultEmoji: "💬" },
+];
+
 const EMOJI_GROUPS = {
   smileys: ["😀","😃","😄","😁","😆","😅","🤣","😂","🙂","🙃","😉","😊","😇","🥰","😍","🤩","😘","😗","😚","😙","🥲","😋","😛","😜","🤪","😝","🤑","🤗","🤭","🫢","🫣","🤫","🤔","🫡","🤐","🤨","😐","😑","😶","😏","😒","🙄","😬","🤥","🫨","🫠","😌","😔","😪","🤤","😴","😷","🤒","🤕","🤢","🤮","🤧","🥵","🥶","🥴","😵","🤯","🤠","🥳","🥸","😎","🤓","🧐","😕","🫤","😟","🙁","☹️","😮","😯","😲","😳","🥺","🥹","😦","😧","😨","😰","😥","😢","😭","😱","😖","😣","😞","😓","😩","😫","🥱","😤","😡","😠","🤬","😈","👿","💀","☠️","💩","🤡","👹","👺","👻","👽","👾","🤖"],
   gestures: ["👋","🤚","✋","🖖","👌","🤌","🤏","✌️","🤞","🫰","🤟","🤘","🤙","🫵","🫱","🫲","🫳","🫴","👈","👉","👆","🖕","👇","☝️","👍","👎","✊","👊","🤛","🤜","👏","🙌","🫶","👐","🤲","🤝","🙏","✍️","💅","🤳","💪","🦾","🦵","🦿","🦶","👂","🦻","👃","🧠","🫀","🫁","🦷","🦴","👀","👁️","👅","👄","🫦","💋"],
@@ -6246,6 +6257,10 @@ export default function CircularMenu() {
   const [dashboardTasks, setDashboardTasks] = useState([]);
   const [dashboardReminders, setDashboardReminders] = useState([]);
   const [dashboardProjects, setDashboardProjects] = useState([]);
+  // OS visuals: per-user custom icons keyed by slot_key (e.g. calendar_event, reminder)
+  const [osVisuals, setOsVisuals] = useState({});
+  const [osVisualsModalOpen, setOsVisualsModalOpen] = useState(false);
+  const [osVisualUploading, setOsVisualUploading] = useState(null); // slot_key being uploaded
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -6909,6 +6924,44 @@ export default function CircularMenu() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id, userOrg?.id]);
 
+  // ── Load OS visuals (custom icons per slot) ──
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    (async () => {
+      const { data } = await supabase.from("os_visuals").select("slot_key, icon_url").eq("user_id", session.user.id);
+      const map = {};
+      (data || []).forEach(row => { map[row.slot_key] = row.icon_url; });
+      setOsVisuals(map);
+    })();
+  }, [session?.user?.id]);
+
+  const uploadOsVisual = async (slotKey, file) => {
+    if (!file || !session?.user?.id) return;
+    setOsVisualUploading(slotKey);
+    try {
+      const ext = (file.name.split(".").pop() || "png").toLowerCase();
+      const path = `${session.user.id}/${slotKey}-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("os-visuals").upload(path, file, { contentType: file.type, upsert: true });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("os-visuals").getPublicUrl(path);
+      const iconUrl = pub.publicUrl + "?t=" + Date.now(); // cache-bust
+      await supabase.from("os_visuals").upsert({
+        user_id: session.user.id, slot_key: slotKey, icon_url: iconUrl, updated_at: new Date().toISOString(),
+      });
+      setOsVisuals(prev => ({ ...prev, [slotKey]: iconUrl }));
+    } catch (e) {
+      console.error("[OS Visuals] Upload failed:", e);
+      alert("Upload fehlgeschlagen: " + (e.message || "Unbekannter Fehler"));
+    } finally {
+      setOsVisualUploading(null);
+    }
+  };
+
+  const resetOsVisual = async (slotKey) => {
+    await supabase.from("os_visuals").delete().eq("user_id", session.user.id).eq("slot_key", slotKey);
+    setOsVisuals(prev => { const next = { ...prev }; delete next[slotKey]; return next; });
+  };
+
   // ── Fetch upcoming Google Calendar events for startview ──
   useEffect(() => {
     if (!session?.user) return;
@@ -7264,10 +7317,13 @@ export default function CircularMenu() {
     const getDashProjectLogo = (name) => dashboardProjects.find(p => p.name === name)?.logo_url || null;
     const taskCards = activeTasks.slice(0, 4).map(tk => {
       const projLogo = tk.project_name ? getDashProjectLogo(tk.project_name) : null;
+      // Custom OS visual override for task slot if no project logo
+      const slotKey = tk.priority === "high" ? "task_high" : "task_default";
+      const customIcon = !projLogo ? osVisuals[slotKey] : null;
       return {
-        icon: projLogo ? null : (tk.priority === "high" ? "⚡" : "◎"),
+        icon: projLogo || customIcon ? null : (tk.priority === "high" ? "⚡" : "◎"),
         iconBg: tk.priority === "high" ? "#C4624A" : "#5A7AB5",
-        logoUrl: projLogo,
+        logoUrl: projLogo || customIcon,
         name: tk.title,
         desc: tk.project_name || colLabel(tk.column_key),
         key: tk.id,
@@ -7280,9 +7336,12 @@ export default function CircularMenu() {
     const eventCards = upcomingEvents.map(ev => {
       const startTime = ev.start ? new Date(ev.start) : null;
       const timeStr = startTime ? startTime.toLocaleTimeString(appLanguage === "de" ? "de-DE" : "en-US", { hour: "2-digit", minute: "2-digit" }) : "";
+      const slotKey = ev.isMeet ? "calendar_meet" : "calendar_event";
+      const customIcon = osVisuals[slotKey];
       return {
-        icon: ev.isMeet ? "📹" : "📅",
+        icon: customIcon ? null : (ev.isMeet ? "📹" : "📅"),
         iconBg: ev.isMeet ? "#2D7A6A" : "#4A6FA5",
+        logoUrl: customIcon || null,
         name: ev.title,
         desc: timeStr + (ev.isMeet ? " · Google Meet" : ""),
         key: "ev-" + ev.id,
@@ -7315,7 +7374,7 @@ export default function CircularMenu() {
       pIdx++;
     }
     return cards;
-  }, [dashboardTasks, dashboardProjects, upcomingEvents, t, appLanguage]);
+  }, [dashboardTasks, dashboardProjects, upcomingEvents, t, appLanguage, osVisuals]);
 
   const getGreeting = () => {
     const h = new Date().getHours();
@@ -10482,6 +10541,50 @@ export default function CircularMenu() {
               </motion.div>
               )}
 
+              {/* OS Visuals — click to open icon customization modal */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.22, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+                style={{ marginTop: 24 }}
+              >
+                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
+                  OS Visuals
+                </div>
+                <motion.div
+                  whileHover={{ y: -1 }} whileTap={{ scale: 0.99 }}
+                  onClick={() => setOsVisualsModalOpen(true)}
+                  style={{
+                    borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`,
+                    padding: "20px 24px", cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: 14,
+                  }}
+                >
+                  <div style={{
+                    width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                    background: "linear-gradient(135deg, rgba(139, 122, 255, 0.18), rgba(100, 80, 220, 0.12))",
+                    border: "1px solid rgba(139, 122, 255, 0.2)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8B7AFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+                      <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
+                      Icons anpassen
+                    </div>
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.4 }}>
+                      Eigene Icons für Calendar-Events, Reminder, Tasks und mehr hochladen
+                    </div>
+                  </div>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, color: theme.textDim }}>
+                    <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </motion.div>
+              </motion.div>
+
               {/* Logout */}
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
@@ -10632,6 +10735,115 @@ export default function CircularMenu() {
           transition: background 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
       `}</style>
+
+      {/* ── OS Visuals Modal (Portal) ── */}
+      {createPortal(<AnimatePresence>
+        {osVisualsModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setOsVisualsModalOpen(false)}
+            style={{ position: "fixed", inset: 0, zIndex: 200, background: darkMode ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.55)", backdropFilter: "blur(20px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              transition={{ type: "spring", stiffness: 280, damping: 24 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "100%", maxWidth: 560, maxHeight: "85vh",
+                background: darkMode ? "rgba(22,22,30,0.98)" : "rgba(255,255,255,0.99)",
+                border: `1px solid ${theme.border}`,
+                borderRadius: 22, overflow: "hidden",
+                display: "flex", flexDirection: "column",
+                boxShadow: "0 30px 80px rgba(0,0,0,0.3)",
+              }}
+            >
+              {/* Header */}
+              <div style={{ padding: "20px 24px", borderBottom: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>OS Visuals</div>
+                  <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Eigene Icons für System-Slots hochladen</div>
+                </div>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.92 }}
+                  onClick={() => setOsVisualsModalOpen(false)}
+                  style={{ width: 32, height: 32, borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 16 }}
+                >✕</motion.div>
+              </div>
+              {/* Slot list */}
+              <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+                {OS_VISUAL_SLOTS.map(slot => {
+                  const customIcon = osVisuals[slot.key];
+                  const uploading = osVisualUploading === slot.key;
+                  return (
+                    <div key={slot.key} style={{
+                      display: "flex", alignItems: "center", gap: 14,
+                      padding: "14px 16px", borderRadius: 14,
+                      background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)",
+                      border: `1px solid ${theme.borderFaint}`,
+                    }}>
+                      {/* Preview */}
+                      <div style={{
+                        width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+                        background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                        border: `1px solid ${theme.borderFaint}`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        overflow: "hidden",
+                        fontSize: 24,
+                      }}>
+                        {customIcon ? (
+                          <img src={customIcon} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        ) : (
+                          slot.defaultEmoji
+                        )}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{slot.label}</div>
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{slot.description}</div>
+                      </div>
+                      {/* Upload + reset buttons */}
+                      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                        <label style={{
+                          padding: "8px 14px", borderRadius: 10, cursor: uploading ? "wait" : "pointer",
+                          background: customIcon ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)") : "#8B7AFF",
+                          color: customIcon ? theme.textDim : "#fff",
+                          border: customIcon ? `1px solid ${theme.borderFaint}` : "none",
+                          fontSize: 12, fontFamily: FONT, fontWeight: 500,
+                          opacity: uploading ? 0.6 : 1,
+                          display: "flex", alignItems: "center", gap: 6,
+                        }}>
+                          {uploading ? "Lädt..." : customIcon ? "Ersetzen" : "Hochladen"}
+                          <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                            style={{ display: "none" }}
+                            onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadOsVisual(slot.key, f); e.target.value = ""; }}
+                          />
+                        </label>
+                        {customIcon && (
+                          <motion.button whileTap={{ scale: 0.95 }}
+                            onClick={() => resetOsVisual(slot.key)}
+                            title="Zurücksetzen"
+                            style={{
+                              width: 34, height: 34, borderRadius: 10, cursor: "pointer",
+                              background: "transparent",
+                              border: `1px solid ${theme.borderFaint}`,
+                              color: theme.textDim,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                            }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                          </motion.button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Footer hint */}
+              <div style={{ padding: "12px 24px 16px", borderTop: `1px solid ${theme.borderFaint}`, fontSize: 11, fontFamily: FONT, color: theme.textFaint, textAlign: "center" }}>
+                Empfohlen: quadratische PNG/SVG · mind. 128×128 px · transparenter Hintergrund
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>, document.body)}
 
       {/* ── Push Setup Overlay (Portal) ── */}
       {createPortal(<AnimatePresence>
