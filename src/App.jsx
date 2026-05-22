@@ -8880,6 +8880,11 @@ export default function CircularMenu() {
       setCurrentView("notes");
     } else if (subItem.id === "kanban") {
       setCurrentView("kanban");
+    } else if (subItem.id === "tasks") {
+      // Open the dashboard's expanded task panel ("Was steht an")
+      setCurrentView("dashboard");
+      setPanelOpen(false);
+      setTimeout(() => setTasksOpen(true), 50);
     } else if (subItem.id === "calendar") {
       setCurrentView("calendar");
     } else if (["images", "videos", "all", "fonts", "raw", "links"].includes(subItem.id)) {
