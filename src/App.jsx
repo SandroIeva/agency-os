@@ -6321,15 +6321,13 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
   };
 
   const loadMembers = async (projectId) => {
-    console.log("[ProjectsView] loadMembers START for", projectId);
     // Step 1: load membership rows (no join — there's no FK from
     // project_members to profiles, only to auth.users)
     const { data: pm, error } = await supabase
       .from("project_members")
       .select("user_id, role, joined_at")
       .eq("project_id", projectId);
-    if (error) { console.warn("[ProjectsView] loadMembers failed:", error.message, error); setMembers([]); return; }
-    console.log("[ProjectsView] loadMembers got", pm?.length, "rows:", pm);
+    if (error) { console.warn("[ProjectsView] loadMembers failed:", error.message); setMembers([]); return; }
 
     // Step 2: enrich with profile data from the org's profiles
     const ids = (pm || []).map(r => r.user_id);
@@ -6337,9 +6335,9 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
     if (ids.length > 0) {
       const { data: profs, error: pErr } = await supabase
         .from("profiles")
-        .select("id, display_name, avatar_url, initials, email, avatar_color")
+        .select("id, display_name, avatar_url, initials, email")
         .in("id", ids);
-      console.log("[ProjectsView] profiles fetched:", profs?.length, "error:", pErr);
+      if (pErr) console.warn("[ProjectsView] profiles fetch failed:", pErr.message);
       (profs || []).forEach(p => { profilesMap[p.id] = p; });
     }
     setMembers((pm || []).map(m => ({ ...m, profiles: profilesMap[m.user_id] || {} })));
@@ -11624,6 +11622,8 @@ export default function CircularMenu() {
             transition={smoothSpring}
             onClick={() => {
               if (menuOpen && menuSource === "grid") { handleClose(); return; }
+              // If the (plus-)menu is open, close it before navigating
+              if (menuOpen) handleClose();
               // First click in a non-dashboard view → just navigate back to dashboard
               if (currentView !== "dashboard") { setCurrentView("dashboard"); return; }
               // Already on dashboard → open the menu
