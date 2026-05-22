@@ -51,7 +51,7 @@ const MENU_ITEMS_DEF = [
   { id: "chat", labelKey: "menu.chat", sub: [] },
   { id: "plan", labelKey: "menu.plan", sub: [{ id: "kanban", labelKey: "sub.kanban" }, { id: "timeline", labelKey: "sub.timeline" }, { id: "tasks", labelKey: "sub.tasks" }, { id: "calendar", labelKey: "sub.calendar" }] },
   { id: "brand", labelKey: "menu.brand", sub: [{ id: "assets", labelKey: "sub.assets" }, { id: "identity", labelKey: "sub.identity" }, { id: "knowledge", labelKey: "sub.intelligence" }, { id: "personas", labelKey: "sub.personas" }, { id: "competitor", labelKey: "sub.analyze" }, { id: "guidelines", labelKey: "sub.guidelines" }] },
-  { id: "docs", labelKey: "menu.projects", sub: [{ id: "notes", labelKey: "sub.notes" }, { id: "briefs", labelKey: "sub.briefs" }, { id: "wiki", labelKey: "sub.wiki" }, { id: "templates", labelKey: "sub.templates" }, { id: "proposals", labelKey: "sub.proposals" }, { id: "reports", labelKey: "sub.reports" }] },
+  { id: "docs", labelKey: "menu.projects", sub: [] },
   { id: "files", labelKey: "menu.files", sub: [{ id: "images", labelKey: "sub.images" }, { id: "videos", labelKey: "sub.videos" }, { id: "all", labelKey: "sub.docs" }, { id: "fonts", labelKey: "sub.fonts" }, { id: "links", labelKey: "sub.links" }] },
   { id: "agents", labelKey: "menu.agents", sub: [{ id: "dev", labelKey: "sub.dev" }, { id: "design", labelKey: "sub.design" }, { id: "strategy", labelKey: "sub.strategy" }, { id: "finance", labelKey: "sub.finance" }, { id: "marketing", labelKey: "sub.marketing" }, { id: "sales", labelKey: "sub.sales" }] },
 ];
@@ -6435,45 +6435,48 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
             </div>
           )}
           {!loading && filtered.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12, paddingBottom: 12 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, paddingBottom: 12 }}>
               {filtered.map((proj, i) => {
                 const count = taskCounts[proj.name] || 0;
                 const initial = (proj.name || "?")[0].toUpperCase();
+                const color = proj.color || "#8B7AFF";
                 return (
                   <motion.div key={proj.id}
                     initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.04 + i * 0.03, duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
-                    whileHover={{ y: -2, scale: 1.02 }}
+                    transition={{ delay: 0.04 + i * 0.025, duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
+                    className="hover-row"
                     onClick={() => openEdit(proj)}
                     style={{
-                      padding: 14, borderRadius: 14, cursor: "pointer",
+                      display: "flex", alignItems: "center", gap: 14,
+                      padding: "12px 14px", borderRadius: 14,
                       background: theme.hoverBg,
                       border: `1px solid ${theme.borderFaint}`,
-                      display: "flex", flexDirection: "column", gap: 10,
-                      position: "relative",
-                      transition: "box-shadow 0.2s ease",
+                      cursor: "pointer", flexShrink: 0,
                     }}
                   >
                     {/* Logo */}
                     <div style={{
-                      width: "100%", aspectRatio: "1", borderRadius: 12, overflow: "hidden",
-                      background: proj.logo_url ? "transparent" : `linear-gradient(135deg, ${proj.color || "#8B7AFF"}30, ${proj.color || "#8B7AFF"}10)`,
-                      border: `1px solid ${(proj.color || "#8B7AFF")}25`,
+                      width: 44, height: 44, borderRadius: 10,
+                      background: proj.logo_url ? "transparent" : `linear-gradient(135deg, ${color}40, ${color}15)`,
+                      border: `1px solid ${color}30`,
                       display: "flex", alignItems: "center", justifyContent: "center",
+                      flexShrink: 0, overflow: "hidden",
                     }}>
                       {proj.logo_url ? (
                         <img src={proj.logo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       ) : (
-                        <div style={{ fontSize: 32, fontFamily: FONT, fontWeight: 600, color: proj.color || "#8B7AFF" }}>{initial}</div>
+                        <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color }}>{initial}</div>
                       )}
                     </div>
                     {/* Info */}
-                    <div>
-                      <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{proj.name}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{proj.name}</div>
                       <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
                         {count} {count === 1 ? "Task" : "Tasks"}
                       </div>
                     </div>
+                    {/* Color indicator */}
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
                   </motion.div>
                 );
               })}
@@ -8354,6 +8357,12 @@ export default function CircularMenu() {
         setCurrentView("chat");
         return;
       }
+      if (item?.id === "docs") {
+        try { sounds.subSelect(); } catch(e) {}
+        setMenuOpen(false); setSubHover(-1);
+        setCurrentView("projects");
+        return;
+      }
       setSubOpen(true); setSubHover(-1); try { sounds.subOpen(); } catch(e) {} return;
     }
     if (subOpen) { setSubOpen(false); try { sounds.menuClose(); } catch(e) {} return; }
@@ -8372,8 +8381,6 @@ export default function CircularMenu() {
       setShowReminderModal(true);
     } else if (subItem.id === "note") {
       setCurrentView("notes");
-    } else if (subItem.id === "project") {
-      setCurrentView("projects");
     } else if (subItem.id === "kanban") {
       setCurrentView("kanban");
     } else if (subItem.id === "calendar") {
