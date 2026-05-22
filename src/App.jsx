@@ -6227,7 +6227,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
 // PROJECTS VIEW — Files-style grid backed by the projects table
 // (same data source as the Kanban brand chips)
 // ═══════════════════════════════════════════════════════════════
-function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKanban }) {
+function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKanban, orgMembers = [] }) {
   const [projects, setProjects] = useState([]);
   const [taskCounts, setTaskCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -6238,6 +6238,12 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
   const [logoPreview, setLogoPreview] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const logoInputRef = useRef(null);
+  // Member management
+  const [members, setMembers] = useState([]); // [{user_id, role, profile: {...}}]
+  const [pendingInvites, setPendingInvites] = useState([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteSending, setInviteSending] = useState(false);
+  const [userName] = useState(session?.user?.user_metadata?.full_name || session?.user?.email?.split("@")[0] || "");
 
   const loadProjects = async () => {
     if (!userOrg?.id) { setLoading(false); return; }
@@ -6275,12 +6281,82 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
     setEditing(proj);
     setForm({ name: proj.name, logo_url: proj.logo_url || "", color: proj.color || "#8B7AFF" });
     setLogoPreview(null);
+    setInviteEmail("");
+    loadMembers(proj.id);
   };
 
   const closeEditor = () => {
     setEditing(null);
     setLogoPreview(null);
+    setMembers([]);
+    setPendingInvites([]);
+    setInviteEmail("");
     if (logoInputRef.current) logoInputRef.current.value = "";
+  };
+
+  const loadMembers = async (projectId) => {
+    const { data: pm } = await supabase
+      .from("project_members")
+      .select("user_id, role, added_at, profiles:profiles!project_members_user_id_fkey(display_name, avatar_url, initials, email, avatar_color)")
+      .eq("project_id", projectId);
+    setMembers(pm || []);
+    const { data: inv } = await supabase
+      .from("project_invitations")
+      .select("id, email, created_at, expires_at, status")
+      .eq("project_id", projectId)
+      .eq("status", "pending");
+    setPendingInvites(inv || []);
+  };
+
+  const currentUserRole = editing?.id ? (members.find(m => m.user_id === session?.user?.id)?.role || null) : null;
+  const isOwner = currentUserRole === "owner";
+
+  const sendInvite = async () => {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email || !email.includes("@") || !editing?.id) return;
+    // Check if already a member
+    const alreadyMember = members.some(m => m.profiles?.email?.toLowerCase() === email);
+    if (alreadyMember) { alert("Diese Person ist bereits Mitglied."); return; }
+    setInviteSending(true);
+    try {
+      const { data: inv, error } = await supabase
+        .from("project_invitations")
+        .insert({ project_id: editing.id, email, invited_by: session.user.id })
+        .select()
+        .single();
+      if (error) throw error;
+      // Send email
+      try {
+        await fetch("/api/send-project-invite", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            token: inv.token,
+            projectName: editing.name,
+            inviterName: userName,
+          }),
+        });
+      } catch (emailErr) { console.warn("Invite email send failed:", emailErr); }
+      setInviteEmail("");
+      loadMembers(editing.id);
+    } catch (e) {
+      alert("Einladung fehlgeschlagen: " + (e.message || "Unbekannter Fehler"));
+    } finally {
+      setInviteSending(false);
+    }
+  };
+
+  const revokeInvite = async (inviteId) => {
+    await supabase.from("project_invitations").delete().eq("id", inviteId);
+    if (editing?.id) loadMembers(editing.id);
+  };
+
+  const removeMember = async (userId) => {
+    if (!editing?.id) return;
+    if (userId === session?.user?.id) { alert("Du kannst dich nicht selbst entfernen."); return; }
+    await supabase.from("project_members").delete().eq("project_id", editing.id).eq("user_id", userId);
+    loadMembers(editing.id);
   };
 
   const handleLogoUpload = async (e) => {
@@ -6590,6 +6666,120 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
                     </label>
                   </div>
                 </div>
+
+                {/* Members section — only when editing an existing project */}
+                {editing?.id && (
+                  <div style={{ marginTop: 4, paddingTop: 16, borderTop: `1px solid ${theme.borderFaint}` }}>
+                    <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 10, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      Mitglieder {members.length > 0 && <span style={{ color: theme.textFaint, fontWeight: 400 }}>· {members.length}</span>}
+                    </label>
+
+                    {/* Member list */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: pendingInvites.length > 0 || isOwner ? 12 : 0 }}>
+                      {members.map(m => {
+                        const p = m.profiles || {};
+                        const isMe = m.user_id === session?.user?.id;
+                        return (
+                          <div key={m.user_id} style={{
+                            display: "flex", alignItems: "center", gap: 10,
+                            padding: "8px 10px", borderRadius: 10,
+                            background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+                          }}>
+                            {p.avatar_url ? (
+                              <img src={p.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 28, height: 28, borderRadius: "50%", flexShrink: 0 }} />
+                            ) : (
+                              <div style={{
+                                width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
+                                background: (p.avatar_color || "#8B7AFF") + "30", color: p.avatar_color || "#8B7AFF",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: 11, fontFamily: FONT, fontWeight: 600,
+                              }}>{p.initials || "?"}</div>
+                            )}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {p.display_name || p.email || "Unbekannt"} {isMe && <span style={{ color: theme.textFaint, fontWeight: 400 }}>(Du)</span>}
+                              </div>
+                              <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>
+                                {m.role === "owner" ? "Owner" : "Mitglied"}
+                              </div>
+                            </div>
+                            {isOwner && !isMe && m.role !== "owner" && (
+                              <motion.div whileTap={{ scale: 0.9 }} onClick={() => removeMember(m.user_id)}
+                                title="Entfernen"
+                                style={{ width: 24, height: 24, borderRadius: 6, cursor: "pointer", color: theme.textDim, display: "flex", alignItems: "center", justifyContent: "center" }}
+                              >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                              </motion.div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Pending invites */}
+                    {pendingInvites.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 6 }}>
+                          Ausstehende Einladungen
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                          {pendingInvites.map(inv => (
+                            <div key={inv.id} style={{
+                              display: "flex", alignItems: "center", gap: 10,
+                              padding: "8px 10px", borderRadius: 10,
+                              background: darkMode ? "rgba(139, 122, 255, 0.06)" : "rgba(139, 122, 255, 0.05)",
+                              border: "1px solid rgba(139, 122, 255, 0.15)",
+                            }}>
+                              <div style={{ width: 28, height: 28, borderRadius: "50%", flexShrink: 0, background: "rgba(139, 122, 255, 0.18)", display: "flex", alignItems: "center", justifyContent: "center", color: "#8B7AFF" }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{inv.email}</div>
+                                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>Eingeladen · ausstehend</div>
+                              </div>
+                              {isOwner && (
+                                <motion.div whileTap={{ scale: 0.9 }} onClick={() => revokeInvite(inv.id)}
+                                  title="Zurückziehen"
+                                  style={{ width: 24, height: 24, borderRadius: 6, cursor: "pointer", color: theme.textDim, display: "flex", alignItems: "center", justifyContent: "center" }}
+                                >
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                                </motion.div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {/* Invite form — only for owners */}
+                    {isOwner && (
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") sendInvite(); }}
+                          placeholder="E-Mail-Adresse eingeben..."
+                          style={{
+                            flex: 1, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                            border: `1px solid ${theme.borderFaint}`, borderRadius: 10,
+                            padding: "10px 12px", fontSize: 13, fontFamily: FONT,
+                            color: theme.text, outline: "none", caretColor: theme.accent,
+                          }}
+                        />
+                        <motion.button whileTap={{ scale: 0.97 }}
+                          onClick={sendInvite}
+                          disabled={!inviteEmail.includes("@") || inviteSending}
+                          style={{
+                            padding: "10px 16px", borderRadius: 10, cursor: inviteEmail.includes("@") && !inviteSending ? "pointer" : "not-allowed",
+                            background: inviteEmail.includes("@") ? "#8B7AFF" : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
+                            color: inviteEmail.includes("@") ? "#fff" : theme.textFaint,
+                            border: "none",
+                            fontSize: 13, fontWeight: 500, fontFamily: FONT,
+                            opacity: inviteSending ? 0.6 : 1,
+                          }}
+                        >{inviteSending ? "Sende..." : "Einladen"}</motion.button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               {/* Actions */}
               <div style={{ padding: "12px 24px 18px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", justifyContent: "space-between", gap: 10 }}>
@@ -7721,6 +7911,45 @@ export default function CircularMenu() {
       console.error("[Push] Setup error:", e);
       setPushSetupOverlay({ status: "error", message: "Setup fehlgeschlagen: " + e.message });
     }
+  }, [session?.user?.id]);
+
+  // ── Handle ?project-invite=<token> — redeem invite once user is logged in ──
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get("project-invite");
+    const storedToken = localStorage.getItem("agencyos-project-invite-token");
+    const token = urlToken || storedToken;
+    if (!token) return;
+    if (urlToken) {
+      localStorage.setItem("agencyos-project-invite-token", urlToken);
+      // Clean URL
+      const url = new URL(window.location.href);
+      url.searchParams.delete("project-invite");
+      window.history.replaceState({}, "", url.pathname + (url.search || ""));
+    }
+    if (!session?.user?.id) return; // wait for login
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc("accept_project_invitation", { p_token: token });
+        if (error) throw error;
+        if (data?.success) {
+          localStorage.removeItem("agencyos-project-invite-token");
+          setNotifications(prev => [{
+            id: "proj-invite-ok-" + Date.now(),
+            type: "member_joined",
+            title: "Projekt beigetreten",
+            body: "Du bist jetzt Mitglied des Projekts.",
+            read: false, created_at: new Date().toISOString(),
+          }, ...prev]);
+        } else {
+          localStorage.removeItem("agencyos-project-invite-token");
+          alert(data?.error || "Einladung konnte nicht eingelöst werden");
+        }
+      } catch (e) {
+        console.error("Project invite accept failed:", e);
+        localStorage.removeItem("agencyos-project-invite-token");
+      }
+    })();
   }, [session?.user?.id]);
 
   // ── Handle ?push-setup=true&token=... — show setup overlay (no login required) ──
@@ -9054,7 +9283,7 @@ export default function CircularMenu() {
         {/* PROJECTS VIEW */}
         <AnimatePresence>
           {currentView === "projects" && (
-            <ProjectsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} onOpenInKanban={(projectName) => { setCurrentView("kanban"); }} />
+            <ProjectsView session={session} userOrg={userOrg} orgMembers={orgMembers} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} onOpenInKanban={(projectName) => { setCurrentView("kanban"); }} />
           )}
         </AnimatePresence>
 
