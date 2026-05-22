@@ -901,10 +901,10 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
     ...projects.filter(p => myProjectNames.has(p.name)).map(p => p.name),
     ...tasks.map(t => t.project_name).filter(name => name && myProjectNames.has(name)),
   ])];
-  // Visibility: only show tasks for projects the user is a member of, OR tasks
-  // without a project, OR tasks the user created/owns/is assigned to.
-  const myUid = session?.user?.id;
-  const visibleTasks = tasks.filter(t => !t.project_name || myProjectNames.has(t.project_name) || t.creator_id === myUid || t.assignee_id === myUid);
+  // Visibility: strictly by project membership.
+  // - Tasks without a project (private) are visible to everyone
+  // - Tasks with a project are visible only to project members
+  const visibleTasks = tasks.filter(t => !t.project_name || myProjectNames.has(t.project_name));
   const filtered = visibleTasks.filter(t => {
     if (filter !== "all" && t.project_name !== filter) return false;
     if (memberFilter !== "all" && t.assignee_id !== memberFilter) return false;
@@ -8054,11 +8054,10 @@ export default function CircularMenu() {
   // ── Build startview cards (tasks + events + placeholders) ──
   const startviewCards = useMemo(() => {
     const priorityOrder = { high: 0, medium: 1, low: 2 };
-    // Visibility: own creator OR private (no project) OR member of the task's project
-    const myUid = session?.user?.id;
+    // Visibility: strictly by project membership (or no project at all)
     const activeTasks = dashboardTasks
       .filter(tk => tk.column_key !== "done")
-      .filter(tk => !tk.project_name || myProjectNames.has(tk.project_name) || tk.creator_id === myUid || tk.assignee_id === myUid)
+      .filter(tk => !tk.project_name || myProjectNames.has(tk.project_name))
       .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
 
     const colLabel = (key) => ({ todo: t("kanban.todo"), in_progress: t("kanban.inProgress"), review: t("kanban.review") }[key] || key);
@@ -9963,11 +9962,10 @@ export default function CircularMenu() {
 
               {/* Task sections — real data from Kanban board */}
               {(() => {
-                // Split tasks by priority, exclude "done" column. Filter by project membership.
-                const myUid = session?.user?.id;
+                // Strict visibility: only tasks in user's projects + projectless tasks
                 const activeTasks = dashboardTasks
                   .filter(tk => tk.column_key !== "done")
-                  .filter(tk => !tk.project_name || myProjectNames.has(tk.project_name) || tk.creator_id === myUid || tk.assignee_id === myUid);
+                  .filter(tk => !tk.project_name || myProjectNames.has(tk.project_name));
                 const highTasks = activeTasks.filter(tk => tk.priority === "high");
                 const mediumTasks = activeTasks.filter(tk => tk.priority === "medium");
                 const lowTasks = activeTasks.filter(tk => tk.priority === "low" || !tk.priority);
