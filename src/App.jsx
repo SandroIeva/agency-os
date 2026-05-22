@@ -6326,7 +6326,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
     // project_members to profiles, only to auth.users)
     const { data: pm, error } = await supabase
       .from("project_members")
-      .select("user_id, role, added_at")
+      .select("user_id, role, joined_at")
       .eq("project_id", projectId);
     if (error) { console.warn("[ProjectsView] loadMembers failed:", error.message, error); setMembers([]); return; }
     console.log("[ProjectsView] loadMembers got", pm?.length, "rows:", pm);
