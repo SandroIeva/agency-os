@@ -7577,16 +7577,23 @@ export default function CircularMenu() {
       return;
     }
     const loadMemberships = async () => {
-      // Join projects so we get both the IDs and names in one shot — independent
-      // of whether dashboardProjects has loaded
-      const { data } = await supabase
+      // Step 1: get IDs of projects the user is a member of (relies only on
+      // project_members RLS — no join, no recursion risk)
+      const { data: rows, error: err1 } = await supabase
         .from("project_members")
-        .select("project_id, projects:projects!project_members_project_id_fkey(name)")
+        .select("project_id")
         .eq("user_id", session.user.id);
-      const ids = (data || []).map(r => r.project_id);
-      const names = (data || []).map(r => r.projects?.name).filter(Boolean);
+      if (err1) { console.warn("[Membership] load IDs failed:", err1.message); setMembershipLoaded(true); return; }
+      const ids = (rows || []).map(r => r.project_id);
       setMyProjectIds(ids);
-      setMyProjectNamesArr(names);
+
+      // Step 2: fetch project names for those IDs separately
+      if (ids.length > 0) {
+        const { data: prjs } = await supabase.from("projects").select("id, name").in("id", ids);
+        setMyProjectNamesArr((prjs || []).map(p => p.name));
+      } else {
+        setMyProjectNamesArr([]);
+      }
       setMembershipLoaded(true);
     };
     loadMemberships();
