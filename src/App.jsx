@@ -6223,6 +6223,433 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
     </motion.div>
   );
 }
+// ═══════════════════════════════════════════════════════════════
+// PROJECTS VIEW — Files-style grid backed by the projects table
+// (same data source as the Kanban brand chips)
+// ═══════════════════════════════════════════════════════════════
+function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKanban }) {
+  const [projects, setProjects] = useState([]);
+  const [taskCounts, setTaskCounts] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [editing, setEditing] = useState(null); // null = closed, {} = new, {id, name, ...} = existing
+  const [form, setForm] = useState({ name: "", logo_url: "", color: "#8B7AFF" });
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoPreview, setLogoPreview] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const logoInputRef = useRef(null);
+
+  const loadProjects = async () => {
+    if (!userOrg?.id) { setLoading(false); return; }
+    const { data: prj } = await supabase.from("projects").select("*").eq("org_id", userOrg.id).order("created_at", { ascending: false });
+    setProjects(prj || []);
+    // Aggregate task counts per project
+    const { data: tasks } = await supabase.from("tasks").select("project_name").eq("org_id", userOrg.id);
+    const counts = {};
+    (tasks || []).forEach(t => { if (t.project_name) counts[t.project_name] = (counts[t.project_name] || 0) + 1; });
+    setTaskCounts(counts);
+    setLoading(false);
+  };
+
+  useEffect(() => { loadProjects(); /* eslint-disable-next-line */ }, [userOrg?.id]);
+
+  // Realtime: stay in sync with Kanban edits
+  useEffect(() => {
+    if (!userOrg?.id) return;
+    const ch = supabase
+      .channel("projects-view")
+      .on("postgres_changes", { event: "*", schema: "public", table: "projects", filter: `org_id=eq.${userOrg.id}` }, () => loadProjects())
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: `org_id=eq.${userOrg.id}` }, () => loadProjects())
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userOrg?.id]);
+
+  const openNew = () => {
+    setEditing({});
+    setForm({ name: "", logo_url: "", color: "#8B7AFF" });
+    setLogoPreview(null);
+  };
+
+  const openEdit = (proj) => {
+    setEditing(proj);
+    setForm({ name: proj.name, logo_url: proj.logo_url || "", color: proj.color || "#8B7AFF" });
+    setLogoPreview(null);
+  };
+
+  const closeEditor = () => {
+    setEditing(null);
+    setLogoPreview(null);
+    if (logoInputRef.current) logoInputRef.current.value = "";
+  };
+
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoUploading(true);
+    setLogoPreview(URL.createObjectURL(file));
+    try {
+      const ext = (file.name.split(".").pop() || "png").toLowerCase();
+      const path = `${session.user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error } = await supabase.storage.from("project-logos").upload(path, file, { contentType: file.type, upsert: true });
+      if (error) throw error;
+      const { data: pub } = supabase.storage.from("project-logos").getPublicUrl(path);
+      setForm(prev => ({ ...prev, logo_url: pub.publicUrl }));
+    } catch (err) {
+      console.error("Logo upload failed:", err);
+      alert("Logo Upload fehlgeschlagen: " + (err.message || "Unbekannter Fehler"));
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const saveProject = async () => {
+    if (!form.name.trim()) return;
+    const payload = { name: form.name.trim(), logo_url: form.logo_url || null, color: form.color };
+    if (editing?.id) {
+      // Update — also propagate rename to tasks
+      if (editing.name !== payload.name) {
+        await supabase.from("tasks").update({ project_name: payload.name }).eq("project_name", editing.name).eq("org_id", userOrg?.id);
+      }
+      await supabase.from("projects").update(payload).eq("id", editing.id);
+    } else {
+      await supabase.from("projects").insert({ ...payload, owner_id: session.user.id, org_id: userOrg?.id || null });
+    }
+    closeEditor();
+    loadProjects();
+  };
+
+  const removeLogo = () => { setForm(prev => ({ ...prev, logo_url: "" })); setLogoPreview(null); };
+
+  const deleteProject = async () => {
+    if (!confirmDelete) return;
+    await supabase.from("projects").delete().eq("id", confirmDelete.id);
+    setConfirmDelete(null);
+    loadProjects();
+  };
+
+  const filtered = projects.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95, y: 20 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }}
+      transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
+      style={{
+        position: "absolute", inset: 0, display: "flex",
+        alignItems: "center", justifyContent: "center",
+        padding: "20px 40px 80px", zIndex: 5,
+      }}
+    >
+      <div style={{
+        width: "100%", maxWidth: 720, height: "100%",
+        background: theme.cardBg,
+        backdropFilter: "blur(40px)",
+        border: `1px solid ${theme.borderFaint}`,
+        borderRadius: 24, overflow: "hidden",
+        display: "flex", flexDirection: "column",
+      }}>
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.03, duration: 0.3 }}
+          style={{ padding: "14px 20px 0", display: "flex", alignItems: "center", gap: 10 }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+            <rect x="3" y="6" width="18" height="14" rx="2" stroke={theme.accent} strokeWidth="1.5"/>
+            <path d="M3 10h18M9 6V4h6v2" stroke={theme.accent} strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>Projekte</span>
+          <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{projects.length}</span>
+          <div style={{ flex: 1 }} />
+          <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+            onClick={openNew}
+            style={{
+              padding: "7px 14px", borderRadius: 10, cursor: "pointer",
+              background: theme.accent + "22", border: `1px solid ${theme.accent}40`,
+              color: theme.accent, fontSize: 12, fontWeight: 500, fontFamily: FONT,
+              display: "flex", alignItems: "center", gap: 6,
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+            Neues Projekt
+          </motion.button>
+        </motion.div>
+
+        {/* Search bar */}
+        <motion.div
+          initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05, duration: 0.3 }}
+          style={{ padding: "10px 20px 8px" }}
+        >
+          <div style={{
+            display: "flex", alignItems: "center", gap: 10,
+            background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
+            border: `1px solid ${theme.borderFaint}`,
+            borderRadius: 14, padding: "10px 14px",
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <circle cx="11" cy="11" r="7" stroke={theme.textDim} strokeWidth="1.8" />
+              <path d="M16 16l4.5 4.5" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+            <input value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Projekt suchen..."
+              style={{
+                flex: 1, background: "none", border: "none", outline: "none",
+                fontSize: 13, fontFamily: FONT, color: theme.text, caretColor: theme.accent,
+              }}
+            />
+            {search && (
+              <motion.div whileTap={{ scale: 0.9 }} onClick={() => setSearch("")}
+                style={{ width: 20, height: 20, borderRadius: "50%", background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 11 }}
+              >✕</motion.div>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Grid */}
+        <div style={{
+          padding: "4px 20px 12px", overflowY: "auto", flex: 1, minHeight: 0,
+        }}>
+          {loading && (
+            <motion.div animate={{ opacity: [0.3, 0.7, 0.3] }} transition={{ duration: 1.5, repeat: Infinity }}
+              style={{ padding: 40, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}
+            >Lade Projekte...</motion.div>
+          )}
+          {!loading && filtered.length === 0 && (
+            <div style={{ padding: 40, textAlign: "center" }}>
+              <div style={{ fontSize: 28, marginBottom: 8, opacity: 0.4 }}>📁</div>
+              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 16 }}>
+                {search ? "Keine Treffer" : "Noch keine Projekte"}
+              </div>
+              {!search && (
+                <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={openNew}
+                  style={{
+                    padding: "9px 18px", borderRadius: 10, cursor: "pointer",
+                    background: theme.accent + "22", border: `1px solid ${theme.accent}40`,
+                    color: theme.accent, fontSize: 13, fontWeight: 500, fontFamily: FONT,
+                  }}
+                >Erstes Projekt erstellen</motion.button>
+              )}
+            </div>
+          )}
+          {!loading && filtered.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12, paddingBottom: 12 }}>
+              {filtered.map((proj, i) => {
+                const count = taskCounts[proj.name] || 0;
+                const initial = (proj.name || "?")[0].toUpperCase();
+                return (
+                  <motion.div key={proj.id}
+                    initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.04 + i * 0.03, duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
+                    whileHover={{ y: -2, scale: 1.02 }}
+                    onClick={() => openEdit(proj)}
+                    style={{
+                      padding: 14, borderRadius: 14, cursor: "pointer",
+                      background: theme.hoverBg,
+                      border: `1px solid ${theme.borderFaint}`,
+                      display: "flex", flexDirection: "column", gap: 10,
+                      position: "relative",
+                      transition: "box-shadow 0.2s ease",
+                    }}
+                  >
+                    {/* Logo */}
+                    <div style={{
+                      width: "100%", aspectRatio: "1", borderRadius: 12, overflow: "hidden",
+                      background: proj.logo_url ? "transparent" : `linear-gradient(135deg, ${proj.color || "#8B7AFF"}30, ${proj.color || "#8B7AFF"}10)`,
+                      border: `1px solid ${(proj.color || "#8B7AFF")}25`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      {proj.logo_url ? (
+                        <img src={proj.logo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : (
+                        <div style={{ fontSize: 32, fontFamily: FONT, fontWeight: 600, color: proj.color || "#8B7AFF" }}>{initial}</div>
+                      )}
+                    </div>
+                    {/* Info */}
+                    <div>
+                      <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{proj.name}</div>
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                        {count} {count === 1 ? "Task" : "Tasks"}
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Editor modal */}
+      {createPortal(<AnimatePresence>
+        {editing && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={closeEditor}
+            style={{ position: "fixed", inset: 0, zIndex: 200, background: darkMode ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.55)", backdropFilter: "blur(20px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+          >
+            <motion.div initial={{ opacity: 0, scale: 0.96, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              transition={{ type: "spring", stiffness: 280, damping: 24 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "100%", maxWidth: 460,
+                background: darkMode ? "rgba(22,22,30,0.98)" : "rgba(255,255,255,0.99)",
+                border: `1px solid ${theme.border}`,
+                borderRadius: 22, overflow: "hidden",
+                boxShadow: "0 30px 80px rgba(0,0,0,0.3)",
+              }}
+            >
+              <div style={{ padding: "20px 24px", borderBottom: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                  {editing?.id ? "Projekt bearbeiten" : "Neues Projekt"}
+                </div>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.92 }} onClick={closeEditor}
+                  style={{ width: 32, height: 32, borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 16 }}
+                >✕</motion.div>
+              </div>
+              <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+                {/* Name */}
+                <div>
+                  <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Name</label>
+                  <input value={form.name} onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
+                    autoFocus placeholder="z.B. Agency OS"
+                    style={{
+                      width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                      border: `1px solid ${theme.borderFaint}`, borderRadius: 12,
+                      padding: "11px 14px", fontSize: 14, fontFamily: FONT,
+                      color: theme.text, outline: "none", caretColor: theme.accent,
+                    }}
+                  />
+                </div>
+                {/* Logo upload */}
+                <div>
+                  <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Logo</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    {(logoPreview || form.logo_url) ? (
+                      <div style={{ position: "relative" }}>
+                        <img src={logoPreview || form.logo_url} alt="" style={{ width: 64, height: 64, borderRadius: 14, objectFit: "cover", border: `1px solid ${theme.borderFaint}` }} />
+                        <motion.div whileTap={{ scale: 0.9 }} onClick={removeLogo}
+                          style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: "#EF4444", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, cursor: "pointer", border: `2px solid ${darkMode ? "#16161e" : "#fff"}` }}
+                        >✕</motion.div>
+                      </div>
+                    ) : (
+                      <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                        onClick={() => logoInputRef.current?.click()}
+                        style={{
+                          width: 64, height: 64, borderRadius: 14, cursor: "pointer",
+                          border: `2px dashed ${theme.border}`,
+                          background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
+                          display: "flex", alignItems: "center", justifyContent: "center", color: theme.textFaint,
+                        }}
+                      >
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                      </motion.div>
+                    )}
+                    <div style={{ flex: 1 }}>
+                      <motion.button whileTap={{ scale: 0.97 }}
+                        onClick={() => logoInputRef.current?.click()} disabled={logoUploading}
+                        style={{
+                          padding: "7px 14px", borderRadius: 10, cursor: "pointer",
+                          background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                          border: `1px solid ${theme.borderFaint}`,
+                          fontSize: 12, fontFamily: FONT, color: theme.textSub,
+                          opacity: logoUploading ? 0.6 : 1,
+                        }}
+                      >{logoUploading ? "Lädt..." : (form.logo_url ? "Ersetzen" : "Logo hochladen")}</motion.button>
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 6 }}>PNG/JPG/SVG, quadratisch ideal</div>
+                    </div>
+                  </div>
+                  <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" style={{ display: "none" }} onChange={handleLogoUpload} />
+                </div>
+                {/* Color */}
+                <div>
+                  <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Akzentfarbe</label>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    {["#8B7AFF","#6C5CE7","#5BA889","#D67885","#D4A85A","#5A7AB5","#7A9560","#C68460"].map(c => (
+                      <motion.div key={c} whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.9 }}
+                        onClick={() => setForm(prev => ({ ...prev, color: c }))}
+                        style={{
+                          width: 26, height: 26, borderRadius: "50%", background: c, cursor: "pointer",
+                          border: form.color === c ? `2px solid ${darkMode ? "#fff" : "#1a1a2e"}` : "2px solid transparent",
+                          boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                        }}
+                      />
+                    ))}
+                    <label style={{
+                      width: 26, height: 26, borderRadius: "50%", cursor: "pointer",
+                      background: "conic-gradient(from 0deg, #ff5e3a, #ffdb4d, #5bd1d7, #8b7aff, #ff5e3a)",
+                      border: "2px solid transparent", marginLeft: 4,
+                    }}>
+                      <input type="color" value={form.color} onChange={(e) => setForm(prev => ({ ...prev, color: e.target.value }))}
+                        style={{ opacity: 0, width: 0, height: 0 }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+              {/* Actions */}
+              <div style={{ padding: "12px 24px 18px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", justifyContent: "space-between", gap: 10 }}>
+                {editing?.id ? (
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => setConfirmDelete(editing)}
+                    style={{
+                      padding: "10px 18px", borderRadius: 12, cursor: "pointer",
+                      background: "transparent", border: "1px solid rgba(239, 68, 68, 0.25)",
+                      color: "#EF4444", fontSize: 13, fontWeight: 500, fontFamily: FONT,
+                    }}
+                  >Löschen</motion.button>
+                ) : <div />}
+                <motion.button whileTap={{ scale: 0.97 }} onClick={saveProject}
+                  disabled={!form.name.trim()}
+                  style={{
+                    padding: "10px 22px", borderRadius: 12, cursor: form.name.trim() ? "pointer" : "not-allowed",
+                    background: form.name.trim() ? theme.accent + "22" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
+                    border: `1px solid ${form.name.trim() ? theme.accent + "40" : theme.borderFaint}`,
+                    color: form.name.trim() ? theme.accent : theme.textFaint,
+                    fontSize: 13, fontWeight: 500, fontFamily: FONT,
+                  }}
+                >{editing?.id ? "Speichern" : "Erstellen"}</motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>, document.body)}
+
+      {/* Delete confirm */}
+      {createPortal(<AnimatePresence>
+        {confirmDelete && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setConfirmDelete(null)}
+            style={{ position: "fixed", inset: 0, zIndex: 220, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(10px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+          >
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "100%", maxWidth: 380, padding: 28, borderRadius: 20,
+                background: darkMode ? "rgba(22,22,30,0.98)" : "rgba(255,255,255,0.99)",
+                border: `1px solid ${theme.border}`, textAlign: "center",
+              }}
+            >
+              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>Projekt löschen?</div>
+              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 24, lineHeight: 1.5 }}>
+                „{confirmDelete.name}" wird gelöscht. Tasks bleiben erhalten (verlieren aber die Projektzuordnung).
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <motion.button whileTap={{ scale: 0.97 }} onClick={() => setConfirmDelete(null)}
+                  style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, fontWeight: 500 }}
+                >Abbrechen</motion.button>
+                <motion.button whileTap={{ scale: 0.97 }} onClick={deleteProject}
+                  style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", fontSize: 13, fontFamily: FONT, color: "#EF4444", fontWeight: 600 }}
+                >Löschen</motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>, document.body)}
+    </motion.div>
+  );
+}
+
 export default function CircularMenu() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -7849,7 +8276,7 @@ export default function CircularMenu() {
     }
 
     // Let views with their own scrolling handle scroll natively
-    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "settings" || currentView === "notes") {
+    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "settings" || currentView === "notes" || currentView === "projects") {
       return;
     }
 
@@ -7945,6 +8372,8 @@ export default function CircularMenu() {
       setShowReminderModal(true);
     } else if (subItem.id === "note") {
       setCurrentView("notes");
+    } else if (subItem.id === "project") {
+      setCurrentView("projects");
     } else if (subItem.id === "kanban") {
       setCurrentView("kanban");
     } else if (subItem.id === "calendar") {
@@ -8612,6 +9041,13 @@ export default function CircularMenu() {
         <AnimatePresence>
           {currentView === "notes" && (
             <NotesView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} ensureValidToken={ensureValidToken} llmKeys={llmKeys} llmProvider={llmProvider} />
+          )}
+        </AnimatePresence>
+
+        {/* PROJECTS VIEW */}
+        <AnimatePresence>
+          {currentView === "projects" && (
+            <ProjectsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} onOpenInKanban={(projectName) => { setCurrentView("kanban"); }} />
           )}
         </AnimatePresence>
 
