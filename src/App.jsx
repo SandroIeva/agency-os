@@ -2848,7 +2848,16 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
     const dateStr = dayObj
       ? `${y}-${String(m + 1).padStart(2, "0")}-${String(dayObj.day).padStart(2, "0")}`
       : `${year}-${String(month + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    setEventForm({ title: "", date: dateStr, startTime: "09:00", endTime: "10:00", description: "", allDay: false, withMeet: false });
+    // Default time: round NOW up to the next 15 minutes; end = +1h. Avoids
+    // creating events that start in the past (which Google rejects silently).
+    const now = new Date();
+    const isToday = dateStr === `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const baseStart = isToday
+      ? new Date(now.getTime() + (15 - (now.getMinutes() % 15)) * 60000)
+      : new Date(`${dateStr}T09:00:00`);
+    const baseEnd = new Date(baseStart.getTime() + 60 * 60 * 1000);
+    const fmt = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    setEventForm({ title: "", date: dateStr, startTime: fmt(baseStart), endTime: fmt(baseEnd), description: "", allDay: false, withMeet: false });
     setMeetLink(null);
     setTempEventId(null);
     setLinkCopied(false);
@@ -2992,7 +3001,28 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
   };
 
   const createGoogleEvent = async () => {
-    if (!eventForm.title.trim() || !eventForm.date) return;
+    if (!eventForm.title.trim()) { alert("Bitte einen Titel eingeben."); return; }
+    if (!eventForm.date) { alert("Bitte ein Datum auswählen."); return; }
+    // Client-side validation for timed events
+    if (!eventForm.allDay) {
+      const startISO = `${eventForm.date}T${eventForm.startTime}:00`;
+      const endISO = `${eventForm.date}T${eventForm.endTime}:00`;
+      const startMs = new Date(startISO).getTime();
+      const endMs = new Date(endISO).getTime();
+      if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+        alert("Ungültige Uhrzeit. Bitte Start- und Endzeit prüfen.");
+        return;
+      }
+      if (endMs <= startMs) {
+        alert("Die Endzeit muss nach der Startzeit liegen.");
+        return;
+      }
+      // Warn (but don't block) if start is in the past
+      if (startMs < Date.now() - 60_000) {
+        const ok = confirm("Die Startzeit liegt in der Vergangenheit. Trotzdem erstellen?");
+        if (!ok) return;
+      }
+    }
     const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
     if (!providerToken) { alert("Kein Google Zugriff. Bitte neu einloggen."); return; }
     setSavingEvent(true);
@@ -3073,6 +3103,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
       }
     } catch (err) {
       console.error("Create event error:", err);
+      alert("Fehler beim Erstellen: " + (err.message || "Verbindungsfehler"));
     }
     setSavingEvent(false);
   };
