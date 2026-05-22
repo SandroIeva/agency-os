@@ -1318,11 +1318,28 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                       <input
                         value={newChecklistText}
                         onChange={e => setNewChecklistText(e.target.value)}
-                        onKeyDown={e => { if (e.key === "Enter" && newChecklistText.trim()) { setTaskChecklist(prev => [...prev, { _localId: Date.now(), text: newChecklistText.trim(), checked: false }]); setNewChecklistText(""); } }}
+                        onKeyDown={e => {
+                          // Ignore IME composition Enter (Asian/special keyboards)
+                          if (e.nativeEvent?.isComposing || e.keyCode === 229) return;
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            const text = newChecklistText.trim();
+                            if (!text) return;
+                            setTaskChecklist(prev => [...prev, { _localId: Date.now() + Math.random(), text, checked: false }]);
+                            setNewChecklistText("");
+                          }
+                        }}
                         placeholder="Neuer Punkt..."
                         style={{ flex: 1, background: "transparent", border: "none", borderBottom: "1px solid transparent", padding: "4px 0", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent }}
                         onFocus={e => e.currentTarget.style.borderBottomColor = theme.accent + "40"}
-                        onBlur={e => { e.currentTarget.style.borderBottomColor = "transparent"; if (newChecklistText.trim()) { setTaskChecklist(prev => [...prev, { _localId: Date.now(), text: newChecklistText.trim(), checked: false }]); setNewChecklistText(""); } }}
+                        onBlur={e => {
+                          e.currentTarget.style.borderBottomColor = "transparent";
+                          const text = newChecklistText.trim();
+                          if (text) {
+                            setTaskChecklist(prev => [...prev, { _localId: Date.now() + Math.random(), text, checked: false }]);
+                            setNewChecklistText("");
+                          }
+                        }}
                       />
                     </div>
                   </div>
