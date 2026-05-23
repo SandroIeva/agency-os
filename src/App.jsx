@@ -7123,12 +7123,12 @@ const LOGO_SLOTS = [
 
 // Items the user can flag for follow-up — drives the next phase of the brand build
 const BRAND_NEXT_STEPS = [
-  { key: "personas",     label: "Personas / Zielgruppe",  hint: "Wer kauft / nutzt deine Brand?" },
-  { key: "competitor",   label: "Competitor-Analyse",      hint: "Wo steht ihr im Markt?" },
-  { key: "guidelines",   label: "Brand Guidelines",        hint: "Schriftarten, Bildwelt, Tonalität, Don'ts" },
-  { key: "assets",       label: "Asset-Library",           hint: "Templates, Vorlagen, Mockups" },
-  { key: "intelligence", label: "Brand Intelligence",      hint: "Content-Strategie, Themen, Storytelling" },
-  { key: "voice",        label: "Tonalität & Sprache",     hint: "Wie klingt deine Brand in Texten?" },
+  { key: "personas",     labelKey: "brand.nextSteps.personas",     hintKey: "brand.nextSteps.personasHint" },
+  { key: "competitor",   labelKey: "brand.nextSteps.competitor",   hintKey: "brand.nextSteps.competitorHint" },
+  { key: "guidelines",   labelKey: "brand.nextSteps.guidelines",   hintKey: "brand.nextSteps.guidelinesHint" },
+  { key: "assets",       labelKey: "brand.nextSteps.assets",       hintKey: "brand.nextSteps.assetsHint" },
+  { key: "intelligence", labelKey: "brand.nextSteps.intelligence", hintKey: "brand.nextSteps.intelligenceHint" },
+  { key: "voice",        labelKey: "brand.nextSteps.voice",        hintKey: "brand.nextSteps.voiceHint" },
 ];
 
 function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, setBrandTab }) {
@@ -7281,7 +7281,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         body: JSON.stringify({ url: fileUrl }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "PDF konnte nicht analysiert werden");
+      if (!response.ok) throw new Error(data.error || t("brand.sources.fetchError"));
       setForm(prev => {
         const next = { ...prev };
         if (!next.claim?.trim() && data.claim) next.claim = data.claim;
@@ -7313,7 +7313,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         body: JSON.stringify({ url: fileUrl }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "ZIP konnte nicht analysiert werden");
+      if (!response.ok) throw new Error(data.error || t("brand.sources.fetchError"));
       setForm(prev => {
         const next = { ...prev };
         next.sources = next.sources.map(s => s.type === "zip" ? { ...s, analysis: { logos: data.logos, fonts: data.fonts, font_families: data.font_families, pdfs: data.pdfs, total_files: data.total_files } } : s);
@@ -7342,7 +7342,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
   // ── Fetch brand content from website ──
   const fetchFromWebsite = async () => {
     const raw = (form.website_url || "").trim();
-    if (!raw) { setWebsiteFetchError("Bitte eine URL eingeben"); return; }
+    if (!raw) { setWebsiteFetchError(t("brand.sources.urlMissing")); return; }
     setFetchingWebsite(true);
     setWebsiteFetchError(null);
     setWebsiteFetchResult(null);
@@ -7353,7 +7353,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         body: JSON.stringify({ url: raw }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Fehler beim Abrufen");
+      if (!response.ok) throw new Error(data.error || t("brand.sources.fetchError"));
       setWebsiteFetchResult(data);
       // Merge into form: only fill empty fields so we don't overwrite user input
       setForm(prev => {
@@ -7474,10 +7474,10 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 36px 24px", position: "relative", zIndex: 1, textAlign: "center" }}>
             <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.15, duration: 0.5 }}
               style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: "#ffffff", letterSpacing: -0.4, marginBottom: 6, lineHeight: 1.2, textShadow: "0 2px 18px rgba(0,0,0,0.18)" }}
-            >Let´s define your Brand</motion.div>
+            >{t("brand.hero.title")}</motion.div>
             <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.25, duration: 0.5 }}
               style={{ fontSize: 14, fontFamily: FONT, color: "rgba(255,255,255,0.92)", lineHeight: 1.65, maxWidth: 440, marginBottom: 32 }}
-            >We´ll go through, step by step, everything we need to know —and you can skip anything you don´t have yet.</motion.div>
+            >{t("brand.hero.subtitle")}</motion.div>
 
             <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.35, duration: 0.5 }} style={{ width: "100%", maxWidth: 320 }}>
               <div style={{
@@ -7489,9 +7489,9 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                 textAlign: "left",
                 boxShadow: "0 10px 30px rgba(57, 79, 224, 0.35)",
               }}>
-                <label style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.85)", display: "block", marginTop: -1, marginLeft: -3, marginBottom: 0, fontWeight: 500, letterSpacing: 0.2, lineHeight: 1.2 }}>Brand name</label>
+                <label style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.85)", display: "block", marginTop: -1, marginLeft: -3, marginBottom: 0, fontWeight: 500, letterSpacing: 0.2, lineHeight: 1.2 }}>{t("brand.hero.brandNameLabel")}</label>
                 <input value={form.name} onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
-                  autoFocus placeholder="z.B. Agency OS"
+                  autoFocus placeholder={t("brand.hero.brandNamePlaceholder")}
                   onKeyDown={(e) => { if (e.key === "Enter" && form.name.trim()) next(); }}
                   style={{
                     width: "100%", background: "transparent", border: "none",
@@ -7517,7 +7517,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                 opacity: canAdvance() ? 1 : 0.7,
               }}
             >
-              Weiter
+              {t("brand.next")}
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
             </motion.button>
           </div>
@@ -7531,8 +7531,8 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         {
           type: "website",
           icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg>,
-          label: "Website",
-          hint: "Wir ziehen später Texte, Farben und Tonalität automatisch",
+          label: t("brand.sources.website"),
+          hint: t("brand.sources.websiteHint"),
           render: () => (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -7557,10 +7557,10 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                       <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }}
                         style={{ width: 10, height: 10, borderRadius: "50%", border: `1.5px solid ${theme.textDim}`, borderTopColor: "transparent" }}
                       />
-                      Lädt…
+                      {t("brand.loading")}
                     </>
                   ) : (
-                    <>✨ Analysieren</>
+                    <>✨ {t("brand.sources.analyse")}</>
                   )}
                 </motion.button>
               </div>
@@ -7571,8 +7571,8 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                 <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, fontFamily: FONT, color: theme.textDim }}>
                   <span style={{ color: "#5DB89E", fontWeight: 600 }}>✓</span>
                   <span>
-                    {websiteFetchResult.name ? `${websiteFetchResult.name}` : "Inhalte gefunden"}
-                    {websiteFetchResult.colors?.length ? ` · ${websiteFetchResult.colors.length} Farben` : ""}
+                    {websiteFetchResult.name ? `${websiteFetchResult.name}` : t("brand.sources.contentFound")}
+                    {websiteFetchResult.colors?.length ? ` · ${websiteFetchResult.colors.length} ${t("brand.sources.colors")}` : ""}
                     {websiteFetchResult.logo_url ? " · Logo" : ""}
                   </span>
                 </div>
@@ -7584,8 +7584,8 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         {
           type: "figma",
           icon: <svg width="22" height="22" viewBox="0 0 38 57" fill="currentColor"><path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0Z"/><path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0Z"/><path d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19Z"/><path d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5Z"/><path d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5Z"/></svg>,
-          label: "Figma / Design System",
-          hint: "Link zur Figma-Datei oder Library",
+          label: t("brand.sources.figma"),
+          hint: t("brand.sources.figmaHint"),
           render: () => (
             <input value={form.figma_url} onChange={(e) => setForm(prev => ({ ...prev, figma_url: e.target.value }))}
               placeholder="https://figma.com/file/..."
@@ -7597,8 +7597,8 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         {
           type: "brandbook",
           icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h12a2 2 0 012 2v14a2 2 0 01-2 2H4z M4 4v18M16 8h2a2 2 0 012 2v10a2 2 0 01-2 2h-2"/></svg>,
-          label: "Brand Book (PDF)",
-          hint: "Style Guide, Identity Manual, Pitch Deck",
+          label: t("brand.sources.brandbook"),
+          hint: t("brand.sources.brandbookHint"),
           render: () => {
             const existing = form.sources.find(s => s.type === "brandbook");
             if (existing) {
@@ -7615,16 +7615,16 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                       <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }}
                         style={{ width: 10, height: 10, borderRadius: "50%", border: `1.5px solid ${theme.textDim}`, borderTopColor: "transparent" }}
                       />
-                      <span>PDF wird analysiert…</span>
+                      <span>{t("brand.sources.analysingPdf")}</span>
                     </div>
                   )}
                   {!analysing && a && (
                     <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, display: "flex", flexWrap: "wrap", gap: 4 }}>
                       <span style={{ color: "#5DB89E", fontWeight: 600 }}>✓</span>
                       <span>
-                        {a.pages ? `${a.pages} Seiten` : ""}
-                        {a.colors?.length ? ` · ${a.colors.length} Farben` : ""}
-                        {a.fonts?.length ? ` · ${a.fonts.length} Fonts` : ""}
+                        {a.pages ? `${a.pages} ${t("brand.sources.pages")}` : ""}
+                        {a.colors?.length ? ` · ${a.colors.length} ${t("brand.sources.colors")}` : ""}
+                        {a.fonts?.length ? ` · ${a.fonts.length} ${t("brand.sources.fonts")}` : ""}
                       </span>
                     </div>
                   )}
@@ -7634,7 +7634,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
             return (
               <motion.div whileTap={{ scale: 0.97 }} onClick={() => pdfBrandbookInputRef.current?.click()}
                 style={{ fontSize: 12, fontFamily: FONT, color: theme.accent, cursor: "pointer", fontWeight: 500 }}
-              >{sourceUploading.brandbook ? "Lädt..." : "PDF auswählen →"}</motion.div>
+              >{sourceUploading.brandbook ? t("brand.loading") : t("brand.sources.choosePdf")}</motion.div>
             );
           },
           isActive: !!form.sources.find(s => s.type === "brandbook"),
@@ -7642,8 +7642,8 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         {
           type: "zip",
           icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8v13a2 2 0 01-2 2H5a2 2 0 01-2-2V8M1 8h22M16 3l-4 5-4-5"/></svg>,
-          label: "Brand-Paket (ZIP)",
-          hint: "Logos, Schriften, Templates — alles in einem Archiv",
+          label: t("brand.sources.zip"),
+          hint: t("brand.sources.zipHint"),
           render: () => {
             const existing = form.sources.find(s => s.type === "zip");
             if (existing) {
@@ -7660,16 +7660,16 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                       <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }}
                         style={{ width: 10, height: 10, borderRadius: "50%", border: `1.5px solid ${theme.textDim}`, borderTopColor: "transparent" }}
                       />
-                      <span>ZIP wird gelesen…</span>
+                      <span>{t("brand.sources.analysingZip")}</span>
                     </div>
                   )}
                   {!analysing && a && (
                     <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, display: "flex", flexWrap: "wrap", gap: 4 }}>
                       <span style={{ color: "#5DB89E", fontWeight: 600 }}>✓</span>
                       <span>
-                        {a.logos?.length ? `${a.logos.length} Logos` : ""}
-                        {a.font_families?.length ? ` · ${a.font_families.length} Fonts` : ""}
-                        {a.pdfs?.length ? ` · ${a.pdfs.length} PDFs` : ""}
+                        {a.logos?.length ? `${a.logos.length} ${t("brand.sources.logos")}` : ""}
+                        {a.font_families?.length ? ` · ${a.font_families.length} ${t("brand.sources.fonts")}` : ""}
+                        {a.pdfs?.length ? ` · ${a.pdfs.length} ${t("brand.sources.pdfs")}` : ""}
                       </span>
                     </div>
                   )}
@@ -7679,7 +7679,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
             return (
               <motion.div whileTap={{ scale: 0.97 }} onClick={() => zipSourceInputRef.current?.click()}
                 style={{ fontSize: 12, fontFamily: FONT, color: theme.accent, cursor: "pointer", fontWeight: 500 }}
-              >{sourceUploading.zip ? "Lädt..." : "ZIP auswählen →"}</motion.div>
+              >{sourceUploading.zip ? t("brand.loading") : t("brand.sources.chooseZip")}</motion.div>
             );
           },
           isActive: !!form.sources.find(s => s.type === "zip"),
@@ -7693,10 +7693,10 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         >
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
-              Was hast du schon?
+              {t("brand.sources.title")}
             </div>
             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
-              Vorhandene Quellen sparen dir später viel Zeit — wir extrahieren Farben, Texte und Style automatisch.
+              {t("brand.sources.subtitle")}
             </div>
           </div>
 
@@ -7733,7 +7733,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
 
           {/* "Starting fresh" hint */}
           <div style={{ textAlign: "center", fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>
-            Du hast noch nichts? Kein Problem — überspring den nächsten Schritt mit „Weiter".
+            {t("brand.sources.empty")}
           </div>
 
           {/* Hidden inputs */}
@@ -7754,10 +7754,10 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         >
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
-              Logo-Varianten
+              {t("brand.logos.title")}
             </div>
             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
-              Lade alle Varianten hoch, die du hast. Du kannst alles überspringen — was wir nicht haben, brauchen wir nicht.
+              {t("brand.logos.subtitle")}
             </div>
           </div>
 
@@ -7958,22 +7958,20 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         >
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
-              {hasAnySource ? "Farben — optional" : "Deine Farb-Hierarchie"}
+              {t("brand.colors.title")}
             </div>
             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
-              {hasAnySource
-                ? "Wir extrahieren später automatisch aus deinen Quellen. Falls du die Hauptfarben schon kennst, hinterlege sie hier."
-                : "Eine Brand braucht eine klare Farb-Hierarchie. Definiere zuerst die zwei wichtigsten Farben — Akzente sind optional."}
+              {t("brand.colors.subtitle")}
             </div>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <RoleSlot role="primary" label="Primary"
-              hint="Die dominante Farbe — Logo, CTAs, Highlights"
+            <RoleSlot role="primary" label={t("brand.colors.primarySlot")}
+              hint={t("brand.colors.pickHint")}
               value={form.color_palette.primary}
             />
-            <RoleSlot role="secondary" label="Secondary"
-              hint="Komplementärer Ton für Backgrounds, Sections, Text-Highlights"
+            <RoleSlot role="secondary" label={t("brand.colors.secondarySlot")}
+              hint={t("brand.colors.pickHint")}
               value={form.color_palette.secondary}
             />
           </div>
@@ -7982,8 +7980,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
           <div style={{ paddingTop: 12, borderTop: `1px solid ${theme.borderFaint}` }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
               <div>
-                <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Akzentfarben</div>
-                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>Optional — z.B. für Charts, Tags, Erfolg/Warnung</div>
+                <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("brand.colors.accents")}</div>
               </div>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
@@ -8014,7 +8011,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   background: theme.accent + "15", border: `1px solid ${theme.accent}30`,
                   color: theme.accent, fontSize: 11, fontFamily: FONT, fontWeight: 500,
                 }}
-              >+ Akzent</motion.button>
+              >{t("brand.colors.addAccent")}</motion.button>
             </div>
           </div>
         </motion.div>
@@ -8030,17 +8027,17 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         >
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
-              Worum geht es bei deiner Brand?
+              {t("brand.voice.title")}
             </div>
             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
-              Ein griffiger Claim und etwas Kontext reichen — alles weitere arbeiten wir später gemeinsam aus.
+              {t("brand.voice.subtitle")}
             </div>
           </div>
 
           <div>
-            <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Claim / Tagline</label>
+            <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>{t("brand.voice.claimLabel")}</label>
             <input value={form.claim} onChange={(e) => setForm(prev => ({ ...prev, claim: e.target.value }))}
-              placeholder="z.B. Das Betriebssystem für moderne Agenturen"
+              placeholder={t("brand.voice.claimPlaceholder")}
               style={{
                 width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
                 border: `1px solid ${theme.borderFaint}`, borderRadius: 12,
@@ -8051,9 +8048,9 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
           </div>
 
           <div>
-            <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Kontext zu deiner Brand</label>
+            <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>{t("brand.voice.descLabel")}</label>
             <textarea value={form.description} onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))}
-              placeholder="Was macht deine Brand aus? Für wen ist sie? Was unterscheidet euch vom Wettbewerb?"
+              placeholder={t("brand.voice.descPlaceholder")}
               rows={7}
               style={{
                 width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
@@ -8071,9 +8068,9 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
     if (step === 5) {
       const setNextStep = (key, val) => setForm(prev => ({ ...prev, next_steps: { ...prev.next_steps, [key]: val } }));
       const STATES = [
-        { id: "have",  label: "Habe ich", icon: "✓",   color: "#5DB89E" },
-        { id: "help",  label: "Brauche Hilfe", icon: "✦", color: "#8B7AFF" },
-        { id: "skip",  label: "Nicht relevant", icon: "—", color: null },
+        { id: "have",  label: t("brand.nextSteps.have"), icon: "✓",   color: "#5DB89E" },
+        { id: "help",  label: t("brand.nextSteps.help"), icon: "✦", color: "#8B7AFF" },
+        { id: "skip",  label: t("brand.nextSteps.skip"), icon: "—", color: null },
       ];
 
       return (
@@ -8083,10 +8080,10 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         >
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
-              Was kommt als Nächstes?
+              {t("brand.nextSteps.title")}
             </div>
             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
-              Markiere, was du schon hast und wo wir dich unterstützen sollen. Im nächsten Schritt arbeiten wir die offenen Punkte zusammen aus.
+              {t("brand.nextSteps.subtitle")}
             </div>
           </div>
 
@@ -8105,8 +8102,8 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{item.label}</div>
-                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{item.hint}</div>
+                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t(item.labelKey)}</div>
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{t(item.hintKey)}</div>
                   </div>
                   <div style={{ display: "flex", gap: 4, padding: 3, borderRadius: 10, background: darkMode ? "rgba(0,0,0,0.2)" : "rgba(0,0,0,0.04)", flexShrink: 0 }}>
                     {STATES.map(s => {
@@ -8136,7 +8133,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
           </div>
 
           <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint, textAlign: "center" }}>
-            Nichts markiert? Auch okay — du kannst die Themen jederzeit später angehen.
+            {t("brand.nextSteps.empty")}
           </div>
         </motion.div>
       );
@@ -8155,10 +8152,10 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         >
           <div>
             <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
-              Sieht gut aus, oder?
+              {t("brand.recap.title")}
             </div>
             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
-              Du kannst alles später jederzeit anpassen — auch noch fehlende Stücke ergänzen.
+              {t("brand.recap.subtitle")}
             </div>
           </div>
 
@@ -8190,14 +8187,14 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
           </motion.div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-            {form.logos.length > 0 && <SummaryChip>✓ {form.logos.length} Logo-Varianten</SummaryChip>}
-            {form.website_url && <SummaryChip>✓ Website</SummaryChip>}
-            {form.figma_url && <SummaryChip>✓ Figma</SummaryChip>}
-            {form.sources.length > 0 && <SummaryChip>✓ {form.sources.length} Quelle{form.sources.length === 1 ? "" : "n"}</SummaryChip>}
-            {paletteColors.length > 0 && <SummaryChip>✓ {paletteColors.length} Farben</SummaryChip>}
-            {form.description && <SummaryChip>✓ Beschreibung</SummaryChip>}
-            {nextStepsHaveCount > 0 && <SummaryChip>✓ {nextStepsHaveCount} Themen vorhanden</SummaryChip>}
-            {nextStepsHelpCount > 0 && <SummaryChip>✦ {nextStepsHelpCount} Themen offen</SummaryChip>}
+            {form.logos.length > 0 && <SummaryChip>✓ {form.logos.length} {t("brand.recap.logoVariants")}</SummaryChip>}
+            {form.website_url && <SummaryChip>✓ {t("brand.recap.website")}</SummaryChip>}
+            {form.figma_url && <SummaryChip>✓ {t("brand.recap.figma")}</SummaryChip>}
+            {form.sources.length > 0 && <SummaryChip>✓ {form.sources.length} {form.sources.length === 1 ? t("brand.recap.sources") : t("brand.recap.sourcesPlural")}</SummaryChip>}
+            {paletteColors.length > 0 && <SummaryChip>✓ {paletteColors.length} {t("brand.recap.colors")}</SummaryChip>}
+            {form.description && <SummaryChip>✓ {t("brand.recap.description")}</SummaryChip>}
+            {nextStepsHaveCount > 0 && <SummaryChip>✓ {nextStepsHaveCount} {t("brand.recap.topicsHave")}</SummaryChip>}
+            {nextStepsHelpCount > 0 && <SummaryChip>✦ {nextStepsHelpCount} {t("brand.recap.topicsOpen")}</SummaryChip>}
           </div>
         </motion.div>
       );
@@ -8277,7 +8274,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   />
                 </div>
                 <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 500, letterSpacing: 0.5, whiteSpace: "nowrap" }}>
-                  Schritt {step + 1} / {totalSteps}
+                  {t("brand.step")} {step + 1} / {totalSteps}
                 </div>
               </div>
             )}
@@ -8300,7 +8297,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                     }}
                   >
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-                    Zurück
+                    {t("brand.back")}
                   </motion.button>
                 ) : profile ? (
                   <motion.button whileTap={{ scale: 0.97 }} onClick={() => { setEditMode(false); setStep(0); }}
@@ -8309,7 +8306,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                       background: "transparent", border: `1px solid ${theme.borderFaint}`,
                       color: theme.textSub, fontSize: 13, fontWeight: 500, fontFamily: FONT,
                     }}
-                  >Abbrechen</motion.button>
+                  >{t("brand.cancel")}</motion.button>
                 ) : <div />}
 
                 {step < 5 ? (
@@ -8324,7 +8321,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                       boxShadow: canAdvance() ? "0 8px 22px rgba(139,122,255,0.35)" : "none",
                     }}
                   >
-                    Weiter
+                    {t("brand.next")}
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                   </motion.button>
                 ) : (
@@ -8339,7 +8336,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                       opacity: saving ? 0.6 : 1,
                     }}
                   >
-                    {saving ? "Speichert..." : "Brand anlegen"}
+                    {saving ? t("brand.saving") : t("brand.create")}
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7"/></svg>
                   </motion.button>
                 )}
@@ -8417,7 +8414,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
 
                 {profile.logos?.length > 0 && (
                   <div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Logo-Varianten</div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.recap.logoVariants")}</div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
                       {profile.logos.map(l => (
                         <div key={l.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: 8, borderRadius: 12, background: l.key === "dark" ? "#1a1a2e" : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)"), border: `1px solid ${theme.borderFaint}` }}>
@@ -8435,7 +8432,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   if (hasPalette) {
                     return (
                       <div>
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Brand-Farben</div>
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.recap.colors")}</div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "flex-start" }}>
                           {cp.primary && (
                             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
@@ -8464,7 +8461,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   if (profile.colors?.length > 0) {
                     return (
                       <div>
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Brand-Farben</div>
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.recap.colors")}</div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
                           {profile.colors.map(c => (
                             <div key={c} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
@@ -8486,13 +8483,13 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                       {BRAND_NEXT_STEPS.map(item => {
                         const state = profile.next_steps?.[item.key];
                         if (!state) return null;
-                        const meta = state === "have" ? { icon: "✓", color: "#5DB89E", label: "Habe ich" }
-                                  : state === "help" ? { icon: "✦", color: "#8B7AFF", label: "Brauche Hilfe" }
-                                  : { icon: "—", color: theme.textFaint, label: "Nicht relevant" };
+                        const meta = state === "have" ? { icon: "✓", color: "#5DB89E", label: t("brand.nextSteps.have") }
+                                  : state === "help" ? { icon: "✦", color: "#8B7AFF", label: t("brand.nextSteps.help") }
+                                  : { icon: "—", color: theme.textFaint, label: t("brand.nextSteps.skip") };
                         return (
                           <div key={item.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
                             <span style={{ width: 22, height: 22, borderRadius: 6, background: meta.color + "22", color: meta.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600 }}>{meta.icon}</span>
-                            <span style={{ flex: 1, fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{item.label}</span>
+                            <span style={{ flex: 1, fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{t(item.labelKey)}</span>
                             <span style={{ fontSize: 10, fontFamily: FONT, color: meta.color, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>{meta.label}</span>
                           </div>
                         );
@@ -8503,7 +8500,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
 
                 {profile.description && (
                   <div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>Beschreibung</div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.recap.description")}</div>
                     <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{profile.description}</div>
                   </div>
                 )}
