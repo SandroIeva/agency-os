@@ -7261,10 +7261,68 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
       if (type === "brandbook") {
         setForm(prev => ({ ...prev, pdf_url: r.url, pdf_name: r.name }));
       }
+      // Auto-analyse PDF / ZIP after upload
+      if (type === "brandbook") analyseBrandPdf(r.url);
+      if (type === "zip") analyseBrandZip(r.url);
     } catch (e) {
       alert("Upload fehlgeschlagen: " + (e.message || ""));
     } finally {
       setSourceUploading(p => ({ ...p, [type]: false }));
+    }
+  };
+
+  // ── Analyse Brand Book PDF (server-side parsing) ──
+  const analyseBrandPdf = async (fileUrl) => {
+    setSourceUploading(p => ({ ...p, "brandbook-analyse": true }));
+    try {
+      const response = await fetch("/api/fetch-brand-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: fileUrl }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "PDF konnte nicht analysiert werden");
+      setForm(prev => {
+        const next = { ...prev };
+        if (!next.claim?.trim() && data.claim) next.claim = data.claim;
+        if (!next.description?.trim() && data.description) next.description = data.description;
+        const cp = { ...(next.color_palette || { primary: "", secondary: "", accents: [] }) };
+        if (!cp.primary && data.primary) cp.primary = data.primary;
+        if (!cp.secondary && data.secondary) cp.secondary = data.secondary;
+        if ((!cp.accents || cp.accents.length === 0) && Array.isArray(data.accents)) cp.accents = data.accents.slice(0, 4);
+        next.color_palette = cp;
+        next.colors = [cp.primary, cp.secondary, ...(cp.accents || [])].filter(Boolean);
+        // Attach analysis to the source entry so UI can show "✓ X Farben, Y Fonts"
+        next.sources = next.sources.map(s => s.type === "brandbook" ? { ...s, analysis: { colors: data.colors, fonts: data.fonts, pages: data.pages, claim: data.claim, description: data.description } } : s);
+        return next;
+      });
+    } catch (err) {
+      console.error("PDF analyse failed:", err);
+    } finally {
+      setSourceUploading(p => ({ ...p, "brandbook-analyse": false }));
+    }
+  };
+
+  // ── Analyse Brand-Paket ZIP (server-side unzip + metadata) ──
+  const analyseBrandZip = async (fileUrl) => {
+    setSourceUploading(p => ({ ...p, "zip-analyse": true }));
+    try {
+      const response = await fetch("/api/fetch-brand-zip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: fileUrl }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "ZIP konnte nicht analysiert werden");
+      setForm(prev => {
+        const next = { ...prev };
+        next.sources = next.sources.map(s => s.type === "zip" ? { ...s, analysis: { logos: data.logos, fonts: data.fonts, font_families: data.font_families, pdfs: data.pdfs, total_files: data.total_files } } : s);
+        return next;
+      });
+    } catch (err) {
+      console.error("ZIP analyse failed:", err);
+    } finally {
+      setSourceUploading(p => ({ ...p, "zip-analyse": false }));
     }
   };
 
@@ -7544,10 +7602,32 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
           render: () => {
             const existing = form.sources.find(s => s.type === "brandbook");
             if (existing) {
+              const a = existing.analysis;
+              const analysing = sourceUploading["brandbook-analyse"];
               return (
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <a href={existing.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, textDecoration: "none", flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{existing.name}</a>
-                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => removeSource("brandbook")} style={{ cursor: "pointer", color: theme.textDim, fontSize: 12, padding: 4 }}>✕</motion.div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <a href={existing.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, textDecoration: "none", flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{existing.name}</a>
+                    <motion.div whileTap={{ scale: 0.9 }} onClick={() => removeSource("brandbook")} style={{ cursor: "pointer", color: theme.textDim, fontSize: 12, padding: 4 }}>✕</motion.div>
+                  </div>
+                  {analysing && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontFamily: FONT, color: theme.textDim }}>
+                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }}
+                        style={{ width: 10, height: 10, borderRadius: "50%", border: `1.5px solid ${theme.textDim}`, borderTopColor: "transparent" }}
+                      />
+                      <span>PDF wird analysiert…</span>
+                    </div>
+                  )}
+                  {!analysing && a && (
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                      <span style={{ color: "#5DB89E", fontWeight: 600 }}>✓</span>
+                      <span>
+                        {a.pages ? `${a.pages} Seiten` : ""}
+                        {a.colors?.length ? ` · ${a.colors.length} Farben` : ""}
+                        {a.fonts?.length ? ` · ${a.fonts.length} Fonts` : ""}
+                      </span>
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -7567,10 +7647,32 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
           render: () => {
             const existing = form.sources.find(s => s.type === "zip");
             if (existing) {
+              const a = existing.analysis;
+              const analysing = sourceUploading["zip-analyse"];
               return (
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <a href={existing.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, textDecoration: "none", flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{existing.name}</a>
-                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => removeSource("zip")} style={{ cursor: "pointer", color: theme.textDim, fontSize: 12, padding: 4 }}>✕</motion.div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <a href={existing.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, textDecoration: "none", flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{existing.name}</a>
+                    <motion.div whileTap={{ scale: 0.9 }} onClick={() => removeSource("zip")} style={{ cursor: "pointer", color: theme.textDim, fontSize: 12, padding: 4 }}>✕</motion.div>
+                  </div>
+                  {analysing && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontFamily: FONT, color: theme.textDim }}>
+                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }}
+                        style={{ width: 10, height: 10, borderRadius: "50%", border: `1.5px solid ${theme.textDim}`, borderTopColor: "transparent" }}
+                      />
+                      <span>ZIP wird gelesen…</span>
+                    </div>
+                  )}
+                  {!analysing && a && (
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                      <span style={{ color: "#5DB89E", fontWeight: 600 }}>✓</span>
+                      <span>
+                        {a.logos?.length ? `${a.logos.length} Logos` : ""}
+                        {a.font_families?.length ? ` · ${a.font_families.length} Fonts` : ""}
+                        {a.pdfs?.length ? ` · ${a.pdfs.length} PDFs` : ""}
+                      </span>
+                    </div>
+                  )}
                 </div>
               );
             }
