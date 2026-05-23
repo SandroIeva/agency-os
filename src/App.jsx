@@ -7371,7 +7371,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
               style={{ fontSize: 14, fontFamily: FONT, color: "rgba(255,255,255,0.92)", lineHeight: 1.65, maxWidth: 440, marginBottom: 32 }}
             >We´ll go through, step by step, everything we need to know —and you can skip anything you don´t have yet.</motion.div>
 
-            <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.35, duration: 0.5 }} style={{ width: "100%", maxWidth: 380 }}>
+            <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.35, duration: 0.5 }} style={{ width: "100%", maxWidth: 378 }}>
               <div style={{
                 position: "relative",
                 background: "linear-gradient(135deg, #394FE0, #5A5FE4)",
@@ -7381,13 +7381,13 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                 textAlign: "left",
                 boxShadow: "0 10px 30px rgba(57, 79, 224, 0.35)",
               }}>
-                <label style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.85)", display: "block", marginTop: -1, marginLeft: -1, marginBottom: 0, fontWeight: 500, letterSpacing: 0.2, lineHeight: 1.2 }}>Brand name</label>
+                <label style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.85)", display: "block", marginTop: -1, marginLeft: -3, marginBottom: 0, fontWeight: 500, letterSpacing: 0.2, lineHeight: 1.2 }}>Brand name</label>
                 <input value={form.name} onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
                   autoFocus placeholder="z.B. Agency OS"
                   onKeyDown={(e) => { if (e.key === "Enter" && form.name.trim()) next(); }}
                   style={{
                     width: "100%", background: "transparent", border: "none",
-                    padding: 0, margin: 0, marginTop: 1, marginLeft: -2, fontSize: 16, fontFamily: FONT, fontWeight: 500, lineHeight: 1.1,
+                    padding: 0, margin: 0, marginTop: 1, marginLeft: -4, fontSize: 16, fontFamily: FONT, fontWeight: 500, lineHeight: 1.1,
                     color: "rgba(255,255,255,0.8)", outline: "none", caretColor: "#ffffff",
                     textTransform: "uppercase", letterSpacing: 0.4,
                   }}
