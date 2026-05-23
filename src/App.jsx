@@ -7381,13 +7381,13 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                 textAlign: "left",
                 boxShadow: "0 10px 30px rgba(57, 79, 224, 0.35)",
               }}>
-                <label style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.85)", display: "block", marginBottom: 4, fontWeight: 500, letterSpacing: 0.2 }}>Brand name</label>
+                <label style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.85)", display: "block", marginTop: -1, marginBottom: 4, fontWeight: 500, letterSpacing: 0.2 }}>Brand name</label>
                 <input value={form.name} onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
                   autoFocus placeholder="z.B. Agency OS"
                   onKeyDown={(e) => { if (e.key === "Enter" && form.name.trim()) next(); }}
                   style={{
                     width: "100%", background: "transparent", border: "none",
-                    padding: 0, fontSize: 18, fontFamily: FONT, fontWeight: 600,
+                    padding: 0, marginTop: -3, fontSize: 18, fontFamily: FONT, fontWeight: 600,
                     color: "#ffffff", outline: "none", caretColor: "#ffffff",
                     textTransform: "uppercase", letterSpacing: 0.4,
                   }}
