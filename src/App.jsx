@@ -7375,7 +7375,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
               <div style={{
                 position: "relative",
                 background: "linear-gradient(135deg, #394FE0, #5A5FE4)",
-                border: "1px solid rgba(255,255,255,0.25)",
+                border: "none",
                 borderRadius: 16,
                 padding: "14px 20px 12px",
                 textAlign: "left",
