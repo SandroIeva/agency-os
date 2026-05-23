@@ -7374,14 +7374,12 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
             <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.35, duration: 0.5 }} style={{ width: "100%", maxWidth: 380 }}>
               <div style={{
                 position: "relative",
-                background: "rgba(255,255,255,0.18)",
-                border: "1px solid rgba(255,255,255,0.35)",
-                backdropFilter: "blur(14px)",
-                WebkitBackdropFilter: "blur(14px)",
+                background: "linear-gradient(135deg, #394FE0, #5A5FE4)",
+                border: "1px solid rgba(255,255,255,0.25)",
                 borderRadius: 16,
                 padding: "14px 20px 12px",
                 textAlign: "left",
-                boxShadow: "0 10px 30px rgba(76, 71, 188, 0.18)",
+                boxShadow: "0 10px 30px rgba(57, 79, 224, 0.35)",
               }}>
                 <label style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.85)", display: "block", marginBottom: 4, fontWeight: 500, letterSpacing: 0.2 }}>Brand name</label>
                 <input value={form.name} onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
