@@ -7151,6 +7151,10 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
   const [saving, setSaving] = useState(false);
   const [colorInput, setColorInput] = useState("#8B7AFF");
   const [hasSourcesIntent, setHasSourcesIntent] = useState(null); // null = not chosen, true = yes, false = starting fresh
+  // Website analysis
+  const [fetchingWebsite, setFetchingWebsite] = useState(false);
+  const [websiteFetchError, setWebsiteFetchError] = useState(null);
+  const [websiteFetchResult, setWebsiteFetchResult] = useState(null); // last fetch payload (for UI)
 
   // Refs for per-slot inputs
   const slotInputRefs = useRef({});
@@ -7276,6 +7280,52 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
     setForm(prev => ({ ...prev, colors: [...prev.colors, c] }));
   };
   const removeColor = (c) => setForm(prev => ({ ...prev, colors: prev.colors.filter(x => x !== c) }));
+
+  // ── Fetch brand content from website ──
+  const fetchFromWebsite = async () => {
+    const raw = (form.website_url || "").trim();
+    if (!raw) { setWebsiteFetchError("Bitte eine URL eingeben"); return; }
+    setFetchingWebsite(true);
+    setWebsiteFetchError(null);
+    setWebsiteFetchResult(null);
+    try {
+      const response = await fetch("/api/fetch-brand", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: raw }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Fehler beim Abrufen");
+      setWebsiteFetchResult(data);
+      // Merge into form: only fill empty fields so we don't overwrite user input
+      setForm(prev => {
+        const next = { ...prev };
+        if (!next.name?.trim() && data.name) next.name = data.name;
+        if (!next.claim?.trim() && data.claim) next.claim = data.claim;
+        if (!next.description?.trim() && data.description) next.description = data.description;
+        if (!next.logo_url && data.logo_url) next.logo_url = data.logo_url;
+        // Logos: add a "primary" slot if none yet
+        if (data.logo_url && !(next.logos || []).some(l => l.key === "primary")) {
+          next.logos = [{ key: "primary", label: "Primary", url: data.logo_url }, ...(next.logos || [])];
+        }
+        // Color palette: only fill empty slots
+        const cp = { ...(next.color_palette || { primary: "", secondary: "", accents: [] }) };
+        if (!cp.primary && data.primary) cp.primary = data.primary;
+        if (!cp.secondary && data.secondary) cp.secondary = data.secondary;
+        if ((!cp.accents || cp.accents.length === 0) && Array.isArray(data.accents)) cp.accents = data.accents.slice(0, 4);
+        next.color_palette = cp;
+        // Keep flat colors[] in sync
+        next.colors = [cp.primary, cp.secondary, ...(cp.accents || [])].filter(Boolean);
+        // Normalize the website URL to the final/redirected one
+        if (data.url && !next.website_url.startsWith("http")) next.website_url = data.url;
+        return next;
+      });
+    } catch (err) {
+      setWebsiteFetchError(err.message || "Fehler beim Abrufen");
+    } finally {
+      setFetchingWebsite(false);
+    }
+  };
 
   // ── Save ──
   const saveProfile = async () => {
@@ -7426,10 +7476,50 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
           label: "Website",
           hint: "Wir ziehen später Texte, Farben und Tonalität automatisch",
           render: () => (
-            <input value={form.website_url} onChange={(e) => setForm(prev => ({ ...prev, website_url: e.target.value }))}
-              placeholder="https://..."
-              style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${theme.borderFaint}`, padding: "8px 0", fontSize: 14, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent }}
-            />
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input value={form.website_url} onChange={(e) => setForm(prev => ({ ...prev, website_url: e.target.value }))}
+                  placeholder="https://..."
+                  onKeyDown={(e) => { if (e.key === "Enter" && form.website_url.trim() && !fetchingWebsite) fetchFromWebsite(); }}
+                  style={{ flex: 1, background: "transparent", border: "none", borderBottom: `1px solid ${theme.borderFaint}`, padding: "8px 0", fontSize: 14, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent }}
+                />
+                <motion.button whileTap={{ scale: 0.96 }} onClick={fetchFromWebsite}
+                  disabled={!form.website_url.trim() || fetchingWebsite}
+                  style={{
+                    padding: "6px 12px", borderRadius: 999, cursor: (!form.website_url.trim() || fetchingWebsite) ? "not-allowed" : "pointer",
+                    background: fetchingWebsite ? (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)") : "linear-gradient(135deg, #8B7AFF, #6C5CE7)",
+                    border: "none", color: fetchingWebsite ? theme.textDim : "#fff",
+                    fontSize: 11, fontFamily: FONT, fontWeight: 600, whiteSpace: "nowrap",
+                    opacity: (!form.website_url.trim() && !fetchingWebsite) ? 0.4 : 1,
+                    display: "flex", alignItems: "center", gap: 5,
+                  }}
+                >
+                  {fetchingWebsite ? (
+                    <>
+                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }}
+                        style={{ width: 10, height: 10, borderRadius: "50%", border: `1.5px solid ${theme.textDim}`, borderTopColor: "transparent" }}
+                      />
+                      Lädt…
+                    </>
+                  ) : (
+                    <>✨ Analysieren</>
+                  )}
+                </motion.button>
+              </div>
+              {websiteFetchError && (
+                <div style={{ fontSize: 11, fontFamily: FONT, color: "#E74C3C" }}>{websiteFetchError}</div>
+              )}
+              {websiteFetchResult && !websiteFetchError && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, fontFamily: FONT, color: theme.textDim }}>
+                  <span style={{ color: "#5DB89E", fontWeight: 600 }}>✓</span>
+                  <span>
+                    {websiteFetchResult.name ? `${websiteFetchResult.name}` : "Inhalte gefunden"}
+                    {websiteFetchResult.colors?.length ? ` · ${websiteFetchResult.colors.length} Farben` : ""}
+                    {websiteFetchResult.logo_url ? " · Logo" : ""}
+                  </span>
+                </div>
+              )}
+            </div>
           ),
           isActive: !!form.website_url,
         },
