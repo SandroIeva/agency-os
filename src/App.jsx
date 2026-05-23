@@ -10177,7 +10177,7 @@ export default function CircularMenu() {
     <div ref={containerRef} style={{
       width: "100%", height: "100vh", background: theme.bg, position: "relative",
       overflow: "hidden", display: "flex", flexDirection: "column",
-      userSelect: "none", borderRadius: 12, transition: "background-color 0.4s ease",
+      userSelect: "none", transition: "background-color 0.4s ease",
     }}>
       <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet" />
       <DotGrid darkMode={darkMode} />
