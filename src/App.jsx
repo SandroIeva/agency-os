@@ -7371,7 +7371,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
               style={{ fontSize: 14, fontFamily: FONT, color: "rgba(255,255,255,0.92)", lineHeight: 1.65, maxWidth: 440, marginBottom: 32 }}
             >We´ll go through, step by step, everything we need to know —and you can skip anything you don´t have yet.</motion.div>
 
-            <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.35, duration: 0.5 }} style={{ width: "100%", maxWidth: 360 }}>
+            <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.35, duration: 0.5 }} style={{ width: "100%", maxWidth: 340 }}>
               <div style={{
                 position: "relative",
                 background: "linear-gradient(135deg, #394FE0, #5A5FE4)",
