@@ -7387,7 +7387,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   onKeyDown={(e) => { if (e.key === "Enter" && form.name.trim()) next(); }}
                   style={{
                     width: "100%", background: "transparent", border: "none",
-                    padding: 0, marginTop: -4, marginLeft: -2, fontSize: 16, fontFamily: FONT, fontWeight: 500,
+                    padding: 0, marginTop: -6, marginLeft: -2, fontSize: 16, fontFamily: FONT, fontWeight: 500,
                     color: "rgba(255,255,255,0.8)", outline: "none", caretColor: "#ffffff",
                     textTransform: "uppercase", letterSpacing: 0.4,
                   }}
