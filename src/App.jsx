@@ -7342,48 +7342,79 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
 
   // ── Render each step ──
   const renderStep = () => {
-    // STEP 0 — Brand Name only (no slogan field here)
+    // STEP 0 — Brand Name (full-bleed gradient hero)
     if (step === 0) {
       return (
         <motion.div key="0" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
           transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
-          style={{ display: "flex", flexDirection: "column", gap: 36, alignItems: "center", textAlign: "center", maxWidth: 520, margin: "0 auto" }}
+          style={{
+            // Break out of the parent padding so the gradient bleeds to the card edges
+            margin: "-40px -36px -20px",
+            flex: 1, alignSelf: "stretch",
+            position: "relative", borderRadius: 0, overflow: "hidden",
+            backgroundImage: "url('/brand-onboarding-bg.jpg'), radial-gradient(120% 90% at 80% 35%, #4F46E5 0%, #6C5CE7 32%, #8B7AFF 55%, #C4B5FD 72%, #ffffff 100%)",
+            backgroundSize: "cover, cover",
+            backgroundPosition: "center, center",
+            backgroundRepeat: "no-repeat, no-repeat",
+            display: "flex", flexDirection: "column",
+          }}
         >
-          <motion.div
-            initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.1, type: "spring", stiffness: 200, damping: 18 }}
-            style={{
-              width: 88, height: 88, borderRadius: 24,
-              background: "linear-gradient(135deg, #8B7AFF, #6C5CE7)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: "0 14px 40px rgba(139, 122, 255, 0.35)",
-            }}
-          >
-            <svg width="44" height="44" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="#fff" strokeWidth="1.6" strokeLinejoin="round" fill="#ffffff20"/>
-            </svg>
-          </motion.div>
-          <div>
-            <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2, duration: 0.5 }}
-              style={{ fontSize: 32, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 12, lineHeight: 1.2 }}
-            >Lass uns deine Brand definieren</motion.div>
-            <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3, duration: 0.5 }}
-              style={{ fontSize: 15, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}
-            >Wir gehen Schritt für Schritt durch, was wir wissen sollten — du kannst überall überspringen, was du noch nicht hast.</motion.div>
+          {/* Subtle top gradient veil so progress bar area reads softly */}
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.05) 18%, transparent 35%)", pointerEvents: "none" }} />
+
+          {/* Centered content */}
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 36px 24px", position: "relative", zIndex: 1, textAlign: "center" }}>
+            <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.15, duration: 0.5 }}
+              style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: "#ffffff", letterSpacing: -0.4, marginBottom: 14, lineHeight: 1.2, textShadow: "0 2px 18px rgba(0,0,0,0.18)" }}
+            >Let´s define your Brand</motion.div>
+            <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.25, duration: 0.5 }}
+              style={{ fontSize: 14, fontFamily: FONT, color: "rgba(255,255,255,0.92)", lineHeight: 1.65, maxWidth: 440, marginBottom: 32 }}
+            >We´ll go through, step by step, everything we need to know —and you can skip anything you don´t have yet.</motion.div>
+
+            <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.35, duration: 0.5 }} style={{ width: "100%", maxWidth: 380 }}>
+              <div style={{
+                position: "relative",
+                background: "rgba(255,255,255,0.18)",
+                border: "1px solid rgba(255,255,255,0.35)",
+                backdropFilter: "blur(14px)",
+                WebkitBackdropFilter: "blur(14px)",
+                borderRadius: 16,
+                padding: "14px 20px 12px",
+                textAlign: "left",
+                boxShadow: "0 10px 30px rgba(76, 71, 188, 0.18)",
+              }}>
+                <label style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.85)", display: "block", marginBottom: 4, fontWeight: 500, letterSpacing: 0.2 }}>Brand name</label>
+                <input value={form.name} onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
+                  autoFocus placeholder="z.B. Agency OS"
+                  onKeyDown={(e) => { if (e.key === "Enter" && form.name.trim()) next(); }}
+                  style={{
+                    width: "100%", background: "transparent", border: "none",
+                    padding: 0, fontSize: 18, fontFamily: FONT, fontWeight: 600,
+                    color: "#ffffff", outline: "none", caretColor: "#ffffff",
+                    textTransform: "uppercase", letterSpacing: 0.4,
+                  }}
+                />
+              </div>
+            </motion.div>
           </div>
-          <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4, duration: 0.5 }} style={{ width: "100%" }}>
-            <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5, textAlign: "left" }}>Brand-Name</label>
-            <input value={form.name} onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
-              autoFocus placeholder="z.B. Agency OS"
-              onKeyDown={(e) => { if (e.key === "Enter" && form.name.trim()) next(); }}
+
+          {/* Inline Weiter button bottom-right inside the gradient */}
+          <div style={{ position: "absolute", right: 24, bottom: 24, zIndex: 2 }}>
+            <motion.button whileTap={{ scale: 0.97 }} onClick={next} disabled={!canAdvance()}
               style={{
-                width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
-                padding: "16px 20px", fontSize: 20, fontFamily: FONT, fontWeight: 500,
-                color: theme.text, outline: "none", caretColor: theme.accent, textAlign: "center",
+                padding: "12px 22px", borderRadius: 999, cursor: canAdvance() ? "pointer" : "not-allowed",
+                background: "#ffffff", border: "none",
+                color: canAdvance() ? "#1a1a2e" : "#a0a0b0",
+                fontSize: 13, fontWeight: 600, fontFamily: FONT,
+                display: "flex", alignItems: "center", gap: 10,
+                boxShadow: "0 10px 28px rgba(0,0,0,0.18)",
+                opacity: canAdvance() ? 1 : 0.7,
               }}
-            />
-          </motion.div>
+            >
+              Weiter
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </motion.button>
+          </div>
         </motion.div>
       );
     }
@@ -8067,7 +8098,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
               </AnimatePresence>
             </div>
 
-            {step < 6 && (
+            {step > 0 && step < 6 && (
               <div style={{ padding: "16px 28px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: `1px solid ${theme.borderFaint}` }}>
                 {step > 0 ? (
                   <motion.button whileTap={{ scale: 0.97 }} onClick={back}
