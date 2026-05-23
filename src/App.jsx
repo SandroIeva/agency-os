@@ -9542,7 +9542,7 @@ export default function CircularMenu() {
       .filter(tk => !tk.project_name || myProjectNames.has(tk.project_name))
       .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
 
-    const colLabel = (key) => ({ todo: t("kanban.todo"), in_progress: t("kanban.inProgress"), review: t("kanban.review") }[key] || key);
+    const colLabel = (key) => ({ todo: t("kanban.todo"), progress: t("kanban.inProgress"), in_progress: t("kanban.inProgress"), review: t("kanban.review"), done: t("kanban.done") }[key] || key);
     const getDashProjectLogo = (name) => dashboardProjects.find(p => p.name === name)?.logo_url || null;
     const taskCards = activeTasks.slice(0, 4).map(tk => {
       const projLogo = tk.project_name ? getDashProjectLogo(tk.project_name) : null;
@@ -11470,10 +11470,10 @@ export default function CircularMenu() {
                 const highTasks = activeTasks.filter(tk => tk.priority === "high");
                 const mediumTasks = activeTasks.filter(tk => tk.priority === "medium");
                 const lowTasks = activeTasks.filter(tk => tk.priority === "low" || !tk.priority);
-                const iconMap = { "todo": "◻", "in_progress": "◎", "review": "◆", "done": "✓" };
+                const iconMap = { "todo": "◻", "progress": "◎", "in_progress": "◎", "review": "◆", "done": "✓" };
                 const getDashProjLogo = (name) => dashboardProjects.find(p => p.name === name)?.logo_url || null;
                 const colLabel = (key) => {
-                  const map = { "todo": t("kanban.todo"), "in_progress": t("kanban.inProgress"), "review": t("kanban.review") };
+                  const map = { "todo": t("kanban.todo"), "progress": t("kanban.inProgress"), "in_progress": t("kanban.inProgress"), "review": t("kanban.review"), "done": t("kanban.done") };
                   return map[key] || key;
                 };
 
