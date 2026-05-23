@@ -7365,7 +7365,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
           {/* Centered content */}
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 36px 24px", position: "relative", zIndex: 1, textAlign: "center" }}>
             <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.15, duration: 0.5 }}
-              style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: "#ffffff", letterSpacing: -0.4, marginBottom: 14, lineHeight: 1.2, textShadow: "0 2px 18px rgba(0,0,0,0.18)" }}
+              style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: "#ffffff", letterSpacing: -0.4, marginBottom: 6, lineHeight: 1.2, textShadow: "0 2px 18px rgba(0,0,0,0.18)" }}
             >Let´s define your Brand</motion.div>
             <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.25, duration: 0.5 }}
               style={{ fontSize: 14, fontFamily: FONT, color: "rgba(255,255,255,0.92)", lineHeight: 1.65, maxWidth: 440, marginBottom: 32 }}
