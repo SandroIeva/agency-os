@@ -7121,9 +7121,14 @@ const LOGO_SLOTS = [
   { key: "icon",     label: "Icon",     hint: "Favicon / App-Icon",  accept: "image/*" },
 ];
 
-const TONE_OF_VOICE_OPTIONS = [
-  "Freundlich", "Professionell", "Mutig", "Verspielt", "Minimalistisch",
-  "Premium", "Inspirierend", "Technisch", "Warm", "Direkt", "Cinematic", "Vertraut",
+// Items the user can flag for follow-up — drives the next phase of the brand build
+const BRAND_NEXT_STEPS = [
+  { key: "personas",     label: "Personas / Zielgruppe",  hint: "Wer kauft / nutzt deine Brand?" },
+  { key: "competitor",   label: "Competitor-Analyse",      hint: "Wo steht ihr im Markt?" },
+  { key: "guidelines",   label: "Brand Guidelines",        hint: "Schriftarten, Bildwelt, Tonalität, Don'ts" },
+  { key: "assets",       label: "Asset-Library",           hint: "Templates, Vorlagen, Mockups" },
+  { key: "intelligence", label: "Brand Intelligence",      hint: "Content-Strategie, Themen, Storytelling" },
+  { key: "voice",        label: "Tonalität & Sprache",     hint: "Wie klingt deine Brand in Texten?" },
 ];
 
 function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, setBrandTab }) {
@@ -7136,7 +7141,9 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
   const [form, setForm] = useState({
     name: "", claim: "", description: "",
     website_url: "", figma_url: "",
-    colors: [], logos: [], sources: [], tone_of_voice: [],
+    colors: [], logos: [], sources: [],
+    color_palette: { primary: "", secondary: "", accents: [] },
+    next_steps: {}, // { personas: 'have'|'help'|'skip', ... }
     logo_url: "", pdf_url: "", pdf_name: "",
   });
   const [logoUploading, setLogoUploading] = useState({});
@@ -7168,7 +7175,10 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         colors: data?.colors || [],
         logos: data?.logos || [],
         sources: data?.sources || [],
-        tone_of_voice: data?.tone_of_voice || [],
+        color_palette: data?.color_palette && Object.keys(data.color_palette).length > 0
+          ? { primary: data.color_palette.primary || "", secondary: data.color_palette.secondary || "", accents: data.color_palette.accents || [] }
+          : { primary: (data?.colors || [])[0] || "", secondary: (data?.colors || [])[1] || "", accents: (data?.colors || []).slice(2) },
+        next_steps: data?.next_steps || {},
         logo_url: data?.logo_url || "",
         pdf_url: data?.pdf_url || "",
         pdf_name: data?.pdf_name || "",
@@ -7267,16 +7277,6 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
   };
   const removeColor = (c) => setForm(prev => ({ ...prev, colors: prev.colors.filter(x => x !== c) }));
 
-  // ── Tone of voice helpers ──
-  const toggleTone = (t) => {
-    setForm(prev => ({
-      ...prev,
-      tone_of_voice: prev.tone_of_voice.includes(t)
-        ? prev.tone_of_voice.filter(x => x !== t)
-        : [...prev.tone_of_voice, t],
-    }));
-  };
-
   // ── Save ──
   const saveProfile = async () => {
     if (!form.name.trim()) return;
@@ -7289,10 +7289,16 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         logo_url: form.logo_url || null,
         website_url: form.website_url.trim() || null,
         figma_url: form.figma_url.trim() || null,
-        colors: form.colors,
+        // Keep flat colors[] in sync with color_palette for backward compat
+        colors: [form.color_palette.primary, form.color_palette.secondary, ...(form.color_palette.accents || [])].filter(Boolean),
+        color_palette: {
+          primary: form.color_palette.primary || null,
+          secondary: form.color_palette.secondary || null,
+          accents: form.color_palette.accents || [],
+        },
         logos: form.logos,
         sources: form.sources,
-        tone_of_voice: form.tone_of_voice,
+        next_steps: form.next_steps,
         description: form.description.trim() || null,
         pdf_url: form.pdf_url || null,
         pdf_name: form.pdf_name || null,
@@ -7305,7 +7311,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         const { data } = await supabase.from("brand_profile").insert(payload).select().single();
         setProfile(data);
       }
-      setStep(6);
+      setStep(7);
       setTimeout(() => { setEditMode(false); setStep(0); }, 1800);
     } catch (e) {
       alert("Speichern fehlgeschlagen: " + (e.message || ""));
@@ -7315,11 +7321,11 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
   };
 
   const goTo = (n) => { setStepDir(n > step ? 1 : -1); setStep(n); };
-  const next = () => goTo(Math.min(step + 1, 5));
+  const next = () => goTo(Math.min(step + 1, 6));
   const back = () => goTo(Math.max(step - 1, 0));
 
   const isOnboarding = !profile || editMode;
-  const totalSteps = 6;
+  const totalSteps = 7;
   const stepVariants = {
     enter: (d) => ({ opacity: 0, x: d * 60, filter: "blur(6px)" }),
     center: { opacity: 1, x: 0, filter: "blur(0px)" },
@@ -7678,86 +7684,123 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
       );
     }
 
-    // STEP 3 — Colors (conditional intro)
+    // STEP 3 — Color Palette (structured: Primary / Secondary / Accents)
     if (step === 3) {
-      return (
-        <motion.div key="3" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
-          transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
-          style={{ display: "flex", flexDirection: "column", gap: 24, alignItems: "center", textAlign: "center", maxWidth: 560, margin: "0 auto", width: "100%" }}
-        >
-          <div>
-            <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
-              {hasAnySource ? "Farben — optional" : "Welche Farben sprechen für dich?"}
-            </div>
-            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
-              {hasAnySource
-                ? "Wir extrahieren die Farben automatisch aus deinen Quellen (kommt bald). Falls du sie schon kennst, kannst du sie hier hinterlegen."
-                : "Wähle die Farben, die deine Brand ausmachen. Du kannst beliebig viele kombinieren."}
-            </div>
-          </div>
+      const setRoleColor = (role, val) => setForm(prev => ({ ...prev, color_palette: { ...prev.color_palette, [role]: val } }));
+      const addAccent = (val) => {
+        const c = (val || colorInput).trim();
+        if (!c || form.color_palette.accents.includes(c)) return;
+        setForm(prev => ({ ...prev, color_palette: { ...prev.color_palette, accents: [...prev.color_palette.accents, c] } }));
+      };
+      const removeAccent = (c) => setForm(prev => ({ ...prev, color_palette: { ...prev.color_palette, accents: prev.color_palette.accents.filter(x => x !== c) } }));
 
-          {/* Color stack */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 14, justifyContent: "center", minHeight: 88 }}>
-            {form.colors.map((c, i) => (
-              <motion.div key={c}
-                initial={{ scale: 0, rotate: -30 }} animate={{ scale: 1, rotate: 0 }}
-                transition={{ type: "spring", stiffness: 260, damping: 20, delay: i * 0.04 }}
-                style={{ position: "relative" }}
-              >
-                <div style={{
-                  width: 72, height: 72, borderRadius: 20, background: c,
-                  border: `1px solid ${theme.borderFaint}`,
-                  boxShadow: `0 8px 24px ${c}55`,
-                }} />
-                <motion.div whileTap={{ scale: 0.9 }} onClick={() => removeColor(c)}
-                  style={{ position: "absolute", top: -6, right: -6, width: 22, height: 22, borderRadius: "50%", background: darkMode ? "#1a1a2e" : "#fff", color: theme.textSub, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 2px 6px rgba(0,0,0,0.15)" }}
-                >✕</motion.div>
-                <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, textAlign: "center", marginTop: 6, letterSpacing: 0.5 }}>{c.toUpperCase()}</div>
-              </motion.div>
-            ))}
-            {form.colors.length === 0 && (
-              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint, fontStyle: "italic", padding: "20px 0" }}>
-                {hasAnySource ? "Nichts hinzugefügt — kein Problem" : "Noch keine Farben gewählt"}
+      const RoleSlot = ({ role, label, hint, value }) => (
+        <div style={{
+          padding: 16, borderRadius: 16,
+          background: value ? `linear-gradient(135deg, ${value}15, transparent 70%)` : (darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)"),
+          border: `1px solid ${value ? value + "55" : theme.borderFaint}`,
+          display: "flex", alignItems: "center", gap: 14,
+        }}>
+          <label style={{ position: "relative", display: "block", cursor: "pointer", flexShrink: 0 }}>
+            <div style={{
+              width: 56, height: 56, borderRadius: 16, background: value || (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+              border: value ? "none" : `2px dashed ${theme.border}`,
+              boxShadow: value ? `0 8px 22px ${value}40` : "none",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: value ? "#ffffffAA" : theme.textFaint,
+            }}>
+              {!value && <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>}
+            </div>
+            <input type="color" value={value || "#8B7AFF"} onChange={(e) => setRoleColor(role, e.target.value)}
+              style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }}
+            />
+          </label>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{label}</div>
+            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, lineHeight: 1.4, marginTop: 1 }}>{hint}</div>
+            {value && (
+              <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textSub, marginTop: 6, letterSpacing: 0.4, display: "flex", alignItems: "center", gap: 8 }}>
+                {value.toUpperCase()}
+                <motion.span whileTap={{ scale: 0.9 }} onClick={() => setRoleColor(role, "")}
+                  style={{ cursor: "pointer", color: theme.textFaint, fontSize: 11 }}
+                >✕</motion.span>
               </div>
             )}
           </div>
+        </div>
+      );
 
-          {/* Quick palette */}
-          <div>
-            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.5 }}>Vorschläge</div>
-            <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-              {BRAND_ACCENT_PALETTE.filter(c => !form.colors.includes(c)).map(c => (
-                <motion.div key={c} whileHover={{ scale: 1.15, y: -2 }} whileTap={{ scale: 0.9 }}
-                  onClick={() => addColor(c)}
-                  style={{ width: 32, height: 32, borderRadius: 10, background: c, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
-                />
-              ))}
+      return (
+        <motion.div key="3" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
+          transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
+          style={{ display: "flex", flexDirection: "column", gap: 22, maxWidth: 580, margin: "0 auto", width: "100%" }}
+        >
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
+              {hasAnySource ? "Farben — optional" : "Deine Farb-Hierarchie"}
+            </div>
+            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+              {hasAnySource
+                ? "Wir extrahieren später automatisch aus deinen Quellen. Falls du die Hauptfarben schon kennst, hinterlege sie hier."
+                : "Eine Brand braucht eine klare Farb-Hierarchie. Definiere zuerst die zwei wichtigsten Farben — Akzente sind optional."}
             </div>
           </div>
 
-          {/* Custom HEX */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: colorInput, border: `2px solid ${theme.borderFaint}` }}>
-                <input type="color" value={colorInput} onChange={(e) => setColorInput(e.target.value)}
-                  style={{ opacity: 0, width: "100%", height: "100%", cursor: "pointer" }}
-                />
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <RoleSlot role="primary" label="Primary"
+              hint="Die dominante Farbe — Logo, CTAs, Highlights"
+              value={form.color_palette.primary}
+            />
+            <RoleSlot role="secondary" label="Secondary"
+              hint="Komplementärer Ton für Backgrounds, Sections, Text-Highlights"
+              value={form.color_palette.secondary}
+            />
+          </div>
+
+          {/* Accents — optional */}
+          <div style={{ paddingTop: 12, borderTop: `1px solid ${theme.borderFaint}` }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
+              <div>
+                <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Akzentfarben</div>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>Optional — z.B. für Charts, Tags, Erfolg/Warnung</div>
               </div>
-              <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub, letterSpacing: 0.3 }}>{colorInput.toUpperCase()}</span>
-            </label>
-            <motion.button whileTap={{ scale: 0.97 }} onClick={() => addColor()}
-              style={{
-                padding: "8px 16px", borderRadius: 10, cursor: "pointer",
-                background: theme.accent + "20", border: `1px solid ${theme.accent}40`,
-                color: theme.accent, fontSize: 12, fontFamily: FONT, fontWeight: 500,
-              }}
-            >+ Hinzufügen</motion.button>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              {form.color_palette.accents.map((c) => (
+                <motion.div key={c}
+                  initial={{ scale: 0 }} animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 12px 4px 4px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}
+                >
+                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: c, border: `1px solid ${theme.borderFaint}` }} />
+                  <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textSub, letterSpacing: 0.3 }}>{c.toUpperCase()}</span>
+                  <motion.span whileTap={{ scale: 0.9 }} onClick={() => removeAccent(c)}
+                    style={{ cursor: "pointer", color: theme.textFaint, fontSize: 11, marginLeft: 2 }}
+                  >✕</motion.span>
+                </motion.div>
+              ))}
+              {/* Quick add */}
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                <div style={{ width: 26, height: 26, borderRadius: 8, background: colorInput, border: `2px solid ${theme.borderFaint}` }}>
+                  <input type="color" value={colorInput} onChange={(e) => setColorInput(e.target.value)}
+                    style={{ opacity: 0, width: "100%", height: "100%", cursor: "pointer" }}
+                  />
+                </div>
+              </label>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => addAccent()}
+                style={{
+                  padding: "6px 12px", borderRadius: 999, cursor: "pointer",
+                  background: theme.accent + "15", border: `1px solid ${theme.accent}30`,
+                  color: theme.accent, fontSize: 11, fontFamily: FONT, fontWeight: 500,
+                }}
+              >+ Akzent</motion.button>
+            </div>
           </div>
         </motion.div>
       );
     }
 
-    // STEP 4 — Voice & Description
+    // STEP 4 — Claim + Context (simple)
     if (step === 4) {
       return (
         <motion.div key="4" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
@@ -7766,14 +7809,13 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         >
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
-              Stimme & Persönlichkeit
+              Worum geht es bei deiner Brand?
             </div>
             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
-              Wie kommuniziert deine Brand? Diese Hinweise helfen uns später, Inhalte in deinem Stil zu generieren.
+              Ein griffiger Claim und etwas Kontext reichen — alles weitere arbeiten wir später gemeinsam aus.
             </div>
           </div>
 
-          {/* Tagline */}
           <div>
             <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Claim / Tagline</label>
             <input value={form.claim} onChange={(e) => setForm(prev => ({ ...prev, claim: e.target.value }))}
@@ -7781,48 +7823,22 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
               style={{
                 width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
                 border: `1px solid ${theme.borderFaint}`, borderRadius: 12,
-                padding: "12px 16px", fontSize: 15, fontFamily: FONT,
+                padding: "14px 18px", fontSize: 16, fontFamily: FONT,
                 color: theme.text, outline: "none", caretColor: theme.accent,
               }}
             />
           </div>
 
-          {/* Tone chips */}
           <div>
-            <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 10, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>
-              Tonalität (mehrere möglich)
-            </label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {TONE_OF_VOICE_OPTIONS.map(t => {
-                const active = form.tone_of_voice.includes(t);
-                return (
-                  <motion.div key={t} whileTap={{ scale: 0.95 }} whileHover={{ y: -1 }}
-                    onClick={() => toggleTone(t)}
-                    style={{
-                      padding: "7px 14px", borderRadius: 999, cursor: "pointer",
-                      background: active ? (theme.accent + "20") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
-                      color: active ? theme.accent : theme.textSub,
-                      border: `1px solid ${active ? (theme.accent + "40") : theme.borderFaint}`,
-                      fontSize: 12, fontFamily: FONT, fontWeight: 500,
-                      transition: "background 0.15s, color 0.15s",
-                    }}
-                  >{t}</motion.div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Description */}
-          <div>
-            <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Mehr Kontext (optional)</label>
+            <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Kontext zu deiner Brand</label>
             <textarea value={form.description} onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))}
-              placeholder="Zielgruppe, Werte, USPs, was du explizit vermeiden willst ..."
-              rows={5}
+              placeholder="Was macht deine Brand aus? Für wen ist sie? Was unterscheidet euch vom Wettbewerb?"
+              rows={7}
               style={{
                 width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
                 border: `1px solid ${theme.borderFaint}`, borderRadius: 12,
-                padding: "12px 16px", fontSize: 14, fontFamily: FONT,
-                color: theme.text, outline: "none", caretColor: theme.accent, resize: "vertical", minHeight: 100, lineHeight: 1.55,
+                padding: "14px 18px", fontSize: 14, fontFamily: FONT,
+                color: theme.text, outline: "none", caretColor: theme.accent, resize: "vertical", minHeight: 140, lineHeight: 1.6,
               }}
             />
           </div>
@@ -7830,11 +7846,89 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
       );
     }
 
-    // STEP 5 — Recap
+    // STEP 5 — Next Steps Checklist
     if (step === 5) {
-      const primaryLogo = form.logos.find(l => l.key === "primary")?.url || form.logos[0]?.url || form.logo_url;
+      const setNextStep = (key, val) => setForm(prev => ({ ...prev, next_steps: { ...prev.next_steps, [key]: val } }));
+      const STATES = [
+        { id: "have",  label: "Habe ich", icon: "✓",   color: "#5DB89E" },
+        { id: "help",  label: "Brauche Hilfe", icon: "✦", color: "#8B7AFF" },
+        { id: "skip",  label: "Nicht relevant", icon: "—", color: null },
+      ];
+
       return (
         <motion.div key="5" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
+          transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
+          style={{ display: "flex", flexDirection: "column", gap: 22, maxWidth: 620, margin: "0 auto", width: "100%" }}
+        >
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 10, lineHeight: 1.2 }}>
+              Was kommt als Nächstes?
+            </div>
+            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+              Markiere, was du schon hast und wo wir dich unterstützen sollen. Im nächsten Schritt arbeiten wir die offenen Punkte zusammen aus.
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {BRAND_NEXT_STEPS.map((item, idx) => {
+              const current = form.next_steps[item.key] || null;
+              return (
+                <motion.div key={item.key}
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.04, duration: 0.3 }}
+                  style={{
+                    padding: "14px 16px", borderRadius: 14,
+                    background: current === "have" ? "rgba(93, 184, 158, 0.06)" : current === "help" ? "rgba(139, 122, 255, 0.06)" : (darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)"),
+                    border: `1px solid ${current === "have" ? "rgba(93, 184, 158, 0.25)" : current === "help" ? "rgba(139, 122, 255, 0.25)" : theme.borderFaint}`,
+                    display: "flex", alignItems: "center", gap: 14,
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{item.label}</div>
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{item.hint}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 4, padding: 3, borderRadius: 10, background: darkMode ? "rgba(0,0,0,0.2)" : "rgba(0,0,0,0.04)", flexShrink: 0 }}>
+                    {STATES.map(s => {
+                      const active = current === s.id;
+                      return (
+                        <motion.div key={s.id} whileTap={{ scale: 0.95 }}
+                          onClick={() => setNextStep(item.key, active ? null : s.id)}
+                          title={s.label}
+                          style={{
+                            padding: "6px 12px", borderRadius: 7, cursor: "pointer",
+                            background: active ? (s.color || (darkMode ? "rgba(255,255,255,0.1)" : "#1a1a2e")) : "transparent",
+                            color: active ? "#fff" : theme.textDim,
+                            fontSize: 11, fontFamily: FONT, fontWeight: 500,
+                            display: "flex", alignItems: "center", gap: 5,
+                            transition: "background 0.15s, color 0.15s",
+                          }}
+                        >
+                          <span style={{ fontSize: 12 }}>{s.icon}</span>
+                          <span>{s.label}</span>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint, textAlign: "center" }}>
+            Nichts markiert? Auch okay — du kannst die Themen jederzeit später angehen.
+          </div>
+        </motion.div>
+      );
+    }
+
+    // STEP 6 — Recap
+    if (step === 6) {
+      const primaryLogo = form.logos.find(l => l.key === "primary")?.url || form.logos[0]?.url || form.logo_url;
+      const paletteColors = [form.color_palette.primary, form.color_palette.secondary, ...(form.color_palette.accents || [])].filter(Boolean);
+      const nextStepsHaveCount = Object.values(form.next_steps).filter(v => v === "have").length;
+      const nextStepsHelpCount = Object.values(form.next_steps).filter(v => v === "help").length;
+      return (
+        <motion.div key="6" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
           transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
           style={{ display: "flex", flexDirection: "column", gap: 22, alignItems: "center", textAlign: "center", maxWidth: 560, margin: "0 auto" }}
         >
@@ -7851,7 +7945,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
             transition={{ type: "spring", stiffness: 240, damping: 22 }}
             style={{
               width: "100%", padding: 24, borderRadius: 22,
-              background: form.colors[0] ? `linear-gradient(135deg, ${form.colors[0]}10, transparent 60%)` : (darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)"),
+              background: paletteColors[0] ? `linear-gradient(135deg, ${paletteColors[0]}10, transparent 60%)` : (darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)"),
               border: `1px solid ${theme.borderFaint}`,
               display: "flex", alignItems: "center", gap: 18, textAlign: "left",
             }}
@@ -7859,15 +7953,15 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
             {primaryLogo ? (
               <img src={primaryLogo} alt="" style={{ width: 72, height: 72, borderRadius: 18, objectFit: "cover", flexShrink: 0, border: `1px solid ${theme.borderFaint}` }} />
             ) : (
-              <div style={{ width: 72, height: 72, borderRadius: 18, background: (form.colors[0] || theme.accent) + "22", color: form.colors[0] || theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{(form.name || "?")[0]}</div>
+              <div style={{ width: 72, height: 72, borderRadius: 18, background: (paletteColors[0] || theme.accent) + "22", color: paletteColors[0] || theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{(form.name || "?")[0]}</div>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{form.name}</div>
               {form.claim && <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 4, lineHeight: 1.5 }}>{form.claim}</div>}
-              {form.colors.length > 0 && (
+              {paletteColors.length > 0 && (
                 <div style={{ display: "flex", gap: 4, marginTop: 10 }}>
-                  {form.colors.slice(0, 8).map(c => (
-                    <div key={c} style={{ width: 14, height: 14, borderRadius: 5, background: c, border: `1px solid ${theme.borderFaint}` }} />
+                  {paletteColors.slice(0, 8).map((c, i) => (
+                    <div key={`${c}-${i}`} style={{ width: 14, height: 14, borderRadius: 5, background: c, border: `1px solid ${theme.borderFaint}` }} />
                   ))}
                 </div>
               )}
@@ -7879,18 +7973,19 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
             {form.website_url && <SummaryChip>✓ Website</SummaryChip>}
             {form.figma_url && <SummaryChip>✓ Figma</SummaryChip>}
             {form.sources.length > 0 && <SummaryChip>✓ {form.sources.length} Quelle{form.sources.length === 1 ? "" : "n"}</SummaryChip>}
-            {form.colors.length > 0 && <SummaryChip>✓ {form.colors.length} Farben</SummaryChip>}
-            {form.tone_of_voice.length > 0 && <SummaryChip>✓ {form.tone_of_voice.length} Tonalitäten</SummaryChip>}
+            {paletteColors.length > 0 && <SummaryChip>✓ {paletteColors.length} Farben</SummaryChip>}
             {form.description && <SummaryChip>✓ Beschreibung</SummaryChip>}
+            {nextStepsHaveCount > 0 && <SummaryChip>✓ {nextStepsHaveCount} Themen vorhanden</SummaryChip>}
+            {nextStepsHelpCount > 0 && <SummaryChip>✦ {nextStepsHelpCount} Themen offen</SummaryChip>}
           </div>
         </motion.div>
       );
     }
 
-    // STEP 6 — Celebration
-    if (step === 6) {
+    // STEP 7 — Celebration
+    if (step === 7) {
       return (
-        <motion.div key="6" initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+        <motion.div key="7" initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
           transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
           style={{ display: "flex", flexDirection: "column", gap: 24, alignItems: "center", textAlign: "center" }}
         >
@@ -8113,27 +8208,74 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   </div>
                 )}
 
-                {profile.colors?.length > 0 && (
-                  <div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Brand-Farben</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                      {profile.colors.map(c => (
-                        <div key={c} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                          <div style={{ width: 48, height: 48, borderRadius: 12, background: c, border: `1px solid ${theme.borderFaint}`, boxShadow: `0 4px 14px ${c}33` }} />
-                          <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.3 }}>{c.toUpperCase()}</span>
+                {(() => {
+                  const cp = profile.color_palette || {};
+                  const hasPalette = cp.primary || cp.secondary || (cp.accents && cp.accents.length > 0);
+                  if (hasPalette) {
+                    return (
+                      <div>
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Brand-Farben</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "flex-start" }}>
+                          {cp.primary && (
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                              <div style={{ width: 64, height: 64, borderRadius: 14, background: cp.primary, border: `1px solid ${theme.borderFaint}`, boxShadow: `0 6px 20px ${cp.primary}40` }} />
+                              <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, fontWeight: 600 }}>Primary</span>
+                              <span style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.3 }}>{cp.primary.toUpperCase()}</span>
+                            </div>
+                          )}
+                          {cp.secondary && (
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                              <div style={{ width: 64, height: 64, borderRadius: 14, background: cp.secondary, border: `1px solid ${theme.borderFaint}`, boxShadow: `0 6px 20px ${cp.secondary}40` }} />
+                              <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, fontWeight: 600 }}>Secondary</span>
+                              <span style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.3 }}>{cp.secondary.toUpperCase()}</span>
+                            </div>
+                          )}
+                          {(cp.accents || []).map((c, i) => (
+                            <div key={`${c}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                              <div style={{ width: 48, height: 48, borderRadius: 12, background: c, border: `1px solid ${theme.borderFaint}`, boxShadow: `0 4px 14px ${c}33`, marginTop: 8 }} />
+                              <span style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.3 }}>{c.toUpperCase()}</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                      </div>
+                    );
+                  }
+                  if (profile.colors?.length > 0) {
+                    return (
+                      <div>
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Brand-Farben</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                          {profile.colors.map(c => (
+                            <div key={c} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                              <div style={{ width: 48, height: 48, borderRadius: 12, background: c, border: `1px solid ${theme.borderFaint}`, boxShadow: `0 4px 14px ${c}33` }} />
+                              <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.3 }}>{c.toUpperCase()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
 
-                {profile.tone_of_voice?.length > 0 && (
+                {profile.next_steps && Object.keys(profile.next_steps).length > 0 && (
                   <div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Tonalität</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {profile.tone_of_voice.map(t => (
-                        <div key={t} style={{ padding: "5px 12px", borderRadius: 999, background: theme.accent + "15", color: theme.accent, fontSize: 11, fontFamily: FONT, fontWeight: 500, border: `1px solid ${theme.accent}30` }}>{t}</div>
-                      ))}
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Next Steps</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {BRAND_NEXT_STEPS.map(item => {
+                        const state = profile.next_steps?.[item.key];
+                        if (!state) return null;
+                        const meta = state === "have" ? { icon: "✓", color: "#5DB89E", label: "Habe ich" }
+                                  : state === "help" ? { icon: "✦", color: "#8B7AFF", label: "Brauche Hilfe" }
+                                  : { icon: "—", color: theme.textFaint, label: "Nicht relevant" };
+                        return (
+                          <div key={item.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
+                            <span style={{ width: 22, height: 22, borderRadius: 6, background: meta.color + "22", color: meta.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600 }}>{meta.icon}</span>
+                            <span style={{ flex: 1, fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{item.label}</span>
+                            <span style={{ fontSize: 10, fontFamily: FONT, color: meta.color, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>{meta.label}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
