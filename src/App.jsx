@@ -7377,17 +7377,17 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                 background: "linear-gradient(135deg, #394FE0, #5A5FE4)",
                 border: "none",
                 borderRadius: 16,
-                padding: "14px 20px 12px",
+                padding: "10px 20px 10px",
                 textAlign: "left",
                 boxShadow: "0 10px 30px rgba(57, 79, 224, 0.35)",
               }}>
-                <label style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.85)", display: "block", marginTop: -1, marginLeft: -1, marginBottom: 4, fontWeight: 500, letterSpacing: 0.2 }}>Brand name</label>
+                <label style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.85)", display: "block", marginTop: -1, marginLeft: -1, marginBottom: 0, fontWeight: 500, letterSpacing: 0.2, lineHeight: 1.2 }}>Brand name</label>
                 <input value={form.name} onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
                   autoFocus placeholder="z.B. Agency OS"
                   onKeyDown={(e) => { if (e.key === "Enter" && form.name.trim()) next(); }}
                   style={{
                     width: "100%", background: "transparent", border: "none",
-                    padding: 0, marginTop: -10, marginLeft: -2, fontSize: 16, fontFamily: FONT, fontWeight: 500,
+                    padding: 0, margin: 0, marginLeft: -2, fontSize: 16, fontFamily: FONT, fontWeight: 500, lineHeight: 1.1,
                     color: "rgba(255,255,255,0.8)", outline: "none", caretColor: "#ffffff",
                     textTransform: "uppercase", letterSpacing: 0.4,
                   }}
