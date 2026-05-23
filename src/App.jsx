@@ -7435,7 +7435,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         },
         {
           type: "figma",
-          icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="9" r="3"/><path d="M9 6h6a3 3 0 010 6H9a3 3 0 010-6zM9 12h3v3a3 3 0 11-3-3z"/></svg>,
+          icon: <svg width="22" height="22" viewBox="0 0 38 57" fill="currentColor"><path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0Z"/><path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0Z"/><path d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19Z"/><path d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5Z"/><path d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5Z"/></svg>,
           label: "Figma / Design System",
           hint: "Link zur Figma-Datei oder Library",
           render: () => (
@@ -8101,7 +8101,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                 {step > 0 ? (
                   <motion.button whileTap={{ scale: 0.97 }} onClick={back}
                     style={{
-                      padding: "10px 18px", borderRadius: 12, cursor: "pointer",
+                      padding: "12px 22px", borderRadius: 999, cursor: "pointer",
                       background: "transparent", border: `1px solid ${theme.borderFaint}`,
                       color: theme.textSub, fontSize: 13, fontWeight: 500, fontFamily: FONT,
                       display: "flex", alignItems: "center", gap: 6,
@@ -8113,7 +8113,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                 ) : profile ? (
                   <motion.button whileTap={{ scale: 0.97 }} onClick={() => { setEditMode(false); setStep(0); }}
                     style={{
-                      padding: "10px 18px", borderRadius: 12, cursor: "pointer",
+                      padding: "12px 22px", borderRadius: 999, cursor: "pointer",
                       background: "transparent", border: `1px solid ${theme.borderFaint}`,
                       color: theme.textSub, fontSize: 13, fontWeight: 500, fontFamily: FONT,
                     }}
@@ -8123,12 +8123,12 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                 {step < 5 ? (
                   <motion.button whileTap={{ scale: 0.97 }} onClick={next} disabled={!canAdvance()}
                     style={{
-                      padding: "10px 22px", borderRadius: 12, cursor: canAdvance() ? "pointer" : "not-allowed",
+                      padding: "12px 22px", borderRadius: 999, cursor: canAdvance() ? "pointer" : "not-allowed",
                       background: canAdvance() ? "linear-gradient(135deg, #8B7AFF, #6C5CE7)" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
                       border: "none",
                       color: canAdvance() ? "#fff" : theme.textFaint,
                       fontSize: 13, fontWeight: 600, fontFamily: FONT,
-                      display: "flex", alignItems: "center", gap: 6,
+                      display: "flex", alignItems: "center", gap: 10,
                       boxShadow: canAdvance() ? "0 8px 22px rgba(139,122,255,0.35)" : "none",
                     }}
                   >
@@ -8138,11 +8138,11 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                 ) : (
                   <motion.button whileTap={{ scale: 0.97 }} onClick={saveProfile} disabled={saving}
                     style={{
-                      padding: "10px 24px", borderRadius: 12, cursor: saving ? "wait" : "pointer",
+                      padding: "12px 24px", borderRadius: 999, cursor: saving ? "wait" : "pointer",
                       background: "linear-gradient(135deg, #00B894, #00997A)",
                       border: "none",
                       color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT,
-                      display: "flex", alignItems: "center", gap: 6,
+                      display: "flex", alignItems: "center", gap: 10,
                       boxShadow: "0 8px 22px rgba(0,184,148,0.35)",
                       opacity: saving ? 0.6 : 1,
                     }}
@@ -8329,7 +8329,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                       )}
                       {profile.figma_url && (
                         <a href={profile.figma_url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="9" r="3"/><path d="M9 6h6a3 3 0 010 6H9a3 3 0 010-6zM9 12h3v3a3 3 0 11-3-3z"/></svg>
+                          <svg width="16" height="16" viewBox="0 0 38 57" fill={theme.accent}><path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0Z"/><path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0Z"/><path d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19Z"/><path d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5Z"/><path d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5Z"/></svg>
                           <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Figma-Datei</span>
                         </a>
                       )}
