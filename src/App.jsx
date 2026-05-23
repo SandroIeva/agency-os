@@ -7352,7 +7352,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
             margin: "-40px -36px -20px",
             flex: 1, alignSelf: "stretch",
             position: "relative", borderRadius: 0, overflow: "hidden",
-            backgroundImage: "url('/background-blur.png'), radial-gradient(120% 90% at 80% 35%, #4F46E5 0%, #6C5CE7 32%, #8B7AFF 55%, #C4B5FD 72%, #ffffff 100%)",
+            backgroundImage: "url('/background-blur.jpg'), radial-gradient(120% 90% at 80% 35%, #4F46E5 0%, #6C5CE7 32%, #8B7AFF 55%, #C4B5FD 72%, #ffffff 100%)",
             backgroundSize: "cover, cover",
             backgroundPosition: "center, center",
             backgroundRepeat: "no-repeat, no-repeat",
