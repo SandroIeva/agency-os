@@ -245,6 +245,10 @@ const translations = {
   "common.back": { de: "Zurück", en: "Back" },
   "common.search": { de: "Suchen...", en: "Search..." },
 
+  // ── Legal ────────────────────────────────────
+  "legal.privacy": { de: "Datenschutz", en: "Privacy" },
+  "legal.terms": { de: "Nutzungsbedingungen", en: "Terms" },
+
   // ── Brand Onboarding Wizard ──────────────────
   "brand.step": { de: "Schritt", en: "Step" },
   "brand.next": { de: "Weiter", en: "Next" },
