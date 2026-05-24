@@ -2,6 +2,16 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "i7os.com" }],
+      "destination": "/landing.html"
+    },
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "www.i7os.com" }],
+      "destination": "/landing.html"
+    },
     { "source": "/((?!api/|.*\\.).*)", "destination": "/" }
   ]
 }
