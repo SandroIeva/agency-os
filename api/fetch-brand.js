@@ -129,11 +129,45 @@ export default async function handler(req, res) {
       colors = [tc, ...colors.filter(c => c !== tc)].slice(0, 6);
     }
 
+    // ── Brand context: hero headlines + first meaningful paragraphs ──────
+    const homeContext = extractBrandContext(html);
+
+    // ── Try to enrich with About / Über-uns / Über page (best-effort) ────
+    const aboutCandidates = ["/about", "/about-us", "/ueber-uns", "/uber-uns", "/ueber", "/who-we-are", "/company"];
+    let aboutContext = null;
+    let aboutUrl = null;
+    for (const path of aboutCandidates) {
+      try {
+        const aboutResp = await fetch(`${origin}${path}`, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; i7-OS-BrandFetcher/1.0)" },
+          redirect: "follow",
+        });
+        if (aboutResp.ok) {
+          const aboutHtml = await aboutResp.text();
+          const ctx = extractBrandContext(aboutHtml);
+          if (ctx && ctx.length > 120) {
+            aboutContext = ctx;
+            aboutUrl = aboutResp.url || `${origin}${path}`;
+            break;
+          }
+        }
+      } catch { /* ignore — about page is optional */ }
+    }
+
+    // Compose a single rich "about" string for the brand context field
+    const aboutParts = [];
+    if (homeContext) aboutParts.push(homeContext);
+    if (aboutContext && aboutContext !== homeContext) aboutParts.push(aboutContext);
+    let about = aboutParts.join("\n\n").trim();
+    if (about.length > 1800) about = about.slice(0, 1797) + "…";
+
     return res.status(200).json({
       url: finalUrl,
       name: name?.slice(0, 60) || null,
       claim: claim || null,
       description: description || null,
+      about: about || null,
+      about_url: aboutUrl || null,
       logo_url: logo || null,
       colors,
       primary: colors[0] || null,
@@ -145,6 +179,69 @@ export default async function handler(req, res) {
     console.error("fetch-brand error", err);
     return res.status(500).json({ error: err.message || "Failed to fetch" });
   }
+}
+
+// Pull headlines and first meaningful paragraphs out of an HTML doc.
+// Returns a single deduped, length-capped string that describes the brand.
+function extractBrandContext(html) {
+  if (!html) return null;
+  // Strip scripts/styles/SVGs/etc. so we don't pick up code
+  let body = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<svg[\s\S]*?<\/svg>/gi, " ")
+    .replace(/<header[\s\S]*?<\/header>/gi, " ")
+    .replace(/<footer[\s\S]*?<\/footer>/gi, " ")
+    .replace(/<nav[\s\S]*?<\/nav>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ");
+
+  // Limit how much we scan for perf
+  body = body.slice(0, 250_000);
+
+  const pieces = [];
+  const push = (txt) => {
+    const clean = decodeEntities(stripTags(txt))
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!clean) return;
+    if (clean.length < 20) return;          // skip nav/menu junk
+    if (clean.length > 400) return;         // skip giant chunks (likely menus/jsondata)
+    if (/cookie|datenschutz|impressum|privacy policy|©|all rights reserved/i.test(clean)) return;
+    if (pieces.some(p => p.toLowerCase() === clean.toLowerCase())) return;
+    pieces.push(clean);
+  };
+
+  // Collect headlines first (H1 → H3), then body paragraphs
+  for (const tag of ["h1", "h2", "h3"]) {
+    const re = new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, "gi");
+    let m;
+    while ((m = re.exec(body)) !== null) push(m[1]);
+  }
+  const pRe = /<p\b[^>]*>([\s\S]*?)<\/p>/gi;
+  let pm;
+  while ((pm = pRe.exec(body)) !== null) push(pm[1]);
+
+  // Also pull list items — often bullet value-props
+  const liRe = /<li\b[^>]*>([\s\S]*?)<\/li>/gi;
+  let lm;
+  while ((lm = liRe.exec(body)) !== null) push(lm[1]);
+
+  if (!pieces.length) return null;
+
+  // Build the final string up to ~1500 chars
+  const out = [];
+  let total = 0;
+  for (const p of pieces) {
+    if (total + p.length + 1 > 1500) break;
+    out.push(p);
+    total += p.length + 1;
+  }
+  return out.join("\n");
+}
+
+function stripTags(s) {
+  return s.replace(/<[^>]+>/g, " ");
 }
 
 // Small HTML entity decoder for the handful that show up in titles/descs

@@ -276,6 +276,7 @@ const translations = {
   "brand.sources.fetchError": { de: "Fehler beim Abrufen", en: "Fetch failed" },
   "brand.sources.urlMissing": { de: "Bitte eine URL eingeben", en: "Please enter a URL" },
   "brand.sources.contentFound": { de: "Inhalte gefunden", en: "Content found" },
+  "brand.sources.context": { de: "Kontext", en: "Context" },
   "brand.sources.colors": { de: "Farben", en: "colors" },
   "brand.sources.fonts": { de: "Fonts", en: "fonts" },
   "brand.sources.logos": { de: "Logos", en: "logos" },

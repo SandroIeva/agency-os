@@ -7360,7 +7360,11 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         const next = { ...prev };
         if (!next.name?.trim() && data.name) next.name = data.name;
         if (!next.claim?.trim() && data.claim) next.claim = data.claim;
-        if (!next.description?.trim() && data.description) next.description = data.description;
+        // Description: prefer the richer "about" context if available; fall back to meta description
+        if (!next.description?.trim()) {
+          const desc = (data.about && data.about.length > 80) ? data.about : data.description;
+          if (desc) next.description = desc;
+        }
         if (!next.logo_url && data.logo_url) next.logo_url = data.logo_url;
         // Logos: add a "primary" slot if none yet
         if (data.logo_url && !(next.logos || []).some(l => l.key === "primary")) {
@@ -7575,6 +7579,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                     {websiteFetchResult.name ? `${websiteFetchResult.name}` : t("brand.sources.contentFound")}
                     {websiteFetchResult.colors?.length ? ` · ${websiteFetchResult.colors.length} ${t("brand.sources.colors")}` : ""}
                     {websiteFetchResult.logo_url ? " · Logo" : ""}
+                    {websiteFetchResult.about ? ` · ${t("brand.sources.context")}` : ""}
                   </span>
                 </div>
               )}
