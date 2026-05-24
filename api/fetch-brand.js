@@ -131,6 +131,8 @@ export default async function handler(req, res) {
 
     // ── Brand context: hero headlines + first meaningful paragraphs ──────
     const homeContext = extractBrandContext(html);
+    const homeHeadlines = extractHeadlines(html);
+    const homeValueProps = extractListItems(html);
 
     // ── Try to enrich with About / Über-uns / Über page (best-effort) ────
     const aboutCandidates = ["/about", "/about-us", "/ueber-uns", "/uber-uns", "/ueber", "/who-we-are", "/company"];
@@ -168,6 +170,8 @@ export default async function handler(req, res) {
       description: description || null,
       about: about || null,
       about_url: aboutUrl || null,
+      headlines: homeHeadlines.slice(0, 8),
+      value_props: homeValueProps.slice(0, 8),
       logo_url: logo || null,
       colors,
       primary: colors[0] || null,
@@ -242,6 +246,52 @@ function extractBrandContext(html) {
 
 function stripTags(s) {
   return s.replace(/<[^>]+>/g, " ");
+}
+
+// Pull H1/H2/H3 as separate strings (deduped, length-bounded)
+function extractHeadlines(html) {
+  if (!html) return [];
+  const body = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<header[\s\S]*?<\/header>/gi, " ")
+    .replace(/<footer[\s\S]*?<\/footer>/gi, " ")
+    .replace(/<nav[\s\S]*?<\/nav>/gi, " ");
+  const out = [];
+  for (const tag of ["h1", "h2", "h3"]) {
+    const re = new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, "gi");
+    let m;
+    while ((m = re.exec(body)) !== null) {
+      const txt = decodeEntities(stripTags(m[1])).replace(/\s+/g, " ").trim();
+      if (txt && txt.length >= 6 && txt.length <= 160 && !out.includes(txt)) out.push(txt);
+      if (out.length >= 15) return out;
+    }
+  }
+  return out;
+}
+
+// Pull list items — typically value props / features
+function extractListItems(html) {
+  if (!html) return [];
+  const body = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<nav[\s\S]*?<\/nav>/gi, " ")
+    .replace(/<footer[\s\S]*?<\/footer>/gi, " ")
+    .replace(/<header[\s\S]*?<\/header>/gi, " ");
+  const out = [];
+  const re = /<li\b[^>]*>([\s\S]*?)<\/li>/gi;
+  let m;
+  while ((m = re.exec(body)) !== null) {
+    const txt = decodeEntities(stripTags(m[1])).replace(/\s+/g, " ").trim();
+    if (!txt) continue;
+    if (txt.length < 12 || txt.length > 200) continue;        // skip menu shorties + giant nested blobs
+    if (/^(home|kontakt|contact|about|über|menü|menu|impressum|privacy|datenschutz)$/i.test(txt)) continue;
+    if (out.includes(txt)) continue;
+    out.push(txt);
+    if (out.length >= 12) break;
+  }
+  return out;
 }
 
 // Small HTML entity decoder for the handful that show up in titles/descs

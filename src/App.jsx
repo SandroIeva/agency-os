@@ -7144,6 +7144,9 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
     colors: [], logos: [], sources: [],
     color_palette: { primary: "", secondary: "", accents: [] },
     next_steps: {}, // { personas: 'have'|'help'|'skip', ... }
+    personas: [],        // [{ id, name, role, description, traits, goals, source, created_at }]
+    intelligence: {},    // { context, value_props, headlines, source_url, last_fetched_at }
+    analysis: {},        // { market_positioning, claim_summary, key_messages, source_url }
     logo_url: "", pdf_url: "", pdf_name: "",
   });
   const [logoUploading, setLogoUploading] = useState({});
@@ -7183,6 +7186,9 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
           ? { primary: data.color_palette.primary || "", secondary: data.color_palette.secondary || "", accents: data.color_palette.accents || [] }
           : { primary: (data?.colors || [])[0] || "", secondary: (data?.colors || [])[1] || "", accents: (data?.colors || []).slice(2) },
         next_steps: data?.next_steps || {},
+        personas: Array.isArray(data?.personas) ? data.personas : [],
+        intelligence: (data?.intelligence && typeof data.intelligence === "object") ? data.intelligence : {},
+        analysis: (data?.analysis && typeof data.analysis === "object") ? data.analysis : {},
         logo_url: data?.logo_url || "",
         pdf_url: data?.pdf_url || "",
         pdf_name: data?.pdf_name || "",
@@ -7380,6 +7386,38 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         next.colors = [cp.primary, cp.secondary, ...(cp.accents || [])].filter(Boolean);
         // Normalize the website URL to the final/redirected one
         if (data.url && !next.website_url.startsWith("http")) next.website_url = data.url;
+
+        // ── Intelligence: store context + headlines + value props ──
+        const intel = { ...(next.intelligence || {}) };
+        if (data.about) intel.context = data.about;
+        if (Array.isArray(data.headlines) && data.headlines.length) intel.headlines = data.headlines;
+        if (Array.isArray(data.value_props) && data.value_props.length) intel.value_props = data.value_props;
+        intel.source_url = data.url || next.website_url;
+        intel.last_fetched_at = new Date().toISOString();
+        next.intelligence = intel;
+
+        // ── Analysis (positioning) draft ──
+        const ana = { ...(next.analysis || {}) };
+        if (data.claim) ana.claim_summary = data.claim;
+        if (data.description) ana.market_positioning = data.description;
+        if (Array.isArray(data.headlines)) ana.key_messages = data.headlines.slice(0, 5);
+        ana.source_url = data.url || next.website_url;
+        next.analysis = ana;
+
+        // ── Auto-create a draft persona if none exists yet ──
+        if (!Array.isArray(next.personas) || next.personas.length === 0) {
+          const draftDesc = data.description || data.about?.split("\n")[0] || "";
+          next.personas = [{
+            id: `persona_${Date.now()}`,
+            name: t("brand.personas.draftName"),
+            role: t("brand.personas.draftRole"),
+            description: draftDesc.slice(0, 400),
+            traits: [],
+            goals: Array.isArray(data.value_props) ? data.value_props.slice(0, 4) : [],
+            source: "website",
+            created_at: new Date().toISOString(),
+          }];
+        }
         return next;
       });
     } catch (err) {
@@ -7411,6 +7449,9 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         logos: form.logos,
         sources: form.sources,
         next_steps: form.next_steps,
+        personas: form.personas || [],
+        intelligence: form.intelligence || {},
+        analysis: form.analysis || {},
         description: form.description.trim() || null,
         pdf_url: form.pdf_url || null,
         pdf_name: form.pdf_name || null,
@@ -8394,10 +8435,10 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
               <div style={{ maxWidth: 540, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
                 <div>
                   <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 6, letterSpacing: -0.3 }}>
-                    {BRAND_SUBVIEW_LABELS[brandTab] || "Brand"}
+                    {t(`brand.tab.${brandTab}.title`) || BRAND_SUBVIEW_LABELS[brandTab] || "Brand"}
                   </div>
                   <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
-                    Dieser Bereich wird im nächsten Schritt mit Inhalten gefüllt. Aktuell siehst du dein Brand-Profil als Übersicht.
+                    {t(`brand.tab.${brandTab}.subtitle`) || ""}
                   </div>
                 </div>
 
@@ -8418,7 +8459,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   </div>
                 </div>
 
-                {profile.logos?.length > 0 && (
+                {(brandTab === "identity" || brandTab === "assets") && profile.logos?.length > 0 && (
                   <div>
                     <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.recap.logoVariants")}</div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
@@ -8432,7 +8473,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   </div>
                 )}
 
-                {(() => {
+                {brandTab === "identity" && (() => {
                   const cp = profile.color_palette || {};
                   const hasPalette = cp.primary || cp.secondary || (cp.accents && cp.accents.length > 0);
                   if (hasPalette) {
@@ -8482,7 +8523,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   return null;
                 })()}
 
-                {profile.next_steps && Object.keys(profile.next_steps).length > 0 && (
+                {brandTab === "identity" && profile.next_steps && Object.keys(profile.next_steps).length > 0 && (
                   <div>
                     <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Next Steps</div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -8504,15 +8545,173 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   </div>
                 )}
 
-                {profile.description && (
+                {brandTab === "identity" && profile.description && (
                   <div>
                     <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.recap.description")}</div>
                     <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{profile.description}</div>
                   </div>
                 )}
 
-                {/* Sources */}
-                {(profile.website_url || profile.figma_url || profile.sources?.length > 0) && (
+                {/* Sources (Assets tab) */}
+                {/* PERSONAS TAB */}
+                {brandTab === "personas" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {Array.isArray(profile.personas) && profile.personas.length > 0 ? profile.personas.map((p, idx) => (
+                      <div key={p.id || idx} style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+                          <div style={{ width: 44, height: 44, borderRadius: 12, background: (profile.color_palette?.primary || theme.accent) + "22", color: profile.color_palette?.primary || theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontFamily: FONT, fontWeight: 700, flexShrink: 0 }}>
+                            {(p.name || "?").charAt(0).toUpperCase()}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{p.name}</div>
+                            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{p.role}</div>
+                            {p.source === "website" && (
+                              <div style={{ display: "inline-block", marginTop: 8, padding: "3px 10px", borderRadius: 999, background: theme.accent + "15", color: theme.accent, fontSize: 10, fontFamily: FONT, fontWeight: 600, letterSpacing: 0.3 }}>
+                                {t("brand.personas.sourceWebsite")}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {p.description && (
+                          <div style={{ marginTop: 12, fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.65 }}>{p.description}</div>
+                        )}
+                        {Array.isArray(p.goals) && p.goals.length > 0 && (
+                          <div style={{ marginTop: 14 }}>
+                            <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600, marginBottom: 6 }}>{t("brand.personas.goals")}</div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                              {p.goals.map((g, i) => (
+                                <div key={i} style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub, paddingLeft: 12, position: "relative" }}>
+                                  <span style={{ position: "absolute", left: 0, color: theme.textFaint }}>·</span>
+                                  {g}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )) : (
+                      <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>
+                        {t("brand.personas.empty")}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* INTELLIGENCE TAB */}
+                {brandTab === "knowledge" && (() => {
+                  const intel = profile.intelligence || {};
+                  const hasAny = intel.context || (intel.headlines?.length) || (intel.value_props?.length);
+                  if (!hasAny) {
+                    return (
+                      <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>
+                        {t("brand.tab.knowledge.empty")}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+                      {intel.context && (
+                        <div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.tab.knowledge.context")}</div>
+                          <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{intel.context}</div>
+                        </div>
+                      )}
+                      {Array.isArray(intel.headlines) && intel.headlines.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.tab.knowledge.headlines")}</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {intel.headlines.map((h, i) => (
+                              <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.5 }}>{h}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {Array.isArray(intel.value_props) && intel.value_props.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.tab.knowledge.valueProps")}</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {intel.value_props.map((v, i) => (
+                              <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.015)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5 }}>
+                                <span style={{ color: theme.accent, marginRight: 8, fontWeight: 600 }}>·</span>{v}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {intel.source_url && (
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>{t("brand.tab.fetchedFrom")}: <a href={intel.source_url} target="_blank" rel="noopener noreferrer" style={{ color: theme.accent }}>{intel.source_url}</a></div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* COMPETITOR / ANALYSIS TAB */}
+                {brandTab === "competitor" && (() => {
+                  const ana = profile.analysis || {};
+                  const hasAny = ana.market_positioning || ana.claim_summary || (ana.key_messages?.length);
+                  if (!hasAny) {
+                    return (
+                      <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>
+                        {t("brand.tab.competitor.empty")}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+                      {ana.claim_summary && (
+                        <div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.tab.competitor.claim")}</div>
+                          <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 500, color: theme.text, lineHeight: 1.4 }}>{ana.claim_summary}</div>
+                        </div>
+                      )}
+                      {ana.market_positioning && (
+                        <div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.tab.competitor.positioning")}</div>
+                          <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7 }}>{ana.market_positioning}</div>
+                        </div>
+                      )}
+                      {Array.isArray(ana.key_messages) && ana.key_messages.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.tab.competitor.keyMessages")}</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {ana.key_messages.map((m, i) => (
+                              <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.5 }}>{m}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* GUIDELINES TAB */}
+                {brandTab === "guidelines" && (() => {
+                  const pdfs = (profile.sources || []).filter(s => s.type === "brandbook" || s.type?.toLowerCase().includes("pdf"));
+                  if (pdfs.length === 0 && !profile.pdf_url) {
+                    return (
+                      <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>
+                        {t("brand.tab.guidelines.empty")}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {pdfs.map(s => (
+                        <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 12, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
+                          <div style={{ width: 36, height: 36, borderRadius: 9, background: theme.accent + "20", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{s.name}</div>
+                            {s.analysis?.pages && <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{s.analysis.pages} Seiten</div>}
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                {brandTab === "assets" && (profile.website_url || profile.figma_url || profile.sources?.length > 0) && (
                   <div>
                     <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Quellen</div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
