@@ -50,7 +50,7 @@ const COLORS = {
 const MENU_ITEMS_DEF = [
   { id: "chat", labelKey: "menu.chat", sub: [] },
   { id: "plan", labelKey: "menu.plan", sub: [{ id: "kanban", labelKey: "sub.kanban" }, { id: "timeline", labelKey: "sub.timeline" }, { id: "tasks", labelKey: "sub.tasks" }, { id: "calendar", labelKey: "sub.calendar" }] },
-  { id: "brand", labelKey: "menu.brand", sub: [{ id: "assets", labelKey: "sub.assets" }, { id: "identity", labelKey: "sub.identity" }, { id: "knowledge", labelKey: "sub.intelligence" }, { id: "personas", labelKey: "sub.personas" }, { id: "competitor", labelKey: "sub.analyze" }, { id: "guidelines", labelKey: "sub.guidelines" }] },
+  { id: "brand", labelKey: "menu.brand", sub: [{ id: "identity", labelKey: "sub.identity" }, { id: "design", labelKey: "sub.designSystem" }, { id: "audience", labelKey: "sub.audience" }, { id: "channels", labelKey: "sub.channels" }, { id: "strategy", labelKey: "sub.strategy" }] },
   { id: "docs", labelKey: "menu.projects", sub: [] },
   { id: "files", labelKey: "menu.files", sub: [{ id: "images", labelKey: "sub.images" }, { id: "videos", labelKey: "sub.videos" }, { id: "all", labelKey: "sub.docs" }, { id: "fonts", labelKey: "sub.fonts" }, { id: "links", labelKey: "sub.links" }] },
   { id: "agents", labelKey: "menu.agents", sub: [{ id: "dev", labelKey: "sub.dev" }, { id: "design", labelKey: "sub.design" }, { id: "strategy", labelKey: "sub.strategy" }, { id: "finance", labelKey: "sub.finance" }, { id: "marketing", labelKey: "sub.marketing" }, { id: "sales", labelKey: "sub.sales" }] },
@@ -7100,11 +7100,19 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
 // ═══════════════════════════════════════════════════════════════
 const BRAND_SUBVIEW_LABELS = {
   identity: "Identity",
-  assets: "Assets",
-  knowledge: "Intelligence",
-  personas: "Personas",
-  competitor: "Analyse",
-  guidelines: "Guidelines",
+  design: "Design System",
+  audience: "Audience",
+  channels: "Channels",
+  strategy: "Strategy",
+};
+
+// Map legacy tab ids to the new 5-tab structure (for users who had a saved tab)
+const BRAND_TAB_LEGACY_MAP = {
+  assets: "design",
+  guidelines: "design",
+  personas: "audience",
+  knowledge: "strategy",
+  competitor: "strategy",
 };
 
 const BRAND_ACCENT_PALETTE = [
@@ -7131,7 +7139,9 @@ const BRAND_NEXT_STEPS = [
   { key: "voice",        labelKey: "brand.nextSteps.voice",        hintKey: "brand.nextSteps.voiceHint" },
 ];
 
-function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, setBrandTab }) {
+function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab }) {
+  // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
+  const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
@@ -7147,6 +7157,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
     personas: [],        // [{ id, name, role, description, traits, goals, source, created_at }]
     intelligence: {},    // { context, value_props, headlines, source_url, last_fetched_at }
     analysis: {},        // { market_positioning, claim_summary, key_messages, source_url }
+    channels: {},        // { website, instagram, linkedin, tiktok, youtube, x, pinterest, facebook, newsletter, ... }
     logo_url: "", pdf_url: "", pdf_name: "",
   });
   const [logoUploading, setLogoUploading] = useState({});
@@ -7189,6 +7200,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         personas: Array.isArray(data?.personas) ? data.personas : [],
         intelligence: (data?.intelligence && typeof data.intelligence === "object") ? data.intelligence : {},
         analysis: (data?.analysis && typeof data.analysis === "object") ? data.analysis : {},
+        channels: (data?.channels && typeof data.channels === "object") ? data.channels : {},
         logo_url: data?.logo_url || "",
         pdf_url: data?.pdf_url || "",
         pdf_name: data?.pdf_name || "",
@@ -7404,6 +7416,16 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         ana.source_url = data.url || next.website_url;
         next.analysis = ana;
 
+        // ── Channels: merge website + auto-detected socials ──
+        const channels = { ...(next.channels || {}) };
+        channels.website = next.website_url || data.url || channels.website;
+        if (data.socials && typeof data.socials === "object") {
+          for (const [k, v] of Object.entries(data.socials)) {
+            if (!channels[k]) channels[k] = v;
+          }
+        }
+        next.channels = channels;
+
         // ── Auto-create a draft persona if none exists yet ──
         if (!Array.isArray(next.personas) || next.personas.length === 0) {
           const draftDesc = data.description || data.about?.split("\n")[0] || "";
@@ -7452,6 +7474,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         personas: form.personas || [],
         intelligence: form.intelligence || {},
         analysis: form.analysis || {},
+        channels: form.channels || {},
         description: form.description.trim() || null,
         pdf_url: form.pdf_url || null,
         pdf_name: form.pdf_name || null,
@@ -8459,7 +8482,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   </div>
                 </div>
 
-                {(brandTab === "identity" || brandTab === "assets") && profile.logos?.length > 0 && (
+                {(brandTab === "identity" || brandTab === "design") && profile.logos?.length > 0 && (
                   <div>
                     <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.recap.logoVariants")}</div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
@@ -8473,7 +8496,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   </div>
                 )}
 
-                {brandTab === "identity" && (() => {
+                {(brandTab === "identity" || brandTab === "design") && (() => {
                   const cp = profile.color_palette || {};
                   const hasPalette = cp.primary || cp.secondary || (cp.accents && cp.accents.length > 0);
                   if (hasPalette) {
@@ -8554,7 +8577,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
 
                 {/* Sources (Assets tab) */}
                 {/* PERSONAS TAB */}
-                {brandTab === "personas" && (
+                {brandTab === "audience" && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     {Array.isArray(profile.personas) && profile.personas.length > 0 ? profile.personas.map((p, idx) => (
                       <div key={p.id || idx} style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
@@ -8597,40 +8620,175 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                   </div>
                 )}
 
-                {/* INTELLIGENCE TAB */}
-                {brandTab === "knowledge" && (() => {
-                  const intel = profile.intelligence || {};
-                  const hasAny = intel.context || (intel.headlines?.length) || (intel.value_props?.length);
-                  if (!hasAny) {
+                {/* DESIGN SYSTEM TAB — Guidelines + Asset sources */}
+                {brandTab === "design" && (() => {
+                  const pdfs = (profile.sources || []).filter(s => s.type === "brandbook" || s.type?.toLowerCase().includes("pdf"));
+                  const otherSources = (profile.sources || []).filter(s => s.type !== "brandbook" && !s.type?.toLowerCase().includes("pdf"));
+                  const hasAnything = pdfs.length > 0 || otherSources.length > 0 || profile.figma_url;
+                  if (!hasAnything && !(profile.logos?.length)) {
                     return (
                       <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>
-                        {t("brand.tab.knowledge.empty")}
+                        {t("brand.tab.design.empty")}
                       </div>
                     );
                   }
                   return (
                     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-                      {intel.context && (
+                      {pdfs.length > 0 && (
                         <div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.tab.knowledge.context")}</div>
-                          <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{intel.context}</div>
-                        </div>
-                      )}
-                      {Array.isArray(intel.headlines) && intel.headlines.length > 0 && (
-                        <div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.tab.knowledge.headlines")}</div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            {intel.headlines.map((h, i) => (
-                              <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.5 }}>{h}</div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.tab.design.guidelines")}</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            {pdfs.map(s => (
+                              <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 12, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
+                                <div style={{ width: 36, height: 36, borderRadius: 9, background: theme.accent + "20", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{s.name}</div>
+                                  {s.analysis?.pages && <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{s.analysis.pages} Seiten</div>}
+                                </div>
+                              </a>
                             ))}
                           </div>
                         </div>
                       )}
-                      {Array.isArray(intel.value_props) && intel.value_props.length > 0 && (
+                      {(otherSources.length > 0 || profile.figma_url) && (
                         <div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.tab.knowledge.valueProps")}</div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.tab.design.assets")}</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            {profile.figma_url && (
+                              <a href={profile.figma_url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
+                                <svg width="16" height="16" viewBox="-3 -3 44 63" fill="none" stroke={theme.accent} strokeWidth="4" strokeLinejoin="round"><path d="M0 9.5C0 4.25 4.25 0 9.5 0H19V19H9.5C4.25 19 0 14.75 0 9.5Z"/><path d="M19 0H28.5C33.75 0 38 4.25 38 9.5C38 14.75 33.75 19 28.5 19H19V0Z"/><path d="M0 28.5C0 23.25 4.25 19 9.5 19H19V38H9.5C4.25 38 0 33.75 0 28.5Z"/><circle cx="28.5" cy="28.5" r="9.5"/><path d="M0 47.5C0 42.25 4.25 38 9.5 38H19V47.5C19 52.75 14.75 57 9.5 57C4.25 57 0 52.75 0 47.5Z"/></svg>
+                                <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Figma-Datei</span>
+                              </a>
+                            )}
+                            {otherSources.map(s => (
+                              <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
+                                <div style={{ width: 28, height: 28, borderRadius: 7, background: "rgba(139,122,255,0.15)", color: "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</div>
+                                  <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.4 }}>{s.type}</div>
+                                </div>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* CHANNELS TAB — website + social profiles */}
+                {brandTab === "channels" && (() => {
+                  const ch = profile.channels || {};
+                  const SOCIALS = [
+                    { key: "instagram", label: "Instagram" },
+                    { key: "linkedin",  label: "LinkedIn" },
+                    { key: "tiktok",    label: "TikTok" },
+                    { key: "youtube",   label: "YouTube" },
+                    { key: "x",         label: "X / Twitter" },
+                    { key: "facebook",  label: "Facebook" },
+                    { key: "pinterest", label: "Pinterest" },
+                    { key: "threads",   label: "Threads" },
+                  ];
+                  const activeSocials = SOCIALS.filter(s => ch[s.key]);
+                  const hasWebsite = profile.website_url || ch.website;
+                  const hasNewsletter = ch.newsletter;
+                  if (!hasWebsite && activeSocials.length === 0 && !hasNewsletter) {
+                    return (
+                      <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>
+                        {t("brand.tab.channels.empty")}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+                      {hasWebsite && (
+                        <div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.tab.channels.website")}</div>
+                          <a href={profile.website_url || ch.website} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg>
+                            <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{profile.website_url || ch.website}</span>
+                          </a>
+                        </div>
+                      )}
+                      {activeSocials.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.tab.channels.social")}</div>
                           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            {intel.value_props.map((v, i) => (
+                            {activeSocials.map(s => (
+                              <a key={s.key} href={ch[s.key]} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
+                                <div style={{ width: 28, height: 28, borderRadius: 7, background: theme.accent + "15", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{s.label[0]}</div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{s.label}</div>
+                                  <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ch[s.key]}</div>
+                                </div>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {hasNewsletter && (
+                        <div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.tab.channels.newsletter")}</div>
+                          <a href={ch.newsletter} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4l8 8 8-8"/></svg>
+                            <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{ch.newsletter}</span>
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* STRATEGY TAB — merged Intelligence + Analysis */}
+                {brandTab === "strategy" && (() => {
+                  const intel = profile.intelligence || {};
+                  const ana = profile.analysis || {};
+                  const claim = ana.claim_summary || profile.claim;
+                  const positioning = ana.market_positioning;
+                  const keyMessages = ana.key_messages || intel.headlines || [];
+                  const valueProps = intel.value_props || [];
+                  const context = intel.context;
+                  const hasAny = claim || positioning || context || keyMessages.length || valueProps.length;
+                  if (!hasAny) {
+                    return (
+                      <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>
+                        {t("brand.tab.strategy.empty")}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+                      {claim && (
+                        <div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.tab.strategy.claim")}</div>
+                          <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 500, color: theme.text, lineHeight: 1.4 }}>{claim}</div>
+                        </div>
+                      )}
+                      {positioning && (
+                        <div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.tab.strategy.positioning")}</div>
+                          <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7 }}>{positioning}</div>
+                        </div>
+                      )}
+                      {keyMessages.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.tab.strategy.keyMessages")}</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {keyMessages.map((m, i) => (
+                              <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.5 }}>{m}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {valueProps.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.tab.strategy.valueProps")}</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {valueProps.map((v, i) => (
                               <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.015)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5 }}>
                                 <span style={{ color: theme.accent, marginRight: 8, fontWeight: 600 }}>·</span>{v}
                               </div>
@@ -8638,109 +8796,19 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                           </div>
                         </div>
                       )}
-                      {intel.source_url && (
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>{t("brand.tab.fetchedFrom")}: <a href={intel.source_url} target="_blank" rel="noopener noreferrer" style={{ color: theme.accent }}>{intel.source_url}</a></div>
+                      {context && (
+                        <div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.tab.strategy.context")}</div>
+                          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{context}</div>
+                        </div>
+                      )}
+                      {(intel.source_url || ana.source_url) && (
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>{t("brand.tab.fetchedFrom")}: <a href={intel.source_url || ana.source_url} target="_blank" rel="noopener noreferrer" style={{ color: theme.accent }}>{intel.source_url || ana.source_url}</a></div>
                       )}
                     </div>
                   );
                 })()}
 
-                {/* COMPETITOR / ANALYSIS TAB */}
-                {brandTab === "competitor" && (() => {
-                  const ana = profile.analysis || {};
-                  const hasAny = ana.market_positioning || ana.claim_summary || (ana.key_messages?.length);
-                  if (!hasAny) {
-                    return (
-                      <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>
-                        {t("brand.tab.competitor.empty")}
-                      </div>
-                    );
-                  }
-                  return (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-                      {ana.claim_summary && (
-                        <div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.tab.competitor.claim")}</div>
-                          <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 500, color: theme.text, lineHeight: 1.4 }}>{ana.claim_summary}</div>
-                        </div>
-                      )}
-                      {ana.market_positioning && (
-                        <div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.tab.competitor.positioning")}</div>
-                          <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7 }}>{ana.market_positioning}</div>
-                        </div>
-                      )}
-                      {Array.isArray(ana.key_messages) && ana.key_messages.length > 0 && (
-                        <div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.tab.competitor.keyMessages")}</div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            {ana.key_messages.map((m, i) => (
-                              <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.5 }}>{m}</div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* GUIDELINES TAB */}
-                {brandTab === "guidelines" && (() => {
-                  const pdfs = (profile.sources || []).filter(s => s.type === "brandbook" || s.type?.toLowerCase().includes("pdf"));
-                  if (pdfs.length === 0 && !profile.pdf_url) {
-                    return (
-                      <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>
-                        {t("brand.tab.guidelines.empty")}
-                      </div>
-                    );
-                  }
-                  return (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {pdfs.map(s => (
-                        <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 12, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
-                          <div style={{ width: 36, height: 36, borderRadius: 9, background: theme.accent + "20", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{s.name}</div>
-                            {s.analysis?.pages && <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{s.analysis.pages} Seiten</div>}
-                          </div>
-                        </a>
-                      ))}
-                    </div>
-                  );
-                })()}
-
-                {brandTab === "assets" && (profile.website_url || profile.figma_url || profile.sources?.length > 0) && (
-                  <div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Quellen</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {profile.website_url && (
-                        <a href={profile.website_url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg>
-                          <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{profile.website_url}</span>
-                        </a>
-                      )}
-                      {profile.figma_url && (
-                        <a href={profile.figma_url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
-                          <svg width="16" height="16" viewBox="-3 -3 44 63" fill="none" stroke={theme.accent} strokeWidth="4" strokeLinejoin="round"><path d="M0 9.5C0 4.25 4.25 0 9.5 0H19V19H9.5C4.25 19 0 14.75 0 9.5Z"/><path d="M19 0H28.5C33.75 0 38 4.25 38 9.5C38 14.75 33.75 19 28.5 19H19V0Z"/><path d="M0 28.5C0 23.25 4.25 19 9.5 19H19V38H9.5C4.25 38 0 33.75 0 28.5Z"/><circle cx="28.5" cy="28.5" r="9.5"/><path d="M0 47.5C0 42.25 4.25 38 9.5 38H19V47.5C19 52.75 14.75 57 9.5 57C4.25 57 0 52.75 0 47.5Z"/></svg>
-                          <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Figma-Datei</span>
-                        </a>
-                      )}
-                      {(profile.sources || []).map(s => (
-                        <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
-                          <div style={{ width: 28, height: 28, borderRadius: 7, background: "rgba(139,122,255,0.15)", color: "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</div>
-                            <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.4 }}>{s.type}</div>
-                          </div>
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </>

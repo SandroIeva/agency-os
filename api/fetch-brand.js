@@ -133,6 +133,7 @@ export default async function handler(req, res) {
     const homeContext = extractBrandContext(html);
     const homeHeadlines = extractHeadlines(html);
     const homeValueProps = extractListItems(html);
+    const socials = extractSocialLinks(html);
 
     // ── Try to enrich with About / Über-uns / Über page (best-effort) ────
     const aboutCandidates = ["/about", "/about-us", "/ueber-uns", "/uber-uns", "/ueber", "/who-we-are", "/company"];
@@ -172,6 +173,7 @@ export default async function handler(req, res) {
       about_url: aboutUrl || null,
       headlines: homeHeadlines.slice(0, 8),
       value_props: homeValueProps.slice(0, 8),
+      socials,
       logo_url: logo || null,
       colors,
       primary: colors[0] || null,
@@ -265,6 +267,36 @@ function extractHeadlines(html) {
       const txt = decodeEntities(stripTags(m[1])).replace(/\s+/g, " ").trim();
       if (txt && txt.length >= 6 && txt.length <= 160 && !out.includes(txt)) out.push(txt);
       if (out.length >= 15) return out;
+    }
+  }
+  return out;
+}
+
+// Find social-network profile URLs from anchor hrefs anywhere in the document
+function extractSocialLinks(html) {
+  if (!html) return {};
+  const PATTERNS = {
+    instagram: /https?:\/\/(?:www\.)?instagram\.com\/[A-Za-z0-9_.\-/]+/i,
+    linkedin:  /https?:\/\/(?:[a-z]{2,3}\.)?linkedin\.com\/(?:company|in|school)\/[A-Za-z0-9_.\-/]+/i,
+    tiktok:    /https?:\/\/(?:www\.)?tiktok\.com\/@?[A-Za-z0-9_.\-/]+/i,
+    youtube:   /https?:\/\/(?:www\.)?youtube\.com\/(?:@|channel\/|c\/|user\/)[A-Za-z0-9_.\-]+/i,
+    x:         /https?:\/\/(?:www\.)?(?:twitter|x)\.com\/(?!intent|share|home)[A-Za-z0-9_]+/i,
+    facebook:  /https?:\/\/(?:www\.)?facebook\.com\/(?!sharer|share|tr|plugins)[A-Za-z0-9_.\-/]+/i,
+    pinterest: /https?:\/\/(?:[a-z]{2,3}\.)?pinterest\.com\/[A-Za-z0-9_.\-/]+/i,
+    threads:   /https?:\/\/(?:www\.)?threads\.net\/@?[A-Za-z0-9_.\-/]+/i,
+  };
+  const out = {};
+  for (const [key, re] of Object.entries(PATTERNS)) {
+    const m = html.match(re);
+    if (m) {
+      // Trim trailing punctuation / quotes
+      let url = m[0].replace(/[\s"'<>)\]]+$/, "");
+      // Skip really short paths (just the bare domain) — likely a tracking pixel, not a profile
+      try {
+        const u = new URL(url);
+        if (u.pathname.length <= 1) continue;
+      } catch { continue; }
+      out[key] = url;
     }
   }
   return out;
