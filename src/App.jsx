@@ -7584,7 +7584,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
         },
         {
           type: "figma",
-          icon: <svg width="22" height="22" viewBox="0 0 38 57" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinejoin="round"><path d="M0 9.5C0 4.25 4.25 0 9.5 0H19V19H9.5C4.25 19 0 14.75 0 9.5Z"/><path d="M19 0H28.5C33.75 0 38 4.25 38 9.5C38 14.75 33.75 19 28.5 19H19V0Z"/><path d="M0 28.5C0 23.25 4.25 19 9.5 19H19V38H9.5C4.25 38 0 33.75 0 28.5Z"/><circle cx="28.5" cy="28.5" r="9.5"/><path d="M0 47.5C0 42.25 4.25 38 9.5 38H19V47.5C19 52.75 14.75 57 9.5 57C4.25 57 0 52.75 0 47.5Z"/></svg>,
+          icon: <svg width="22" height="22" viewBox="0 0 38 57" fill="none" stroke="currentColor" strokeWidth="4" strokeLinejoin="round"><path d="M0 9.5C0 4.25 4.25 0 9.5 0H19V19H9.5C4.25 19 0 14.75 0 9.5Z"/><path d="M19 0H28.5C33.75 0 38 4.25 38 9.5C38 14.75 33.75 19 28.5 19H19V0Z"/><path d="M0 28.5C0 23.25 4.25 19 9.5 19H19V38H9.5C4.25 38 0 33.75 0 28.5Z"/><circle cx="28.5" cy="28.5" r="9.5"/><path d="M0 47.5C0 42.25 4.25 38 9.5 38H19V47.5C19 52.75 14.75 57 9.5 57C4.25 57 0 52.75 0 47.5Z"/></svg>,
           label: t("brand.sources.figma"),
           hint: t("brand.sources.figmaHint"),
           render: () => (
@@ -8519,7 +8519,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab, set
                       )}
                       {profile.figma_url && (
                         <a href={profile.figma_url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
-                          <svg width="16" height="16" viewBox="0 0 38 57" fill="none" stroke={theme.accent} strokeWidth="2.4" strokeLinejoin="round"><path d="M0 9.5C0 4.25 4.25 0 9.5 0H19V19H9.5C4.25 19 0 14.75 0 9.5Z"/><path d="M19 0H28.5C33.75 0 38 4.25 38 9.5C38 14.75 33.75 19 28.5 19H19V0Z"/><path d="M0 28.5C0 23.25 4.25 19 9.5 19H19V38H9.5C4.25 38 0 33.75 0 28.5Z"/><circle cx="28.5" cy="28.5" r="9.5"/><path d="M0 47.5C0 42.25 4.25 38 9.5 38H19V47.5C19 52.75 14.75 57 9.5 57C4.25 57 0 52.75 0 47.5Z"/></svg>
+                          <svg width="16" height="16" viewBox="0 0 38 57" fill="none" stroke={theme.accent} strokeWidth="4" strokeLinejoin="round"><path d="M0 9.5C0 4.25 4.25 0 9.5 0H19V19H9.5C4.25 19 0 14.75 0 9.5Z"/><path d="M19 0H28.5C33.75 0 38 4.25 38 9.5C38 14.75 33.75 19 28.5 19H19V0Z"/><path d="M0 28.5C0 23.25 4.25 19 9.5 19H19V38H9.5C4.25 38 0 33.75 0 28.5Z"/><circle cx="28.5" cy="28.5" r="9.5"/><path d="M0 47.5C0 42.25 4.25 38 9.5 38H19V47.5C19 52.75 14.75 57 9.5 57C4.25 57 0 52.75 0 47.5Z"/></svg>
                           <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Figma-Datei</span>
                         </a>
                       )}
