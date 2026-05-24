@@ -9273,7 +9273,7 @@ export default function CircularMenu() {
       provider: "google",
       options: {
         redirectTo: window.location.origin,
-        scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/generative-language.retriever https://www.googleapis.com/auth/cloud-platform",
+        scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events",
         queryParams: { access_type: "offline", prompt: "consent" },
       },
     });
@@ -9383,7 +9383,7 @@ export default function CircularMenu() {
       provider: "google",
       options: {
         redirectTo: window.location.origin,
-        scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/generative-language.retriever https://www.googleapis.com/auth/cloud-platform",
+        scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events",
         queryParams: { access_type: "offline", prompt: "consent" },
       },
     });
