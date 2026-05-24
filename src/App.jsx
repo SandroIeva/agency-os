@@ -10781,8 +10781,7 @@ export default function CircularMenu() {
                 animate={{ opacity: 1 }}
                 transition={{ delay: 1, duration: 0.5 }}
                 style={{ position: "absolute", bottom: 32, left: 0, right: 0, fontSize: 13, color: "#ffffff50", fontFamily: FONT, textAlign: "center", lineHeight: 1.6, zIndex: 2 }}
-              ><span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2C9.24 2 7 4.24 7 7v3H5c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2h-2V7c0-2.76-2.24-5-5-5zm0 2c1.66 0 3 1.34 3 3v3H9V7c0-1.66 1.34-3 3-3zm0 10c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z" fill="#ffffff50"/></svg>{t("auth.privacyNote")}</span>
-                <div style={{ marginTop: 10, fontSize: 12, color: "#ffffff40" }}>
+              ><div style={{ fontSize: 12, color: "#ffffff40" }}>
                   <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "#ffffff70", textDecoration: "none", margin: "0 8px" }}>{t("legal.privacy")}</a>
                   <span style={{ color: "#ffffff30" }}>·</span>
                   <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: "#ffffff70", textDecoration: "none", margin: "0 8px" }}>{t("legal.terms")}</a>
