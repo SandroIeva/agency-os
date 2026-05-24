@@ -1,6 +1,6 @@
 # Datenschutzerklärung
 
-**Stand: November 2025**
+**Stand: Mai 2026**
 
 ## 1. Verantwortlicher
 
@@ -188,7 +188,7 @@ Wir können diese Datenschutzerklärung anpassen, wenn sich Funktionen oder Rech
 
 # Privacy Policy (English)
 
-**Last updated: November 2025**
+**Last updated: May 2026**
 
 ## 1. Controller
 

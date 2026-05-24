@@ -1,6 +1,6 @@
 # Nutzungsbedingungen
 
-**Stand: November 2025**
+**Stand: Mai 2026**
 
 ## 1. Geltungsbereich
 
@@ -107,7 +107,7 @@ Sollte eine Bestimmung dieser Bedingungen unwirksam sein, berührt das die Wirks
 
 # Terms of Service (English)
 
-**Last updated: November 2025**
+**Last updated: May 2026**
 
 ## 1. Scope
 
