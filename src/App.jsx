@@ -3897,6 +3897,9 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   const [error, setError] = useState(null);
   const [metadata, setMetadata] = useState({});
   const [selectedFile, setSelectedFile] = useState(null);
+  const [previewFile, setPreviewFile] = useState(null);
+  const [downloading, setDownloading] = useState(false);
+  const [toast, setToast] = useState(null); // { text, type } — transient feedback line
   const [currentFolder, setCurrentFolder] = useState(null);
   const [folderPath, setFolderPath] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -3971,6 +3974,11 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
           source: "picker",
         }));
         await supabase.from("user_drive_files").upsert(rows, { onConflict: "user_id,google_file_id" });
+      }
+      // Feedback so the user sees something happened
+      if (enriched.length > 0) {
+        setToast({ text: `${enriched.length} ${enriched.length === 1 ? "Datei" : "Dateien"} aus Drive hinzugefügt`, type: "success" });
+        setTimeout(() => setToast(null), 3500);
       }
     } catch (err) {
       console.error("Picker failed:", err);
@@ -4262,6 +4270,61 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
     setUploading(false);
     setUploadProgress(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+    const where = useDrive ? (localDriveFolder?.name || "Drive-Ordner") : "i7 OS Storage";
+    setToast({ text: `${fileList.length} ${fileList.length === 1 ? "Datei hochgeladen" : "Dateien hochgeladen"} → ${where}`, type: "success" });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  // Download a file (handles both Drive + Supabase)
+  const downloadFile = async (file) => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      if (file._source === "supabase" || String(file.id || "").startsWith("sb:")) {
+        // Supabase: signed URL
+        if (file.webViewLink) {
+          window.open(file.webViewLink, "_blank");
+        } else if (file._storagePath) {
+          const { data } = await supabase.storage.from("user-files").createSignedUrl(file._storagePath, 60);
+          if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+        }
+      } else {
+        // Drive: fetch as blob, trigger download with original filename
+        const token = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
+        if (!token) { setError("Bitte neu einloggen für Drive-Download."); return; }
+        const sharedFlag = localDriveFolder?.type === "shared_drive" ? "&supportsAllDrives=true" : "";
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media${sharedFlag}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) { setError(`Download fehlgeschlagen (${res.status})`); return; }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = file.name || "download";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+    } catch (e) {
+      console.error("Download failed:", e);
+      setError("Download fehlgeschlagen.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  // Preview URL helper
+  const previewSrc = (file) => {
+    if (!file) return null;
+    if (file._source === "supabase" || String(file.id || "").startsWith("sb:")) {
+      return file.webViewLink || null; // signed URL pointing directly at the image
+    }
+    // Drive: large thumbnail (works without re-auth in <img> tag)
+    if (file.thumbnailLink) return file.thumbnailLink.replace(/=s\d+/, "=s1600");
+    if (file.webViewLink) return file.webViewLink; // fallback
+    return null;
   };
 
   const handleCreateFolder = async () => {
@@ -4319,27 +4382,46 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
         borderRadius: 24, overflow: "hidden",
         display: "flex", flexDirection: "column",
       }}>
-        {/* Header with folder path */}
+        {/* Header with folder path + connected sources */}
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.03, duration: 0.3 }}
-          style={{ padding: "14px 20px 0", display: "flex", alignItems: "center", gap: 8 }}
+          style={{ padding: "14px 20px 0", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-            <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke={theme.accent} strokeWidth="1.5" fill="none" />
-          </svg>
-          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontFamily: FONT, color: theme.textDim, overflow: "hidden" }}>
-            <span onClick={() => { setCurrentFolder(null); setFolderPath([]); }} style={{ cursor: "pointer", color: theme.textSub }}>Drive</span>
-            {folderPath.map((fp, i) => (
-              <span key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <span style={{ color: theme.textFaint }}>/</span>
-                <span onClick={() => {
-                  setCurrentFolder(fp.id);
-                  setFolderPath(prev => prev.slice(0, i));
-                }} style={{ cursor: "pointer", color: theme.textSub }}>{fp.name}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+              <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke={theme.accent} strokeWidth="1.5" fill="none" />
+            </svg>
+            <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontFamily: FONT, color: theme.textDim, overflow: "hidden" }}>
+              <span onClick={() => { setCurrentFolder(null); setFolderPath([]); }} style={{ cursor: "pointer", color: theme.textSub, fontWeight: 500 }}>Alle Dateien</span>
+              {folderPath.map((fp, i) => (
+                <span key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ color: theme.textFaint }}>/</span>
+                  <span onClick={() => {
+                    setCurrentFolder(fp.id);
+                    setFolderPath(prev => prev.slice(0, i));
+                  }} style={{ cursor: "pointer", color: theme.textSub }}>{fp.name}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+          {/* Connected sources indicators */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontFamily: FONT, flexShrink: 0 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 999, background: theme.accent + "10", color: theme.accent, border: `1px solid ${theme.accent}25` }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: theme.accent }} />
+              i7 OS Storage
+            </span>
+            {localDriveFolder?.id ? (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 999, background: "rgba(66,133,244,0.10)", color: "#4285F4", border: "1px solid rgba(66,133,244,0.25)" }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4285F4" }} />
+                Drive: {localDriveFolder.name}
               </span>
-            ))}
+            ) : (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 999, background: "transparent", color: theme.textFaint, border: `1px dashed ${theme.borderFaint}` }}>
+                Drive nicht verbunden
+              </span>
+            )}
           </div>
         </motion.div>
 
@@ -4446,8 +4528,12 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
                 transition={{ delay: 0.04 + i * 0.025, duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
                 className="hover-row"
                 onClick={() => {
-                  if (isFolder) { navigateToFolder(file); }
-                  else { setSelectedFile(selectedFile?.id === file.id ? null : file); }
+                  if (isFolder) { navigateToFolder(file); return; }
+                  const mime = (file.mimeType || "").toLowerCase();
+                  const ext = (file.name || "").toLowerCase().split(".").pop();
+                  const isImage = mime.startsWith("image/") || ["jpg","jpeg","png","gif","webp","svg","bmp","heic","avif"].includes(ext);
+                  if (isImage) { setPreviewFile(file); return; }
+                  setSelectedFile(selectedFile?.id === file.id ? null : file);
                 }}
                 style={{
                   display: "flex", alignItems: "center", gap: 14,
@@ -4597,6 +4683,92 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
                   />
                 </div>
               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Toast feedback */}
+        <AnimatePresence>
+          {toast && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setToast(null)}
+              style={{
+                position: "fixed", bottom: 100, left: "50%", transform: "translateX(-50%)",
+                padding: "10px 18px", borderRadius: 999,
+                background: toast.type === "success" ? "rgba(0, 184, 148, 0.95)" : "rgba(220, 53, 69, 0.95)",
+                color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 500,
+                boxShadow: "0 10px 30px rgba(0,0,0,0.3)", cursor: "pointer",
+                zIndex: 9999,
+              }}
+            >{toast.text}</motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Image preview modal */}
+        <AnimatePresence>
+          {previewFile && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setPreviewFile(null)}
+              style={{
+                position: "fixed", inset: 0, zIndex: 99999,
+                background: "rgba(0,0,0,0.88)", backdropFilter: "blur(8px)",
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                padding: 40,
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
+                onClick={e => e.stopPropagation()}
+                style={{
+                  maxWidth: "90vw", maxHeight: "85vh",
+                  display: "flex", flexDirection: "column", alignItems: "center",
+                }}
+              >
+                <img
+                  src={previewSrc(previewFile)}
+                  alt={previewFile.name}
+                  style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 12, boxShadow: "0 25px 80px rgba(0,0,0,0.5)", objectFit: "contain" }}
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                />
+                <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 24 }}>
+                  <div style={{ color: "#ffffff", fontSize: 14, fontFamily: FONT, fontWeight: 500, maxWidth: 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {previewFile.name}
+                  </div>
+                  <motion.div
+                    onClick={() => downloadFile(previewFile)}
+                    whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                    style={{
+                      padding: "10px 18px", borderRadius: 999, cursor: downloading ? "wait" : "pointer",
+                      background: "#ffffff", color: "#111117",
+                      fontSize: 13, fontFamily: FONT, fontWeight: 500,
+                      display: "flex", alignItems: "center", gap: 8,
+                      opacity: downloading ? 0.7 : 1,
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                      <polyline points="7 10 12 15 17 10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    {downloading ? "Lädt…" : "Download"}
+                  </motion.div>
+                  <motion.div
+                    onClick={() => setPreviewFile(null)}
+                    whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                    style={{
+                      padding: "10px 18px", borderRadius: 999, cursor: "pointer",
+                      background: "transparent", color: "#ffffffaa",
+                      border: "1px solid #ffffff30",
+                      fontSize: 13, fontFamily: FONT, fontWeight: 500,
+                    }}
+                  >Schließen</motion.div>
+                </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
