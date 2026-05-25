@@ -13093,7 +13093,7 @@ export default function CircularMenu() {
                             <motion.div key={tsk.id}
                               initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                               transition={{ delay: 0.12 + i * 0.05, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
-                              className="hover-row"
+                              className="hover-row-priority"
                               onClick={() => { setTasksOpen(false); setCurrentView("kanban"); }}
                               style={{
                                 display: "flex", alignItems: "center", gap: 14,
@@ -14609,6 +14609,15 @@ export default function CircularMenu() {
         .hover-row:hover {
           background: ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.07)"} !important;
           border-color: ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)"} !important;
+          transition: background 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), border-color 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        /* Pink-tinted hover — used for Prioritäts-Tasks, keeps the pink identity */
+        .hover-row-priority {
+          transition: background 0.6s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .hover-row-priority:hover {
+          background: ${darkMode ? "rgba(232, 67, 147, 0.10)" : "rgba(232, 67, 147, 0.12)"} !important;
+          border-color: ${darkMode ? "rgba(232, 67, 147, 0.22)" : "rgba(232, 67, 147, 0.30)"} !important;
           transition: background 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), border-color 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
         .hover-back {
