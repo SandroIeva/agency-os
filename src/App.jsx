@@ -3906,6 +3906,10 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [currentFolder, setCurrentFolder] = useState(null);
   const [folderPath, setFolderPath] = useState([]);
+  // Supabase virtual folders (separate from Drive folder navigation)
+  const [currentSbFolder, setCurrentSbFolder] = useState(null);
+  const [sbFolderPath, setSbFolderPath] = useState([]);
+  const [sbFolders, setSbFolders] = useState([]); // all user_folders rows (for current-level filtering + breadcrumb resolution)
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [picking, setPicking] = useState(false);
@@ -4086,13 +4090,38 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
           }
         }
 
-        // Load Supabase Storage files (i7 OS Storage)
-        if (!currentFolder && session?.user?.id) {
-          const { data: rows } = await supabase
+        // Load Supabase Storage virtual folders + files (i7 OS Storage)
+        if (session?.user?.id) {
+          // 1. Load ALL folders for breadcrumb resolution + current-level filtering
+          const { data: folderRows } = await supabase
+            .from("user_folders")
+            .select("id, name, parent_id, created_at")
+            .eq("user_id", session.user.id)
+            .order("name", { ascending: true });
+          setSbFolders(folderRows || []);
+          // 2. Show folders that live at the current Sb level
+          for (const f of (folderRows || [])) {
+            if ((f.parent_id || null) === (currentSbFolder || null)) {
+              allFiles.push({
+                id: `sbf:${f.id}`,
+                name: f.name,
+                mimeType: "application/vnd.google-apps.folder",
+                size: null,
+                modifiedTime: f.created_at,
+                _source: "supabase",
+                _isSbFolder: true,
+                _folderId: f.id,
+              });
+            }
+          }
+          // 3. Files at the current Sb level
+          let fileQ = supabase
             .from("user_files")
-            .select("id, name, mime_type, size_bytes, storage_path, created_at, public_url")
+            .select("id, name, mime_type, size_bytes, storage_path, created_at, public_url, folder_id")
             .eq("user_id", session.user.id)
             .order("created_at", { ascending: false });
+          fileQ = currentSbFolder ? fileQ.eq("folder_id", currentSbFolder) : fileQ.is("folder_id", null);
+          const { data: rows } = await fileQ;
           for (const r of (rows || [])) {
             allFiles.push({
               id: `sb:${r.id}`,
@@ -4104,6 +4133,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
               _source: "supabase",
               _storagePath: r.storage_path,
               _rowId: r.id,
+              _folderId: r.folder_id,
             });
           }
         }
@@ -4127,7 +4157,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
       setLoading(false);
     };
     fetchFiles();
-  }, [session, currentFolder, driveFolder?.id]);
+  }, [session, currentFolder, currentSbFolder, driveFolder?.id]);
 
   // File-type matchers for the menu sub-filters. Folders are ALWAYS kept so
   // navigation works regardless of which filter is active.
@@ -4170,18 +4200,35 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   const filtered = files.filter(f => f.name.toLowerCase().includes(search.toLowerCase()) && matchesTypeFilter(f) && matchesSource(f));
 
   const navigateToFolder = (folder) => {
-    setFolderPath(prev => [...prev, { id: currentFolder, name: folder.name }]);
-    setCurrentFolder(folder.id);
+    if (folder._isSbFolder) {
+      // Supabase virtual folder navigation
+      setSbFolderPath(prev => [...prev, { id: currentSbFolder, name: folder.name }]);
+      setCurrentSbFolder(folder._folderId);
+    } else {
+      // Drive folder navigation
+      setFolderPath(prev => [...prev, { id: currentFolder, name: folder.name }]);
+      setCurrentFolder(folder.id);
+    }
     setSearch("");
   };
 
   const navigateBack = () => {
-    if (folderPath.length > 0) {
-      const prev = [...folderPath];
-      const parent = prev.pop();
-      setFolderPath(prev);
-      setCurrentFolder(parent.id);
-      setSearch("");
+    if (activeSource === "supabase") {
+      if (sbFolderPath.length > 0) {
+        const prev = [...sbFolderPath];
+        const parent = prev.pop();
+        setSbFolderPath(prev);
+        setCurrentSbFolder(parent.id);
+        setSearch("");
+      }
+    } else {
+      if (folderPath.length > 0) {
+        const prev = [...folderPath];
+        const parent = prev.pop();
+        setFolderPath(prev);
+        setCurrentFolder(parent.id);
+        setSearch("");
+      }
     }
   };
 
@@ -4290,6 +4337,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
             storage_path: path,
             storage_provider: "supabase",
             public_url: signed?.signedUrl || null,
+            folder_id: currentSbFolder || null,
           }).select().single();
           if (insErr) { console.error("user_files insert error:", insErr); }
           else {
@@ -4383,32 +4431,62 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
     if (!folderName || creatingFolder) return;
     setCreatingFolder(true);
     try {
-      const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
-      if (!providerToken) { setError("Kein Google Drive Zugriff."); setNewFolderModalOpen(false); return; }
-      const parentId = currentFolder || localDriveFolder?.id || null;
-      const metadataObj = { name: folderName, mimeType: "application/vnd.google-apps.folder" };
-      if (parentId) metadataObj.parents = [parentId];
-      const sharedFlag = localDriveFolder?.type === "shared_drive" ? "&supportsAllDrives=true" : "";
-      const res = await fetch(
-        `https://www.googleapis.com/drive/v3/files?fields=id,name,mimeType,size,modifiedTime,webViewLink${sharedFlag}`,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${providerToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify(metadataObj),
-        }
-      );
-      if (res.ok) {
-        const folder = await res.json();
-        setFiles(prev => [{ ...folder, _source: "drive" }, ...prev]);
-        setActiveSource("drive");
+      if (activeSource === "supabase") {
+        // ── Create virtual folder in user_folders ───────────────────
+        const { data: row, error: insErr } = await supabase
+          .from("user_folders")
+          .insert({
+            user_id: session.user.id,
+            org_id: userOrg?.id || null,
+            name: folderName,
+            parent_id: currentSbFolder || null,
+          })
+          .select()
+          .single();
+        if (insErr) { console.error("Sb folder create error:", insErr); setError("Ordner konnte nicht erstellt werden."); return; }
+        setSbFolders(prev => [...prev, row]);
+        setFiles(prev => [{
+          id: `sbf:${row.id}`,
+          name: row.name,
+          mimeType: "application/vnd.google-apps.folder",
+          size: null,
+          modifiedTime: row.created_at,
+          _source: "supabase",
+          _isSbFolder: true,
+          _folderId: row.id,
+        }, ...prev]);
         setNewFolderModalOpen(false);
         setNewFolderName("");
         setToast({ text: `Ordner „${folderName}" erstellt`, type: "success" });
         setTimeout(() => setToast(null), 3000);
       } else {
-        const err = await res.json().catch(() => ({}));
-        console.error("Folder create error:", err);
-        setError("Ordner konnte nicht erstellt werden.");
+        // ── Create Drive folder ─────────────────────────────────────
+        const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
+        if (!providerToken) { setError("Kein Google Drive Zugriff."); setNewFolderModalOpen(false); return; }
+        const parentId = currentFolder || localDriveFolder?.id || null;
+        const metadataObj = { name: folderName, mimeType: "application/vnd.google-apps.folder" };
+        if (parentId) metadataObj.parents = [parentId];
+        const sharedFlag = localDriveFolder?.type === "shared_drive" ? "&supportsAllDrives=true" : "";
+        const res = await fetch(
+          `https://www.googleapis.com/drive/v3/files?fields=id,name,mimeType,size,modifiedTime,webViewLink${sharedFlag}`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${providerToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify(metadataObj),
+          }
+        );
+        if (res.ok) {
+          const folder = await res.json();
+          setFiles(prev => [{ ...folder, _source: "drive" }, ...prev]);
+          setNewFolderModalOpen(false);
+          setNewFolderName("");
+          setToast({ text: `Ordner „${folderName}" erstellt`, type: "success" });
+          setTimeout(() => setToast(null), 3000);
+        } else {
+          const err = await res.json().catch(() => ({}));
+          console.error("Drive folder create error:", err);
+          setError("Ordner konnte nicht erstellt werden.");
+        }
       }
     } catch (err) {
       console.error(err);
@@ -4486,16 +4564,22 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
             })}
           </div>
           {/* Folder breadcrumb — only when navigated into subfolder */}
-          {folderPath.length > 0 && (
+          {((activeSource === "drive" && folderPath.length > 0) || (activeSource === "supabase" && sbFolderPath.length > 0)) && (
             <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontFamily: FONT, color: theme.textDim, overflow: "hidden" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                 <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
               </svg>
-              <span onClick={() => { setCurrentFolder(null); setFolderPath([]); }} style={{ cursor: "pointer", color: theme.textSub }}>Root</span>
-              {folderPath.map((fp, i) => (
+              <span onClick={() => {
+                if (activeSource === "supabase") { setCurrentSbFolder(null); setSbFolderPath([]); }
+                else { setCurrentFolder(null); setFolderPath([]); }
+              }} style={{ cursor: "pointer", color: theme.textSub }}>Root</span>
+              {(activeSource === "supabase" ? sbFolderPath : folderPath).map((fp, i) => (
                 <span key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <span style={{ color: theme.textFaint }}>/</span>
-                  <span onClick={() => { setCurrentFolder(fp.id); setFolderPath(prev => prev.slice(0, i)); }} style={{ cursor: "pointer", color: theme.textSub }}>{fp.name}</span>
+                  <span onClick={() => {
+                    if (activeSource === "supabase") { setCurrentSbFolder(fp.id); setSbFolderPath(prev => prev.slice(0, i)); }
+                    else { setCurrentFolder(fp.id); setFolderPath(prev => prev.slice(0, i)); }
+                  }} style={{ cursor: "pointer", color: theme.textSub }}>{fp.name}</span>
                 </span>
               ))}
             </div>
@@ -4817,7 +4901,9 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
               >
                 <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 6, letterSpacing: -0.2 }}>Neuer Ordner</div>
                 <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 18, lineHeight: 1.5 }}>
-                  Wird in {localDriveFolder?.name ? `Drive · ${localDriveFolder.name}` : "deinem Drive"} angelegt.
+                  {activeSource === "supabase"
+                    ? `Wird in i7 OS Storage angelegt${currentSbFolder ? ` (in „${sbFolderPath[sbFolderPath.length - 1]?.name || ""}")` : ""}.`
+                    : `Wird in ${localDriveFolder?.name ? `Drive · ${localDriveFolder.name}` : "deinem Drive"} angelegt.`}
                 </div>
                 <input
                   autoFocus
@@ -4952,27 +5038,25 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
           }}
         >
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {/* New Folder — only on Drive view */}
-            {activeSource === "drive" && (
-              <motion.div
-                onClick={openNewFolderModal}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                style={{
-                  padding: "6px 14px", borderRadius: 20, cursor: "pointer",
-                  fontSize: 12, fontFamily: FONT, fontWeight: 500, color: theme.textSub,
-                  background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`,
-                  display: "flex", alignItems: "center", gap: 5,
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                  <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke={theme.textDim} strokeWidth="1.5" fill="none" />
-                  <path d="M12 11v4M10 13h4" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                + Neuer Ordner
-              </motion.div>
-            )}
-            {currentFolder && (
+            {/* New Folder — works for both sources */}
+            <motion.div
+              onClick={openNewFolderModal}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              style={{
+                padding: "6px 14px", borderRadius: 20, cursor: "pointer",
+                fontSize: 12, fontFamily: FONT, fontWeight: 500, color: theme.textSub,
+                background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`,
+                display: "flex", alignItems: "center", gap: 5,
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke={theme.textDim} strokeWidth="1.5" fill="none" />
+                <path d="M12 11v4M10 13h4" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              + Neuer Ordner
+            </motion.div>
+            {((activeSource === "drive" && currentFolder) || (activeSource === "supabase" && currentSbFolder)) && (
               <motion.div
                 onClick={navigateBack}
                 className="hover-back"
