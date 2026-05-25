@@ -8479,19 +8479,13 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab: raw
         <motion.div key="0" custom={stepDir} variants={stepVariants} initial="enter" animate="center" exit="exit"
           transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
           style={{
-            // Break out of the parent padding so the gradient bleeds to the card edges
+            // Break out of the parent padding so content sits on the gradient that lives on the wizard card itself
             margin: "-40px -36px -20px",
             flex: 1, alignSelf: "stretch",
             position: "relative", borderRadius: 0, overflow: "hidden",
-            backgroundImage: "url('/background-blur.jpg'), radial-gradient(120% 90% at 80% 35%, #4F46E5 0%, #6C5CE7 32%, #8B7AFF 55%, #C4B5FD 72%, #ffffff 100%)",
-            backgroundSize: "cover, cover",
-            backgroundPosition: "center, center",
-            backgroundRepeat: "no-repeat, no-repeat",
             display: "flex", flexDirection: "column",
           }}
         >
-          {/* Subtle top gradient veil so progress bar area reads softly */}
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.05) 18%, transparent 35%)", pointerEvents: "none" }} />
 
           {/* Centered content */}
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 36px 24px", position: "relative", zIndex: 1, textAlign: "center" }}>
@@ -9284,21 +9278,33 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab: raw
         border: `1px solid ${theme.borderFaint}`,
         borderRadius: 26, overflow: "hidden",
         display: "flex", flexDirection: "column",
+        position: "relative",
       }}>
+        {/* Full-card gradient background — only on step 0 so progress bar floats on it */}
+        {isOnboarding && step === 0 && (
+          <div style={{
+            position: "absolute", inset: 0, zIndex: 0, pointerEvents: "none",
+            backgroundImage: "url('/background-blur.jpg'), radial-gradient(120% 90% at 80% 35%, #4F46E5 0%, #6C5CE7 32%, #8B7AFF 55%, #C4B5FD 72%, #ffffff 100%)",
+            backgroundSize: "cover, cover",
+            backgroundPosition: "center, center",
+            backgroundRepeat: "no-repeat, no-repeat",
+            borderRadius: 26,
+          }} />
+        )}
         {loading ? (
-          <div style={{ padding: 40, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim, margin: "auto" }}>Lädt...</div>
+          <div style={{ padding: 40, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim, margin: "auto", position: "relative", zIndex: 1 }}>Lädt...</div>
         ) : isOnboarding ? (
           <>
             {step < 6 && (
-              <div style={{ padding: "20px 28px 0", display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ flex: 1, height: 4, borderRadius: 2, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", overflow: "hidden" }}>
+              <div style={{ padding: "20px 28px 0", display: "flex", alignItems: "center", gap: 12, position: "relative", zIndex: 1 }}>
+                <div style={{ flex: 1, height: 4, borderRadius: 2, background: step === 0 ? "rgba(255,255,255,0.25)" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"), overflow: "hidden" }}>
                   <motion.div
                     animate={{ width: `${((step + 1) / totalSteps) * 100}%` }}
                     transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
-                    style={{ height: "100%", background: "linear-gradient(90deg, #8B7AFF, #6C5CE7)", borderRadius: 2 }}
+                    style={{ height: "100%", background: step === 0 ? "#ffffff" : "linear-gradient(90deg, #8B7AFF, #6C5CE7)", borderRadius: 2 }}
                   />
                 </div>
-                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 500, letterSpacing: 0.5, whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: step === 0 ? "rgba(255,255,255,0.9)" : theme.textDim, fontWeight: 500, letterSpacing: 0.5, whiteSpace: "nowrap" }}>
                   {t("brand.step")} {step + 1} / {totalSteps}
                 </div>
               </div>
