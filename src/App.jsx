@@ -3908,70 +3908,6 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   const [deleteFolderModalOpen, setDeleteFolderModalOpen] = useState(false);
   const [deletingFolder, setDeletingFolder] = useState(false);
 
-  // Delete the currently-open folder (root-level current folder, not the navigated-through path)
-  const deleteCurrentFolder = async () => {
-    if (deletingFolder) return;
-    setDeletingFolder(true);
-    try {
-      if (activeSource === "supabase") {
-        if (!currentSbFolder) return;
-        // Collect files in this folder (recursive descendants too — for now keep flat)
-        const { data: filesInFolder } = await supabase
-          .from("user_files").select("id, storage_path")
-          .eq("user_id", session.user.id).eq("folder_id", currentSbFolder);
-        // Delete storage objects
-        const paths = (filesInFolder || []).map(f => f.storage_path).filter(Boolean);
-        if (paths.length > 0) {
-          await supabase.storage.from("user-files").remove(paths);
-          await supabase.from("user_files").delete().eq("user_id", session.user.id).eq("folder_id", currentSbFolder);
-        }
-        // Delete the folder row (cascades sub-folders via parent_id ON DELETE CASCADE)
-        const { error: delErr } = await supabase.from("user_folders").delete().eq("id", currentSbFolder).eq("user_id", session.user.id);
-        if (delErr) throw delErr;
-        // Navigate one level up
-        const prev = [...sbFolderPath];
-        const parent = prev.pop();
-        setSbFolderPath(prev);
-        setCurrentSbFolder(parent?.id || null);
-        setToast({ text: "Ordner gelöscht", type: "success" });
-        setTimeout(() => setToast(null), 3000);
-      } else {
-        if (!currentFolder) return;
-        const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
-        if (!providerToken) { setError("Kein Google Drive Zugriff."); return; }
-        const sharedFlag = localDriveFolder?.type === "shared_drive" ? "?supportsAllDrives=true" : "";
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${currentFolder}${sharedFlag}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${providerToken}` },
-        });
-        if (!res.ok && res.status !== 204) {
-          const err = await res.json().catch(() => ({}));
-          console.error("Drive folder delete error:", err);
-          setError("Ordner konnte nicht gelöscht werden.");
-          return;
-        }
-        // Navigate one level up
-        const prev = [...folderPath];
-        const parent = prev.pop();
-        setFolderPath(prev);
-        setCurrentFolder(parent?.id || null);
-        setToast({ text: "Ordner gelöscht", type: "success" });
-        setTimeout(() => setToast(null), 3000);
-      }
-      setDeleteFolderModalOpen(false);
-    } catch (e) {
-      console.error("delete folder failed", e);
-      setError("Ordner konnte nicht gelöscht werden.");
-    } finally {
-      setDeletingFolder(false);
-    }
-  };
-
-  // Current folder name (for delete-confirmation text)
-  const currentFolderName = activeSource === "supabase"
-    ? (sbFolderPath[sbFolderPath.length - 1]?.name || "")
-    : (folderPath[folderPath.length - 1]?.name || "");
-
   // Get a shareable link for the current preview file
   const getShareLink = async (file) => {
     if (!file) return null;
@@ -4025,6 +3961,65 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   const fileInputRef = useRef(null);
   // Keep local state in sync when prop changes
   useEffect(() => { setLocalDriveFolder(driveFolder); }, [driveFolder?.id]);
+
+  // Delete the currently-open folder (Drive or Supabase)
+  const deleteCurrentFolder = async () => {
+    if (deletingFolder) return;
+    setDeletingFolder(true);
+    try {
+      if (activeSource === "supabase") {
+        if (!currentSbFolder) return;
+        const { data: filesInFolder } = await supabase
+          .from("user_files").select("id, storage_path")
+          .eq("user_id", session.user.id).eq("folder_id", currentSbFolder);
+        const paths = (filesInFolder || []).map(f => f.storage_path).filter(Boolean);
+        if (paths.length > 0) {
+          await supabase.storage.from("user-files").remove(paths);
+          await supabase.from("user_files").delete().eq("user_id", session.user.id).eq("folder_id", currentSbFolder);
+        }
+        const { error: delErr } = await supabase.from("user_folders").delete().eq("id", currentSbFolder).eq("user_id", session.user.id);
+        if (delErr) throw delErr;
+        const prev = [...sbFolderPath];
+        const parent = prev.pop();
+        setSbFolderPath(prev);
+        setCurrentSbFolder(parent?.id || null);
+        setToast({ text: "Ordner gelöscht", type: "success" });
+        setTimeout(() => setToast(null), 3000);
+      } else {
+        if (!currentFolder) return;
+        const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
+        if (!providerToken) { setError("Kein Google Drive Zugriff."); return; }
+        const sharedFlag = localDriveFolder?.type === "shared_drive" ? "?supportsAllDrives=true" : "";
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${currentFolder}${sharedFlag}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${providerToken}` },
+        });
+        if (!res.ok && res.status !== 204) {
+          const err = await res.json().catch(() => ({}));
+          console.error("Drive folder delete error:", err);
+          setError("Ordner konnte nicht gelöscht werden.");
+          return;
+        }
+        const prev = [...folderPath];
+        const parent = prev.pop();
+        setFolderPath(prev);
+        setCurrentFolder(parent?.id || null);
+        setToast({ text: "Ordner gelöscht", type: "success" });
+        setTimeout(() => setToast(null), 3000);
+      }
+      setDeleteFolderModalOpen(false);
+    } catch (e) {
+      console.error("delete folder failed", e);
+      setError("Ordner konnte nicht gelöscht werden.");
+    } finally {
+      setDeletingFolder(false);
+    }
+  };
+
+  // Current folder name (for delete-confirmation modal)
+  const currentFolderName = activeSource === "supabase"
+    ? (sbFolderPath[sbFolderPath.length - 1]?.name || "")
+    : (folderPath[folderPath.length - 1]?.name || "");
 
   // Inline folder picker — used when user picks "Drive" destination but hasn't connected a folder yet
   const ensureDriveFolderInline = async () => {
