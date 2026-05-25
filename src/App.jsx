@@ -10782,9 +10782,9 @@ export default function CircularMenu() {
                 transition={{ delay: 1, duration: 0.5 }}
                 style={{ position: "absolute", bottom: 32, left: 0, right: 0, fontSize: 13, color: "#ffffff50", fontFamily: FONT, textAlign: "center", lineHeight: 1.6, zIndex: 2 }}
               ><div style={{ fontSize: 12, color: "#ffffff40" }}>
-                  <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "#ffffff70", textDecoration: "none", margin: "0 8px" }}>{t("legal.privacy")}</a>
+                  <a href="https://i7os.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "#ffffff70", textDecoration: "none", margin: "0 8px" }}>{t("legal.privacy")}</a>
                   <span style={{ color: "#ffffff30" }}>·</span>
-                  <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: "#ffffff70", textDecoration: "none", margin: "0 8px" }}>{t("legal.terms")}</a>
+                  <a href="https://i7os.com/terms" target="_blank" rel="noopener noreferrer" style={{ color: "#ffffff70", textDecoration: "none", margin: "0 8px" }}>{t("legal.terms")}</a>
                 </div>
               </motion.div>
           </motion.div>
