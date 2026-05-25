@@ -3947,22 +3947,48 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
       });
       if (!picked || picked.length === 0) return;
       // Fetch full Drive metadata for each picked file (now allowed via drive.file)
-      const enriched = [];
-      for (const p of picked) {
+      // Fallback file objects from the picker callback (always available)
+      const fromPicker = picked.map(p => ({
+        id: p.id,
+        name: p.name,
+        mimeType: p.mimeType,
+        size: p.sizeBytes,
+        modifiedTime: p.lastEditedUtc ? new Date(p.lastEditedUtc).toISOString() : null,
+        webViewLink: p.url,
+        iconLink: p.iconUrl,
+        _source: "drive",
+      }));
+
+      // Try to enrich each with full Drive metadata (gives us thumbnailLink etc.)
+      const enriched = [...fromPicker];
+      for (let i = 0; i < picked.length; i++) {
+        const p = picked[i];
         try {
           const res = await fetch(
-            `https://www.googleapis.com/drive/v3/files/${p.id}?fields=id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink`,
+            `https://www.googleapis.com/drive/v3/files/${p.id}?fields=id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink&supportsAllDrives=true`,
             { headers: { Authorization: `Bearer ${providerToken}` } }
           );
-          if (res.ok) enriched.push(await res.json());
-        } catch { /* skip individual failures */ }
+          if (res.ok) {
+            const meta = await res.json();
+            enriched[i] = { ...enriched[i], ...meta };
+          } else {
+            console.warn(`[Picker] enrich ${p.id} failed:`, res.status, await res.text().catch(() => ""));
+          }
+        } catch (e) {
+          console.warn(`[Picker] enrich ${p.id} threw:`, e);
+        }
       }
-      // Add to the visible list immediately
+
+      // Filter out anything already in the list, add the rest
       setFiles(prev => {
         const existingIds = new Set(prev.map(f => f.id));
         const additions = enriched.filter(f => !existingIds.has(f.id));
         return [...additions, ...prev];
       });
+
+      // Reset filter so picked files are guaranteed to be visible
+      if (typeof setFilesFilter === "function") setFilesFilter("all");
+
       // Persist picked file IDs to Supabase so they survive sessions
       if (enriched.length > 0 && session?.user?.id) {
         const rows = enriched.map(f => ({
@@ -3973,13 +3999,16 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
           size_bytes: f.size ? Number(f.size) : null,
           source: "picker",
         }));
-        await supabase.from("user_drive_files").upsert(rows, { onConflict: "user_id,google_file_id" });
+        const { error: upErr } = await supabase.from("user_drive_files").upsert(rows, { onConflict: "user_id,google_file_id" });
+        if (upErr) console.warn("[Picker] persist failed:", upErr);
       }
+
       // Feedback so the user sees something happened
-      if (enriched.length > 0) {
-        setToast({ text: `${enriched.length} ${enriched.length === 1 ? "Datei" : "Dateien"} aus Drive hinzugefügt`, type: "success" });
-        setTimeout(() => setToast(null), 3500);
-      }
+      setToast({
+        text: `${enriched.length} ${enriched.length === 1 ? "Datei" : "Dateien"} aus Drive hinzugefügt`,
+        type: "success",
+      });
+      setTimeout(() => setToast(null), 3500);
     } catch (err) {
       console.error("Picker failed:", err);
       setError(err.message || "Picker fehlgeschlagen");
@@ -11185,6 +11214,13 @@ export default function CircularMenu() {
         try { sounds.subSelect(); } catch(e) {}
         setMenuOpen(false); setSubHover(-1);
         setCurrentView("projects");
+        return;
+      }
+      if (item?.id === "files") {
+        try { sounds.subSelect(); } catch(e) {}
+        setMenuOpen(false); setSubHover(-1);
+        setFilesFilter("all");
+        setCurrentView("files");
         return;
       }
       setSubOpen(true); setSubHover(-1); try { sounds.subOpen(); } catch(e) {} return;
