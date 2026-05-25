@@ -3901,6 +3901,9 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   const [downloading, setDownloading] = useState(false);
   const [toast, setToast] = useState(null); // { text, type } — transient feedback line
   const [activeSource, setActiveSource] = useState("supabase"); // 'supabase' | 'drive'
+  const [newFolderModalOpen, setNewFolderModalOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
   const [currentFolder, setCurrentFolder] = useState(null);
   const [folderPath, setFolderPath] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -4370,38 +4373,48 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
     return null;
   };
 
-  const handleCreateFolder = async () => {
-    const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
-    if (!providerToken) { setError("Kein Google Drive Zugriff."); return; }
-    const folderName = prompt("Ordner Name:");
-    if (!folderName) return;
+  const openNewFolderModal = () => {
+    setNewFolderName("");
+    setNewFolderModalOpen(true);
+  };
 
+  const submitNewFolder = async () => {
+    const folderName = newFolderName.trim();
+    if (!folderName || creatingFolder) return;
+    setCreatingFolder(true);
     try {
-      const metadataObj = {
-        name: folderName,
-        mimeType: "application/vnd.google-apps.folder",
-      };
-      if (currentFolder) { metadataObj.parents = [currentFolder]; }
-
+      const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
+      if (!providerToken) { setError("Kein Google Drive Zugriff."); setNewFolderModalOpen(false); return; }
+      const parentId = currentFolder || localDriveFolder?.id || null;
+      const metadataObj = { name: folderName, mimeType: "application/vnd.google-apps.folder" };
+      if (parentId) metadataObj.parents = [parentId];
+      const sharedFlag = localDriveFolder?.type === "shared_drive" ? "&supportsAllDrives=true" : "";
       const res = await fetch(
-        "https://www.googleapis.com/drive/v3/files?fields=id,name,mimeType,size,modifiedTime,webViewLink",
+        `https://www.googleapis.com/drive/v3/files?fields=id,name,mimeType,size,modifiedTime,webViewLink${sharedFlag}`,
         {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${providerToken}`,
-            "Content-Type": "application/json",
-          },
+          headers: { Authorization: `Bearer ${providerToken}`, "Content-Type": "application/json" },
           body: JSON.stringify(metadataObj),
         }
       );
       if (res.ok) {
         const folder = await res.json();
-        setFiles(prev => [folder, ...prev]);
+        setFiles(prev => [{ ...folder, _source: "drive" }, ...prev]);
+        setActiveSource("drive");
+        setNewFolderModalOpen(false);
+        setNewFolderName("");
+        setToast({ text: `Ordner „${folderName}" erstellt`, type: "success" });
+        setTimeout(() => setToast(null), 3000);
       } else {
+        const err = await res.json().catch(() => ({}));
+        console.error("Folder create error:", err);
         setError("Ordner konnte nicht erstellt werden.");
       }
     } catch (err) {
+      console.error(err);
       setError("Fehler beim Ordner erstellen.");
+    } finally {
+      setCreatingFolder(false);
     }
   };
 
@@ -4775,6 +4788,83 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
           )}
         </AnimatePresence>
 
+        {/* New Folder modal */}
+        <AnimatePresence>
+          {newFolderModalOpen && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              onClick={() => !creatingFolder && setNewFolderModalOpen(false)}
+              style={{
+                position: "fixed", inset: 0, zIndex: 99998,
+                background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                padding: 24,
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 8 }}
+                transition={{ duration: 0.2, ease: [0.22, 0.68, 0.35, 1.0] }}
+                onClick={e => e.stopPropagation()}
+                style={{
+                  width: "100%", maxWidth: 420,
+                  background: theme.cardBg,
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: 18,
+                  padding: 26,
+                  boxShadow: "0 25px 80px rgba(0,0,0,0.4)",
+                }}
+              >
+                <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 6, letterSpacing: -0.2 }}>Neuer Ordner</div>
+                <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 18, lineHeight: 1.5 }}>
+                  Wird in {localDriveFolder?.name ? `Drive · ${localDriveFolder.name}` : "deinem Drive"} angelegt.
+                </div>
+                <input
+                  autoFocus
+                  value={newFolderName}
+                  onChange={e => setNewFolderName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && newFolderName.trim() && !creatingFolder) submitNewFolder();
+                    if (e.key === "Escape" && !creatingFolder) setNewFolderModalOpen(false);
+                  }}
+                  placeholder="z.B. Logos"
+                  style={{
+                    width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                    border: `1px solid ${theme.borderFaint}`, borderRadius: 12,
+                    padding: "12px 14px", fontSize: 14, fontFamily: FONT,
+                    color: theme.text, outline: "none", caretColor: theme.accent,
+                  }}
+                />
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
+                  <motion.div
+                    onClick={() => !creatingFolder && setNewFolderModalOpen(false)}
+                    whileTap={{ scale: 0.97 }}
+                    style={{
+                      padding: "10px 18px", borderRadius: 999, cursor: creatingFolder ? "not-allowed" : "pointer",
+                      background: "transparent", border: `1px solid ${theme.borderFaint}`,
+                      color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500,
+                      opacity: creatingFolder ? 0.5 : 1,
+                    }}
+                  >Abbrechen</motion.div>
+                  <motion.div
+                    onClick={submitNewFolder}
+                    whileTap={{ scale: 0.97 }}
+                    style={{
+                      padding: "10px 22px", borderRadius: 999,
+                      cursor: (!newFolderName.trim() || creatingFolder) ? "not-allowed" : "pointer",
+                      background: (!newFolderName.trim() || creatingFolder) ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)") : theme.accent,
+                      border: "none",
+                      color: (!newFolderName.trim() || creatingFolder) ? theme.textFaint : "#fff",
+                      fontSize: 13, fontFamily: FONT, fontWeight: 600,
+                      display: "flex", alignItems: "center", gap: 6,
+                    }}
+                  >{creatingFolder ? "Erstellt…" : "Erstellen"}</motion.div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Image preview modal */}
         <AnimatePresence>
           {previewFile && (
@@ -4861,21 +4951,27 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
             display: "flex", alignItems: "center", justifyContent: "space-between",
           }}
         >
-          <div style={{ display: "flex", gap: 8 }}>
-            <motion.div
-              onClick={onBack}
-              className="hover-back"
-              whileTap={{ scale: 0.97 }}
-              style={{
-                display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
-                padding: "6px 14px", borderRadius: 10,
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                <path d="M15 18l-6-6 6-6" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{t("common.back")}</span>
-            </motion.div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {/* New Folder — only on Drive view */}
+            {activeSource === "drive" && (
+              <motion.div
+                onClick={openNewFolderModal}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                style={{
+                  padding: "6px 14px", borderRadius: 20, cursor: "pointer",
+                  fontSize: 12, fontFamily: FONT, fontWeight: 500, color: theme.textSub,
+                  background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`,
+                  display: "flex", alignItems: "center", gap: 5,
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                  <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke={theme.textDim} strokeWidth="1.5" fill="none" />
+                  <path d="M12 11v4M10 13h4" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                + Neuer Ordner
+              </motion.div>
+            )}
             {currentFolder && (
               <motion.div
                 onClick={navigateBack}
@@ -4897,25 +4993,8 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
             <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginRight: 4 }}>
               {filtered.length} {filtered.length === 1 ? "file" : "files"}
             </div>
-            {/* New Folder button */}
-            <motion.div
-              onClick={handleCreateFolder}
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              style={{
-                padding: "6px 14px", borderRadius: 20, cursor: "pointer",
-                fontSize: 12, fontFamily: FONT, fontWeight: 500, color: theme.textSub,
-                background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`,
-                display: "flex", alignItems: "center", gap: 5,
-              }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke={theme.textDim} strokeWidth="1.5" fill="none" />
-                <path d="M12 11v4M10 13h4" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-              + Neuer Ordner
-            </motion.div>
-            {/* Aus Drive wählen (Google Picker) */}
+            {/* Aus Drive wählen (Google Picker) — only on Drive view */}
+            {activeSource === "drive" && (
             <motion.div
               onClick={handlePickFromDrive}
               whileHover={{ scale: picking ? 1 : 1.03 }}
@@ -4936,6 +5015,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
               </svg>
               {picking ? "Lädt…" : "Aus Drive wählen"}
             </motion.div>
+            )}
             {/* Upload split-button with destination menu */}
             <div style={{ position: "relative" }}>
               <motion.div
