@@ -3890,7 +3890,7 @@ function getFileExtension(name, mimeType) {
   return "FILE";
 }
 
-function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValidToken, theme, darkMode, t, filesFilter = "all", setFilesFilter }) {
+function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValidToken, theme, darkMode, t, filesFilter = "all", setFilesFilter, preferredStorage = "supabase", driveFolder = null, orgDriveFolder = null, userOrg = null }) {
   const [search, setSearch] = useState("");
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -3969,38 +3969,37 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
           return;
         }
 
+        // Scope the Drive query to the user's connected folder (if any).
+        // Without a connected folder, drive.file scope returns only files the app uploaded —
+        // which is fine, just less useful UX. With a folder, we see everything WE uploaded into it.
+        const rootFolderId = currentFolder || driveFolder?.id || null;
         let query = "trashed=false";
-        if (currentFolder) {
-          query += ` and '${currentFolder}' in parents`;
-        } else {
-          query += " and 'root' in parents";
-        }
-
-        let res = await fetch(
-          `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink)&orderBy=folder,name&pageSize=50`,
-          { headers: { Authorization: `Bearer ${providerToken}` } }
-        );
-
-        // If 401, token was actually expired — force refresh and retry once
-        if (res.status === 401 && autoReLogin) {
-          console.log("[FilesView] 401 — forcing token refresh");
-          const newToken = await autoReLogin();
-          if (newToken) {
-            res = await fetch(
-              `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink)&orderBy=folder,name&pageSize=50`,
-              { headers: { Authorization: `Bearer ${newToken}` } }
-            );
+        let driveFiles = [];
+        if (rootFolderId) {
+          query += ` and '${rootFolderId}' in parents`;
+          const driveExtras = driveFolder?.driveId
+            ? `&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=drive&driveId=${driveFolder.driveId}`
+            : "&supportsAllDrives=true&includeItemsFromAllDrives=true";
+          let res = await fetch(
+            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink)&orderBy=folder,name&pageSize=100${driveExtras}`,
+            { headers: { Authorization: `Bearer ${providerToken}` } }
+          );
+          if (res.status === 401 && autoReLogin) {
+            const newToken = await autoReLogin();
+            if (newToken) {
+              res = await fetch(
+                `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink)&orderBy=folder,name&pageSize=100${driveExtras}`,
+                { headers: { Authorization: `Bearer ${newToken}` } }
+              );
+            }
+          }
+          if (res.ok) {
+            const data = await res.json();
+            driveFiles = (data.files || []).map(f => ({ ...f, _source: "drive" }));
           }
         }
 
-        if (!res.ok) {
-          setError(t ? t("error.loadFailed") : "Fehler beim Laden der Dateien.");
-          setLoading(false);
-          return;
-        }
-
-        const data = await res.json();
-        let allFiles = data.files || [];
+        let allFiles = [...driveFiles];
 
         // Also load previously picked files from Supabase so they show up across sessions
         if (!currentFolder && session?.user?.id) {
@@ -4009,17 +4008,39 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
             .select("google_file_id")
             .eq("user_id", session.user.id);
           const pickedIds = (picked || []).map(p => p.google_file_id).filter(id => !allFiles.some(f => f.id === id));
-          // Fetch live metadata for each picked file (allowed by drive.file because user picked them)
           for (const pid of pickedIds) {
             try {
               const r = await fetch(
                 `https://www.googleapis.com/drive/v3/files/${pid}?fields=id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink`,
                 { headers: { Authorization: `Bearer ${providerToken}` } }
               );
-              if (r.ok) allFiles.push(await r.json());
+              if (r.ok) allFiles.push({ ...(await r.json()), _source: "drive" });
             } catch { /* skip individual */ }
           }
         }
+
+        // Load Supabase Storage files (i7 OS Storage)
+        if (!currentFolder && session?.user?.id) {
+          const { data: rows } = await supabase
+            .from("user_files")
+            .select("id, name, mime_type, size_bytes, storage_path, created_at, public_url")
+            .eq("user_id", session.user.id)
+            .order("created_at", { ascending: false });
+          for (const r of (rows || [])) {
+            allFiles.push({
+              id: `sb:${r.id}`,
+              name: r.name,
+              mimeType: r.mime_type,
+              size: r.size_bytes,
+              modifiedTime: r.created_at,
+              webViewLink: r.public_url || null,
+              _source: "supabase",
+              _storagePath: r.storage_path,
+              _rowId: r.id,
+            });
+          }
+        }
+
         setFiles(allFiles);
 
         // Fetch metadata from Supabase
@@ -4039,7 +4060,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
       setLoading(false);
     };
     fetchFiles();
-  }, [session, currentFolder]);
+  }, [session, currentFolder, driveFolder?.id]);
 
   // File-type matchers for the menu sub-filters. Folders are ALWAYS kept so
   // navigation works regardless of which filter is active.
@@ -4131,9 +4152,10 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
     fetchAgain();
   };
 
+  // Route uploads to Supabase Storage OR Google Drive based on user preference
   const handleUpload = async (fileList) => {
-    const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
-    if (!providerToken) { setError("Kein Google Drive Zugriff. Bitte neu einloggen."); return; }
+    const useDrive = preferredStorage === "drive_personal" && driveFolder?.id;
+
     setUploading(true);
     setUploadProgress({ current: 0, total: fileList.length });
 
@@ -4141,38 +4163,68 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
       const file = fileList[i];
       setUploadProgress({ current: i + 1, total: fileList.length, name: file.name });
       try {
-        // Build multipart upload request
-        const metadataObj = { name: file.name };
-        if (currentFolder) { metadataObj.parents = [currentFolder]; }
-
-        const form = new FormData();
-        form.append("metadata", new Blob([JSON.stringify(metadataObj)], { type: "application/json" }));
-        form.append("file", file);
-
-        const res = await fetch(
-          "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink",
-          { method: "POST", headers: { Authorization: `Bearer ${providerToken}` }, body: form }
-        );
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          console.error("Upload error:", errData);
-          if (res.status === 403) {
-            setError("Keine Upload-Berechtigung. Bitte neu einloggen für Drive-Zugriff.");
-            break;
+        if (useDrive) {
+          // ── Google Drive upload ────────────────────────────────────────
+          const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
+          if (!providerToken) { setError("Kein Google Drive Zugriff. Bitte neu einloggen."); break; }
+          const parents = [currentFolder || driveFolder.id];
+          const metadataObj = { name: file.name, parents };
+          const form = new FormData();
+          form.append("metadata", new Blob([JSON.stringify(metadataObj)], { type: "application/json" }));
+          form.append("file", file);
+          const sharedFlag = driveFolder?.type === "shared_drive" ? "&supportsAllDrives=true" : "";
+          const res = await fetch(
+            `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink${sharedFlag}`,
+            { method: "POST", headers: { Authorization: `Bearer ${providerToken}` }, body: form }
+          );
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            console.error("Drive upload error:", errData);
+            if (res.status === 403) { setError("Keine Upload-Berechtigung. Bitte neu einloggen für Drive-Zugriff."); break; }
+            continue;
           }
-        } else {
           const uploaded = await res.json();
-          // Add to local file list
-          setFiles(prev => [uploaded, ...prev]);
-          // Create default metadata in Supabase
+          setFiles(prev => [{ ...uploaded, _source: "drive" }, ...prev]);
           await supabase.from("file_metadata").insert({
             google_file_id: uploaded.id,
             user_id: session.user.id,
             status: "Neu",
-          }).then(() => {
-            setMetadata(prev => ({ ...prev, [uploaded.id]: { google_file_id: uploaded.id, status: "Neu" } }));
           });
+          setMetadata(prev => ({ ...prev, [uploaded.id]: { google_file_id: uploaded.id, status: "Neu" } }));
+        } else {
+          // ── Supabase Storage upload (default) ──────────────────────────
+          const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+          const path = `${session.user.id}/${Date.now()}_${safeName}`;
+          const { error: upErr } = await supabase.storage.from("user-files").upload(path, file, {
+            contentType: file.type || "application/octet-stream",
+            upsert: false,
+          });
+          if (upErr) { console.error("Storage upload error:", upErr); setError(`Upload fehlgeschlagen: ${file.name}`); continue; }
+          const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(path, 60 * 60 * 24 * 365);
+          const { data: inserted, error: insErr } = await supabase.from("user_files").insert({
+            user_id: session.user.id,
+            org_id: userOrg?.id || null,
+            name: file.name,
+            mime_type: file.type || null,
+            size_bytes: file.size,
+            storage_path: path,
+            storage_provider: "supabase",
+            public_url: signed?.signedUrl || null,
+          }).select().single();
+          if (insErr) { console.error("user_files insert error:", insErr); }
+          else {
+            setFiles(prev => [{
+              id: `sb:${inserted.id}`,
+              name: inserted.name,
+              mimeType: inserted.mime_type,
+              size: inserted.size_bytes,
+              modifiedTime: inserted.created_at,
+              webViewLink: inserted.public_url,
+              _source: "supabase",
+              _storagePath: inserted.storage_path,
+              _rowId: inserted.id,
+            }, ...prev]);
+          }
         }
       } catch (err) {
         console.error("Upload failed:", err);
@@ -4181,7 +4233,6 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
     }
     setUploading(false);
     setUploadProgress(null);
-    // Reset file input
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -11561,7 +11612,7 @@ export default function CircularMenu() {
         {/* FILES VIEW */}
         <AnimatePresence>
           {currentView === "files" && (
-            <FilesView session={session} getProviderToken={getProviderToken} autoReLogin={autoReLogin} ensureValidToken={ensureValidToken} theme={theme} darkMode={darkMode} t={t} filesFilter={filesFilter} setFilesFilter={setFilesFilter} onBack={() => {
+            <FilesView session={session} getProviderToken={getProviderToken} autoReLogin={autoReLogin} ensureValidToken={ensureValidToken} theme={theme} darkMode={darkMode} t={t} filesFilter={filesFilter} setFilesFilter={setFilesFilter} preferredStorage={preferredStorage} driveFolder={driveFolder} orgDriveFolder={orgDriveFolder} userOrg={userOrg} onBack={() => {
               setCurrentView("dashboard");
               setMenuSource("grid");
               setActiveIndex(4);
