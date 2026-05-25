@@ -3904,6 +3904,46 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   const [newFolderModalOpen, setNewFolderModalOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
+  const [previewMenuOpen, setPreviewMenuOpen] = useState(false);
+
+  // Get a shareable link for the current preview file
+  const getShareLink = async (file) => {
+    if (!file) return null;
+    const isSb = file._source === "supabase" || String(file.id || "").startsWith("sb:");
+    if (isSb) {
+      if (file.webViewLink) return file.webViewLink;
+      if (file._storagePath) {
+        const { data } = await supabase.storage.from("user-files").createSignedUrl(file._storagePath, 60 * 60 * 24 * 7); // 7d
+        return data?.signedUrl || null;
+      }
+      return null;
+    }
+    // Drive — webViewLink is "view in Drive" URL
+    return file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`;
+  };
+
+  const copyShareLink = async (file) => {
+    const link = await getShareLink(file);
+    if (!link) { setToast({ text: "Kein Link verfügbar", type: "error" }); setTimeout(() => setToast(null), 2500); return; }
+    try {
+      await navigator.clipboard.writeText(link);
+      setToast({ text: "Link kopiert", type: "success" });
+      setTimeout(() => setToast(null), 2500);
+    } catch {
+      // Fallback: prompt
+      window.prompt("Link zum Kopieren:", link);
+    }
+  };
+
+  const nativeShare = async (file) => {
+    const link = await getShareLink(file);
+    if (!link) return;
+    if (navigator.share) {
+      try { await navigator.share({ title: file.name, url: link }); } catch { /* user cancelled */ }
+    } else {
+      await copyShareLink(file);
+    }
+  };
   const [currentFolder, setCurrentFolder] = useState(null);
   const [folderPath, setFolderPath] = useState([]);
   // Supabase virtual folders (separate from Drive folder navigation)
@@ -4409,16 +4449,40 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
     }
   };
 
-  // Preview URL helper
+  // Classify preview kind: 'image' | 'pdf' | 'gdoc' | 'video' | 'design' | 'other'
+  const previewKind = (file) => {
+    if (!file) return "other";
+    const mime = (file.mimeType || "").toLowerCase();
+    const ext = (file.name || "").toLowerCase().split(".").pop();
+    if (mime.startsWith("image/") || ["jpg","jpeg","png","gif","webp","svg","bmp","heic","avif"].includes(ext)) return "image";
+    if (mime === "application/pdf" || ext === "pdf") return "pdf";
+    if (mime.startsWith("application/vnd.google-apps.")) return "gdoc";
+    if (mime.startsWith("video/") || ["mp4","mov","webm","m4v"].includes(ext)) return "video";
+    if (["psd","ai","sketch","fig","xd","indd","docx","xlsx","pptx","doc","xls","ppt","odt","ods","odp"].includes(ext)) return "design";
+    return "other";
+  };
+
+  // Preview src — depends on file kind + source
   const previewSrc = (file) => {
     if (!file) return null;
-    if (file._source === "supabase" || String(file.id || "").startsWith("sb:")) {
-      return file.webViewLink || null; // signed URL pointing directly at the image
+    const isSb = file._source === "supabase" || String(file.id || "").startsWith("sb:");
+    const kind = previewKind(file);
+
+    if (isSb) {
+      // Supabase: signed URL works for images directly, for PDFs in <iframe>
+      return file.webViewLink || null;
     }
-    // Drive: large thumbnail (works without re-auth in <img> tag)
-    if (file.thumbnailLink) return file.thumbnailLink.replace(/=s\d+/, "=s1600");
-    if (file.webViewLink) return file.webViewLink; // fallback
-    return null;
+    // Drive
+    if (kind === "image") {
+      // Large thumbnail (works without auth in <img>)
+      if (file.thumbnailLink) return file.thumbnailLink.replace(/=s\d+/, "=s1600");
+      return file.webViewLink || null;
+    }
+    if (kind === "pdf" || kind === "gdoc" || kind === "design" || kind === "video") {
+      // Drive's embedded preview iframe (handles PDFs, Docs/Sheets/Slides, video, and even PSD/AI thumbnails)
+      return `https://drive.google.com/file/d/${file.id}/preview`;
+    }
+    return file.webViewLink || null;
   };
 
   const openNewFolderModal = () => {
@@ -4692,7 +4756,12 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
                   const mime = (file.mimeType || "").toLowerCase();
                   const ext = (file.name || "").toLowerCase().split(".").pop();
                   const isImage = mime.startsWith("image/") || ["jpg","jpeg","png","gif","webp","svg","bmp","heic","avif"].includes(ext);
-                  if (isImage) { setPreviewFile(file); return; }
+                  const isPdf = mime === "application/pdf" || ext === "pdf";
+                  const isGDoc = mime.startsWith("application/vnd.google-apps.");
+                  const isOffice = ["doc","docx","xls","xlsx","ppt","pptx","odt","ods","odp"].includes(ext);
+                  const isDesign = ["psd","ai","sketch","fig","xd","indd"].includes(ext); // thumbnail-only preview
+                  const isVideo = mime.startsWith("video/") || ["mp4","mov","webm","m4v"].includes(ext);
+                  if (isImage || isPdf || isGDoc || isOffice || isDesign || isVideo) { setPreviewFile(file); return; }
                   setSelectedFile(selectedFile?.id === file.id ? null : file);
                 }}
                 style={{
@@ -4951,71 +5020,147 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
           )}
         </AnimatePresence>
 
-        {/* Image preview modal */}
+        {/* Preview modal — images, PDFs, Google Docs, designs, videos */}
         <AnimatePresence>
-          {previewFile && (
+          {previewFile && (() => {
+            const kind = previewKind(previewFile);
+            const src = previewSrc(previewFile);
+            const isSb = previewFile._source === "supabase" || String(previewFile.id || "").startsWith("sb:");
+            return (
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              onClick={() => setPreviewFile(null)}
+              onClick={() => { setPreviewFile(null); setPreviewMenuOpen(false); }}
               style={{
                 position: "fixed", inset: 0, zIndex: 99999,
-                background: "rgba(0,0,0,0.88)", backdropFilter: "blur(8px)",
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                padding: 40,
+                background: "rgba(0,0,0,0.92)", backdropFilter: "blur(10px)",
+                display: "flex", flexDirection: "column",
               }}
             >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-                transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
-                onClick={e => e.stopPropagation()}
-                style={{
-                  maxWidth: "90vw", maxHeight: "85vh",
-                  display: "flex", flexDirection: "column", alignItems: "center",
-                }}
-              >
-                <img
-                  src={previewSrc(previewFile)}
-                  alt={previewFile.name}
-                  style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 12, boxShadow: "0 25px 80px rgba(0,0,0,0.5)", objectFit: "contain" }}
-                  onError={(e) => { e.currentTarget.style.display = "none"; }}
-                />
-                <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 24 }}>
-                  <div style={{ color: "#ffffff", fontSize: 14, fontFamily: FONT, fontWeight: 500, maxWidth: 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {previewFile.name}
-                  </div>
-                  <motion.div
-                    onClick={() => downloadFile(previewFile)}
-                    whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+              {/* Top bar with filename + action menu */}
+              <div onClick={e => e.stopPropagation()} style={{
+                padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14,
+                borderBottom: "1px solid rgba(255,255,255,0.06)",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
+                  <span style={{ display: "inline-flex", padding: "3px 10px", borderRadius: 999, background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.7)", fontSize: 10, fontFamily: FONT, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase" }}>
+                    {kind === "image" ? "Bild" : kind === "pdf" ? "PDF" : kind === "gdoc" ? "Google Doc" : kind === "video" ? "Video" : kind === "design" ? "Design" : "Datei"}
+                  </span>
+                  <div style={{ color: "#ffffff", fontSize: 14, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{previewFile.name}</div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
+                  {/* 3-dot menu */}
+                  <motion.div onClick={(e) => { e.stopPropagation(); setPreviewMenuOpen(v => !v); }}
+                    whileHover={{ background: "rgba(255,255,255,0.12)" }}
+                    whileTap={{ scale: 0.96 }}
                     style={{
-                      padding: "10px 18px", borderRadius: 999, cursor: downloading ? "wait" : "pointer",
-                      background: "#ffffff", color: "#111117",
-                      fontSize: 13, fontFamily: FONT, fontWeight: 500,
-                      display: "flex", alignItems: "center", gap: 8,
-                      opacity: downloading ? 0.7 : 1,
+                      width: 36, height: 36, borderRadius: "50%", cursor: "pointer",
+                      background: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center",
                     }}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                      <polyline points="7 10 12 15 17 10"/>
-                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
                     </svg>
-                    {downloading ? "Lädt…" : "Download"}
                   </motion.div>
-                  <motion.div
-                    onClick={() => setPreviewFile(null)}
-                    whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                    style={{
-                      padding: "10px 18px", borderRadius: 999, cursor: "pointer",
-                      background: "transparent", color: "#ffffffaa",
-                      border: "1px solid #ffffff30",
-                      fontSize: 13, fontFamily: FONT, fontWeight: 500,
-                    }}
-                  >Schließen</motion.div>
+                  <AnimatePresence>
+                    {previewMenuOpen && (
+                      <>
+                        <div onClick={(e) => { e.stopPropagation(); setPreviewMenuOpen(false); }} style={{ position: "fixed", inset: 0, zIndex: 5 }} />
+                        <motion.div
+                          initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+                          transition={{ duration: 0.15 }}
+                          style={{
+                            position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 10,
+                            minWidth: 220,
+                            background: "#1a1a22", border: "1px solid rgba(255,255,255,0.08)",
+                            borderRadius: 12, padding: 4, boxShadow: "0 14px 40px rgba(0,0,0,0.5)",
+                          }}
+                        >
+                          {[
+                            { id: "download", label: "Download", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> },
+                            { id: "copy", label: "Link kopieren", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> },
+                            { id: "share", label: "Teilen", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> },
+                            ...(isSb ? [] : [{ id: "drive", label: "In Drive öffnen", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> }]),
+                          ].map(item => (
+                            <motion.div key={item.id} onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewMenuOpen(false);
+                              if (item.id === "download") downloadFile(previewFile);
+                              else if (item.id === "copy") copyShareLink(previewFile);
+                              else if (item.id === "share") nativeShare(previewFile);
+                              else if (item.id === "drive") window.open(previewFile.webViewLink || `https://drive.google.com/file/d/${previewFile.id}/view`, "_blank");
+                            }}
+                              whileHover={{ background: "rgba(255,255,255,0.06)" }} whileTap={{ scale: 0.99 }}
+                              style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer", color: "rgba(255,255,255,0.92)", fontSize: 13, fontFamily: FONT }}
+                            >
+                              <span style={{ color: "rgba(255,255,255,0.6)" }}>{item.icon}</span>
+                              <span>{item.label}</span>
+                            </motion.div>
+                          ))}
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                  {/* Close X */}
+                  <motion.div onClick={() => { setPreviewFile(null); setPreviewMenuOpen(false); }}
+                    whileHover={{ background: "rgba(255,255,255,0.12)" }} whileTap={{ scale: 0.96 }}
+                    style={{ width: 36, height: 36, borderRadius: "50%", cursor: "pointer", background: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  </motion.div>
                 </div>
-              </motion.div>
+              </div>
+
+              {/* Preview content area */}
+              <div onClick={e => e.stopPropagation()} style={{ flex: 1, padding: 28, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                {kind === "image" && (
+                  <img src={src} alt={previewFile.name}
+                    style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 12, boxShadow: "0 25px 80px rgba(0,0,0,0.5)", objectFit: "contain" }}
+                    onError={(e) => { e.currentTarget.style.display = "none"; }}
+                  />
+                )}
+                {(kind === "pdf" || kind === "gdoc" || kind === "design") && (
+                  isSb ? (
+                    <iframe src={src} title={previewFile.name}
+                      style={{ width: "100%", height: "100%", borderRadius: 12, background: "#ffffff", border: "none", boxShadow: "0 25px 80px rgba(0,0,0,0.5)" }}
+                    />
+                  ) : (
+                    <iframe src={src} title={previewFile.name} allow="autoplay"
+                      style={{ width: "100%", height: "100%", borderRadius: 12, background: "#ffffff", border: "none", boxShadow: "0 25px 80px rgba(0,0,0,0.5)" }}
+                    />
+                  )
+                )}
+                {kind === "video" && (
+                  isSb ? (
+                    <video src={src} controls autoPlay
+                      style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 12, boxShadow: "0 25px 80px rgba(0,0,0,0.5)" }}
+                    />
+                  ) : (
+                    <iframe src={src} title={previewFile.name} allow="autoplay"
+                      style={{ width: "100%", height: "100%", borderRadius: 12, background: "#000", border: "none", boxShadow: "0 25px 80px rgba(0,0,0,0.5)" }}
+                    />
+                  )
+                )}
+                {kind === "other" && (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 18, color: "rgba(255,255,255,0.7)" }}>
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6 }}>
+                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                    <div style={{ fontSize: 14, fontFamily: FONT }}>Keine Vorschau verfügbar</div>
+                    <motion.div onClick={() => downloadFile(previewFile)}
+                      whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                      style={{ padding: "10px 22px", borderRadius: 999, background: "#ffffff", color: "#111117", fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      Download
+                    </motion.div>
+                  </div>
+                )}
+              </div>
             </motion.div>
-          )}
+            );
+          })()}
         </AnimatePresence>
 
         {/* Hidden file input for upload */}
