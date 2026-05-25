@@ -3900,6 +3900,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   const [previewFile, setPreviewFile] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const [toast, setToast] = useState(null); // { text, type } — transient feedback line
+  const [activeSource, setActiveSource] = useState("supabase"); // 'supabase' | 'drive'
   const [currentFolder, setCurrentFolder] = useState(null);
   const [folderPath, setFolderPath] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -3986,8 +3987,9 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
         return [...additions, ...prev];
       });
 
-      // Reset filter so picked files are guaranteed to be visible
+      // Reset filter + switch to Drive view so picked files are guaranteed to be visible
       if (typeof setFilesFilter === "function") setFilesFilter("all");
+      setActiveSource("drive");
 
       // Persist picked file IDs to Supabase so they survive sessions
       if (enriched.length > 0 && session?.user?.id) {
@@ -4158,7 +4160,11 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
     return true;
   };
 
-  const filtered = files.filter(f => f.name.toLowerCase().includes(search.toLowerCase()) && matchesTypeFilter(f));
+  const matchesSource = (f) => {
+    const src = f._source || (String(f.id || "").startsWith("sb:") ? "supabase" : "drive");
+    return src === activeSource;
+  };
+  const filtered = files.filter(f => f.name.toLowerCase().includes(search.toLowerCase()) && matchesTypeFilter(f) && matchesSource(f));
 
   const navigateToFolder = (folder) => {
     setFolderPath(prev => [...prev, { id: currentFolder, name: folder.name }]);
@@ -4306,6 +4312,8 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
     setUploadProgress(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     const where = useDrive ? (localDriveFolder?.name || "Drive-Ordner") : "i7 OS Storage";
+    // Auto-switch to the source we uploaded to so the user sees the new file
+    setActiveSource(useDrive ? "drive" : "supabase");
     setToast({ text: `${fileList.length} ${fileList.length === 1 ? "Datei hochgeladen" : "Dateien hochgeladen"} → ${where}`, type: "success" });
     setTimeout(() => setToast(null), 3500);
   };
@@ -4417,47 +4425,68 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
         borderRadius: 24, overflow: "hidden",
         display: "flex", flexDirection: "column",
       }}>
-        {/* Header with folder path + connected sources */}
+        {/* Source switcher — Supabase vs Drive */}
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.03, duration: 0.3 }}
           style={{ padding: "14px 20px 0", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-              <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke={theme.accent} strokeWidth="1.5" fill="none" />
-            </svg>
+          {/* Big tab switcher */}
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            padding: 4, borderRadius: 999,
+            background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
+            border: `1px solid ${theme.borderFaint}`,
+          }}>
+            {[
+              { id: "supabase", label: "i7 OS Storage",
+                icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6"/></svg>,
+                color: theme.accent,
+              },
+              { id: "drive", label: localDriveFolder?.name ? `Drive · ${localDriveFolder.name}` : "Google Drive",
+                icon: <svg width="13" height="13" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>,
+                color: "#4285F4",
+              },
+            ].map(src => {
+              const active = activeSource === src.id;
+              return (
+                <motion.div key={src.id}
+                  onClick={() => setActiveSource(src.id)}
+                  whileTap={{ scale: 0.97 }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 7,
+                    padding: "7px 14px", borderRadius: 999, cursor: "pointer",
+                    background: active ? (darkMode ? "rgba(255,255,255,0.07)" : "#ffffff") : "transparent",
+                    color: active ? theme.text : theme.textDim,
+                    fontSize: 12, fontFamily: FONT, fontWeight: active ? 600 : 500,
+                    border: active ? `1px solid ${theme.borderFaint}` : "1px solid transparent",
+                    boxShadow: active ? (darkMode ? "0 1px 4px rgba(0,0,0,0.3)" : "0 1px 4px rgba(0,0,0,0.08)") : "none",
+                    transition: "background 0.15s, color 0.15s",
+                    maxWidth: 280, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  }}
+                >
+                  <span style={{ display: "inline-flex", color: active ? src.color : theme.textDim }}>{src.icon}</span>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{src.label}</span>
+                </motion.div>
+              );
+            })}
+          </div>
+          {/* Folder breadcrumb — only when navigated into subfolder */}
+          {folderPath.length > 0 && (
             <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontFamily: FONT, color: theme.textDim, overflow: "hidden" }}>
-              <span onClick={() => { setCurrentFolder(null); setFolderPath([]); }} style={{ cursor: "pointer", color: theme.textSub, fontWeight: 500 }}>Alle Dateien</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+              </svg>
+              <span onClick={() => { setCurrentFolder(null); setFolderPath([]); }} style={{ cursor: "pointer", color: theme.textSub }}>Root</span>
               {folderPath.map((fp, i) => (
                 <span key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <span style={{ color: theme.textFaint }}>/</span>
-                  <span onClick={() => {
-                    setCurrentFolder(fp.id);
-                    setFolderPath(prev => prev.slice(0, i));
-                  }} style={{ cursor: "pointer", color: theme.textSub }}>{fp.name}</span>
+                  <span onClick={() => { setCurrentFolder(fp.id); setFolderPath(prev => prev.slice(0, i)); }} style={{ cursor: "pointer", color: theme.textSub }}>{fp.name}</span>
                 </span>
               ))}
             </div>
-          </div>
-          {/* Connected sources indicators */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontFamily: FONT, flexShrink: 0 }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 999, background: theme.accent + "10", color: theme.accent, border: `1px solid ${theme.accent}25` }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: theme.accent }} />
-              i7 OS Storage
-            </span>
-            {localDriveFolder?.id ? (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 999, background: "rgba(66,133,244,0.10)", color: "#4285F4", border: "1px solid rgba(66,133,244,0.25)" }}>
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4285F4" }} />
-                Drive: {localDriveFolder.name}
-              </span>
-            ) : (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 999, background: "transparent", color: theme.textFaint, border: `1px dashed ${theme.borderFaint}` }}>
-                Drive nicht verbunden
-              </span>
-            )}
-          </div>
+          )}
         </motion.div>
 
         {/* Type filter chips */}
@@ -4622,17 +4651,24 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
           })}
 
           {!loading && !error && filtered.length === 0 && (
-            <div style={{ padding: 32, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textFaint }}>
-              {files.length === 0
-                ? t("files.empty")
-                : (filesFilter !== "all"
-                    ? `Keine ${{
-                        images: "Bilder",
-                        videos: "Videos",
-                        docs: "Dokumente",
-                        zip: "ZIP-Dateien",
-                      }[filesFilter] || "Dateien"} in diesem Ordner`
-                    : t("files.noResults"))}
+            <div style={{ padding: 40, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textFaint, lineHeight: 1.6 }}>
+              {activeSource === "drive" && !localDriveFolder?.id ? (
+                <>
+                  <div style={{ fontSize: 14, color: theme.textDim, marginBottom: 8 }}>Kein Drive-Ordner verbunden</div>
+                  <div>Verbinde einen Ordner über <strong>Upload → Google Drive</strong> oder pick einzelne Files via <strong>„Aus Drive wählen"</strong>.</div>
+                </>
+              ) : files.length === 0 ? (
+                t("files.empty")
+              ) : filesFilter !== "all" ? (
+                `Keine ${{
+                  images: "Bilder",
+                  videos: "Videos",
+                  docs: "Dokumente",
+                  zip: "ZIP-Dateien",
+                }[filesFilter] || "Dateien"} in ${activeSource === "supabase" ? "i7 OS Storage" : "Google Drive"}`
+              ) : (
+                `Noch keine Dateien in ${activeSource === "supabase" ? "i7 OS Storage" : "Google Drive"}`
+              )}
             </div>
           )}
         </div>
