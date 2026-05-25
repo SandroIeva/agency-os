@@ -3903,7 +3903,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   const [uploadProgress, setUploadProgress] = useState(null);
   const [picking, setPicking] = useState(false);
   const [uploadMenuOpen, setUploadMenuOpen] = useState(false);
-  const [pendingUploadDest, setPendingUploadDest] = useState(null); // 'supabase' | 'drive_personal' set just before opening the system file picker
+  const pendingUploadDestRef = useRef(null); // 'supabase' | 'drive_personal' — set right before opening the OS file picker
   const [localDriveFolder, setLocalDriveFolder] = useState(driveFolder);
   const fileInputRef = useRef(null);
   // Keep local state in sync when prop changes
@@ -4180,8 +4180,8 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   // Route uploads to Supabase Storage OR Google Drive based on the destination
   // chosen for this upload (set just before opening the system file picker).
   const handleUpload = async (fileList) => {
-    const dest = pendingUploadDest || "supabase";
-    setPendingUploadDest(null); // reset for next round
+    const dest = pendingUploadDestRef.current || "supabase";
+    pendingUploadDestRef.current = null; // reset for next round
     const useDrive = dest === "drive_personal" && localDriveFolder?.id;
 
     setUploading(true);
@@ -4717,10 +4717,12 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
                 Upload
                 <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 2 }}><path d="M6 9l6 6 6-6"/></svg>
               </motion.div>
+              {uploadMenuOpen && (
+                <div onClick={() => setUploadMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 50, background: "transparent" }} />
+              )}
               <AnimatePresence>
                 {uploadMenuOpen && (
                   <>
-                    <div onClick={() => setUploadMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 50 }} />
                     <motion.div
                       initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
                       transition={{ duration: 0.15 }}
@@ -4736,9 +4738,9 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
                       <motion.div
                         whileHover={{ background: theme.hoverBg }} whileTap={{ scale: 0.99 }}
                         onClick={() => {
+                          pendingUploadDestRef.current = "supabase";
                           setUploadMenuOpen(false);
-                          setPendingUploadDest("supabase");
-                          setTimeout(() => fileInputRef.current?.click(), 0);
+                          fileInputRef.current?.click();
                         }}
                         style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer" }}
                       >
@@ -4761,8 +4763,8 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
                           // Ensure folder is set up first
                           const folder = await ensureDriveFolderInline();
                           if (!folder) return; // user cancelled the picker
-                          setPendingUploadDest("drive_personal");
-                          setTimeout(() => fileInputRef.current?.click(), 0);
+                          pendingUploadDestRef.current = "drive_personal";
+                          fileInputRef.current?.click();
                         }}
                         style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer" }}
                       >
