@@ -11738,13 +11738,15 @@ export default function CircularMenu() {
       setTimeout(() => setTasksOpen(true), 50);
     } else if (subItem.id === "calendar") {
       setCurrentView("calendar");
-    } else if (["assets", "identity", "knowledge", "personas", "competitor", "guidelines"].includes(subItem.id)) {
+    } else if (activeItems[activeIndex]?.id === "brand") {
+      // New 5-tab structure: identity, design, audience, channels, strategy
+      // Legacy aliases (assets, knowledge, personas, competitor, guidelines) auto-map via BRAND_TAB_LEGACY_MAP
       setBrandTab(subItem.id);
       setCurrentView("brand");
     } else if (["all", "images", "videos", "docs", "zip"].includes(subItem.id)) {
       setFilesFilter(subItem.id);
       setCurrentView("files");
-    } else if (["team", "clients", "ai", "channels", "calls", "archive"].includes(subItem.id)) {
+    } else if (activeItems[activeIndex]?.id === "chat" || ["team", "clients", "ai", "channels", "calls", "archive"].includes(subItem.id)) {
       setCurrentView("chat");
       setChatTab(subItem.label);
     } else {
