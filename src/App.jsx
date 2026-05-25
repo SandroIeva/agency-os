@@ -3905,6 +3905,72 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   const [newFolderName, setNewFolderName] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [previewMenuOpen, setPreviewMenuOpen] = useState(false);
+  const [deleteFolderModalOpen, setDeleteFolderModalOpen] = useState(false);
+  const [deletingFolder, setDeletingFolder] = useState(false);
+
+  // Delete the currently-open folder (root-level current folder, not the navigated-through path)
+  const deleteCurrentFolder = async () => {
+    if (deletingFolder) return;
+    setDeletingFolder(true);
+    try {
+      if (activeSource === "supabase") {
+        if (!currentSbFolder) return;
+        // Collect files in this folder (recursive descendants too — for now keep flat)
+        const { data: filesInFolder } = await supabase
+          .from("user_files").select("id, storage_path")
+          .eq("user_id", session.user.id).eq("folder_id", currentSbFolder);
+        // Delete storage objects
+        const paths = (filesInFolder || []).map(f => f.storage_path).filter(Boolean);
+        if (paths.length > 0) {
+          await supabase.storage.from("user-files").remove(paths);
+          await supabase.from("user_files").delete().eq("user_id", session.user.id).eq("folder_id", currentSbFolder);
+        }
+        // Delete the folder row (cascades sub-folders via parent_id ON DELETE CASCADE)
+        const { error: delErr } = await supabase.from("user_folders").delete().eq("id", currentSbFolder).eq("user_id", session.user.id);
+        if (delErr) throw delErr;
+        // Navigate one level up
+        const prev = [...sbFolderPath];
+        const parent = prev.pop();
+        setSbFolderPath(prev);
+        setCurrentSbFolder(parent?.id || null);
+        setToast({ text: "Ordner gelöscht", type: "success" });
+        setTimeout(() => setToast(null), 3000);
+      } else {
+        if (!currentFolder) return;
+        const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
+        if (!providerToken) { setError("Kein Google Drive Zugriff."); return; }
+        const sharedFlag = localDriveFolder?.type === "shared_drive" ? "?supportsAllDrives=true" : "";
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${currentFolder}${sharedFlag}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${providerToken}` },
+        });
+        if (!res.ok && res.status !== 204) {
+          const err = await res.json().catch(() => ({}));
+          console.error("Drive folder delete error:", err);
+          setError("Ordner konnte nicht gelöscht werden.");
+          return;
+        }
+        // Navigate one level up
+        const prev = [...folderPath];
+        const parent = prev.pop();
+        setFolderPath(prev);
+        setCurrentFolder(parent?.id || null);
+        setToast({ text: "Ordner gelöscht", type: "success" });
+        setTimeout(() => setToast(null), 3000);
+      }
+      setDeleteFolderModalOpen(false);
+    } catch (e) {
+      console.error("delete folder failed", e);
+      setError("Ordner konnte nicht gelöscht werden.");
+    } finally {
+      setDeletingFolder(false);
+    }
+  };
+
+  // Current folder name (for delete-confirmation text)
+  const currentFolderName = activeSource === "supabase"
+    ? (sbFolderPath[sbFolderPath.length - 1]?.name || "")
+    : (folderPath[folderPath.length - 1]?.name || "");
 
   // Get a shareable link for the current preview file
   const getShareLink = async (file) => {
@@ -5020,6 +5086,77 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
           )}
         </AnimatePresence>
 
+        {/* Delete-folder confirmation modal */}
+        <AnimatePresence>
+          {deleteFolderModalOpen && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              onClick={() => !deletingFolder && setDeleteFolderModalOpen(false)}
+              style={{
+                position: "fixed", inset: 0, zIndex: 99998,
+                background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                padding: 24,
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 8 }}
+                transition={{ duration: 0.2, ease: [0.22, 0.68, 0.35, 1.0] }}
+                onClick={e => e.stopPropagation()}
+                style={{
+                  width: "100%", maxWidth: 420,
+                  background: theme.cardBg,
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: 18,
+                  padding: 26,
+                  boxShadow: "0 25px 80px rgba(0,0,0,0.4)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(232, 67, 147, 0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E84393" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6l-1.5 14a2 2 0 01-2 2H8.5a2 2 0 01-2-2L5 6"/>
+                    </svg>
+                  </div>
+                  <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.2 }}>Ordner löschen?</div>
+                </div>
+                <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 22, lineHeight: 1.6 }}>
+                  {currentFolderName ? (
+                    <>Möchtest du <strong style={{ color: theme.textSub }}>„{currentFolderName}"</strong> wirklich löschen? Alle enthaltenen Dateien werden ebenfalls gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.</>
+                  ) : "Möchtest du den Ordner wirklich löschen?"}
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                  <motion.div
+                    onClick={() => !deletingFolder && setDeleteFolderModalOpen(false)}
+                    whileTap={{ scale: 0.97 }}
+                    style={{
+                      padding: "10px 18px", borderRadius: 999, cursor: deletingFolder ? "not-allowed" : "pointer",
+                      background: "transparent", border: `1px solid ${theme.borderFaint}`,
+                      color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500,
+                      opacity: deletingFolder ? 0.5 : 1,
+                    }}
+                  >Abbrechen</motion.div>
+                  <motion.div
+                    onClick={deleteCurrentFolder}
+                    whileTap={{ scale: 0.97 }}
+                    style={{
+                      padding: "10px 22px", borderRadius: 999,
+                      cursor: deletingFolder ? "wait" : "pointer",
+                      background: "#E84393",
+                      border: "none",
+                      color: "#fff",
+                      fontSize: 13, fontFamily: FONT, fontWeight: 600,
+                      opacity: deletingFolder ? 0.7 : 1,
+                    }}
+                  >{deletingFolder ? "Löscht…" : "Ja, löschen"}</motion.div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Preview modal — images, PDFs, Google Docs, designs, videos */}
         <AnimatePresence>
           {previewFile && (() => {
@@ -5201,20 +5338,27 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
               </svg>
               + Neuer Ordner
             </motion.div>
+            {/* Ordner löschen — only when inside a folder */}
             {((activeSource === "drive" && currentFolder) || (activeSource === "supabase" && currentSbFolder)) && (
               <motion.div
-                onClick={navigateBack}
-                className="hover-back"
+                onClick={() => setDeleteFolderModalOpen(true)}
+                whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 style={{
-                  display: "flex", alignItems: "center", gap: 6, cursor: "pointer",
-                  padding: "6px 14px", borderRadius: 10,
+                  padding: "6px 14px", borderRadius: 20, cursor: "pointer",
+                  fontSize: 12, fontFamily: FONT, fontWeight: 500, color: "#E84393",
+                  background: "rgba(232, 67, 147, 0.08)",
+                  border: "1px solid rgba(232, 67, 147, 0.25)",
+                  display: "flex", alignItems: "center", gap: 5,
                 }}
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                  <path d="M15 18l-6-6 6-6" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round" />
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6l-1.5 14a2 2 0 01-2 2H8.5a2 2 0 01-2-2L5 6"/>
+                  <line x1="10" y1="11" x2="10" y2="17"/>
+                  <line x1="14" y1="11" x2="14" y2="17"/>
                 </svg>
-                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>Ordner zurück</span>
+                Ordner löschen
               </motion.div>
             )}
           </div>
