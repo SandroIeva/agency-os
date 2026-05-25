@@ -48,8 +48,12 @@ const translations = {
   "sub.reports": { de: "Berichte", en: "Reports" },
 
   // ── Files Submenu ────────────────────────────
+  "sub.allFiles": { de: "Alle", en: "All" },
   "sub.images": { de: "Bilder", en: "Images" },
   "sub.videos": { de: "Videos", en: "Videos" },
+  "sub.documents": { de: "Dokumente", en: "Documents" },
+  "sub.zips": { de: "ZIPs", en: "ZIPs" },
+  // Legacy keys kept for backward compatibility
   "sub.docs": { de: "Docs", en: "Docs" },
   "sub.fonts": { de: "Fonts", en: "Fonts" },
   "sub.links": { de: "Links", en: "Links" },

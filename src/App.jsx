@@ -53,7 +53,7 @@ const MENU_ITEMS_DEF = [
   { id: "plan", labelKey: "menu.plan", sub: [{ id: "kanban", labelKey: "sub.kanban" }, { id: "timeline", labelKey: "sub.timeline" }, { id: "tasks", labelKey: "sub.tasks" }, { id: "calendar", labelKey: "sub.calendar" }] },
   { id: "brand", labelKey: "menu.brand", sub: [{ id: "identity", labelKey: "sub.identity" }, { id: "design", labelKey: "sub.designSystem" }, { id: "audience", labelKey: "sub.audience" }, { id: "channels", labelKey: "sub.channels" }, { id: "strategy", labelKey: "sub.strategy" }] },
   { id: "docs", labelKey: "menu.projects", sub: [] },
-  { id: "files", labelKey: "menu.files", sub: [{ id: "images", labelKey: "sub.images" }, { id: "videos", labelKey: "sub.videos" }, { id: "all", labelKey: "sub.docs" }, { id: "fonts", labelKey: "sub.fonts" }, { id: "links", labelKey: "sub.links" }] },
+  { id: "files", labelKey: "menu.files", sub: [{ id: "all", labelKey: "sub.allFiles" }, { id: "images", labelKey: "sub.images" }, { id: "videos", labelKey: "sub.videos" }, { id: "docs", labelKey: "sub.documents" }, { id: "zip", labelKey: "sub.zips" }] },
   { id: "agents", labelKey: "menu.agents", sub: [{ id: "dev", labelKey: "sub.dev" }, { id: "design", labelKey: "sub.design" }, { id: "strategy", labelKey: "sub.strategy" }, { id: "finance", labelKey: "sub.finance" }, { id: "marketing", labelKey: "sub.marketing" }, { id: "sales", labelKey: "sub.sales" }] },
 ];
 
@@ -4139,15 +4139,21 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
     if (filesFilter === "videos") {
       return mime.startsWith("video/") || ["mp4","mov","avi","mkv","webm","m4v","wmv","flv","3gp","mpg","mpeg"].includes(ext);
     }
-    if (filesFilter === "fonts") {
-      return mime.includes("font") || ["ttf","otf","woff","woff2","eot","fon"].includes(ext);
+    if (filesFilter === "docs") {
+      // Office + Google Docs + PDF + RTF + plaintext + Markdown
+      return mime === "application/pdf"
+        || mime.startsWith("text/")
+        || mime.includes("officedocument") // docx/xlsx/pptx
+        || mime.includes("ms-excel") || mime.includes("ms-word") || mime.includes("ms-powerpoint")
+        || mime === "application/vnd.google-apps.document"
+        || mime === "application/vnd.google-apps.spreadsheet"
+        || mime === "application/vnd.google-apps.presentation"
+        || mime === "application/rtf"
+        || ["pdf","doc","docx","xls","xlsx","ppt","pptx","odt","ods","odp","txt","md","rtf","csv"].includes(ext);
     }
-    if (filesFilter === "raw") {
-      // Camera raw + uncompressed audio + lossless
-      return ["raw","cr2","cr3","nef","arw","dng","orf","rw2","raf","sr2","srw","pef","wav","aiff","flac","alac"].includes(ext);
-    }
-    if (filesFilter === "links") {
-      return mime === "application/vnd.google-apps.shortcut" || ext === "url" || ext === "webloc";
+    if (filesFilter === "zip") {
+      return mime.includes("zip") || mime.includes("compressed") || mime.includes("archive")
+        || ["zip","rar","7z","tar","gz","bz2","tgz"].includes(ext);
     }
     return true;
   };
@@ -4465,9 +4471,8 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
             { id: "all", label: "Alle" },
             { id: "images", label: "Bilder" },
             { id: "videos", label: "Videos" },
-            { id: "fonts", label: "Fonts" },
-            { id: "raw", label: "Raw" },
-            { id: "links", label: "Links" },
+            { id: "docs", label: "Dokumente" },
+            { id: "zip", label: "ZIPs" },
           ].map(chip => {
             const active = filesFilter === chip.id;
             return (
@@ -4624,9 +4629,8 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
                     ? `Keine ${{
                         images: "Bilder",
                         videos: "Videos",
-                        fonts: "Fonts",
-                        raw: "Raw-Dateien",
-                        links: "Links",
+                        docs: "Dokumente",
+                        zip: "ZIP-Dateien",
                       }[filesFilter] || "Dateien"} in diesem Ordner`
                     : t("files.noResults"))}
             </div>
@@ -9309,7 +9313,7 @@ export default function CircularMenu() {
   });
   const [chatTab, setChatTab] = useState("Team");
   const [brandTab, setBrandTab] = useState("identity");
-  const [filesFilter, setFilesFilter] = useState("all"); // all | images | videos | fonts | raw | links
+  const [filesFilter, setFilesFilter] = useState("all"); // all | images | videos | docs | zip
   const [openChatConvId, setOpenChatConvId] = useState(null);
   const [openTaskId, setOpenTaskId] = useState(null);
   const [triggerNewTask, setTriggerNewTask] = useState(false);
@@ -11253,7 +11257,7 @@ export default function CircularMenu() {
     } else if (["assets", "identity", "knowledge", "personas", "competitor", "guidelines"].includes(subItem.id)) {
       setBrandTab(subItem.id);
       setCurrentView("brand");
-    } else if (["images", "videos", "all", "fonts", "raw", "links"].includes(subItem.id)) {
+    } else if (["all", "images", "videos", "docs", "zip"].includes(subItem.id)) {
       setFilesFilter(subItem.id);
       setCurrentView("files");
     } else if (["team", "clients", "ai", "channels", "calls", "archive"].includes(subItem.id)) {
