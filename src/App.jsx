@@ -9297,14 +9297,14 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab: raw
           <>
             {step < 6 && (
               <div style={{ padding: "20px 28px 0", display: "flex", alignItems: "center", gap: 12, position: "relative", zIndex: 1 }}>
-                <div style={{ flex: 1, height: 4, borderRadius: 2, background: step === 0 ? "rgba(255,255,255,0.25)" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"), overflow: "hidden" }}>
+                <div style={{ flex: 1, height: 4, borderRadius: 2, background: step === 0 ? "rgba(0,0,0,0.10)" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"), overflow: "hidden" }}>
                   <motion.div
                     animate={{ width: `${((step + 1) / totalSteps) * 100}%` }}
                     transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
-                    style={{ height: "100%", background: step === 0 ? "#ffffff" : "linear-gradient(90deg, #8B7AFF, #6C5CE7)", borderRadius: 2 }}
+                    style={{ height: "100%", background: "linear-gradient(90deg, #8B7AFF, #6C5CE7)", borderRadius: 2 }}
                   />
                 </div>
-                <div style={{ fontSize: 11, fontFamily: FONT, color: step === 0 ? "rgba(255,255,255,0.9)" : theme.textDim, fontWeight: 500, letterSpacing: 0.5, whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: step === 0 ? "rgba(60, 60, 80, 0.6)" : theme.textDim, fontWeight: 500, letterSpacing: 0.5, whiteSpace: "nowrap" }}>
                   {t("brand.step")} {step + 1} / {totalSteps}
                 </div>
               </div>
