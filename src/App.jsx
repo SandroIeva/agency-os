@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "./supabase";
 import { buildSystemPrompt } from "./systemPrompt";
 import { getTranslation } from "./translations";
+import { openGooglePicker } from "./googlePicker";
 
 // Error Boundary to prevent black screen — shows error info in production
 export class AppErrorBoundary extends Component {
@@ -3900,7 +3901,59 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   const [folderPath, setFolderPath] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
+  const [picking, setPicking] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Pick files from the user's Drive via Google Picker (works with drive.file scope)
+  const handlePickFromDrive = async () => {
+    if (picking) return;
+    try {
+      setPicking(true);
+      setError(null);
+      const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
+      if (!providerToken) { setError(t ? t("error.noGoogleAccess") : "Kein Google Drive Zugriff."); return; }
+      const picked = await openGooglePicker({
+        accessToken: providerToken,
+        locale: (t && t("settings.language")) === "Language" ? "en" : "de",
+        multi: true,
+      });
+      if (!picked || picked.length === 0) return;
+      // Fetch full Drive metadata for each picked file (now allowed via drive.file)
+      const enriched = [];
+      for (const p of picked) {
+        try {
+          const res = await fetch(
+            `https://www.googleapis.com/drive/v3/files/${p.id}?fields=id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink`,
+            { headers: { Authorization: `Bearer ${providerToken}` } }
+          );
+          if (res.ok) enriched.push(await res.json());
+        } catch { /* skip individual failures */ }
+      }
+      // Add to the visible list immediately
+      setFiles(prev => {
+        const existingIds = new Set(prev.map(f => f.id));
+        const additions = enriched.filter(f => !existingIds.has(f.id));
+        return [...additions, ...prev];
+      });
+      // Persist picked file IDs to Supabase so they survive sessions
+      if (enriched.length > 0 && session?.user?.id) {
+        const rows = enriched.map(f => ({
+          user_id: session.user.id,
+          google_file_id: f.id,
+          name: f.name,
+          mime_type: f.mimeType,
+          size_bytes: f.size ? Number(f.size) : null,
+          source: "picker",
+        }));
+        await supabase.from("user_drive_files").upsert(rows, { onConflict: "user_id,google_file_id" });
+      }
+    } catch (err) {
+      console.error("Picker failed:", err);
+      setError(err.message || "Picker fehlgeschlagen");
+    } finally {
+      setPicking(false);
+    }
+  };
 
   // Fetch Google Drive files
   useEffect(() => {
@@ -3947,10 +4000,30 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
         }
 
         const data = await res.json();
-        setFiles(data.files || []);
+        let allFiles = data.files || [];
+
+        // Also load previously picked files from Supabase so they show up across sessions
+        if (!currentFolder && session?.user?.id) {
+          const { data: picked } = await supabase
+            .from("user_drive_files")
+            .select("google_file_id")
+            .eq("user_id", session.user.id);
+          const pickedIds = (picked || []).map(p => p.google_file_id).filter(id => !allFiles.some(f => f.id === id));
+          // Fetch live metadata for each picked file (allowed by drive.file because user picked them)
+          for (const pid of pickedIds) {
+            try {
+              const r = await fetch(
+                `https://www.googleapis.com/drive/v3/files/${pid}?fields=id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink`,
+                { headers: { Authorization: `Bearer ${providerToken}` } }
+              );
+              if (r.ok) allFiles.push(await r.json());
+            } catch { /* skip individual */ }
+          }
+        }
+        setFiles(allFiles);
 
         // Fetch metadata from Supabase
-        const fileIds = (data.files || []).map(f => f.id);
+        const fileIds = allFiles.map(f => f.id);
         if (fileIds.length > 0) {
           const { data: metaData } = await supabase
             .from("file_metadata")
@@ -4521,6 +4594,27 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
                 <path d="M12 11v4M10 13h4" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round" />
               </svg>
               + Neuer Ordner
+            </motion.div>
+            {/* Aus Drive wählen (Google Picker) */}
+            <motion.div
+              onClick={handlePickFromDrive}
+              whileHover={{ scale: picking ? 1 : 1.03 }}
+              whileTap={{ scale: picking ? 1 : 0.97 }}
+              style={{
+                padding: "6px 14px", borderRadius: 20, cursor: picking ? "wait" : "pointer",
+                fontSize: 12, fontFamily: FONT, fontWeight: 500, color: theme.textSub,
+                background: "transparent",
+                border: `1px solid ${theme.borderFaint}`,
+                display: "flex", alignItems: "center", gap: 6,
+                opacity: picking ? 0.6 : 1,
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              {picking ? "Lädt…" : "Aus Drive wählen"}
             </motion.div>
             {/* Upload button */}
             <motion.div
