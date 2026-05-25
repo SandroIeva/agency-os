@@ -3902,7 +3902,32 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [picking, setPicking] = useState(false);
+  const [uploadMenuOpen, setUploadMenuOpen] = useState(false);
+  const [pendingUploadDest, setPendingUploadDest] = useState(null); // 'supabase' | 'drive_personal' set just before opening the system file picker
+  const [localDriveFolder, setLocalDriveFolder] = useState(driveFolder);
   const fileInputRef = useRef(null);
+  // Keep local state in sync when prop changes
+  useEffect(() => { setLocalDriveFolder(driveFolder); }, [driveFolder?.id]);
+
+  // Inline folder picker — used when user picks "Drive" destination but hasn't connected a folder yet
+  const ensureDriveFolderInline = async () => {
+    if (localDriveFolder?.id) return localDriveFolder;
+    const token = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
+    if (!token) { setError("Bitte zuerst mit Google neu einloggen."); return null; }
+    const picked = await openGoogleFolderPicker({
+      accessToken: token,
+      locale: ((t && t("settings.language")) === "Language") ? "en" : "de",
+    });
+    if (!picked) return null;
+    await supabase.from("profiles").update({
+      drive_folder_id: picked.id,
+      drive_folder_name: picked.name,
+      drive_folder_type: picked.type,
+      drive_folder_drive_id: picked.driveId,
+    }).eq("id", session.user.id);
+    setLocalDriveFolder(picked);
+    return picked;
+  };
 
   // Pick files from the user's Drive via Google Picker (works with drive.file scope)
   const handlePickFromDrive = async () => {
@@ -4152,9 +4177,12 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
     fetchAgain();
   };
 
-  // Route uploads to Supabase Storage OR Google Drive based on user preference
+  // Route uploads to Supabase Storage OR Google Drive based on the destination
+  // chosen for this upload (set just before opening the system file picker).
   const handleUpload = async (fileList) => {
-    const useDrive = preferredStorage === "drive_personal" && driveFolder?.id;
+    const dest = pendingUploadDest || "supabase";
+    setPendingUploadDest(null); // reset for next round
+    const useDrive = dest === "drive_personal" && localDriveFolder?.id;
 
     setUploading(true);
     setUploadProgress({ current: 0, total: fileList.length });
@@ -4167,12 +4195,12 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
           // ── Google Drive upload ────────────────────────────────────────
           const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
           if (!providerToken) { setError("Kein Google Drive Zugriff. Bitte neu einloggen."); break; }
-          const parents = [currentFolder || driveFolder.id];
+          const parents = [currentFolder || localDriveFolder.id];
           const metadataObj = { name: file.name, parents };
           const form = new FormData();
           form.append("metadata", new Blob([JSON.stringify(metadataObj)], { type: "application/json" }));
           form.append("file", file);
-          const sharedFlag = driveFolder?.type === "shared_drive" ? "&supportsAllDrives=true" : "";
+          const sharedFlag = localDriveFolder?.type === "shared_drive" ? "&supportsAllDrives=true" : "";
           const res = await fetch(
             `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink${sharedFlag}`,
             { method: "POST", headers: { Authorization: `Bearer ${providerToken}` }, body: form }
@@ -4667,26 +4695,117 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
               </svg>
               {picking ? "Lädt…" : "Aus Drive wählen"}
             </motion.div>
-            {/* Upload button */}
-            <motion.div
-              onClick={() => fileInputRef.current?.click()}
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              style={{
-                padding: "6px 14px", borderRadius: 20, cursor: uploading ? "not-allowed" : "pointer",
-                fontSize: 12, fontFamily: FONT, fontWeight: 500, color: uploading ? theme.textFaint : theme.accent,
-                background: uploading ? theme.hoverBg : theme.accent + "15",
-                border: `1px solid ${uploading ? theme.borderFaint : theme.accent + "30"}`,
-                display: "flex", alignItems: "center", gap: 5,
-                opacity: uploading ? 0.5 : 1,
-              }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                <path d="M12 16V4M12 4l-4 4M12 4l4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-              Upload
-            </motion.div>
+            {/* Upload split-button with destination menu */}
+            <div style={{ position: "relative" }}>
+              <motion.div
+                onClick={() => { if (!uploading) setUploadMenuOpen(v => !v); }}
+                whileHover={{ scale: uploading ? 1 : 1.03 }}
+                whileTap={{ scale: uploading ? 1 : 0.97 }}
+                style={{
+                  padding: "6px 14px", borderRadius: 20, cursor: uploading ? "not-allowed" : "pointer",
+                  fontSize: 12, fontFamily: FONT, fontWeight: 500, color: uploading ? theme.textFaint : theme.accent,
+                  background: uploading ? theme.hoverBg : theme.accent + "15",
+                  border: `1px solid ${uploading ? theme.borderFaint : theme.accent + "30"}`,
+                  display: "flex", alignItems: "center", gap: 6,
+                  opacity: uploading ? 0.5 : 1,
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 16V4M12 4l-4 4M12 4l4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                Upload
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 2 }}><path d="M6 9l6 6 6-6"/></svg>
+              </motion.div>
+              <AnimatePresence>
+                {uploadMenuOpen && (
+                  <>
+                    <div onClick={() => setUploadMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 50 }} />
+                    <motion.div
+                      initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.15 }}
+                      style={{
+                        position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 51,
+                        minWidth: 260,
+                        background: theme.cardBg, border: `1px solid ${theme.borderFaint}`,
+                        borderRadius: 12, boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
+                        padding: 4, overflow: "hidden",
+                      }}
+                    >
+                      {/* i7 OS Storage */}
+                      <motion.div
+                        whileHover={{ background: theme.hoverBg }} whileTap={{ scale: 0.99 }}
+                        onClick={() => {
+                          setUploadMenuOpen(false);
+                          setPendingUploadDest("supabase");
+                          setTimeout(() => fileInputRef.current?.click(), 0);
+                        }}
+                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer" }}
+                      >
+                        <div style={{ width: 28, height: 28, borderRadius: 8, background: theme.accent + "18", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                            <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                            <path d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6"/>
+                          </svg>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>i7 OS Storage</div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>In der App verwaltet</div>
+                        </div>
+                      </motion.div>
+                      {/* Google Drive */}
+                      <motion.div
+                        whileHover={{ background: theme.hoverBg }} whileTap={{ scale: 0.99 }}
+                        onClick={async () => {
+                          setUploadMenuOpen(false);
+                          // Ensure folder is set up first
+                          const folder = await ensureDriveFolderInline();
+                          if (!folder) return; // user cancelled the picker
+                          setPendingUploadDest("drive_personal");
+                          setTimeout(() => fileInputRef.current?.click(), 0);
+                        }}
+                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer" }}
+                      >
+                        <div style={{ width: 28, height: 28, borderRadius: 8, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24">
+                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                          </svg>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Google Drive</div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {localDriveFolder?.name ? `Ordner: ${localDriveFolder.name}` : "Ordner einmalig auswählen"}
+                          </div>
+                        </div>
+                      </motion.div>
+                      {localDriveFolder?.id && (
+                        <>
+                          <div style={{ height: 1, background: theme.borderFaint, margin: "4px 6px" }} />
+                          <motion.div whileHover={{ background: theme.hoverBg }} whileTap={{ scale: 0.99 }}
+                            onClick={async () => {
+                              setUploadMenuOpen(false);
+                              // Force a new folder picker, then upload to the new folder
+                              setLocalDriveFolder(null);
+                              const folder = await ensureDriveFolderInline();
+                              if (!folder) return;
+                            }}
+                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer" }}
+                          >
+                            <div style={{ width: 28, height: 28, borderRadius: 8, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: theme.textDim }}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                            </div>
+                            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub }}>Drive-Ordner ändern</div>
+                          </motion.div>
+                        </>
+                      )}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </motion.div>
       </div>
@@ -13412,139 +13531,6 @@ export default function CircularMenu() {
                       <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{session ? t("settings.calFilesSynced") : t("settings.signInToConnect")}</div>
                     </div>
                     <div style={{ width: 8, height: 8, borderRadius: "50%", background: session ? "#00B894" : "#E84393" }} />
-                  </div>
-                  {/* Personal Drive Folder */}
-                  <div style={{
-                    display: "flex", alignItems: "flex-start", gap: 14,
-                    padding: "16px 20px",
-                    borderBottom: `1px solid ${theme.borderFaint}`,
-                  }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: 10,
-                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      flexShrink: 0,
-                    }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.textSub} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-                      </svg>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Persönlicher Drive-Ordner</div>
-                      {driveFolder ? (
-                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
-                          {driveFolder.name}
-                          <span style={{ color: theme.textFaint, marginLeft: 8 }}>· {driveFolder.type === "shared_drive" ? "Shared Drive" : "Mein Drive"}</span>
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Nicht verbunden — Uploads gehen nach i7 OS Storage</div>
-                      )}
-                      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                        <motion.div onClick={connectDriveFolder} whileTap={{ scale: 0.97 }}
-                          style={{ padding: "6px 12px", borderRadius: 999, cursor: driveConnecting ? "wait" : "pointer", background: theme.accent + "15", border: `1px solid ${theme.accent}30`, color: theme.accent, fontSize: 11, fontFamily: FONT, fontWeight: 500, opacity: driveConnecting ? 0.6 : 1 }}
-                        >{driveConnecting ? "Lädt…" : (driveFolder ? "Ordner ändern" : "Drive verbinden")}</motion.div>
-                        {driveFolder && (
-                          <motion.div onClick={disconnectDriveFolder} whileTap={{ scale: 0.97 }}
-                            style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 11, fontFamily: FONT, fontWeight: 500 }}
-                          >Trennen</motion.div>
-                        )}
-                      </div>
-                    </div>
-                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: driveFolder ? "#00B894" : "transparent", marginTop: 14, flexShrink: 0 }} />
-                  </div>
-                  {/* Org Shared Drive folder — only org owner sees this */}
-                  {userOrg?.id && userOrgRole === "owner" && (
-                    <div style={{
-                      display: "flex", alignItems: "flex-start", gap: 14,
-                      padding: "16px 20px",
-                      borderBottom: `1px solid ${theme.borderFaint}`,
-                    }}>
-                      <div style={{
-                        width: 36, height: 36, borderRadius: 10,
-                        background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        flexShrink: 0,
-                      }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.textSub} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
-                          <circle cx="9" cy="7" r="4"/>
-                          <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
-                        </svg>
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Team Shared Drive-Ordner</div>
-                        {orgDriveFolder ? (
-                          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{orgDriveFolder.name} <span style={{ color: theme.textFaint, marginLeft: 8 }}>· Workspace</span></div>
-                        ) : (
-                          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Optional — gemeinsamer Ordner für das ganze Team</div>
-                        )}
-                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                          <motion.div onClick={connectOrgDriveFolder} whileTap={{ scale: 0.97 }}
-                            style={{ padding: "6px 12px", borderRadius: 999, cursor: driveConnecting ? "wait" : "pointer", background: theme.accent + "15", border: `1px solid ${theme.accent}30`, color: theme.accent, fontSize: 11, fontFamily: FONT, fontWeight: 500, opacity: driveConnecting ? 0.6 : 1 }}
-                          >{driveConnecting ? "Lädt…" : (orgDriveFolder ? "Team-Ordner ändern" : "Team-Ordner verbinden")}</motion.div>
-                          {orgDriveFolder && (
-                            <motion.div onClick={disconnectOrgDriveFolder} whileTap={{ scale: 0.97 }}
-                              style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 11, fontFamily: FONT, fontWeight: 500 }}
-                            >Trennen</motion.div>
-                          )}
-                        </div>
-                      </div>
-                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: orgDriveFolder ? "#00B894" : "transparent", marginTop: 14, flexShrink: 0 }} />
-                    </div>
-                  )}
-                  {/* Storage Preference */}
-                  <div style={{
-                    display: "flex", alignItems: "flex-start", gap: 14,
-                    padding: "16px 20px",
-                    borderBottom: `1px solid ${theme.borderFaint}`,
-                  }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: 10,
-                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      flexShrink: 0,
-                    }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.textSub} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                        <ellipse cx="12" cy="5" rx="9" ry="3"/>
-                        <path d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6"/>
-                      </svg>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 8 }}>Bevorzugter Upload-Speicher</div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                        {[
-                          { id: "supabase", label: "i7 OS Storage", desc: "Standard — schnell, in der App verwaltet" },
-                          { id: "drive_personal", label: "Persönlicher Google Drive Ordner", desc: driveFolder ? `Lädt in: ${driveFolder.name}` : "Erst Drive-Ordner verbinden", disabled: !driveFolder },
-                        ].map(opt => {
-                          const active = preferredStorage === opt.id;
-                          return (
-                            <motion.div key={opt.id}
-                              onClick={() => { if (!opt.disabled) setPreferredStorageChoice(opt.id); }}
-                              whileTap={opt.disabled ? {} : { scale: 0.99 }}
-                              style={{
-                                display: "flex", alignItems: "center", gap: 10,
-                                padding: "10px 12px", borderRadius: 10, cursor: opt.disabled ? "not-allowed" : "pointer",
-                                background: active ? (theme.accent + "12") : "transparent",
-                                border: `1px solid ${active ? theme.accent + "40" : theme.borderFaint}`,
-                                opacity: opt.disabled ? 0.45 : 1,
-                              }}
-                            >
-                              <div style={{
-                                width: 16, height: 16, borderRadius: "50%",
-                                border: `2px solid ${active ? theme.accent : theme.borderFaint}`,
-                                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                              }}>
-                                {active && <div style={{ width: 8, height: 8, borderRadius: "50%", background: theme.accent }} />}
-                              </div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{opt.label}</div>
-                                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{opt.desc}</div>
-                              </div>
-                            </motion.div>
-                          );
-                        })}
-                      </div>
-                    </div>
                   </div>
                   {/* Slack */}
                   <div style={{
