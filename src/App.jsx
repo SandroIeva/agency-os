@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "./supabase";
 import { buildSystemPrompt } from "./systemPrompt";
 import { getTranslation } from "./translations";
-import { openGooglePicker } from "./googlePicker";
+import { openGooglePicker, openGoogleFolderPicker } from "./googlePicker";
 
 // Error Boundary to prevent black screen — shows error info in production
 export class AppErrorBoundary extends Component {
@@ -9116,6 +9116,137 @@ export default function CircularMenu() {
   const [inviteEmails, setInviteEmails] = useState([]);      // email chips for invite input
   const [inviteInputVal, setInviteInputVal] = useState("");  // current text in invite input
 
+  // ── Storage preferences (Supabase Storage vs Google Drive folder) ──
+  const [preferredStorage, setPreferredStorage] = useState("supabase"); // 'supabase' | 'drive_personal'
+  const [driveFolder, setDriveFolder] = useState(null); // { id, name, type, driveId }
+  const [orgDriveFolder, setOrgDriveFolder] = useState(null); // org-level shared drive folder
+  const [driveConnecting, setDriveConnecting] = useState(false);
+
+  // Load storage preferences from profile + org
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    (async () => {
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("drive_folder_id, drive_folder_name, drive_folder_type, drive_folder_drive_id, preferred_storage")
+        .eq("id", session.user.id)
+        .maybeSingle();
+      if (prof?.drive_folder_id) {
+        setDriveFolder({
+          id: prof.drive_folder_id,
+          name: prof.drive_folder_name,
+          type: prof.drive_folder_type,
+          driveId: prof.drive_folder_drive_id,
+        });
+      }
+      if (prof?.preferred_storage) setPreferredStorage(prof.preferred_storage);
+    })();
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!userOrg?.id) { setOrgDriveFolder(null); return; }
+    (async () => {
+      const { data: org } = await supabase
+        .from("organizations")
+        .select("drive_folder_id, drive_folder_name, drive_folder_type, drive_folder_drive_id")
+        .eq("id", userOrg.id)
+        .maybeSingle();
+      if (org?.drive_folder_id) {
+        setOrgDriveFolder({
+          id: org.drive_folder_id,
+          name: org.drive_folder_name,
+          type: org.drive_folder_type,
+          driveId: org.drive_folder_drive_id,
+        });
+      } else setOrgDriveFolder(null);
+    })();
+  }, [userOrg?.id]);
+
+  // Connect / change personal Drive folder
+  const connectDriveFolder = async () => {
+    if (driveConnecting) return;
+    setDriveConnecting(true);
+    try {
+      const token = await ensureValidToken();
+      if (!token) { alert("Bitte zuerst mit Google neu einloggen."); return; }
+      const picked = await openGoogleFolderPicker({
+        accessToken: token,
+        locale: appLanguage === "de" ? "de" : "en",
+      });
+      if (!picked) return; // cancelled
+      // Persist
+      await supabase.from("profiles").update({
+        drive_folder_id: picked.id,
+        drive_folder_name: picked.name,
+        drive_folder_type: picked.type,
+        drive_folder_drive_id: picked.driveId,
+      }).eq("id", session.user.id);
+      setDriveFolder(picked);
+    } catch (e) {
+      alert("Picker fehlgeschlagen: " + (e.message || ""));
+    } finally {
+      setDriveConnecting(false);
+    }
+  };
+
+  const disconnectDriveFolder = async () => {
+    await supabase.from("profiles").update({
+      drive_folder_id: null,
+      drive_folder_name: null,
+      drive_folder_type: null,
+      drive_folder_drive_id: null,
+    }).eq("id", session.user.id);
+    setDriveFolder(null);
+    // If preferred was drive, fall back to supabase
+    if (preferredStorage !== "supabase") {
+      await supabase.from("profiles").update({ preferred_storage: "supabase" }).eq("id", session.user.id);
+      setPreferredStorage("supabase");
+    }
+  };
+
+  const setPreferredStorageChoice = async (choice) => {
+    setPreferredStorage(choice);
+    await supabase.from("profiles").update({ preferred_storage: choice }).eq("id", session.user.id);
+  };
+
+  // Org-level shared Drive folder (only org owner can set)
+  const connectOrgDriveFolder = async () => {
+    if (!userOrg?.id) return;
+    if (driveConnecting) return;
+    setDriveConnecting(true);
+    try {
+      const token = await ensureValidToken();
+      if (!token) { alert("Bitte zuerst mit Google neu einloggen."); return; }
+      const picked = await openGoogleFolderPicker({
+        accessToken: token,
+        locale: appLanguage === "de" ? "de" : "en",
+      });
+      if (!picked) return;
+      await supabase.from("organizations").update({
+        drive_folder_id: picked.id,
+        drive_folder_name: picked.name,
+        drive_folder_type: picked.type,
+        drive_folder_drive_id: picked.driveId,
+      }).eq("id", userOrg.id);
+      setOrgDriveFolder(picked);
+    } catch (e) {
+      alert("Picker fehlgeschlagen: " + (e.message || ""));
+    } finally {
+      setDriveConnecting(false);
+    }
+  };
+
+  const disconnectOrgDriveFolder = async () => {
+    if (!userOrg?.id) return;
+    await supabase.from("organizations").update({
+      drive_folder_id: null,
+      drive_folder_name: null,
+      drive_folder_type: null,
+      drive_folder_drive_id: null,
+    }).eq("id", userOrg.id);
+    setOrgDriveFolder(null);
+  };
+
   // Load pending invites when user goes to "join" step
   useEffect(() => {
     if (onboardingStep !== "join" || !session?.user?.email) return;
@@ -13230,6 +13361,139 @@ export default function CircularMenu() {
                       <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{session ? t("settings.calFilesSynced") : t("settings.signInToConnect")}</div>
                     </div>
                     <div style={{ width: 8, height: 8, borderRadius: "50%", background: session ? "#00B894" : "#E84393" }} />
+                  </div>
+                  {/* Personal Drive Folder */}
+                  <div style={{
+                    display: "flex", alignItems: "flex-start", gap: 14,
+                    padding: "16px 20px",
+                    borderBottom: `1px solid ${theme.borderFaint}`,
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      flexShrink: 0,
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.textSub} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Persönlicher Drive-Ordner</div>
+                      {driveFolder ? (
+                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                          {driveFolder.name}
+                          <span style={{ color: theme.textFaint, marginLeft: 8 }}>· {driveFolder.type === "shared_drive" ? "Shared Drive" : "Mein Drive"}</span>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Nicht verbunden — Uploads gehen nach i7 OS Storage</div>
+                      )}
+                      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                        <motion.div onClick={connectDriveFolder} whileTap={{ scale: 0.97 }}
+                          style={{ padding: "6px 12px", borderRadius: 999, cursor: driveConnecting ? "wait" : "pointer", background: theme.accent + "15", border: `1px solid ${theme.accent}30`, color: theme.accent, fontSize: 11, fontFamily: FONT, fontWeight: 500, opacity: driveConnecting ? 0.6 : 1 }}
+                        >{driveConnecting ? "Lädt…" : (driveFolder ? "Ordner ändern" : "Drive verbinden")}</motion.div>
+                        {driveFolder && (
+                          <motion.div onClick={disconnectDriveFolder} whileTap={{ scale: 0.97 }}
+                            style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 11, fontFamily: FONT, fontWeight: 500 }}
+                          >Trennen</motion.div>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: driveFolder ? "#00B894" : "transparent", marginTop: 14, flexShrink: 0 }} />
+                  </div>
+                  {/* Org Shared Drive folder — only org owner sees this */}
+                  {userOrg?.id && userOrgRole === "owner" && (
+                    <div style={{
+                      display: "flex", alignItems: "flex-start", gap: 14,
+                      padding: "16px 20px",
+                      borderBottom: `1px solid ${theme.borderFaint}`,
+                    }}>
+                      <div style={{
+                        width: 36, height: 36, borderRadius: 10,
+                        background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        flexShrink: 0,
+                      }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.textSub} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+                          <circle cx="9" cy="7" r="4"/>
+                          <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+                        </svg>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Team Shared Drive-Ordner</div>
+                        {orgDriveFolder ? (
+                          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{orgDriveFolder.name} <span style={{ color: theme.textFaint, marginLeft: 8 }}>· Workspace</span></div>
+                        ) : (
+                          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Optional — gemeinsamer Ordner für das ganze Team</div>
+                        )}
+                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                          <motion.div onClick={connectOrgDriveFolder} whileTap={{ scale: 0.97 }}
+                            style={{ padding: "6px 12px", borderRadius: 999, cursor: driveConnecting ? "wait" : "pointer", background: theme.accent + "15", border: `1px solid ${theme.accent}30`, color: theme.accent, fontSize: 11, fontFamily: FONT, fontWeight: 500, opacity: driveConnecting ? 0.6 : 1 }}
+                          >{driveConnecting ? "Lädt…" : (orgDriveFolder ? "Team-Ordner ändern" : "Team-Ordner verbinden")}</motion.div>
+                          {orgDriveFolder && (
+                            <motion.div onClick={disconnectOrgDriveFolder} whileTap={{ scale: 0.97 }}
+                              style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 11, fontFamily: FONT, fontWeight: 500 }}
+                            >Trennen</motion.div>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: orgDriveFolder ? "#00B894" : "transparent", marginTop: 14, flexShrink: 0 }} />
+                    </div>
+                  )}
+                  {/* Storage Preference */}
+                  <div style={{
+                    display: "flex", alignItems: "flex-start", gap: 14,
+                    padding: "16px 20px",
+                    borderBottom: `1px solid ${theme.borderFaint}`,
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      flexShrink: 0,
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.textSub} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                        <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                        <path d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6"/>
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 8 }}>Bevorzugter Upload-Speicher</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {[
+                          { id: "supabase", label: "i7 OS Storage", desc: "Standard — schnell, in der App verwaltet" },
+                          { id: "drive_personal", label: "Persönlicher Google Drive Ordner", desc: driveFolder ? `Lädt in: ${driveFolder.name}` : "Erst Drive-Ordner verbinden", disabled: !driveFolder },
+                        ].map(opt => {
+                          const active = preferredStorage === opt.id;
+                          return (
+                            <motion.div key={opt.id}
+                              onClick={() => { if (!opt.disabled) setPreferredStorageChoice(opt.id); }}
+                              whileTap={opt.disabled ? {} : { scale: 0.99 }}
+                              style={{
+                                display: "flex", alignItems: "center", gap: 10,
+                                padding: "10px 12px", borderRadius: 10, cursor: opt.disabled ? "not-allowed" : "pointer",
+                                background: active ? (theme.accent + "12") : "transparent",
+                                border: `1px solid ${active ? theme.accent + "40" : theme.borderFaint}`,
+                                opacity: opt.disabled ? 0.45 : 1,
+                              }}
+                            >
+                              <div style={{
+                                width: 16, height: 16, borderRadius: "50%",
+                                border: `2px solid ${active ? theme.accent : theme.borderFaint}`,
+                                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                              }}>
+                                {active && <div style={{ width: 8, height: 8, borderRadius: "50%", background: theme.accent }} />}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{opt.label}</div>
+                                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{opt.desc}</div>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                   {/* Slack */}
                   <div style={{

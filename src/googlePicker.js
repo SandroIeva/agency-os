@@ -59,6 +59,7 @@ export async function openGooglePicker({ accessToken, locale = "en", multi = fal
         .setLocale(locale)
         .addView(view)
         .addView(new google.picker.DocsUploadView())
+        .enableFeature(google.picker.Feature.SUPPORT_DRIVES)
         .setCallback((data) => {
           const Action = google.picker.Action;
           if (data.action === Action.PICKED) {
@@ -78,6 +79,75 @@ export async function openGooglePicker({ accessToken, locale = "en", multi = fal
           }
         });
       if (multi) builder.enableFeature(google.picker.Feature.MULTISELECT_ENABLED);
+      if (VITE_GOOGLE_APP_ID) builder.setAppId(VITE_GOOGLE_APP_ID);
+
+      const picker = builder.build();
+      picker.setVisible(true);
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+/**
+ * Open the Google Picker in *folder-select* mode. Lets the user choose ONE folder
+ * from My Drive or any Shared Drive they belong to. The folder ID is then stored
+ * so the app can upload/list inside it without going through the Picker again.
+ * Resolves with: { id, name, type: 'my_drive' | 'shared_drive', driveId? } or null on cancel.
+ */
+export async function openGoogleFolderPicker({ accessToken, locale = "en" } = {}) {
+  if (!accessToken) throw new Error("No access token — please sign in with Google first");
+  if (!VITE_GOOGLE_API_KEY) throw new Error("VITE_GOOGLE_API_KEY not configured");
+
+  await loadPickerOnce();
+  const google = window.google;
+  if (!google?.picker) throw new Error("Picker SDK failed to load");
+
+  return new Promise((resolve, reject) => {
+    try {
+      const FOLDER_MIME = "application/vnd.google-apps.folder";
+
+      // My Drive folders
+      const myDriveView = new google.picker.DocsView()
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(true)
+        .setMimeTypes(FOLDER_MIME)
+        .setMode(google.picker.DocsViewMode.LIST);
+
+      // Shared Drives (Workspace only — auto-hidden for users without)
+      const sharedDrivesView = new google.picker.DocsView()
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(true)
+        .setEnableDrives(true)
+        .setMimeTypes(FOLDER_MIME)
+        .setMode(google.picker.DocsViewMode.LIST);
+
+      const builder = new google.picker.PickerBuilder()
+        .setOAuthToken(accessToken)
+        .setDeveloperKey(VITE_GOOGLE_API_KEY)
+        .setLocale(locale)
+        .setTitle(locale === "de" ? "Ordner für i7 OS auswählen" : "Select folder for i7 OS")
+        .addView(myDriveView)
+        .addView(sharedDrivesView)
+        .enableFeature(google.picker.Feature.SUPPORT_DRIVES)
+        .setCallback((data) => {
+          const Action = google.picker.Action;
+          if (data.action === Action.PICKED) {
+            const d = (data.docs || [])[0];
+            if (!d) { resolve(null); return; }
+            // If a Shared Drive folder was picked, d.driveId is set
+            const isShared = !!d.driveId;
+            resolve({
+              id: d.id,
+              name: d.name,
+              type: isShared ? "shared_drive" : "my_drive",
+              driveId: d.driveId || null,
+              url: d.url,
+            });
+          } else if (data.action === Action.CANCEL) {
+            resolve(null);
+          }
+        });
       if (VITE_GOOGLE_APP_ID) builder.setAppId(VITE_GOOGLE_APP_ID);
 
       const picker = builder.build();
