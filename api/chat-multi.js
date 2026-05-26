@@ -37,9 +37,20 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { message, systemPrompt, provider = "claude", apiKey, oauthToken, model, maxTokens } = req.body || {};
+  const { message, messages, systemPrompt, provider = "claude", apiKey, oauthToken, model, maxTokens } = req.body || {};
 
-  if (!message) return res.status(400).json({ error: "Keine Nachricht erhalten." });
+  // Build a normalised conversation history: array of { role: "user" | "assistant", content: string }
+  // Accept either legacy single-message format or full messages array.
+  let conversation = [];
+  if (Array.isArray(messages) && messages.length > 0) {
+    conversation = messages
+      .filter(m => m && typeof m.content === "string" && m.content.trim() && (m.role === "user" || m.role === "assistant"))
+      .map(m => ({ role: m.role, content: m.content }));
+  } else if (message) {
+    conversation = [{ role: "user", content: String(message) }];
+  }
+
+  if (conversation.length === 0) return res.status(400).json({ error: "Keine Nachricht erhalten." });
   if (!apiKey && !oauthToken) {
     return res.status(400).json({
       error: `Kein API-Key für ${provider} hinterlegt. Settings → AI-Modelle.`,
@@ -64,7 +75,7 @@ export default async function handler(req, res) {
           model: claudeModel,
           max_tokens: tokenLimit,
           system: systemPrompt || "",
-          messages: [{ role: "user", content: message }],
+          messages: conversation,
         }),
       }), UPSTREAM_TIMEOUT_MS, "Claude");
 
@@ -110,7 +121,7 @@ export default async function handler(req, res) {
           max_tokens: tokenLimit,
           messages: [
             ...(systemPrompt ? [{ role: "system", content: systemPrompt }] : []),
-            { role: "user", content: message },
+            ...conversation,
           ],
         }),
       }), UPSTREAM_TIMEOUT_MS, "OpenAI");
@@ -153,10 +164,13 @@ export default async function handler(req, res) {
       const headers = { "Content-Type": "application/json" };
       if (oauthToken && !apiKey) headers["Authorization"] = `Bearer ${oauthToken}`;
 
-      // Use Gemini's official systemInstruction field instead of jamming the system prompt
-      // into the user turn — gives much better, more on-topic answers.
+      // Use Gemini's official systemInstruction field + map conversation to its expected shape.
+      // Gemini uses { role: "user" | "model", parts: [{ text }] } — translate "assistant" → "model".
       const requestBody = {
-        contents: [{ role: "user", parts: [{ text: message }] }],
+        contents: conversation.map(m => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }],
+        })),
         generationConfig: {
           maxOutputTokens: tokenLimit,
           temperature: 0.7,

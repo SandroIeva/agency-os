@@ -13206,9 +13206,21 @@ export default function CircularMenu() {
   };
 
   // Start voice recording with Web Speech API
-  // ── Voice transcript review: editable text before sending to AI ──
-  const [voiceReview, setVoiceReview] = useState(false);     // true after mic stops, while user reviews/edits the transcript
-  const [reviewText, setReviewText] = useState("");          // editable transcript content
+  // ── Dialog mode (ChatGPT-style multi-turn conversation, triggered by the bottom Mic button) ──
+  const [dialogMode, setDialogMode] = useState(false);
+  // When true, the next stopVoice() shouldn't send to AI — it should open the dialog with the transcript pre-filled.
+  const voiceTargetDialogRef = useRef(false);
+  const [dialogMessages, setDialogMessages] = useState([]); // [{role:"user"|"assistant", content, timestamp}]
+  const [dialogInput, setDialogInput] = useState("");
+  const [dialogSending, setDialogSending] = useState(false);
+  const [dialogMicActive, setDialogMicActive] = useState(false); // mic recording inside dialog input
+  const dialogScrollRef = useRef(null);
+  const dialogRecognitionRef = useRef(null);
+  // Auto-scroll to the latest message
+  useEffect(() => {
+    if (!dialogScrollRef.current) return;
+    dialogScrollRef.current.scrollTop = dialogScrollRef.current.scrollHeight;
+  }, [dialogMessages, dialogMode]);
 
   // ── Vocabulary correction: fix common phonetic mishearings of important names ──
   // E.g. "Epics", "Apics", "Apicks", "Epix" → "APPICS". Triggered on every recognised final phrase.
@@ -13319,7 +13331,7 @@ export default function CircularMenu() {
 
     const cleaned = correctTranscriptVocab((transcript || "").trim());
 
-    // ── Local voice commands run instantly — no review needed ──
+    // ── Local voice commands run instantly — no AI call needed ──
     const voiceNav = detectVoiceCommand(cleaned);
     if (voiceNav) {
       setVoiceMode(false);
@@ -13327,12 +13339,23 @@ export default function CircularMenu() {
       setAiStatus("");
       setAiResponse("");
       setTranscript("");
+      voiceTargetDialogRef.current = false;
       if (voiceNav.view) setCurrentView(voiceNav.view);
       if (voiceNav.action) voiceNav.action();
       return;
     }
 
-    // No transcript captured — silently bail without nagging
+    // Dialog target (Mic button in bottom bar): pre-fill the dialog input — do NOT auto-send.
+    if (voiceTargetDialogRef.current) {
+      voiceTargetDialogRef.current = false;
+      setVoiceMode(false);
+      setAiStatus("");
+      setTranscript("");
+      openDialogMode(cleaned);
+      return;
+    }
+
+    // No transcript captured — silently bail
     if (!cleaned) {
       setVoiceMode(false);
       setAiSpeaking(false);
@@ -13340,24 +13363,146 @@ export default function CircularMenu() {
       return;
     }
 
-    // Enter REVIEW mode — user can edit the text before submitting
-    setReviewText(cleaned);
+    // Quick question (AI sphere) → fire immediately
     setVoiceMode(false);
-    setVoiceReview(true);
-    setAiStatus("");
+    await submitVoiceMessage(cleaned);
   };
 
-  // Re-arm the mic for another attempt without leaving review mode
-  const restartVoiceFromReview = () => {
-    setVoiceReview(false);
-    setReviewText("");
-    setTranscript("");
+  // ── Dialog mode: multi-turn conversation ──
+  const openDialogMode = (prefillText) => {
+    setMenuOpen(false);
+    setSubOpen(false);
+    if (panelOpen) setPanelOpen(false);
+    if (tasksOpen) setTasksOpen(false);
+    if (typeof prefillText === "string" && prefillText.trim()) {
+      setDialogInput(prev => {
+        const t = prefillText.trim();
+        if (!prev) return t;
+        return prev.endsWith(" ") ? prev + t : prev + " " + t;
+      });
+    }
+    setDialogMode(true);
+  };
+
+  // Mic in the bottom bar: start listening, then pre-fill the dialog input on stop.
+  // This keeps the user in control — nothing is sent until they hit Enter / Send.
+  const startVoiceForDialog = () => {
+    voiceTargetDialogRef.current = true;
     startVoice();
   };
+  const closeDialogMode = () => {
+    setDialogMode(false);
+    // Stop any in-flight mic recording
+    try { if (dialogRecognitionRef.current) dialogRecognitionRef.current.stop(); } catch(e) {}
+    dialogRecognitionRef.current = null;
+    setDialogMicActive(false);
+  };
+  const resetDialog = () => {
+    setDialogMessages([]);
+    setDialogInput("");
+  };
 
-  // Send the (possibly edited) review text to the AI
+  // Toggle mic dictation inside the dialog input
+  const toggleDialogMic = () => {
+    if (dialogMicActive) {
+      try { if (dialogRecognitionRef.current) dialogRecognitionRef.current.stop(); } catch(e) {}
+      dialogRecognitionRef.current = null;
+      setDialogMicActive(false);
+      return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { return; }
+    const recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = appLanguage === "de" ? "de-DE" : "en-US";
+    let baseText = dialogInput;
+    let finalised = "";
+    recognition.onresult = (event) => {
+      let interim = "";
+      for (let i = 0; i < event.results.length; i++) {
+        if (event.results[i].isFinal) finalised += event.results[i][0].transcript;
+        else interim += event.results[i][0].transcript;
+      }
+      const corrected = correctTranscriptVocab((finalised + interim).trim());
+      const joined = baseText && !baseText.endsWith(" ") ? baseText + " " + corrected : baseText + corrected;
+      setDialogInput(joined.trim());
+    };
+    recognition.onerror = () => {};
+    recognition.onend = () => {
+      dialogRecognitionRef.current = null;
+      setDialogMicActive(false);
+    };
+    recognition.start();
+    dialogRecognitionRef.current = recognition;
+    setDialogMicActive(true);
+  };
+
+  const sendDialogMessage = async () => {
+    const text = (dialogInput || "").trim();
+    if (!text || dialogSending) return;
+
+    // Stop mic if still listening
+    if (dialogMicActive) {
+      try { if (dialogRecognitionRef.current) dialogRecognitionRef.current.stop(); } catch(e) {}
+      dialogRecognitionRef.current = null;
+      setDialogMicActive(false);
+    }
+
+    const userMsg = { role: "user", content: text, timestamp: Date.now() };
+    const nextMessages = [...dialogMessages, userMsg];
+    setDialogMessages(nextMessages);
+    setDialogInput("");
+    setDialogSending(true);
+
+    try {
+      const systemPrompt = buildSystemPrompt({
+        currentView,
+        userName,
+        provider: llmProvider,
+        workspace: userOrg ? { name: userOrg.name, role: userOrgRole } : null,
+        brand: brandProfile,
+        projects: appProjects,
+      });
+      const activeKey = llmKeys[llmProvider];
+      const googleToken = llmProvider === "gemini" && !activeKey ? getProviderToken() : null;
+
+      if (!activeKey && !googleToken) {
+        setDialogMessages(prev => [...prev, { role: "assistant", content: t("ai.noProvider") || "Kein KI-Provider konfiguriert. Bitte in den Settings einen API-Key eintragen.", timestamp: Date.now(), error: true }]);
+        return;
+      }
+
+      const response = await fetch("/api/chat-multi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: nextMessages.map(m => ({ role: m.role, content: m.content })),
+          systemPrompt,
+          provider: llmProvider,
+          apiKey: activeKey || undefined,
+          oauthToken: googleToken || undefined,
+        }),
+      });
+      const data = await response.json();
+      const aiText = data.content?.[0]?.text;
+      if (aiText) {
+        setDialogMessages(prev => [...prev, { role: "assistant", content: aiText, timestamp: Date.now() }]);
+      } else if (data.error) {
+        const providerName = data.provider ? data.provider.charAt(0).toUpperCase() + data.provider.slice(1) : "KI";
+        setDialogMessages(prev => [...prev, { role: "assistant", content: `${providerName}: ${data.error}`, timestamp: Date.now(), error: true }]);
+      } else {
+        setDialogMessages(prev => [...prev, { role: "assistant", content: t("ai.fallback") || "Konnte gerade nicht antworten.", timestamp: Date.now(), error: true }]);
+      }
+    } catch (e) {
+      setDialogMessages(prev => [...prev, { role: "assistant", content: `Netzwerk-Fehler: ${e.message || "unbekannt"}`, timestamp: Date.now(), error: true }]);
+    } finally {
+      setDialogSending(false);
+    }
+  };
+
+  // Send the transcript to the AI (called by both stopVoice and any external invokers)
   const submitVoiceMessage = async (overrideText) => {
-    const userMessage = (overrideText ?? reviewText ?? "").trim() || "Hello, what can you help me with?";
+    const userMessage = (overrideText ?? "").trim() || "Hello, what can you help me with?";
     setVoiceReview(false);
     setAiSpeaking(true);
     setAiStatus("thinking");
@@ -14593,113 +14738,156 @@ export default function CircularMenu() {
           )}
         </AnimatePresence>
 
-        {/* VOICE REVIEW VIEW — editable transcript with Send / Re-record actions */}
+        {/* DIALOG MODE — full conversation chat (ChatGPT-style) */}
         <AnimatePresence>
-          {voiceReview && (
+          {dialogMode && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              onClick={(e) => {
-                // Click on the dimmed backdrop (not the inner card) closes the review without nav.
-                if (e.target === e.currentTarget) {
-                  setVoiceReview(false);
-                  setReviewText("");
-                  setTranscript("");
-                }
-              }}
+              transition={{ duration: 0.22 }}
               style={{
                 position: "fixed", inset: 0,
                 display: "flex", flexDirection: "column",
-                alignItems: "center", justifyContent: "center",
-                background: darkMode ? "rgba(10, 10, 16, 0.78)" : "rgba(245, 245, 247, 0.78)",
-                backdropFilter: "blur(10px)",
-                WebkitBackdropFilter: "blur(10px)",
-                zIndex: 9999, padding: 32,
+                background: darkMode ? "rgba(10, 10, 16, 0.85)" : "rgba(245, 245, 247, 0.85)",
+                backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
+                zIndex: 9998,
               }}
             >
-              <motion.div
-                initial={{ scale: 0.94, y: 12 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.96, y: 8 }}
-                transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1.0] }}
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  width: "100%", maxWidth: 620,
-                  display: "flex", flexDirection: "column", alignItems: "center",
-                  pointerEvents: "auto",
-                }}
-              >
-                <div style={{
-                  fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff70" : "#1a1a2e90",
-                  letterSpacing: 2, marginBottom: 16, fontWeight: 600, textTransform: "uppercase",
-                }}>{appLanguage === "de" ? "Vor dem Senden bearbeiten" : "Edit before sending"}</div>
+              {/* Header */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}` }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: theme.accent + "20", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, lineHeight: 1.2 }}>{appLanguage === "de" ? "i7 OS Assistent" : "i7 OS Assistant"}</div>
+                    <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>
+                      {(llmProvider || "claude").charAt(0).toUpperCase() + (llmProvider || "claude").slice(1)}
+                      {dialogMessages.length > 0 && ` · ${dialogMessages.length} ${appLanguage === "de" ? "Nachrichten" : "messages"}`}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {dialogMessages.length > 0 && (
+                    <motion.div onClick={resetDialog} whileTap={{ scale: 0.95 }}
+                      title={appLanguage === "de" ? "Verlauf löschen" : "Clear history"}
+                      style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"}`, color: theme.textDim, fontSize: 11, fontFamily: FONT, fontWeight: 500 }}
+                    >{appLanguage === "de" ? "Neuer Dialog" : "New chat"}</motion.div>
+                  )}
+                  <motion.div onClick={closeDialogMode} whileTap={{ scale: 0.92 }}
+                    style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  </motion.div>
+                </div>
+              </div>
 
-                <textarea
-                  value={reviewText}
-                  onChange={(e) => setReviewText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitVoiceMessage(); }
-                    if (e.key === "Escape") { e.preventDefault(); setVoiceReview(false); setReviewText(""); setTranscript(""); }
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  autoFocus
-                  rows={3}
-                  style={{
-                    width: "100%",
-                    background: darkMode ? "rgba(28, 28, 36, 0.95)" : "rgba(255, 255, 255, 0.95)",
-                    border: `1px solid ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)"}`,
-                    borderRadius: 16,
-                    padding: "16px 18px",
-                    fontSize: 16, fontFamily: FONT, fontWeight: 400, lineHeight: 1.5,
-                    color: darkMode ? "#ffffffE6" : "#1a1a2eEE",
-                    outline: "none", resize: "vertical", caretColor: "#8B7AFF",
-                    boxShadow: "0 14px 50px rgba(0,0,0,0.25)",
-                  }}
-                />
+              {/* Messages */}
+              <div ref={dialogScrollRef} style={{ flex: 1, overflowY: "auto", padding: "24px 20px" }}>
+                <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 }}>
+                  {dialogMessages.length === 0 && (
+                    <div style={{ textAlign: "center", padding: "60px 20px", color: theme.textDim }}>
+                      <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>
+                        {appLanguage === "de" ? `Was möchtest du fragen, ${userName?.split(" ")[0] || ""}?` : `What's on your mind, ${userName?.split(" ")[0] || ""}?`}
+                      </div>
+                      <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
+                        {appLanguage === "de" ? "Stell deine Frage — der Verlauf bleibt im Dialog erhalten." : "Ask anything — the conversation history stays in context."}
+                      </div>
+                    </div>
+                  )}
+                  {dialogMessages.map((m, idx) => (
+                    <div key={idx} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+                      <div style={{
+                        maxWidth: "75%", padding: "11px 16px", borderRadius: 18,
+                        background: m.role === "user"
+                          ? theme.accent
+                          : (m.error ? (darkMode ? "rgba(232,67,147,0.12)" : "rgba(232,67,147,0.08)") : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)")),
+                        color: m.role === "user" ? "#fff" : (m.error ? "#E84393" : theme.text),
+                        fontSize: 14, fontFamily: FONT, lineHeight: 1.55,
+                        whiteSpace: "pre-wrap", wordBreak: "break-word",
+                        borderBottomRightRadius: m.role === "user" ? 6 : 18,
+                        borderBottomLeftRadius: m.role === "user" ? 18 : 6,
+                        boxShadow: m.role === "user" ? `0 4px 14px ${theme.accent}30` : "none",
+                      }}>
+                        {m.content}
+                      </div>
+                    </div>
+                  ))}
+                  {dialogSending && (
+                    <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                      <div style={{ padding: "11px 16px", borderRadius: 18, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", display: "flex", gap: 4 }}>
+                        {[0, 1, 2].map(i => (
+                          <motion.div key={i}
+                            animate={{ opacity: [0.3, 1, 0.3] }}
+                            transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
+                            style={{ width: 6, height: 6, borderRadius: "50%", background: theme.textDim }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
 
-                <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap", justifyContent: "center" }}>
-                  <motion.div onClick={(e) => { e.stopPropagation(); setVoiceReview(false); setReviewText(""); setTranscript(""); }} whileTap={{ scale: 0.96 }}
-                    style={{
-                      padding: "10px 18px", borderRadius: 999, cursor: "pointer",
-                      background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-                      border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)"}`,
-                      color: darkMode ? "#ffffff90" : "#1a1a2e90",
-                      fontSize: 12, fontFamily: FONT, fontWeight: 500,
+              {/* Input bar */}
+              <div style={{ padding: "16px 20px 20px", borderTop: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}` }}>
+                <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", alignItems: "flex-end", gap: 10 }}>
+                  <textarea
+                    value={dialogInput}
+                    onChange={(e) => setDialogInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendDialogMessage(); }
+                      if (e.key === "Escape") { e.preventDefault(); closeDialogMode(); }
                     }}
-                  >{appLanguage === "de" ? "Abbrechen" : "Cancel"}</motion.div>
-
-                  <motion.div onClick={(e) => { e.stopPropagation(); restartVoiceFromReview(); }} whileTap={{ scale: 0.96 }}
+                    autoFocus
+                    rows={1}
+                    placeholder={appLanguage === "de" ? "Nachricht eingeben…" : "Type a message…"}
                     style={{
-                      padding: "10px 18px", borderRadius: 999, cursor: "pointer",
-                      background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                      flex: 1, resize: "none", minHeight: 44, maxHeight: 180,
+                      background: darkMode ? "rgba(28, 28, 36, 0.95)" : "rgba(255, 255, 255, 0.95)",
                       border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)"}`,
-                      color: darkMode ? "#ffffffCC" : "#1a1a2eCC",
-                      fontSize: 12, fontFamily: FONT, fontWeight: 500,
-                      display: "inline-flex", alignItems: "center", gap: 6,
+                      borderRadius: 18,
+                      padding: "12px 16px",
+                      fontSize: 14, fontFamily: FONT, lineHeight: 1.5,
+                      color: theme.text, outline: "none", caretColor: theme.accent,
+                    }}
+                  />
+                  <motion.div onClick={toggleDialogMic} whileTap={{ scale: 0.94 }}
+                    title={appLanguage === "de" ? "Diktieren" : "Dictate"}
+                    style={{
+                      width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                      background: dialogMicActive ? theme.accent : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"),
+                      color: dialogMicActive ? "#fff" : theme.text,
+                      border: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"}`,
+                      transition: "background 0.15s",
                     }}
                   >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 1010 10"/><path d="M12 2v6h6"/></svg>
-                    {appLanguage === "de" ? "Erneut sprechen" : "Re-record"}
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="9" y="2" width="6" height="12" rx="3"/>
+                      <path d="M19 10v2a7 7 0 01-14 0v-2"/>
+                      <line x1="12" y1="19" x2="12" y2="23"/>
+                      <line x1="8" y1="23" x2="16" y2="23"/>
+                    </svg>
                   </motion.div>
-
-                  <motion.div onClick={(e) => { e.stopPropagation(); if (reviewText.trim()) submitVoiceMessage(); }} whileTap={{ scale: 0.96 }}
+                  <motion.div onClick={sendDialogMessage} whileTap={{ scale: 0.94 }}
                     style={{
-                      padding: "10px 22px", borderRadius: 999, cursor: reviewText.trim() ? "pointer" : "not-allowed",
-                      background: reviewText.trim() ? "#8B7AFF" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"),
-                      color: reviewText.trim() ? "#fff" : (darkMode ? "#ffffff40" : "#1a1a2e40"),
-                      fontSize: 12, fontFamily: FONT, fontWeight: 600,
-                      boxShadow: reviewText.trim() ? "0 6px 22px rgba(139,122,255,0.4)" : "none",
+                      width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      cursor: dialogInput.trim() && !dialogSending ? "pointer" : "not-allowed",
+                      background: dialogInput.trim() && !dialogSending ? theme.accent : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"),
+                      color: dialogInput.trim() && !dialogSending ? "#fff" : theme.textFaint,
+                      boxShadow: dialogInput.trim() && !dialogSending ? `0 4px 14px ${theme.accent}45` : "none",
                     }}
-                  >{appLanguage === "de" ? "Senden" : "Send"} ⏎</motion.div>
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  </motion.div>
                 </div>
-
-                <div style={{
-                  fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff45" : "#1a1a2e70",
-                  marginTop: 12, letterSpacing: 0.3,
-                }}>{appLanguage === "de" ? "⌘+Enter zum Senden · Esc zum Abbrechen" : "⌘+Enter to send · Esc to cancel"}</div>
-              </motion.div>
+                <div style={{ maxWidth: 760, margin: "8px auto 0", fontSize: 10, fontFamily: FONT, color: theme.textFaint, textAlign: "center" }}>
+                  {appLanguage === "de" ? "Enter zum Senden · Shift+Enter für Zeilenumbruch · Esc zum Schließen" : "Enter to send · Shift+Enter for new line · Esc to close"}
+                </div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -16678,10 +16866,15 @@ export default function CircularMenu() {
             </svg>
           </motion.div>
 
-          {/* Icon2: Mic */}
-          <motion.div whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }} transition={smoothSpring} style={{ cursor: "pointer" }} onClick={startVoice}>
+          {/* Icon2: Mic — record voice, then load the Dialog with the transcript pre-filled */}
+          <motion.div
+            whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }} transition={smoothSpring}
+            style={{ cursor: "pointer" }}
+            onClick={startVoiceForDialog}
+            title={appLanguage === "de" ? "Sprechen, dann im Dialog bearbeiten" : "Speak, then review in dialog"}
+          >
             <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
-              <rect x="0.6" y="0.6" width="50.4" height="50.4" rx="25.2" stroke={darkMode ? "white" : "#1a1a2e"} strokeOpacity="0.15" strokeWidth="1.2" />
+              <rect x="0.6" y="0.6" width="50.4" height="50.4" rx="25.2" stroke={darkMode ? "white" : "#1a1a2e"} strokeOpacity={dialogMode ? 0.45 : 0.15} strokeWidth="1.2" />
               <path d="M26.2839 28.4991C28.0558 28.4991 29.5239 27.0309 29.5239 25.2591V18.7791C29.5239 16.9566 28.0558 15.5391 26.2839 15.5391C24.512 15.5391 23.0439 16.9566 23.0439 18.7791V25.2591C23.0439 27.0309 24.512 28.4991 26.2839 28.4991ZM32.6627 25.2591C32.1564 25.2591 31.7008 25.6134 31.5995 26.1703C31.1439 28.7016 28.967 30.6253 26.2839 30.6253C23.6008 30.6253 21.4239 28.7016 20.9683 26.1703C20.867 25.6134 20.4114 25.2591 19.9052 25.2591C19.247 25.2591 18.7408 25.8159 18.842 26.4741C19.3483 29.7141 21.9302 32.2453 25.2208 32.7009V34.9791C25.2208 35.5359 25.6764 36.0422 26.2839 36.0422C26.8914 36.0422 27.347 35.5359 27.347 34.9791V32.7009C30.6377 32.2453 33.2195 29.7141 33.7258 26.4741C33.8777 25.8159 33.3208 25.2591 32.6627 25.2591Z" fill={theme.iconColor}/>
             </svg>
           </motion.div>
