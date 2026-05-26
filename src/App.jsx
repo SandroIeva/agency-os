@@ -3065,26 +3065,6 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
           )}
         </div>
 
-        {/* Team members */}
-        {orgMembers.length > 0 && (
-          <div style={{ padding: "0 10px 24px", marginTop: "auto" }}>
-            <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 2, textTransform: "uppercase", padding: "12px 10px 8px", fontWeight: 600 }}>Team</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "0 10px" }}>
-              {orgMembers.slice(0, 8).map(m => {
-                const av = m.profiles?.avatar_url || m.avatar_url;
-                const name = m.profiles?.display_name || m.full_name || m.name || m.profiles?.email?.split("@")[0] || m.email?.split("@")[0] || "?";
-                return av ? (
-                  <img key={m.user_id || m.id} src={av} alt="" referrerPolicy="no-referrer" title={name} style={{ width: 28, height: 28, borderRadius: "50%", border: `2px solid ${theme.borderFaint}` }} />
-                ) : (
-                  <div key={m.user_id || m.id} title={name} style={{ width: 28, height: 28, borderRadius: "50%", background: theme.accent + "30", color: theme.accent, border: `2px solid ${theme.borderFaint}`, fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{name[0].toUpperCase()}</div>
-                );
-              })}
-              {orgMembers.length > 8 && (
-                <div style={{ width: 28, height: 28, borderRadius: "50%", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", color: theme.textDim, fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>+{orgMembers.length - 8}</div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Main area */}
