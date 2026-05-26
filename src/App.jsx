@@ -2780,6 +2780,12 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
     setLinkedTasks(prev => ({ ...prev, [itemId]: taskIds }));
   };
 
+  const refetchItems = async () => {
+    if (!userOrg?.id) return;
+    const { data } = await supabase.from("timeline_items").select("*").eq("org_id", userOrg.id).order("start_date", { ascending: true });
+    if (data) setItems(data);
+  };
+
   const createItem = async (payload) => {
     const row = {
       org_id: userOrg.id,
@@ -2793,10 +2799,17 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
       created_by: session.user.id,
     };
     const { data, error: e } = await supabase.from("timeline_items").insert(row).select().single();
-    if (e) { console.error(e); return null; }
+    if (e) {
+      console.error("[Timeline] insert failed", e);
+      setError(`Sprint konnte nicht erstellt werden: ${e.message || "Unbekannter Fehler"}`);
+      setTimeout(() => setError(null), 4000);
+      return null;
+    }
     setItems(prev => [...prev, data]);
-    if (payload.assignee_ids) await persistAssignees(data.id, payload.assignee_ids);
-    if (payload.linked_task_ids) await persistLinkedTasks(data.id, payload.linked_task_ids);
+    if (payload.assignee_ids && payload.assignee_ids.length > 0) await persistAssignees(data.id, payload.assignee_ids);
+    if (payload.linked_task_ids && payload.linked_task_ids.length > 0) await persistLinkedTasks(data.id, payload.linked_task_ids);
+    // Safety net: also refetch to make sure UI matches DB
+    refetchItems();
     return data;
   };
 
