@@ -1,7 +1,8 @@
 {
+  "framework": "vite",
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
-    { "source": "/((?!api/|.*\\.).*)", "destination": "/" }
+    { "source": "/((?!api/|@|node_modules/|src/|.*\\.).*)", "destination": "/" }
   ]
 }

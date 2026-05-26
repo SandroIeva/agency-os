@@ -3930,19 +3930,9 @@ function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId =
           </div>
           <div>
             <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Sprinttitel</label>
-            <div style={{ display: "flex", alignItems: "stretch", gap: 6 }}>
-              <input value={title} onChange={e => setTitle(e.target.value)} autoFocus placeholder="Sprint Title"
-                style={{ flex: 1, minWidth: 0, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent }}
-              />
-              {!creating && onChainNext && (
-                <motion.div onClick={onChainNext} whileTap={{ scale: 0.94 }} whileHover={{ background: theme.accent + "20" }}
-                  title="Folge-Sprint erstellen (verkettet)"
-                  style={{ width: 36, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 10, background: theme.accent + "15", border: `1px solid ${theme.accent}30`, color: theme.accent, cursor: "pointer", flexShrink: 0 }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </motion.div>
-              )}
-            </div>
+            <input value={title} onChange={e => setTitle(e.target.value)} autoFocus placeholder="Sprint Title"
+              style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent }}
+            />
           </div>
         </div>
 
@@ -10074,11 +10064,14 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab: raw
         // Normalize the website URL to the final/redirected one
         if (data.url && !next.website_url.startsWith("http")) next.website_url = data.url;
 
-        // ── Intelligence: store context + headlines + value props ──
+        // ── Intelligence: store context + headlines + value props + fonts ──
         const intel = { ...(next.intelligence || {}) };
         if (data.about) intel.context = data.about;
         if (Array.isArray(data.headlines) && data.headlines.length) intel.headlines = data.headlines;
         if (Array.isArray(data.value_props) && data.value_props.length) intel.value_props = data.value_props;
+        if (data.fonts && (data.fonts.heading || data.fonts.body || (data.fonts.all && data.fonts.all.length))) {
+          intel.fonts = data.fonts;
+        }
         intel.source_url = data.url || next.website_url;
         intel.last_fetched_at = new Date().toISOString();
         next.intelligence = intel;
@@ -10124,16 +10117,48 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab: raw
     }
   };
 
+  // Upload a base64 data URL to Supabase Storage and return the public URL.
+  // Used to persist auto-fetched logos (currently inlined as data URLs) before they hit the DB.
+  const persistDataUrlAsLogo = async (dataUrl, hint = "logo") => {
+    if (!dataUrl || !dataUrl.startsWith("data:")) return dataUrl; // already a regular URL
+    try {
+      const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (!match) return dataUrl;
+      const mime = match[1] || "image/png";
+      const ext = mime.split("/").pop().replace("+xml", "").replace("svg", "svg").replace("jpeg", "jpg") || "png";
+      const bin = atob(match[2]);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const blob = new Blob([bytes], { type: mime });
+      const filePath = `${userOrg?.id || session.user.id}/${hint}-${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from("project-logos").upload(filePath, blob, { upsert: true, contentType: mime });
+      if (error) { console.warn("Logo persist failed", error); return dataUrl; }
+      const { data: urlData } = supabase.storage.from("project-logos").getPublicUrl(filePath);
+      return urlData.publicUrl;
+    } catch (e) {
+      console.warn("Logo persist threw", e);
+      return dataUrl;
+    }
+  };
+
   // ── Save ──
   const saveProfile = async () => {
     if (!form.name.trim()) return;
     setSaving(true);
     try {
+      // Upload any inlined data URLs to Supabase Storage so the DB stores stable public URLs
+      const persistedLogoUrl = await persistDataUrlAsLogo(form.logo_url, "primary");
+      const persistedLogos = await Promise.all((form.logos || []).map(async (l) => {
+        if (!l?.url) return l;
+        const url = await persistDataUrlAsLogo(l.url, l.key || "logo");
+        return { ...l, url };
+      }));
+
       const payload = {
         org_id: userOrg.id,
         name: form.name.trim(),
         claim: form.claim.trim() || null,
-        logo_url: form.logo_url || null,
+        logo_url: persistedLogoUrl || null,
         website_url: form.website_url.trim() || null,
         figma_url: form.figma_url.trim() || null,
         // Keep flat colors[] in sync with color_palette for backward compat
@@ -10143,7 +10168,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab: raw
           secondary: form.color_palette.secondary || null,
           accents: form.color_palette.accents || [],
         },
-        logos: form.logos,
+        logos: persistedLogos,
         sources: form.sources,
         next_steps: form.next_steps,
         personas: form.personas || [],
@@ -10162,6 +10187,8 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab: raw
         const { data } = await supabase.from("brand_profile").insert(payload).select().single();
         setProfile(data);
       }
+      // Reflect the persisted URLs back into the form so the user doesn't re-upload on next save
+      setForm(prev => ({ ...prev, logo_url: persistedLogoUrl, logos: persistedLogos }));
       setStep(7);
       setTimeout(() => { setEditMode(false); setStep(0); }, 1800);
     } catch (e) {
@@ -10562,9 +10589,11 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab: raw
                   {existing ? (
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       {existing.url.match(/\.(svg)$/i) || existing.format?.includes("svg") ? (
-                        <img src={existing.url} alt="" style={{ width: 56, height: 56, objectFit: "contain", borderRadius: 8, background: slot.key === "dark" ? "#1a1a2e" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)"), padding: 6 }} />
+                        <img src={existing.url} alt="" referrerPolicy="no-referrer"
+                          style={{ width: 56, height: 56, objectFit: "contain", borderRadius: 8, background: slot.key === "dark" ? "#1a1a2e" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)"), padding: 6 }} />
                       ) : (
-                        <img src={existing.url} alt="" style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover", background: slot.key === "dark" ? "#1a1a2e" : "transparent" }} />
+                        <img src={existing.url} alt="" referrerPolicy="no-referrer"
+                          style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover", background: slot.key === "dark" ? "#1a1a2e" : "transparent" }} />
                       )}
                       <div style={{ flex: 1, minWidth: 0, fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{existing.name}</div>
                       <motion.div whileTap={{ scale: 0.9 }} onClick={() => removeLogoSlot(slot.key)} style={{ cursor: "pointer", color: theme.textDim, fontSize: 12, padding: 4 }}>✕</motion.div>
@@ -10723,19 +10752,47 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab: raw
               </div>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-              {form.color_palette.accents.map((c) => (
-                <motion.div key={c}
-                  initial={{ scale: 0 }} animate={{ scale: 1 }}
-                  transition={{ type: "spring", stiffness: 260, damping: 20 }}
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 12px 4px 4px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}
-                >
-                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: c, border: `1px solid ${theme.borderFaint}` }} />
-                  <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textSub, letterSpacing: 0.3 }}>{c.toUpperCase()}</span>
-                  <motion.span whileTap={{ scale: 0.9 }} onClick={() => removeAccent(c)}
-                    style={{ cursor: "pointer", color: theme.textFaint, fontSize: 11, marginLeft: 2 }}
-                  >✕</motion.span>
-                </motion.div>
-              ))}
+              {form.color_palette.accents.map((c) => {
+                // Promote this accent to Primary or Secondary slot — swap the previous occupant down to accents.
+                const promote = (role) => {
+                  setForm(prev => {
+                    const oldRoleValue = prev.color_palette[role];
+                    const newAccents = prev.color_palette.accents.filter(x => x !== c);
+                    if (oldRoleValue && oldRoleValue !== c && !newAccents.includes(oldRoleValue)) {
+                      newAccents.push(oldRoleValue);
+                    }
+                    return {
+                      ...prev,
+                      color_palette: {
+                        ...prev.color_palette,
+                        [role]: c,
+                        accents: newAccents,
+                      },
+                    };
+                  });
+                };
+                return (
+                  <motion.div key={c}
+                    initial={{ scale: 0 }} animate={{ scale: 1 }}
+                    transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px 4px 4px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}
+                  >
+                    <div style={{ width: 22, height: 22, borderRadius: "50%", background: c, border: `1px solid ${theme.borderFaint}` }} />
+                    <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textSub, letterSpacing: 0.3 }}>{c.toUpperCase()}</span>
+                    <motion.span whileTap={{ scale: 0.9 }} onClick={() => promote("primary")}
+                      title={t("brand.colors.makePrimary") || "Als Primary setzen"}
+                      style={{ cursor: "pointer", color: theme.textDim, fontSize: 9, padding: "1px 5px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", fontWeight: 600, letterSpacing: 0.5 }}
+                    >1°</motion.span>
+                    <motion.span whileTap={{ scale: 0.9 }} onClick={() => promote("secondary")}
+                      title={t("brand.colors.makeSecondary") || "Als Secondary setzen"}
+                      style={{ cursor: "pointer", color: theme.textDim, fontSize: 9, padding: "1px 5px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", fontWeight: 600, letterSpacing: 0.5 }}
+                    >2°</motion.span>
+                    <motion.span whileTap={{ scale: 0.9 }} onClick={() => removeAccent(c)}
+                      style={{ cursor: "pointer", color: theme.textFaint, fontSize: 11, marginLeft: 2 }}
+                    >✕</motion.span>
+                  </motion.div>
+                );
+              })}
               {/* Quick add */}
               <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
                 <div style={{ width: 26, height: 26, borderRadius: 8, background: colorInput, border: `2px solid ${theme.borderFaint}` }}>
@@ -10753,6 +10810,48 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab: raw
               >{t("brand.colors.addAccent")}</motion.button>
             </div>
           </div>
+
+          {/* Typography — auto-detected from the website (read-only chips for now) */}
+          {form.intelligence?.fonts && (form.intelligence.fonts.heading || form.intelligence.fonts.body || (form.intelligence.fonts.all || []).length > 0) && (
+            <div style={{ marginTop: 12, paddingTop: 24, borderTop: `1px solid ${theme.borderFaint}` }}>
+              {/* Inject Google Fonts stylesheet so the preview renders in the real typeface */}
+              {(form.intelligence?.fonts?.google_fonts || []).length > 0 && (
+                <link rel="stylesheet" href={`https://fonts.googleapis.com/css2?${(form.intelligence.fonts.google_fonts || []).map(f => `family=${encodeURIComponent(f).replace(/%20/g, "+")}:wght@400;600`).join("&")}&display=swap`} />
+              )}
+              <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 4 }}>Typografie</div>
+              <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 14 }}>Aus der Website extrahiert.</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+                {[
+                  { key: "heading", label: "Headlines" },
+                  { key: "body",    label: "Fließtext" },
+                ].map(slot => {
+                  const fam = form.intelligence?.fonts?.[slot.key];
+                  return (
+                    <div key={slot.key} style={{
+                      padding: 14, borderRadius: 12,
+                      background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)",
+                      border: `1px solid ${theme.borderFaint}`,
+                    }}>
+                      <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 6 }}>{slot.label}</div>
+                      <div style={{ fontSize: 18, color: theme.text, fontWeight: slot.key === "heading" ? 600 : 400, fontFamily: fam ? `"${fam}", ${FONT}` : FONT, lineHeight: 1.25 }}>
+                        {fam || "—"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {(form.intelligence?.fonts?.google_fonts || []).length > 0 && (
+                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>
+                  Google Fonts erkannt: {(form.intelligence.fonts.google_fonts || []).join(" · ")}
+                </div>
+              )}
+              {(form.intelligence?.fonts?.custom || []).length > 0 && (
+                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 3 }}>
+                  Custom Faces: {(form.intelligence.fonts.custom || []).join(" · ")}
+                </div>
+              )}
+            </div>
+          )}
         </motion.div>
       );
     }
@@ -11608,9 +11707,9 @@ export default function CircularMenu() {
     bg: "#111117",
     cardBg: "rgba(22, 22, 30, 0.92)",
     text: "#ffffffCC",
-    textDim: "#ffffff40",
-    textFaint: "#ffffff25",
-    textSub: "#ffffff60",
+    textDim: "#ffffff55",
+    textFaint: "#ffffff42",
+    textSub: "#ffffff75",
     border: "rgba(255,255,255,0.1)",
     borderFaint: "rgba(255,255,255,0.06)",
     hoverBg: "rgba(255,255,255,0.05)",
@@ -13230,7 +13329,18 @@ export default function CircularMenu() {
         // No provider connected
         data = { content: [{ type: "text", text: t("ai.noProvider") }] };
       }
-      const aiText = data.content?.[0]?.text || t("ai.fallback");
+      // Surface API-level errors (invalid key, blocked by safety, rate limit, etc.) instead of a generic fallback
+      let aiText;
+      if (data.content?.[0]?.text) {
+        aiText = data.content[0].text;
+      } else if (data.error) {
+        // Make it sound conversational — prepend with a soft tone
+        const providerName = data.provider ? data.provider.charAt(0).toUpperCase() + data.provider.slice(1) : "Die KI";
+        aiText = `${providerName}: ${data.error}`;
+        console.warn("[AI error]", data);
+      } else {
+        aiText = t("ai.fallback");
+      }
       setAiResponse(aiText);
       setAiStatus("speaking");
 
