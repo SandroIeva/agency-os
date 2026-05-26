@@ -2564,9 +2564,10 @@ function tlMonthLabel(d, short = false) {
   return `${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMode, t }) {
+function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMode, t, openTaskInKanban }) {
   const [items, setItems] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [projectMembers, setProjectMembers] = useState({}); // project_id -> [user_id]
   const [tasks, setTasks] = useState([]);
   const [assignees, setAssignees] = useState({}); // item_id -> [user_id]
   const [linkedTasks, setLinkedTasks] = useState({}); // item_id -> [task_id]
@@ -2622,9 +2623,23 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
         if (!alive) return;
         if (iRes.error) throw iRes.error;
         const itemList = iRes.data || [];
+        const projList = pRes.data || [];
         setItems(itemList);
-        setProjects(pRes.data || []);
+        setProjects(projList);
         setTasks(tRes.data || []);
+
+        // Project members lookup
+        if (projList.length > 0) {
+          const projIds = projList.map(p => p.id);
+          const { data: pmRows } = await supabase.from("project_members").select("project_id, user_id").in("project_id", projIds);
+          const pm = {};
+          (pmRows || []).forEach(r => {
+            if (!pm[r.project_id]) pm[r.project_id] = [];
+            pm[r.project_id].push(r.user_id);
+          });
+          if (!alive) return;
+          setProjectMembers(pm);
+        }
 
         // Load assignees + linked tasks for all items
         if (itemList.length > 0) {
@@ -2714,10 +2729,19 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
     return m;
   }, [projects]);
 
+  // Live status derived from date range (not from stored value)
+  const liveStatus = (it) => {
+    const todayD = new Date(); todayD.setHours(0,0,0,0);
+    const sD = new Date(it.start_date); sD.setHours(0,0,0,0);
+    const eD = new Date(it.end_date); eD.setHours(0,0,0,0);
+    if (todayD > eD) return "done";
+    if (todayD >= sD) return "active";
+    return "planned";
+  };
   const itemColor = (it) => {
     if (it.color) return it.color;
     const p = it.project_id ? projectById[it.project_id] : null;
-    return p?.color || TL_STATUS_COLORS[it.status] || "#8B7AFF";
+    return p?.color || TL_STATUS_COLORS[liveStatus(it)] || "#8B7AFF";
   };
 
   // ── Time axis labels ──────────────────────────────────
@@ -2988,10 +3012,11 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
           {projects.map(p => {
             const count = itemsByProject[p.id] || 0;
             const isChecked = visibleProjectIds === null || visibleProjectIds.includes(p.id);
-            const projMembers = orgMembers.filter(m => {
-              const uid = m.user_id || m.id;
-              return tasks.some(tk => tk.project_id === p.id && tk.assignee_id === uid);
-            }).slice(0, 4);
+            // Use REAL project_members table — fall back to task-assignee scan if no rows
+            const memberIds = projectMembers[p.id] && projectMembers[p.id].length > 0
+              ? projectMembers[p.id]
+              : orgMembers.filter(m => tasks.some(tk => tk.project_id === p.id && tk.assignee_id === (m.user_id || m.id))).map(m => m.user_id || m.id);
+            const projMembers = orgMembers.filter(m => memberIds.includes(m.user_id || m.id)).slice(0, 5);
             return (
               <div key={p.id}
                 style={{ padding: "10px 10px", borderRadius: 8, marginBottom: 4, background: isChecked ? "transparent" : (darkMode ? "rgba(255,255,255,0.015)" : "rgba(0,0,0,0.01)"), opacity: isChecked ? 1 : 0.5, transition: "opacity 0.15s" }}
@@ -3304,7 +3329,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
               const width = Math.max(pxPerDay * 0.6, duration * pxPerDay - 4);
               const top = bandTops[bi] + (bandPadding / 2) + li * rowHeight;
               const c = itemColor(it);
-              const isDone = it.status === "done";
+              const isDone = liveStatus(it) === "done";
               const cardH = rowHeight - 14;
               return (
                 <div key={it.id}
@@ -3402,6 +3427,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
             tasks={tasks}
             initialAssigneeIds={selectedItem ? (assignees[selectedItem.id] || []) : []}
             initialLinkedTaskIds={selectedItem ? (linkedTasks[selectedItem.id] || []) : []}
+            onOpenTask={openTaskInKanban}
             theme={theme} darkMode={darkMode}
             onClose={() => { setCreating(false); setSelectedItem(null); setCreateForProject(null); }}
             onSave={async (payload) => {
@@ -3428,7 +3454,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
   );
 }
 
-function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId = null, projects, orgMembers = [], tasks = [], initialAssigneeIds = [], initialLinkedTaskIds = [], theme, darkMode, onClose, onSave, onDelete }) {
+function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId = null, projects, orgMembers = [], tasks = [], initialAssigneeIds = [], initialLinkedTaskIds = [], onOpenTask, theme, darkMode, onClose, onSave, onDelete }) {
   const today = tlIsoDate(new Date());
   const defaultEnd = tlIsoDate(tlAddDays(new Date(), sprintDays - 1));
   const [title, setTitle] = useState(item?.title || "");
@@ -3436,7 +3462,16 @@ function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId =
   const [startDate, setStartDate] = useState(item?.start_date || today);
   const [endDate, setEndDate] = useState(item?.end_date || defaultEnd);
   const [projectId, setProjectId] = useState(item?.project_id || defaultProjectId || "");
-  const [status, setStatus] = useState(item?.status || "planned");
+  // Status is derived automatically from date range. We still send 'status' on save based on current dates.
+  const deriveStatus = (s, e) => {
+    const todayD = new Date(); todayD.setHours(0,0,0,0);
+    const sD = new Date(s); sD.setHours(0,0,0,0);
+    const eD = new Date(e); eD.setHours(0,0,0,0);
+    if (todayD > eD) return "done";
+    if (todayD >= sD) return "active";
+    return "planned";
+  };
+  const status = deriveStatus(startDate, endDate);
   const [autoEnd, setAutoEnd] = useState(creating); // when creating: end auto-shifts with start
 
   // Keep end-date in sync with start-date when in auto mode (only for new sprints)
@@ -3497,7 +3532,7 @@ function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId =
         style={{ width: "100%", maxWidth: 540, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26, boxShadow: "0 25px 80px rgba(0,0,0,0.4)" }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-          <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.2 }}>{creating ? "Neues Timeline-Item" : "Item bearbeiten"}</div>
+          <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.2 }}>{creating ? "Neuer Sprint" : "Sprint bearbeiten"}</div>
           <motion.div onClick={onClose} whileTap={{ scale: 0.94 }} style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </motion.div>
@@ -3536,7 +3571,7 @@ function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId =
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, marginBottom: 18, alignItems: "end" }}>
           <div>
             <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Projekt</label>
             <select value={projectId} onChange={e => setProjectId(e.target.value)}
@@ -3546,18 +3581,10 @@ function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId =
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
-          <div>
-            <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Status</label>
-            <div style={{ display: "flex", gap: 4, padding: 3, borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}>
-              {["planned","active","done"].map(s => {
-                const active = status === s;
-                return (
-                  <motion.div key={s} onClick={() => setStatus(s)} whileTap={{ scale: 0.96 }}
-                    style={{ flex: 1, padding: "7px 8px", borderRadius: 7, cursor: "pointer", fontSize: 11, fontFamily: FONT, fontWeight: active ? 600 : 500, color: active ? "#fff" : theme.textDim, background: active ? TL_STATUS_COLORS[s] : "transparent", textAlign: "center", transition: "background 0.15s" }}
-                  >{TL_STATUS_LABEL[s]}</motion.div>
-                );
-              })}
-            </div>
+          {/* Status — auto-computed from dates, read-only chip */}
+          <div title="Status wird automatisch aus den Daten berechnet" style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 12px", borderRadius: 999, background: TL_STATUS_COLORS[status] + "15", border: `1px solid ${TL_STATUS_COLORS[status]}30`, color: TL_STATUS_COLORS[status], fontSize: 11, fontFamily: FONT, fontWeight: 600, whiteSpace: "nowrap" }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: TL_STATUS_COLORS[status] }} />
+            {TL_STATUS_LABEL[status]}
           </div>
         </div>
 
@@ -3631,14 +3658,30 @@ function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId =
               const tk = tasks.find(x => x.id === tid);
               if (!tk) return null;
               return (
-                <div key={tid} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10 }}>
+                <motion.div key={tid}
+                  whileHover={{ background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.035)" }}
+                  whileTap={{ scale: 0.99 }}
+                  onClick={() => { if (onOpenTask) { onOpenTask(tk.id); onClose(); } }}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, cursor: onOpenTask ? "pointer" : "default", transition: "background 0.15s" }}
+                >
                   <div style={{ width: 6, height: 6, borderRadius: "50%", background: tk.priority === "high" ? "#E84393" : tk.priority === "medium" ? "#F59E0B" : "#8B7AFF", flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tk.title}</div>
-                    {tk.project_name && <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{tk.project_name}</div>}
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tk.title}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+                      {tk.project_name && <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim }}>{tk.project_name}</div>}
+                      {tk.column_key && <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, padding: "1px 6px", borderRadius: 4, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 }}>{tk.column_key === "todo" ? "To Do" : tk.column_key === "progress" || tk.column_key === "in_progress" ? "In Arbeit" : tk.column_key === "review" ? "Review" : tk.column_key}</div>}
+                    </div>
                   </div>
-                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => setLinkedTaskIds(prev => prev.filter(x => x !== tid))} style={{ cursor: "pointer", color: theme.textDim, fontSize: 12, padding: 4 }}>✕</motion.div>
-                </div>
+                  {/* Open arrow icon */}
+                  {onOpenTask && (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: theme.textFaint, flexShrink: 0 }}>
+                      <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+                      <polyline points="15 3 21 3 21 9"/>
+                      <line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                  )}
+                  <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); setLinkedTaskIds(prev => prev.filter(x => x !== tid)); }} style={{ cursor: "pointer", color: theme.textDim, fontSize: 12, padding: 4 }}>✕</motion.div>
+                </motion.div>
               );
             })}
             <div style={{ position: "relative" }}>
@@ -13612,7 +13655,10 @@ export default function CircularMenu() {
         {/* TIMELINE VIEW */}
         <AnimatePresence>
           {currentView === "timeline" && (
-            <TimelineView session={session} userOrg={userOrg} orgMembers={orgMembers} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} />
+            <TimelineView session={session} userOrg={userOrg} orgMembers={orgMembers} theme={theme} darkMode={darkMode} t={t}
+              onBack={() => setCurrentView("dashboard")}
+              openTaskInKanban={(taskId) => { setOpenTaskId(taskId); setCurrentView("kanban"); }}
+            />
           )}
         </AnimatePresence>
 
