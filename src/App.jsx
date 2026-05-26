@@ -11793,6 +11793,8 @@ export default function CircularMenu() {
   const [onboardingStep, setOnboardingStep] = useState(null); // null = skip, "choose" | "create" | "join"
   const [onboardingError, setOnboardingError] = useState(null);
   const [orgMembers, setOrgMembers] = useState([]);          // team members for chat etc.
+  const [brandProfile, setBrandProfile] = useState(null);    // brand_profile row for current org — fed into AI context
+  const [appProjects, setAppProjects] = useState([]);        // [{name}] — known project names for AI context + vocab correction
   const [wsName, setWsName] = useState("");                  // workspace name input
   const [wsCreating, setWsCreating] = useState(false);       // creating workspace loading
   const [inviteCode, setInviteCode] = useState("");          // invite code input
@@ -12030,6 +12032,18 @@ export default function CircularMenu() {
             .select("user_id, role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
             .eq("org_id", org.id);
           setOrgMembers(members || []);
+
+          // Load brand profile + projects for AI context (best-effort, fail silently)
+          (async () => {
+            try {
+              const [bRes, pRes] = await Promise.all([
+                supabase.from("brand_profile").select("*").eq("org_id", org.id).maybeSingle(),
+                supabase.from("projects").select("name").eq("org_id", org.id).order("name"),
+              ]);
+              setBrandProfile(bRes?.data || null);
+              setAppProjects(pRes?.data || []);
+            } catch (_) { /* ignore */ }
+          })();
 
           // Load pending invites for team management
           const { data: sentInvites } = await supabase
@@ -13192,6 +13206,51 @@ export default function CircularMenu() {
   };
 
   // Start voice recording with Web Speech API
+  // ── Voice transcript review: editable text before sending to AI ──
+  const [voiceReview, setVoiceReview] = useState(false);     // true after mic stops, while user reviews/edits the transcript
+  const [reviewText, setReviewText] = useState("");          // editable transcript content
+
+  // ── Vocabulary correction: fix common phonetic mishearings of important names ──
+  // E.g. "Epics", "Apics", "Apicks", "Epix" → "APPICS". Triggered on every recognised final phrase.
+  const correctTranscriptVocab = (text) => {
+    if (!text) return text;
+    const vocab = [];
+    if (userOrg?.name) vocab.push(userOrg.name);
+    if (brandProfile?.name && brandProfile.name !== userOrg?.name) vocab.push(brandProfile.name);
+    for (const p of appProjects) if (p.name && p.name.length >= 3) vocab.push(p.name);
+    if (vocab.length === 0) return text;
+
+    // Tiny Levenshtein implementation — fine for short names
+    const lev = (a, b) => {
+      if (a === b) return 0;
+      if (!a.length) return b.length;
+      if (!b.length) return a.length;
+      const prev = new Array(b.length + 1).fill(0).map((_, i) => i);
+      for (let i = 1; i <= a.length; i++) {
+        const cur = [i];
+        for (let j = 1; j <= b.length; j++) {
+          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+          cur.push(Math.min(cur[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost));
+        }
+        for (let k = 0; k <= b.length; k++) prev[k] = cur[k];
+      }
+      return prev[b.length];
+    };
+
+    return text.replace(/[A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß0-9]*/g, (word) => {
+      if (word.length < 3) return word;
+      const wLow = word.toLowerCase();
+      for (const target of vocab) {
+        const tLow = target.toLowerCase();
+        if (wLow === tLow) return target; // already correct, just fix casing
+        if (Math.abs(word.length - target.length) > 3) continue;
+        const threshold = target.length <= 4 ? 1 : target.length <= 7 ? 2 : 3;
+        if (lev(wLow, tLow) <= threshold) return target;
+      }
+      return word;
+    });
+  };
+
   const startVoice = () => {
     setMenuOpen(false);
     setSubOpen(false);
@@ -13223,7 +13282,7 @@ export default function CircularMenu() {
           if (event.results[i].isFinal) final += event.results[i][0].transcript;
           else interim += event.results[i][0].transcript;
         }
-        const currentText = final + interim;
+        const currentText = correctTranscriptVocab(final + interim);
         setTranscript(currentText);
 
         // Auto-detect and execute voice commands in real-time
@@ -13254,15 +13313,14 @@ export default function CircularMenu() {
     }
   };
 
-  // Stop recording, send to Claude, speak response
+  // Stop recording — pause mic, then let the user review/edit the transcript before sending.
   const stopVoice = async () => {
-    // Stop recognition
     try { if (recognitionRef.current) recognitionRef.current.stop(); } catch(e) {}
 
-    const userMessage = transcript || "Hello, what can you help me with?";
+    const cleaned = correctTranscriptVocab((transcript || "").trim());
 
-    // ── Local voice commands — no LLM tokens used ──
-    const voiceNav = detectVoiceCommand(userMessage);
+    // ── Local voice commands run instantly — no review needed ──
+    const voiceNav = detectVoiceCommand(cleaned);
     if (voiceNav) {
       setVoiceMode(false);
       setAiSpeaking(false);
@@ -13274,14 +13332,47 @@ export default function CircularMenu() {
       return;
     }
 
+    // No transcript captured — silently bail without nagging
+    if (!cleaned) {
+      setVoiceMode(false);
+      setAiSpeaking(false);
+      setAiStatus("");
+      return;
+    }
+
+    // Enter REVIEW mode — user can edit the text before submitting
+    setReviewText(cleaned);
     setVoiceMode(false);
+    setVoiceReview(true);
+    setAiStatus("");
+  };
+
+  // Re-arm the mic for another attempt without leaving review mode
+  const restartVoiceFromReview = () => {
+    setVoiceReview(false);
+    setReviewText("");
+    setTranscript("");
+    startVoice();
+  };
+
+  // Send the (possibly edited) review text to the AI
+  const submitVoiceMessage = async (overrideText) => {
+    const userMessage = (overrideText ?? reviewText ?? "").trim() || "Hello, what can you help me with?";
+    setVoiceReview(false);
     setAiSpeaking(true);
     setAiStatus("thinking");
     aiStoppedRef.current = false;
 
     try {
-      // Build context-aware system prompt
-      const systemPrompt = buildSystemPrompt({ currentView, userName, provider: llmProvider });
+      // Build context-aware system prompt — now includes workspace + brand + projects
+      const systemPrompt = buildSystemPrompt({
+        currentView,
+        userName,
+        provider: llmProvider,
+        workspace: userOrg ? { name: userOrg.name, role: userOrgRole } : null,
+        brand: brandProfile,
+        projects: appProjects,
+      });
       let data;
 
       const activeKey = llmKeys[llmProvider];
@@ -14498,6 +14589,92 @@ export default function CircularMenu() {
                 fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e70",
                 letterSpacing: 1.5, marginTop: 20,
               }}>{t("ai.clickToSend")}</div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* VOICE REVIEW VIEW — editable transcript with Send / Re-record actions */}
+        <AnimatePresence>
+          {voiceReview && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
+              style={{
+                position: "absolute", inset: 0,
+                display: "flex", flexDirection: "column",
+                alignItems: "center", justifyContent: "center",
+                zIndex: 15, padding: 32,
+              }}
+            >
+              <div style={{
+                fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff50" : "#1a1a2e80",
+                letterSpacing: 2, marginBottom: 16, fontWeight: 500, textTransform: "uppercase",
+              }}>{t("ai.review.heading") || "Vor dem Senden bearbeiten"}</div>
+
+              <textarea
+                value={reviewText}
+                onChange={(e) => setReviewText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitVoiceMessage(); }
+                  if (e.key === "Escape") { e.preventDefault(); setVoiceReview(false); setReviewText(""); }
+                }}
+                autoFocus
+                rows={3}
+                style={{
+                  width: "100%", maxWidth: 600,
+                  background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                  border: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)"}`,
+                  borderRadius: 16,
+                  padding: "16px 18px",
+                  fontSize: 16, fontFamily: FONT, fontWeight: 400, lineHeight: 1.5,
+                  color: darkMode ? "#ffffffE6" : "#1a1a2eEE",
+                  outline: "none", resize: "vertical", caretColor: "#8B7AFF",
+                  boxShadow: "0 10px 40px rgba(0,0,0,0.15)",
+                }}
+              />
+
+              <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+                <motion.div onClick={() => { setVoiceReview(false); setReviewText(""); setTranscript(""); }} whileTap={{ scale: 0.96 }}
+                  style={{
+                    padding: "10px 18px", borderRadius: 999, cursor: "pointer",
+                    background: "transparent",
+                    border: `1px solid ${darkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)"}`,
+                    color: darkMode ? "#ffffff80" : "#1a1a2e80",
+                    fontSize: 12, fontFamily: FONT, fontWeight: 500,
+                  }}
+                >{t("common.cancel") || "Abbrechen"}</motion.div>
+
+                <motion.div onClick={restartVoiceFromReview} whileTap={{ scale: 0.96 }}
+                  style={{
+                    padding: "10px 18px", borderRadius: 999, cursor: "pointer",
+                    background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                    border: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"}`,
+                    color: darkMode ? "#ffffffCC" : "#1a1a2eCC",
+                    fontSize: 12, fontFamily: FONT, fontWeight: 500,
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                  }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 1010 10"/><path d="M12 2v6h6"/></svg>
+                  {t("ai.review.rerecord") || "Erneut sprechen"}
+                </motion.div>
+
+                <motion.div onClick={() => submitVoiceMessage()} whileTap={{ scale: 0.96 }}
+                  style={{
+                    padding: "10px 22px", borderRadius: 999, cursor: reviewText.trim() ? "pointer" : "not-allowed",
+                    background: reviewText.trim() ? "#8B7AFF" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"),
+                    color: reviewText.trim() ? "#fff" : (darkMode ? "#ffffff40" : "#1a1a2e40"),
+                    fontSize: 12, fontFamily: FONT, fontWeight: 600,
+                    boxShadow: reviewText.trim() ? "0 6px 22px rgba(139,122,255,0.4)" : "none",
+                  }}
+                >{t("ai.review.send") || "Senden"} ⏎</motion.div>
+              </div>
+
+              <div style={{
+                fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e60",
+                marginTop: 10, letterSpacing: 0.3,
+              }}>{t("ai.review.shortcut") || "⌘+Enter zum Senden · Esc zum Abbrechen"}</div>
             </motion.div>
           )}
         </AnimatePresence>
