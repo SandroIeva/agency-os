@@ -14597,84 +14597,109 @@ export default function CircularMenu() {
         <AnimatePresence>
           {voiceReview && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.96 }}
-              transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => {
+                // Click on the dimmed backdrop (not the inner card) closes the review without nav.
+                if (e.target === e.currentTarget) {
+                  setVoiceReview(false);
+                  setReviewText("");
+                  setTranscript("");
+                }
+              }}
               style={{
-                position: "absolute", inset: 0,
+                position: "fixed", inset: 0,
                 display: "flex", flexDirection: "column",
                 alignItems: "center", justifyContent: "center",
-                zIndex: 15, padding: 32,
+                background: darkMode ? "rgba(10, 10, 16, 0.78)" : "rgba(245, 245, 247, 0.78)",
+                backdropFilter: "blur(10px)",
+                WebkitBackdropFilter: "blur(10px)",
+                zIndex: 9999, padding: 32,
               }}
             >
-              <div style={{
-                fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff50" : "#1a1a2e80",
-                letterSpacing: 2, marginBottom: 16, fontWeight: 500, textTransform: "uppercase",
-              }}>{t("ai.review.heading") || "Vor dem Senden bearbeiten"}</div>
-
-              <textarea
-                value={reviewText}
-                onChange={(e) => setReviewText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitVoiceMessage(); }
-                  if (e.key === "Escape") { e.preventDefault(); setVoiceReview(false); setReviewText(""); }
-                }}
-                autoFocus
-                rows={3}
+              <motion.div
+                initial={{ scale: 0.94, y: 12 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.96, y: 8 }}
+                transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1.0] }}
+                onClick={(e) => e.stopPropagation()}
                 style={{
-                  width: "100%", maxWidth: 600,
-                  background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                  border: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)"}`,
-                  borderRadius: 16,
-                  padding: "16px 18px",
-                  fontSize: 16, fontFamily: FONT, fontWeight: 400, lineHeight: 1.5,
-                  color: darkMode ? "#ffffffE6" : "#1a1a2eEE",
-                  outline: "none", resize: "vertical", caretColor: "#8B7AFF",
-                  boxShadow: "0 10px 40px rgba(0,0,0,0.15)",
+                  width: "100%", maxWidth: 620,
+                  display: "flex", flexDirection: "column", alignItems: "center",
+                  pointerEvents: "auto",
                 }}
-              />
+              >
+                <div style={{
+                  fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff70" : "#1a1a2e90",
+                  letterSpacing: 2, marginBottom: 16, fontWeight: 600, textTransform: "uppercase",
+                }}>{appLanguage === "de" ? "Vor dem Senden bearbeiten" : "Edit before sending"}</div>
 
-              <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-                <motion.div onClick={() => { setVoiceReview(false); setReviewText(""); setTranscript(""); }} whileTap={{ scale: 0.96 }}
-                  style={{
-                    padding: "10px 18px", borderRadius: 999, cursor: "pointer",
-                    background: "transparent",
-                    border: `1px solid ${darkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)"}`,
-                    color: darkMode ? "#ffffff80" : "#1a1a2e80",
-                    fontSize: 12, fontFamily: FONT, fontWeight: 500,
+                <textarea
+                  value={reviewText}
+                  onChange={(e) => setReviewText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitVoiceMessage(); }
+                    if (e.key === "Escape") { e.preventDefault(); setVoiceReview(false); setReviewText(""); setTranscript(""); }
                   }}
-                >{t("common.cancel") || "Abbrechen"}</motion.div>
-
-                <motion.div onClick={restartVoiceFromReview} whileTap={{ scale: 0.96 }}
+                  onClick={(e) => e.stopPropagation()}
+                  autoFocus
+                  rows={3}
                   style={{
-                    padding: "10px 18px", borderRadius: 999, cursor: "pointer",
-                    background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                    border: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"}`,
-                    color: darkMode ? "#ffffffCC" : "#1a1a2eCC",
-                    fontSize: 12, fontFamily: FONT, fontWeight: 500,
-                    display: "inline-flex", alignItems: "center", gap: 6,
+                    width: "100%",
+                    background: darkMode ? "rgba(28, 28, 36, 0.95)" : "rgba(255, 255, 255, 0.95)",
+                    border: `1px solid ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)"}`,
+                    borderRadius: 16,
+                    padding: "16px 18px",
+                    fontSize: 16, fontFamily: FONT, fontWeight: 400, lineHeight: 1.5,
+                    color: darkMode ? "#ffffffE6" : "#1a1a2eEE",
+                    outline: "none", resize: "vertical", caretColor: "#8B7AFF",
+                    boxShadow: "0 14px 50px rgba(0,0,0,0.25)",
                   }}
-                >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 1010 10"/><path d="M12 2v6h6"/></svg>
-                  {t("ai.review.rerecord") || "Erneut sprechen"}
-                </motion.div>
+                />
 
-                <motion.div onClick={() => submitVoiceMessage()} whileTap={{ scale: 0.96 }}
-                  style={{
-                    padding: "10px 22px", borderRadius: 999, cursor: reviewText.trim() ? "pointer" : "not-allowed",
-                    background: reviewText.trim() ? "#8B7AFF" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"),
-                    color: reviewText.trim() ? "#fff" : (darkMode ? "#ffffff40" : "#1a1a2e40"),
-                    fontSize: 12, fontFamily: FONT, fontWeight: 600,
-                    boxShadow: reviewText.trim() ? "0 6px 22px rgba(139,122,255,0.4)" : "none",
-                  }}
-                >{t("ai.review.send") || "Senden"} ⏎</motion.div>
-              </div>
+                <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap", justifyContent: "center" }}>
+                  <motion.div onClick={(e) => { e.stopPropagation(); setVoiceReview(false); setReviewText(""); setTranscript(""); }} whileTap={{ scale: 0.96 }}
+                    style={{
+                      padding: "10px 18px", borderRadius: 999, cursor: "pointer",
+                      background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                      border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)"}`,
+                      color: darkMode ? "#ffffff90" : "#1a1a2e90",
+                      fontSize: 12, fontFamily: FONT, fontWeight: 500,
+                    }}
+                  >{appLanguage === "de" ? "Abbrechen" : "Cancel"}</motion.div>
 
-              <div style={{
-                fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e60",
-                marginTop: 10, letterSpacing: 0.3,
-              }}>{t("ai.review.shortcut") || "⌘+Enter zum Senden · Esc zum Abbrechen"}</div>
+                  <motion.div onClick={(e) => { e.stopPropagation(); restartVoiceFromReview(); }} whileTap={{ scale: 0.96 }}
+                    style={{
+                      padding: "10px 18px", borderRadius: 999, cursor: "pointer",
+                      background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                      border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)"}`,
+                      color: darkMode ? "#ffffffCC" : "#1a1a2eCC",
+                      fontSize: 12, fontFamily: FONT, fontWeight: 500,
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 1010 10"/><path d="M12 2v6h6"/></svg>
+                    {appLanguage === "de" ? "Erneut sprechen" : "Re-record"}
+                  </motion.div>
+
+                  <motion.div onClick={(e) => { e.stopPropagation(); if (reviewText.trim()) submitVoiceMessage(); }} whileTap={{ scale: 0.96 }}
+                    style={{
+                      padding: "10px 22px", borderRadius: 999, cursor: reviewText.trim() ? "pointer" : "not-allowed",
+                      background: reviewText.trim() ? "#8B7AFF" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"),
+                      color: reviewText.trim() ? "#fff" : (darkMode ? "#ffffff40" : "#1a1a2e40"),
+                      fontSize: 12, fontFamily: FONT, fontWeight: 600,
+                      boxShadow: reviewText.trim() ? "0 6px 22px rgba(139,122,255,0.4)" : "none",
+                    }}
+                  >{appLanguage === "de" ? "Senden" : "Send"} ⏎</motion.div>
+                </div>
+
+                <div style={{
+                  fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff45" : "#1a1a2e70",
+                  marginTop: 12, letterSpacing: 0.3,
+                }}>{appLanguage === "de" ? "⌘+Enter zum Senden · Esc zum Abbrechen" : "⌘+Enter to send · Esc to cancel"}</div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
