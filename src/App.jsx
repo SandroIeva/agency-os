@@ -2572,6 +2572,15 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
   const [linkedTasks, setLinkedTasks] = useState({}); // item_id -> [task_id]
   const [loading, setLoading] = useState(true);
   const [zoom, setZoom] = useState("week"); // 'day' | 'week' | 'month' | 'quarter'
+  // Sprint duration in days — persisted in localStorage (per-user, not org)
+  const [sprintDays, setSprintDays] = useState(() => {
+    const v = parseInt(localStorage.getItem("timeline-sprint-days") || "14", 10);
+    return [7, 14, 21, 28].includes(v) ? v : 14;
+  });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => { localStorage.setItem("timeline-sprint-days", String(sprintDays)); }, [sprintDays]);
+  // Optional: when creating, pre-fill end date relative to start date based on sprintDays
+  const [createForProject, setCreateForProject] = useState(null); // project_id passed to modal when '+' clicked next to a project row
   const [anchorDate, setAnchorDate] = useState(() => tlStartOfWeek(new Date()));
   const [visibleProjectIds, setVisibleProjectIds] = useState(null); // null = all
   const [showNoProject, setShowNoProject] = useState(true);
@@ -2655,31 +2664,48 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
     return visibleProjectIds.includes(it.project_id);
   }), [items, visibleProjectIds, showNoProject]);
 
-  // ── Lane assignment (auto-stacking) ───────────────────
-  const lanes = useMemo(() => {
-    const ls = []; // ls[i] = array of items
-    const sorted = [...visibleItems].sort((a, b) => {
-      const aS = new Date(a.start_date).getTime();
-      const bS = new Date(b.start_date).getTime();
-      if (aS !== bS) return aS - bS;
-      return (a.position || 0) - (b.position || 0);
-    });
-    for (const it of sorted) {
-      const s = new Date(it.start_date).getTime();
-      const e = new Date(it.end_date).getTime();
-      let placed = false;
-      for (let i = 0; i < ls.length; i++) {
-        const overlaps = ls[i].some(o => {
-          const oS = new Date(o.start_date).getTime();
-          const oE = new Date(o.end_date).getTime();
-          return s <= oE && e >= oS;
-        });
-        if (!overlaps) { ls[i].push(it); placed = true; break; }
-      }
-      if (!placed) ls.push([it]);
+  // ── Per-project bands: each project gets its own row(s) ──────────
+  // bands = [{ projectId, project: {…} | null, lanes: [[items], [items]] }, ...]
+  const bands = useMemo(() => {
+    // Group items by project_id (null bucket = "ohne Projekt")
+    const groups = new Map(); // projectId | "__none" -> items[]
+    for (const it of visibleItems) {
+      const key = it.project_id || "__none";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(it);
     }
-    return ls;
-  }, [visibleItems]);
+    // Build band order: follow projects[] order, then "__none" at the end if present
+    const bandList = [];
+    for (const p of projects) {
+      // Only render bands for visible projects
+      if (visibleProjectIds !== null && !visibleProjectIds.includes(p.id)) continue;
+      bandList.push({ projectId: p.id, project: p, items: groups.get(p.id) || [] });
+    }
+    if (showNoProject && (groups.get("__none") || []).length > 0) {
+      bandList.push({ projectId: "__none", project: null, items: groups.get("__none") || [] });
+    }
+    // For each band, lane-assign overlapping items
+    for (const band of bandList) {
+      const sorted = [...band.items].sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
+      const lanes = [];
+      for (const it of sorted) {
+        const s = new Date(it.start_date).getTime();
+        const e = new Date(it.end_date).getTime();
+        let placed = false;
+        for (let i = 0; i < lanes.length; i++) {
+          const overlaps = lanes[i].some(o => {
+            const oS = new Date(o.start_date).getTime();
+            const oE = new Date(o.end_date).getTime();
+            return s <= oE && e >= oS;
+          });
+          if (!overlaps) { lanes[i].push(it); placed = true; break; }
+        }
+        if (!placed) lanes.push([it]);
+      }
+      band.lanes = lanes;
+    }
+    return bandList;
+  }, [visibleItems, projects, visibleProjectIds, showNoProject]);
 
   // Project color lookup
   const projectById = useMemo(() => {
@@ -2862,10 +2888,22 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
       ? projectById[visibleProjectIds[0]]?.name || "1 Projekt"
       : `${visibleProjectIds.length} Projekte`;
 
-  const rowHeight = 56;
-  const headerHeight = zoom === "day" || zoom === "week" ? 56 : 56;
+  const rowHeight = 52;
+  const bandPadding = 18; // bottom padding inside band (top is reserved for label)
+  const bandTopGap = 36; // space above band for "Project Name" plate
+  const headerHeight = 56;
   const totalWidth = VISIBLE_DAYS * pxPerDay;
-  const gridHeight = Math.max(lanes.length * rowHeight + 40, 320);
+  // Compute total height from bands (lanes + padding + top-gap for plate)
+  const bandHeights = bands.map(b => Math.max(1, b.lanes.length) * rowHeight + bandPadding);
+  const totalBodyHeight = bandHeights.reduce((s, h) => s + h, 0) + bands.length * bandTopGap;
+  const gridHeight = Math.max(totalBodyHeight + 40, 320);
+  // Compute Y-offset for each band (top of band relative to headerHeight)
+  const bandTops = [];
+  let yCursor = headerHeight + bandTopGap; // start with gap for first plate
+  bands.forEach((b, i) => {
+    bandTops.push(yCursor);
+    yCursor += bandHeights[i] + bandTopGap;
+  });
 
   // Group items per project for sidebar counts
   const itemsByProject = useMemo(() => {
@@ -2924,13 +2962,13 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
           </motion.div>
         </div>
 
-        {/* Projects */}
+        {/* Projects — labeled list. Row-alignment with timeline bands is provided below as a separate aligned legend. */}
         <div style={{ padding: "0 10px 12px" }}>
           <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 2, textTransform: "uppercase", padding: "8px 10px 8px", fontWeight: 600 }}>Projekte</div>
           {projects.map(p => {
             const count = itemsByProject[p.id] || 0;
             const isActive = visibleProjectIds !== null && visibleProjectIds.length === 1 && visibleProjectIds[0] === p.id;
-            // Get assignees for this project (filter org members who are on tasks in this project, or just show first 3 from orgMembers as placeholder)
+            // Project members from org_members.project_members? Fallback: anyone with a task in this project
             const projMembers = orgMembers.filter(m => {
               const uid = m.user_id || m.id;
               return tasks.some(tk => tk.project_id === p.id && tk.assignee_id === uid);
@@ -2947,8 +2985,8 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                 {projMembers.length > 0 && (
                   <div style={{ display: "flex", marginTop: 6, paddingLeft: 20 }}>
                     {projMembers.map((m, idx) => {
-                      const av = m.avatar_url || m.profile?.avatar_url;
-                      const name = m.full_name || m.name || m.email?.split("@")[0] || "?";
+                      const av = m.profiles?.avatar_url || m.avatar_url;
+                      const name = m.profiles?.display_name || m.full_name || m.name || m.profiles?.email?.split("@")[0] || m.email?.split("@")[0] || "?";
                       return av ? (
                         <img key={m.user_id || m.id} src={av} alt="" referrerPolicy="no-referrer" style={{ width: 18, height: 18, borderRadius: "50%", border: `2px solid ${theme.bg}`, marginLeft: idx === 0 ? 0 : -5 }} />
                       ) : (
@@ -2963,17 +3001,6 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
           {projects.length === 0 && (
             <div style={{ padding: "8px 12px", fontSize: 11, fontFamily: FONT, color: theme.textFaint, fontStyle: "italic" }}>Noch keine Projekte</div>
           )}
-          {itemsByProject.__none > 0 && (
-            <motion.div onClick={() => { setVisibleProjectIds([]); setShowNoProject(true); }} whileTap={{ scale: 0.99 }}
-              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 10px", borderRadius: 8, cursor: "pointer", marginTop: 6, opacity: 0.7 }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 10, height: 10, borderRadius: 3, border: `1.5px dashed ${theme.borderFaint}`, flexShrink: 0 }} />
-                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, fontStyle: "italic" }}>Ohne Projekt</span>
-              </div>
-              <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, fontWeight: 600 }}>{itemsByProject.__none}</span>
-            </motion.div>
-          )}
         </div>
 
         {/* Team members */}
@@ -2982,8 +3009,8 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
             <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 2, textTransform: "uppercase", padding: "12px 10px 8px", fontWeight: 600 }}>Team</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "0 10px" }}>
               {orgMembers.slice(0, 8).map(m => {
-                const av = m.avatar_url || m.profile?.avatar_url;
-                const name = m.full_name || m.name || m.email?.split("@")[0] || "?";
+                const av = m.profiles?.avatar_url || m.avatar_url;
+                const name = m.profiles?.display_name || m.full_name || m.name || m.profiles?.email?.split("@")[0] || m.email?.split("@")[0] || "?";
                 return av ? (
                   <img key={m.user_id || m.id} src={av} alt="" referrerPolicy="no-referrer" title={name} style={{ width: 28, height: 28, borderRadius: "50%", border: `2px solid ${theme.borderFaint}` }} />
                 ) : (
@@ -3113,12 +3140,49 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
               );
             })}
           </div>
-          {/* New item */}
-          <motion.div onClick={() => setCreating(true)} whileTap={{ scale: 0.97 }}
+          {/* Settings cog */}
+          <div style={{ position: "relative" }}>
+            <motion.div onClick={() => setSettingsOpen(v => !v)} whileTap={{ scale: 0.94 }}
+              style={{ width: 28, height: 28, borderRadius: "50%", background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textSub }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            </motion.div>
+            <AnimatePresence>
+              {settingsOpen && (
+                <>
+                  <div onClick={() => setSettingsOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 9 }} />
+                  <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }}
+                    style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 10, minWidth: 240, background: theme.cardBg, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, boxShadow: "0 14px 40px rgba(0,0,0,0.25)", padding: 14 }}
+                  >
+                    <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>Timeline-Einstellungen</div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 10 }}>Sprint-Länge (Standard für neue Sprints)</div>
+                    <div style={{ display: "flex", gap: 4, padding: 3, borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}` }}>
+                      {[
+                        { v: 7,  label: "1 Wo" },
+                        { v: 14, label: "2 Wo" },
+                        { v: 21, label: "3 Wo" },
+                        { v: 28, label: "4 Wo" },
+                      ].map(opt => {
+                        const active = sprintDays === opt.v;
+                        return (
+                          <motion.div key={opt.v} onClick={() => setSprintDays(opt.v)} whileTap={{ scale: 0.96 }}
+                            style={{ flex: 1, padding: "7px 6px", borderRadius: 7, cursor: "pointer", fontSize: 11, fontFamily: FONT, fontWeight: active ? 600 : 500, color: active ? "#fff" : theme.textDim, background: active ? theme.accent : "transparent", textAlign: "center", transition: "background 0.15s" }}
+                          >{opt.label}</motion.div>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* New sprint */}
+          <motion.div onClick={() => { setCreateForProject(null); setCreating(true); }} whileTap={{ scale: 0.97 }}
             style={{ padding: "6px 14px", borderRadius: 999, background: theme.accent, color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, boxShadow: `0 4px 14px ${theme.accent}45` }}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Neues Item
+            Neuer Sprint
           </motion.div>
         </div>
       </div>
@@ -3183,13 +3247,42 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
               <div style={{ position: "absolute", top: -2, left: -5, width: 12, height: 12, borderRadius: "50%", background: theme.accent, boxShadow: `0 0 0 4px ${theme.bg}` }} />
             </div>
 
-            {/* Item bars */}
-            {lanes.map((lane, li) => lane.map((it) => {
+            {/* Band separators (horizontal lines between projects) */}
+            {bands.map((b, bi) => (
+              <div key={`band-sep-${b.projectId}`} style={{
+                position: "absolute", left: 0, right: 0,
+                top: bandTops[bi] + bandHeights[bi] - 1,
+                height: 1, background: theme.borderFaint,
+                opacity: 0.7, pointerEvents: "none",
+              }} />
+            ))}
+
+            {/* Project-name plates (absolute, sit at band-top above items) */}
+            {bands.map((b, bi) => (
+              <div key={`band-plate-${b.projectId}`} style={{
+                position: "absolute",
+                left: 12, top: bandTops[bi] - 22,
+                display: "flex", alignItems: "center", gap: 7,
+                padding: "3px 10px", borderRadius: 999,
+                background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                border: `1px solid ${theme.borderFaint}`,
+                fontSize: 10, fontFamily: FONT, color: theme.textSub, fontWeight: 600,
+                letterSpacing: 0.3,
+                zIndex: 1,
+                pointerEvents: "none",
+              }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: b.project?.color || theme.textFaint, flexShrink: 0 }} />
+                <span style={{ whiteSpace: "nowrap" }}>{b.project ? b.project.name : "Ohne Projekt"}</span>
+              </div>
+            ))}
+
+            {/* Item bars (grouped per band) */}
+            {bands.map((band, bi) => band.lanes.map((lane, li) => lane.map((it) => {
               const startOffset = tlDaysBetween(viewStart, new Date(it.start_date));
               const duration = tlDaysBetween(new Date(it.start_date), new Date(it.end_date)) + 1;
               const left = startOffset * pxPerDay;
               const width = Math.max(pxPerDay * 0.6, duration * pxPerDay - 4);
-              const top = headerHeight + 10 + li * rowHeight;
+              const top = bandTops[bi] + (bandPadding / 2) + li * rowHeight;
               const c = itemColor(it);
               const isDone = it.status === "done";
               return (
@@ -3225,8 +3318,8 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                         {visible.map((uid, idx) => {
                           const m = orgMembers.find(x => x.user_id === uid || x.id === uid);
                           if (!m) return null;
-                          const av = m.avatar_url || m.profile?.avatar_url;
-                          const name = m.full_name || m.name || m.email?.split("@")[0] || "?";
+                          const av = m.profiles?.avatar_url || m.avatar_url;
+                          const name = m.profiles?.display_name || m.full_name || m.name || m.profiles?.email?.split("@")[0] || m.email?.split("@")[0] || "?";
                           return av ? (
                             <img key={uid} src={av} alt="" referrerPolicy="no-referrer"
                               style={{ width: 22, height: 22, borderRadius: "50%", border: isDone ? `2px solid ${theme.bg}` : "2px solid rgba(255,255,255,0.4)", marginLeft: idx === 0 ? 0 : -6, objectFit: "cover" }} />
@@ -3253,13 +3346,37 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                   <div onPointerDown={(e) => onItemDragStart(e, it, "resizeR")} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "ew-resize", zIndex: 2 }} />
                 </div>
               );
-            }))}
+            })))}
+
+            {/* "+ Sprint hier" hint button per band — appears on hover (always rendered, opacity 0 by default via class) */}
+            {bands.map((band, bi) => (
+              <motion.div key={`band-add-${band.projectId}`}
+                onClick={() => { setCreateForProject(band.projectId === "__none" ? null : band.projectId); setCreating(true); }}
+                whileHover={{ opacity: 1 }}
+                style={{
+                  position: "absolute", left: 12,
+                  top: bandTops[bi] + 6,
+                  opacity: 0.35,
+                  cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 4,
+                  padding: "3px 8px", borderRadius: 999,
+                  background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                  border: `1px dashed ${theme.borderFaint}`,
+                  fontSize: 10, fontFamily: FONT, color: theme.textDim, fontWeight: 500,
+                  zIndex: 1, transition: "opacity 0.15s",
+                  pointerEvents: "auto",
+                }}
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Sprint hier
+              </motion.div>
+            ))}
 
             {/* Empty state */}
             {!loading && visibleItems.length === 0 && (
               <div style={{ position: "absolute", top: headerHeight + 60, left: "50%", transform: "translateX(-50%)", color: theme.textFaint, fontFamily: FONT, fontSize: 13, textAlign: "center" }}>
-                Noch keine Items.<br/>
-                <span style={{ fontSize: 12, color: theme.textFaint }}>Klick <strong style={{ color: theme.accent }}>+ Neues Item</strong> oben rechts.</span>
+                Noch keine Sprints.<br/>
+                <span style={{ fontSize: 12, color: theme.textFaint }}>Klick <strong style={{ color: theme.accent }}>+ Neuer Sprint</strong> oben rechts.</span>
               </div>
             )}
           </div>
@@ -3272,13 +3389,15 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
           <TimelineItemModal
             item={selectedItem}
             creating={creating}
+            sprintDays={sprintDays}
+            defaultProjectId={createForProject}
             projects={projects}
             orgMembers={orgMembers}
             tasks={tasks}
             initialAssigneeIds={selectedItem ? (assignees[selectedItem.id] || []) : []}
             initialLinkedTaskIds={selectedItem ? (linkedTasks[selectedItem.id] || []) : []}
             theme={theme} darkMode={darkMode}
-            onClose={() => { setCreating(false); setSelectedItem(null); }}
+            onClose={() => { setCreating(false); setSelectedItem(null); setCreateForProject(null); }}
             onSave={async (payload) => {
               if (selectedItem) {
                 await updateItem(selectedItem.id, payload);
@@ -3303,15 +3422,25 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
   );
 }
 
-function TimelineItemModal({ item, creating, projects, orgMembers = [], tasks = [], initialAssigneeIds = [], initialLinkedTaskIds = [], theme, darkMode, onClose, onSave, onDelete }) {
+function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId = null, projects, orgMembers = [], tasks = [], initialAssigneeIds = [], initialLinkedTaskIds = [], theme, darkMode, onClose, onSave, onDelete }) {
   const today = tlIsoDate(new Date());
-  const tomorrow = tlIsoDate(tlAddDays(new Date(), 6));
+  const defaultEnd = tlIsoDate(tlAddDays(new Date(), sprintDays - 1));
   const [title, setTitle] = useState(item?.title || "");
   const [description, setDescription] = useState(item?.description || "");
   const [startDate, setStartDate] = useState(item?.start_date || today);
-  const [endDate, setEndDate] = useState(item?.end_date || tomorrow);
-  const [projectId, setProjectId] = useState(item?.project_id || "");
+  const [endDate, setEndDate] = useState(item?.end_date || defaultEnd);
+  const [projectId, setProjectId] = useState(item?.project_id || defaultProjectId || "");
   const [status, setStatus] = useState(item?.status || "planned");
+  const [autoEnd, setAutoEnd] = useState(creating); // when creating: end auto-shifts with start
+
+  // Keep end-date in sync with start-date when in auto mode (only for new sprints)
+  useEffect(() => {
+    if (autoEnd && creating) {
+      const s = new Date(startDate);
+      const e = tlAddDays(s, sprintDays - 1);
+      setEndDate(tlIsoDate(e));
+    }
+  }, [startDate, sprintDays, autoEnd, creating]);
   const [assigneeIds, setAssigneeIds] = useState(initialAssigneeIds);
   const [linkedTaskIds, setLinkedTaskIds] = useState(initialLinkedTaskIds);
   const [saving, setSaving] = useState(false);
@@ -3338,8 +3467,8 @@ function TimelineItemModal({ item, creating, projects, orgMembers = [], tasks = 
 
   // Helpers
   const memberById = (id) => orgMembers.find(m => m.user_id === id || m.id === id);
-  const getMemberName = (m) => m?.full_name || m?.name || m?.email?.split("@")[0] || "—";
-  const getMemberAvatar = (m) => m?.avatar_url || m?.profile?.avatar_url || null;
+  const getMemberName = (m) => m?.profiles?.display_name || m?.full_name || m?.name || m?.profiles?.email?.split("@")[0] || m?.email?.split("@")[0] || "—";
+  const getMemberAvatar = (m) => m?.profiles?.avatar_url || m?.avatar_url || null;
 
   // Filter tasks by current project (if any) or all when no project, plus search
   const visibleTasks = tasks.filter(tk => {
@@ -3384,9 +3513,19 @@ function TimelineItemModal({ item, creating, projects, orgMembers = [], tasks = 
             />
           </div>
           <div>
-            <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Ende</label>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} min={startDate}
-              style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", colorScheme: darkMode ? "dark" : "light" }}
+            <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block", display: "flex", justifyContent: "space-between" }}>
+              <span>Ende</span>
+              {creating && (
+                <motion.span onClick={() => setAutoEnd(v => !v)} whileTap={{ scale: 0.96 }}
+                  style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, color: autoEnd ? theme.accent : theme.textFaint, textTransform: "none", letterSpacing: 0, fontWeight: 500 }}
+                >
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: autoEnd ? theme.accent : theme.borderFaint }} />
+                  {autoEnd ? `Auto (${sprintDays} Tage)` : "Manuell"}
+                </motion.span>
+              )}
+            </label>
+            <input type="date" value={endDate} onChange={e => { setEndDate(e.target.value); setAutoEnd(false); }} min={startDate} disabled={autoEnd && creating}
+              style={{ width: "100%", background: autoEnd && creating ? (darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.01)") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)"), border: `1px solid ${theme.borderFaint}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: FONT, color: autoEnd && creating ? theme.textDim : theme.text, outline: "none", colorScheme: darkMode ? "dark" : "light", opacity: autoEnd && creating ? 0.7 : 1 }}
             />
           </div>
         </div>
