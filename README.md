@@ -1,120 +1,105 @@
-# Agency OS — Circular Menu Prototype
+# i7 OS — Agency Operating System
 
-Interactive circular navigation menu prototype for **Agency OS**, a native desktop application for creative agencies.
+Workspace-aware operating system for creative agencies. Multi-tenant, real-time, Google-integrated.
 
-Built with React, Framer Motion, Three.js, and Web Audio API.
+Built with React 19, Vite, Supabase, Framer Motion, Three.js, and the Web Audio / Web Speech APIs.
 
-## Preview
-
-A dark, minimal dashboard with a circular scroll-to-navigate menu system:
-
-- **Scroll** to rotate through 6 main categories (CHAT, PLAN, BRAND, DOCS, FILES, AGENTS)
-- **Click center** to reveal sub-menu items arranged in a circular layout
-- **Hover + click** sub-items to navigate
-- **Sound effects** on every interaction via Web Audio API
-- **3D AI Sphere** rendered with Three.js GLSL shaders in the bottom-right corner
-
-## Features
-
-### Circular Menu
-- Segmented ring indicator with active segment highlighted in white
-- Infinite scroll navigation (wraps around endlessly in both directions)
-- Smooth Framer Motion animations with spring physics
-- 6 categories × 6 sub-items = 36 navigation targets
-
-### Sub-Menu
-- Rounded rectangle cards arranged in circular orbit around center
-- Hover state: card fills white, text inverts to dark
-- Staggered spring animations on open/close
-- Click or Enter to select
-
-### AI Sphere
-- Three.js WebGL renderer with custom GLSL vertex/fragment shaders
-- Perlin-inspired FBM noise for organic flowing color gradients
-- Soft 3D lighting with specular highlights and rim glow
-- Pink–purple–blue color palette matching the UI theme
-- Smooth rotation animation
-
-### Sound Design
-- Web Audio API — no external files, pure synthesized tones
-- Menu open: ascending arpeggio (G4 → C5 → G5)
-- Menu close: descending arpeggio
-- Scroll: subtle randomized tick
-- Sub-menu open: triple ascending tone
-- Sub-item select: confirmation ping with detune
-- Hover: ultra-subtle high tone
-
-### UI Elements
-- i7 OS logo (SVG) — bottom left
-- Weather display with custom cloud icon (SVG) — top right
-- Three bottom control buttons: Dashboard, Microphone, Plus
-- Animated gradient blob in background corner
-- Dot grid background pattern
-- Geist font throughout
-
-## Tech Stack
+## Stack
 
 | Layer | Technology |
 |-------|-----------|
-| UI Framework | React 19 |
-| Animations | Framer Motion |
-| 3D Rendering | Three.js (r128+) with custom GLSL shaders |
-| Sound | Web Audio API (synthesized) |
-| Font | Geist (Google Fonts) |
+| UI | React 19 + Framer Motion |
+| Auth & DB | Supabase (Postgres + RLS) |
+| Storage | Supabase Storage + Google Drive (drive.file scope) |
+| Calendar | Google Calendar API |
+| 3D / Visuals | Three.js with custom GLSL shaders |
+| Speech | Web Speech API (de-DE / en-US) |
 | Build | Vite |
+| Hosting | Vercel |
+
+## Views
+
+| View | What it does |
+|------|--------------|
+| **Dashboard** | Circular scroll-to-navigate hub with 6 categories × 6 sub-items |
+| **Chat** | Team, channels, AI assistant |
+| **Plan → Kanban** | Project boards with tasks, subtasks, checklists, assignees, priorities |
+| **Plan → Timeline** | Sprint planning gantt with project bands, sprint groups, cascade-shift, quick-create tasks |
+| **Plan → Calendar** | Google Calendar integration + team events + tasks-as-events |
+| **Brand** | Identity, design tokens, audience, channels, strategy |
+| **Files** | Dual storage (Supabase + Google Drive folder picker), virtual folders |
+| **Docs / Notes** | Markdown notes per workspace |
+| **Settings** | Workspace logo, team invites, members, integrations, LLM keys |
+
+## Timeline — Sprint Planning
+
+Per-project sprint bands with auto-lane stacking. Drag bars to reschedule, drag the grips to resize. Status is derived live from the date range (planned / active / done).
+
+- **Sprint groups** — a single sprint can belong to a named group (e.g. "App Building"). Moving one sprint in a group cascade-shifts all later sprints in the same group.
+- **Quick-create tasks** — inline `+ Task erstellen` field in the sprint modal; pending tasks are buffered and created together with the sprint on save, then auto-linked.
+- **Linked Kanban tasks** — pick existing tasks from the workspace; arrow icon jumps straight into the Kanban detail.
+- **Checklists** — per-sprint to-do list, independent of linked Kanban tasks.
+- **Folge-Sprint button** — `+` next to the sprint title chains a follow-up sprint with same project, same group, dates pre-filled.
+- **Holiday overlay** — toggle in timeline settings; weekends and German national holidays are tinted in the grid.
+- **Dictation** — mic icon on the description textarea for speech-to-text (Chrome / Safari).
+
+Card title shows `Sprint Title` with a small `↩ Group name` underneath. Status dot: gray = planned, light blue = active, green = done.
+
+## Workspace
+
+Each user belongs to one or more `organizations` (workspaces). Switcher in Settings.
+
+- **Logo** — upload in Settings → Workspace card. Shown in sidebar header and workspace switcher.
+- **Team** — invite by email, role-based (Admin / Member).
+- **Project members** — separate `project_members` join table determines who shows up in each project's team strip.
+- **Org-level Drive folder** — admin connects a shared Google Drive folder for `Files` uploads.
+
+## Auth & Data Model
+
+- Google OAuth (Supabase). `drive.file` scope only — no CASA audit needed; per-file access via Google Picker.
+- All workspace data lives behind RLS policies scoped to `org_members`.
+- Real-time subscriptions for chat, calendar, tasks.
+
+## Key Tables
+
+```
+organizations         (id, name, slug, logo_url, drive_folder_*)
+org_members           (org_id, user_id, role)
+projects              (id, org_id, name, color, logo_url)
+project_members       (project_id, user_id)
+tasks                 (id, org_id, project_id, column_key, …)
+task_checklist_items  (task_id, text, done, position)
+timeline_items        (id, org_id, project_id, group_id, start_date, end_date, …)
+sprint_groups         (id, org_id, name, project_id)
+timeline_item_*       (assignees, tasks, checklist) — join tables
+calendar_events       (id, org_id, …)
+user_folders          (virtual folders inside Supabase Storage)
+```
 
 ## Getting Started
 
 ```bash
-# Install dependencies
-npm install
+# 1. Copy .env.example → .env.local and fill in
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+VITE_GOOGLE_API_KEY=     # for Drive Picker
+VITE_GOOGLE_APP_ID=      # optional
 
-# Start dev server
+# 2. Install & run
+npm install
 npm run dev
 
-# Build for production
+# 3. Build
 npm run build
 ```
 
-## Interaction Guide
-
-| Action | Result |
-|--------|--------|
-| Click dashboard icon (bottom center-left) | Open/close circular menu |
-| Scroll (mouse wheel) | Navigate between categories |
-| Click center label | Open sub-menu for current category |
-| Click center again | Close sub-menu, return to ring |
-| Hover sub-item card | Card highlights white |
-| Click sub-item card | Select and close menu |
-| Click outside menu | Close everything |
-
-## Menu Structure
-
-```
-CHAT     → Team, Clients, AI, Channels, Calls, Archive
-PLAN     → Kanban, Timeline, Tasks, Calendar, Goals, Sprints
-BRAND    → Assets, Identity, Knowledge, Personas, Competitor, Guidelines
-DOCS     → Notes, Briefs, Wiki, Templates, Proposals, Reports
-FILES    → Images, Videos, All Files, Fonts, Raw, Links
-AGENTS   → Dev, Design, Strategy, Finance, Marketing, Sales
-```
-
-## Design Tokens
-
-```
-Background:    #111117
-Text:          #ffffffCC
-Text Dim:      #ffffff40
-Ring Active:   #ffffff
-Ring Inactive: #ffffff18
-Font:          Geist, -apple-system, sans-serif
-```
+Supabase project ID for this app: `oidbemeetiawiahpweyg`.
 
 ## Project Context
 
-This prototype is part of **Agency OS** — a native macOS/Windows desktop app (Tauri 2 + React + Supabase) for creative agencies. The circular menu is the main navigation concept for the dashboard.
+This is the production codebase for **i7 OS**, the operating system for creative agencies. The original circular menu lives on as the Dashboard view; the rest of the app has grown into a full workspace platform.
 
-Full project documentation: see `Agency-OS-Build-Plan.pdf` and `Agency-OS-MVP-v2.pdf`.
+Marketing site lives in a separate repo (`i7os-marketing`) deployed independently on Vercel.
 
 ## Author
 

@@ -2571,6 +2571,8 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
   const [tasks, setTasks] = useState([]);
   const [assignees, setAssignees] = useState({}); // item_id -> [user_id]
   const [linkedTasks, setLinkedTasks] = useState({}); // item_id -> [task_id]
+  const [checklists, setChecklists] = useState({}); // item_id -> [{id, text, done, position}]
+  const [sprintGroups, setSprintGroups] = useState([]); // [{id, name, project_id}]
   const [loading, setLoading] = useState(true);
   const [zoom, setZoom] = useState("week"); // 'day' | 'week' | 'month' | 'quarter'
   // Sprint duration in days — persisted in localStorage (per-user, not org)
@@ -2579,9 +2581,12 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
     return [7, 14, 21, 28].includes(v) ? v : 14;
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showHolidays, setShowHolidays] = useState(() => localStorage.getItem("timeline-show-holidays") === "1");
   useEffect(() => { localStorage.setItem("timeline-sprint-days", String(sprintDays)); }, [sprintDays]);
+  useEffect(() => { localStorage.setItem("timeline-show-holidays", showHolidays ? "1" : "0"); }, [showHolidays]);
   // Optional: when creating, pre-fill end date relative to start date based on sprintDays
   const [createForProject, setCreateForProject] = useState(null); // project_id passed to modal when '+' clicked next to a project row
+  const [chainFrom, setChainFrom] = useState(null); // { projectId, predecessorId, startDate, endDate } when chaining a new sprint
   const [anchorDate, setAnchorDate] = useState(() => tlStartOfWeek(new Date()));
   const [visibleProjectIds, setVisibleProjectIds] = useState(null); // null = all
   const [showNoProject, setShowNoProject] = useState(true);
@@ -2604,7 +2609,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
     (async () => {
       setLoading(true);
       try {
-        const [iRes, pRes, tRes] = await Promise.all([
+        const [iRes, pRes, tRes, gRes] = await Promise.all([
           supabase.from("timeline_items")
             .select("*")
             .eq("org_id", userOrg.id)
@@ -2619,6 +2624,10 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
             .neq("column_key", "done")
             .order("created_at", { ascending: false })
             .limit(200),
+          supabase.from("sprint_groups")
+            .select("id, name, project_id")
+            .eq("org_id", userOrg.id)
+            .order("created_at", { ascending: true }),
         ]);
         if (!alive) return;
         if (iRes.error) throw iRes.error;
@@ -2627,6 +2636,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
         setItems(itemList);
         setProjects(projList);
         setTasks(tRes.data || []);
+        setSprintGroups(gRes.data || []);
 
         // Project members lookup
         if (projList.length > 0) {
@@ -2644,9 +2654,10 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
         // Load assignees + linked tasks for all items
         if (itemList.length > 0) {
           const ids = itemList.map(it => it.id);
-          const [aRes, lRes] = await Promise.all([
+          const [aRes, lRes, cRes] = await Promise.all([
             supabase.from("timeline_item_assignees").select("item_id, user_id").in("item_id", ids),
             supabase.from("timeline_item_tasks").select("item_id, task_id").in("item_id", ids),
+            supabase.from("timeline_item_checklist").select("id, item_id, text, done, position").in("item_id", ids).order("position", { ascending: true }),
           ]);
           if (!alive) return;
           const aMap = {};
@@ -2661,6 +2672,12 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
             lMap[r.item_id].push(r.task_id);
           });
           setLinkedTasks(lMap);
+          const cMap = {};
+          (cRes.data || []).forEach(r => {
+            if (!cMap[r.item_id]) cMap[r.item_id] = [];
+            cMap[r.item_id].push({ id: r.id, text: r.text, done: !!r.done, position: r.position || 0 });
+          });
+          setChecklists(cMap);
         }
       } catch (e) {
         console.error("timeline load failed", e);
@@ -2811,13 +2828,101 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
     setLinkedTasks(prev => ({ ...prev, [itemId]: taskIds }));
   };
 
+  const persistChecklist = async (itemId, items) => {
+    await supabase.from("timeline_item_checklist").delete().eq("item_id", itemId);
+    let inserted = [];
+    if (items && items.length > 0) {
+      const rows = items.map((c, i) => ({ item_id: itemId, text: c.text, done: !!c.done, position: i }));
+      const { data } = await supabase.from("timeline_item_checklist").insert(rows).select();
+      inserted = (data || []).map(r => ({ id: r.id, text: r.text, done: !!r.done, position: r.position || 0 }));
+    }
+    setChecklists(prev => ({ ...prev, [itemId]: inserted }));
+  };
+
+  // German national holidays for the years currently visible — used to optionally shade the grid
+  const holidaysSet = useMemo(() => {
+    const compute = (y) => {
+      // Anonymous Gregorian Easter algorithm
+      const a = y % 19, b = Math.floor(y / 100), c = y % 100;
+      const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+      const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+      const i = Math.floor(c / 4), k = c % 4;
+      const l = (32 + 2 * e + 2 * i - h - k) % 7;
+      const m = Math.floor((a + 11 * h + 22 * l) / 451);
+      const eMonth = Math.floor((h + l - 7 * m + 114) / 31) - 1;
+      const eDay = ((h + l - 7 * m + 114) % 31) + 1;
+      const easter = new Date(y, eMonth, eDay);
+      const off = (n) => { const d2 = new Date(easter); d2.setDate(d2.getDate() + n); return d2; };
+      const fmt = (d2) => `${d2.getFullYear()}-${String(d2.getMonth() + 1).padStart(2, "0")}-${String(d2.getDate()).padStart(2, "0")}`;
+      return [
+        fmt(new Date(y, 0, 1)),    // Neujahr
+        fmt(off(-2)),              // Karfreitag
+        fmt(off(1)),               // Ostermontag
+        fmt(new Date(y, 4, 1)),    // Tag der Arbeit
+        fmt(off(39)),              // Christi Himmelfahrt
+        fmt(off(50)),              // Pfingstmontag
+        fmt(new Date(y, 9, 3)),    // Tag der Deutschen Einheit
+        fmt(new Date(y, 11, 25)),  // 1. Weihnachtstag
+        fmt(new Date(y, 11, 26)),  // 2. Weihnachtstag
+      ];
+    };
+    const startY = viewStart.getFullYear();
+    const endY = tlAddDays(viewStart, VISIBLE_DAYS).getFullYear();
+    const set = new Set();
+    for (let y = startY; y <= endY; y++) compute(y).forEach(d => set.add(d));
+    return set;
+  }, [viewStart]);
+
   const refetchItems = async () => {
     if (!userOrg?.id) return;
     const { data } = await supabase.from("timeline_items").select("*").eq("org_id", userOrg.id).order("start_date", { ascending: true });
     if (data) setItems(data);
   };
 
+  // Create new tasks (titles only) inside a sprint context, then link them to the timeline item.
+  // Used when the user added "Quick-Create" tasks inside the sprint modal.
+  const createAndLinkNewTasks = async (itemId, newTasks, projectId) => {
+    if (!newTasks || newTasks.length === 0) return [];
+    const project = projects.find(p => p.id === projectId);
+    const rows = newTasks.map((t, idx) => ({
+      title: t.title,
+      column_key: "todo",
+      project_id: projectId || null,
+      project_name: project?.name || null,
+      priority: "medium",
+      creator_id: session.user.id,
+      assignee_id: session.user.id,
+      position: idx,
+      org_id: userOrg.id,
+    }));
+    const { data, error: e } = await supabase.from("tasks").insert(rows).select();
+    if (e) { console.error("Quick-create tasks failed", e); return []; }
+    const newIds = (data || []).map(d => d.id);
+    if (newIds.length > 0) {
+      await supabase.from("timeline_item_tasks").insert(newIds.map(id => ({ item_id: itemId, task_id: id })));
+      // Update local tasks state so they appear immediately in the linked-task lookup
+      setTasks(prev => [...(data || []), ...prev]);
+    }
+    return newIds;
+  };
+
+  // Create a new sprint group on the fly (used when modal returns new_group_name)
+  const createSprintGroup = async (name, projectId) => {
+    const { data, error: e } = await supabase.from("sprint_groups")
+      .insert({ org_id: userOrg.id, name, project_id: projectId || null, created_by: session.user.id })
+      .select().single();
+    if (e) { console.error("Group create failed", e); return null; }
+    setSprintGroups(prev => [...prev, data]);
+    return data;
+  };
+
   const createItem = async (payload) => {
+    // If user typed a new group name, create it first
+    let groupId = payload.group_id || null;
+    if (!groupId && payload.new_group_name && payload.new_group_name.trim()) {
+      const g = await createSprintGroup(payload.new_group_name.trim(), payload.project_id);
+      if (g) groupId = g.id;
+    }
     const row = {
       org_id: userOrg.id,
       title: payload.title,
@@ -2825,6 +2930,8 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
       start_date: payload.start_date,
       end_date: payload.end_date,
       project_id: payload.project_id || null,
+      predecessor_id: payload.predecessor_id || null,
+      group_id: groupId,
       status: payload.status || "planned",
       color: payload.color || null,
       created_by: session.user.id,
@@ -2837,20 +2944,52 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
       return null;
     }
     setItems(prev => [...prev, data]);
+    // Quick-create tasks FIRST so we can merge their ids into the linked list before persisting links
+    let extraTaskIds = [];
+    if (payload.new_tasks && payload.new_tasks.length > 0) {
+      extraTaskIds = await createAndLinkNewTasks(data.id, payload.new_tasks, payload.project_id);
+    }
     if (payload.assignee_ids && payload.assignee_ids.length > 0) await persistAssignees(data.id, payload.assignee_ids);
-    if (payload.linked_task_ids && payload.linked_task_ids.length > 0) await persistLinkedTasks(data.id, payload.linked_task_ids);
+    const allLinkedIds = [...(payload.linked_task_ids || []), ...extraTaskIds];
+    if (allLinkedIds.length > 0) {
+      // Avoid double-insert: createAndLinkNewTasks already inserted timeline_item_tasks for extraTaskIds.
+      // So we only persist the *original* linked_task_ids via persistLinkedTasks, then merge into state.
+      if (payload.linked_task_ids && payload.linked_task_ids.length > 0) await persistLinkedTasks(data.id, payload.linked_task_ids);
+      if (extraTaskIds.length > 0) setLinkedTasks(prev => ({ ...prev, [data.id]: [...(prev[data.id] || payload.linked_task_ids || []), ...extraTaskIds] }));
+    }
+    if (payload.checklist !== undefined) await persistChecklist(data.id, payload.checklist);
     // Safety net: also refetch to make sure UI matches DB
     refetchItems();
     return data;
   };
 
   const updateItem = async (id, payload) => {
-    const { assignee_ids, linked_task_ids, ...patch } = payload;
+    const { assignee_ids, linked_task_ids, checklist, new_tasks, new_group_name, ...patch } = payload;
+    // If a new group name was provided, create the group first and override group_id
+    if (new_group_name && new_group_name.trim()) {
+      const g = await createSprintGroup(new_group_name.trim(), patch.project_id);
+      if (g) patch.group_id = g.id;
+    }
     const { data, error: e } = await supabase.from("timeline_items").update(patch).eq("id", id).select().single();
     if (e) { console.error(e); return; }
     setItems(prev => prev.map(it => it.id === id ? data : it));
+    let extraTaskIds = [];
+    if (new_tasks && new_tasks.length > 0) {
+      extraTaskIds = await createAndLinkNewTasks(id, new_tasks, patch.project_id);
+    }
     if (assignee_ids !== undefined) await persistAssignees(id, assignee_ids);
-    if (linked_task_ids !== undefined) await persistLinkedTasks(id, linked_task_ids);
+    if (linked_task_ids !== undefined) {
+      // Persist user's explicit selection first, then merge new task ids in (since createAndLinkNewTasks
+      // already inserted their join rows, persistLinkedTasks would wipe them — handle separately).
+      await persistLinkedTasks(id, linked_task_ids);
+      if (extraTaskIds.length > 0) {
+        await supabase.from("timeline_item_tasks").insert(extraTaskIds.map(tid => ({ item_id: id, task_id: tid })));
+        setLinkedTasks(prev => ({ ...prev, [id]: [...(prev[id] || linked_task_ids || []), ...extraTaskIds] }));
+      }
+    } else if (extraTaskIds.length > 0) {
+      setLinkedTasks(prev => ({ ...prev, [id]: [...(prev[id] || []), ...extraTaskIds] }));
+    }
+    if (checklist !== undefined) await persistChecklist(id, checklist);
   };
 
   const deleteItem = async (id) => {
@@ -2858,14 +2997,30 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
     setItems(prev => prev.filter(it => it.id !== id));
     setAssignees(prev => { const n = { ...prev }; delete n[id]; return n; });
     setLinkedTasks(prev => { const n = { ...prev }; delete n[id]; return n; });
+    setChecklists(prev => { const n = { ...prev }; delete n[id]; return n; });
   };
 
   // ── Drag/Resize handlers ──────────────────────────────
   const dragRef = useRef(null); // { itemId, mode, startX, origStart, origEnd, pxPerDay }
+  const justDraggedRef = useRef(false); // true right after a drag that actually moved — suppress the immediately-following click
+
+  // Cascade successors: when a sprint with a group_id is moved, all sprints in the same group
+  // that start strictly later should shift along with it. (Equal-start sprints are siblings, not successors.)
+  const collectSuccessors = (rootId, source) => {
+    const root = source.find(x => x.id === rootId);
+    if (!root || !root.group_id) return [];
+    const rootStart = new Date(root.start_date).getTime();
+    return source.filter(it => it.id !== rootId
+      && it.group_id === root.group_id
+      && new Date(it.start_date).getTime() > rootStart);
+  };
 
   const onItemDragStart = (e, item, mode) => {
     e.stopPropagation();
     e.preventDefault();
+    justDraggedRef.current = false;
+    // Snapshot successor chain (only for move-mode cascade); record their orig dates so we can shift relative to them.
+    const successors = mode === "move" ? collectSuccessors(item.id, items).map(s => ({ id: s.id, origStart: s.start_date, origEnd: s.end_date })) : [];
     dragRef.current = {
       itemId: item.id,
       mode, // 'move' | 'resizeL' | 'resizeR'
@@ -2873,6 +3028,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
       origStart: item.start_date,
       origEnd: item.end_date,
       pxPerDay,
+      successors,
     };
     window.addEventListener("pointermove", onItemDragMove);
     window.addEventListener("pointerup", onItemDragEnd);
@@ -2884,10 +3040,21 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
     const dx = e.clientX - r.startX;
     const days = Math.round(dx / r.pxPerDay);
     if (days === 0) return;
+    justDraggedRef.current = true;
     setItems(prev => prev.map(it => {
+      // Move: also shift cascade successors
+      if (r.mode === "move") {
+        if (it.id === r.itemId) {
+          return { ...it, start_date: tlIsoDate(tlAddDays(r.origStart, days)), end_date: tlIsoDate(tlAddDays(r.origEnd, days)) };
+        }
+        const succ = r.successors.find(s => s.id === it.id);
+        if (succ) {
+          return { ...it, start_date: tlIsoDate(tlAddDays(succ.origStart, days)), end_date: tlIsoDate(tlAddDays(succ.origEnd, days)) };
+        }
+        return it;
+      }
       if (it.id !== r.itemId) return it;
       let ns = r.origStart, ne = r.origEnd;
-      if (r.mode === "move")     { ns = tlIsoDate(tlAddDays(r.origStart, days)); ne = tlIsoDate(tlAddDays(r.origEnd,   days)); }
       if (r.mode === "resizeL")  { ns = tlIsoDate(tlAddDays(r.origStart, days));
                                    if (new Date(ns).getTime() > new Date(r.origEnd).getTime()) ns = r.origEnd; }
       if (r.mode === "resizeR")  { ne = tlIsoDate(tlAddDays(r.origEnd,   days));
@@ -2901,17 +3068,19 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
     if (!r) return;
     window.removeEventListener("pointermove", onItemDragMove);
     window.removeEventListener("pointerup", onItemDragEnd);
-    // Persist the new dates
-    const current = items.find(it => it.id === r.itemId) ||
-      (() => { /* fall back to refetch */ return null; })();
-    // We read latest state via the closure on items; but items may be stale.
-    // Use a ref-fresh approach via functional setItems above already; here just commit:
-    const fresh = (window.__tl_items_fresh && window.__tl_items_fresh[r.itemId]) || null;
-    // Simpler: just push the latest from items state by id
+    // Persist new dates for primary + (if cascade) any successors that moved
     setItems(prev => {
-      const f = prev.find(it => it.id === r.itemId);
-      if (f && (f.start_date !== r.origStart || f.end_date !== r.origEnd)) {
-        supabase.from("timeline_items").update({ start_date: f.start_date, end_date: f.end_date }).eq("id", r.itemId);
+      const idsToPersist = [r.itemId, ...r.successors.map(s => s.id)];
+      for (const id of idsToPersist) {
+        const f = prev.find(it => it.id === id);
+        if (!f) continue;
+        // Compare against orig values from dragRef
+        const orig = id === r.itemId
+          ? { s: r.origStart, e: r.origEnd }
+          : (() => { const s = r.successors.find(x => x.id === id); return { s: s.origStart, e: s.origEnd }; })();
+        if (f.start_date !== orig.s || f.end_date !== orig.e) {
+          supabase.from("timeline_items").update({ start_date: f.start_date, end_date: f.end_date }).eq("id", id);
+        }
       }
       return prev;
     });
@@ -2982,9 +3151,13 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
         {/* Workspace header — no back button (Hub menu handles navigation) */}
         <div style={{ padding: "20px 18px 16px", borderBottom: `1px solid ${theme.borderFaint}` }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg, #8B7AFF, #6C5CE7)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 13 }}>
-              {(userOrg?.name || "?")[0]}
-            </div>
+            {userOrg?.logo_url ? (
+              <img src={userOrg.logo_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", border: `1px solid ${theme.borderFaint}` }} />
+            ) : (
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg, #8B7AFF, #6C5CE7)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 13 }}>
+                {(userOrg?.name || "?")[0]}
+              </div>
+            )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{userOrg?.name || "Workspace"}</div>
               <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 1 }}>Team Workspace</div>
@@ -3163,10 +3336,8 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
           {/* Zoom switcher */}
           <div style={{ display: "inline-flex", alignItems: "center", gap: 2, padding: 3, borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}` }}>
             {[
-              { id: "day",     label: "Tag" },
               { id: "week",    label: "Woche" },
               { id: "month",   label: "Monat" },
-              { id: "quarter", label: "Quartal" },
             ].map(z => {
               const active = zoom === z.id;
               return (
@@ -3214,6 +3385,18 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                         );
                       })}
                     </div>
+
+                    {/* Holiday toggle */}
+                    <div style={{ height: 1, background: theme.borderFaint, margin: "12px 0" }} />
+                    <motion.div onClick={() => setShowHolidays(v => !v)} whileTap={{ scale: 0.99 }}
+                      style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "4px 0" }}
+                    >
+                      <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${showHolidays ? theme.accent : theme.borderFaint}`, background: showHolidays ? theme.accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.15s" }}>
+                        {showHolidays && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                      </div>
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.text, flex: 1 }}>Feiertage anzeigen</div>
+                    </motion.div>
+                    <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 4, marginLeft: 26 }}>Deutsche Feiertage werden farblich markiert.</div>
                   </motion.div>
                 </>
               )}
@@ -3280,6 +3463,21 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
               ))}
             </div>
 
+            {/* Weekend + holiday shading (only in day-cell zoom: week) */}
+            {(zoom === "day" || zoom === "week") && axis.map((c, i) => {
+              const dow = c.d.getDay();
+              const isWeekend = dow === 0 || dow === 6;
+              const iso = tlIsoDate(c.d);
+              const isHoliday = showHolidays && holidaysSet.has(iso);
+              if (!isWeekend && !isHoliday) return null;
+              const bg = isHoliday
+                ? (darkMode ? "rgba(232, 67, 147, 0.08)" : "rgba(232, 67, 147, 0.07)")
+                : (darkMode ? "rgba(255,255,255,0.018)" : "rgba(0,0,0,0.018)");
+              return (
+                <div key={`bg${i}`} title={isHoliday ? "Feiertag" : "Wochenende"} style={{ position: "absolute", left: c.left, top: headerHeight, bottom: 0, width: c.width, background: bg, pointerEvents: "none" }} />
+              );
+            })}
+
             {/* Vertical grid lines */}
             {axis.map((c, i) => (
               <div key={`g${i}`} style={{ position: "absolute", left: c.left, top: headerHeight, bottom: 0, width: 1, background: theme.borderFaint, opacity: 0.6 }} />
@@ -3313,31 +3511,66 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
               const cardH = rowHeight - 14;
               return (
                 <div key={it.id}
-                  onPointerDown={(e) => { if (e.target.dataset.handle) return; onItemDragStart(e, it, "move"); }}
-                  onClick={(e) => { if (!dragRef.current) setSelectedItem(it); }}
+                  onPointerDown={(e) => {
+                    if (e.target.dataset.handle) return;
+                    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+                    onItemDragStart(e, it, "move");
+                  }}
+                  onPointerUp={(e) => { try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {} }}
+                  onDoubleClick={(e) => { e.stopPropagation(); setSelectedItem(it); }}
                   style={{
                     position: "absolute", left, top, width, height: cardH,
                     borderRadius: 12, cursor: "grab",
                     background: isDone ? "transparent" : c,
                     border: isDone ? `1.5px dashed ${c}` : "none",
                     color: isDone ? c : "#fff",
-                    padding: "0 14px",
+                    padding: "0 22px 0 14px",
                     display: "flex", alignItems: "center", gap: 10,
                     fontSize: 13, fontFamily: FONT, fontWeight: 500,
                     boxShadow: isDone ? "none" : `0 6px 18px ${c}45`,
                     overflow: "hidden",
                     userSelect: "none",
+                    touchAction: "none",
                   }}
                 >
                   {/* Left resize handle — visible || grip */}
-                  <div data-handle="L" onPointerDown={(e) => onItemDragStart(e, it, "resizeL")}
+                  <div data-handle="L"
+                    onPointerDown={(e) => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} onItemDragStart(e, it, "resizeL"); }}
+                    onPointerUp={(e) => { try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {} }}
                     style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 12, cursor: "ew-resize", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center", borderTopLeftRadius: 12, borderBottomLeftRadius: 12 }}
                   >
                     <div data-handle="L" style={{ width: 3, height: 18, borderRadius: 2, background: isDone ? c : "rgba(255,255,255,0.55)", boxShadow: isDone ? "none" : "inset 0 0 0 1px rgba(0,0,0,0.05)" }} />
                   </div>
-                  {/* Status dot */}
-                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: isDone ? c : "rgba(255,255,255,0.85)", flexShrink: 0 }} />
-                  <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.title}</span>
+                  {/* Status dot — gray=planned, blue=active, green=done */}
+                  {(() => {
+                    const st = liveStatus(it);
+                    const dotColor = st === "done" ? "#22C55E" : st === "active" ? "#60A5FA" : "#9CA3AF";
+                    return (
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, marginLeft: 8, marginRight: 3, flexShrink: 0 }} />
+                    );
+                  })()}
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (justDraggedRef.current) { justDraggedRef.current = false; return; }
+                      setSelectedItem(it);
+                    }}
+                    style={{ flex: 1, minWidth: 0, cursor: "pointer", display: "flex", flexDirection: "column", justifyContent: "center", gap: 2 }}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.title}</div>
+                    {it.group_id && (() => {
+                      const g = sprintGroups.find(x => x.id === it.group_id);
+                      return g ? (
+                        <div style={{ fontSize: 10, opacity: 0.75, lineHeight: 1.1, display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 400 }}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                            <polyline points="9 10 4 15 9 20"/>
+                            <path d="M20 4v7a4 4 0 01-4 4H4"/>
+                          </svg>
+                          <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{g.name}</span>
+                        </div>
+                      ) : null;
+                    })()}
+                  </div>
                   {/* Assignee avatars (up to 3, +N) */}
                   {(assignees[it.id] || []).length > 0 && (() => {
                     const userIds = assignees[it.id];
@@ -3373,7 +3606,9 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                     </div>
                   )}
                   {/* Right resize handle — visible || grip */}
-                  <div data-handle="R" onPointerDown={(e) => onItemDragStart(e, it, "resizeR")}
+                  <div data-handle="R"
+                    onPointerDown={(e) => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} onItemDragStart(e, it, "resizeR"); }}
+                    onPointerUp={(e) => { try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {} }}
                     style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 12, cursor: "ew-resize", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center", borderTopRightRadius: 12, borderBottomRightRadius: 12 }}
                   >
                     <div data-handle="R" style={{ width: 3, height: 18, borderRadius: 2, background: isDone ? c : "rgba(255,255,255,0.55)" }} />
@@ -3401,22 +3636,43 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
             item={selectedItem}
             creating={creating}
             sprintDays={sprintDays}
-            defaultProjectId={createForProject}
+            defaultProjectId={chainFrom?.projectId ?? createForProject}
+            defaultPredecessorId={chainFrom?.predecessorId ?? null}
+            defaultGroupId={chainFrom?.groupId ?? null}
+            defaultStartDate={chainFrom?.startDate ?? null}
+            defaultEndDate={chainFrom?.endDate ?? null}
             projects={projects}
             orgMembers={orgMembers}
             tasks={tasks}
+            allItems={items}
+            sprintGroups={sprintGroups}
             initialAssigneeIds={selectedItem ? (assignees[selectedItem.id] || []) : []}
             initialLinkedTaskIds={selectedItem ? (linkedTasks[selectedItem.id] || []) : []}
+            initialChecklist={selectedItem ? (checklists[selectedItem.id] || []) : []}
             onOpenTask={openTaskInKanban}
+            onChainNext={selectedItem ? () => {
+              // Build defaults for chained sprint: same project, predecessor = current item, start = current end + 1d
+              const nextStart = tlIsoDate(tlAddDays(selectedItem.end_date, 1));
+              const nextEnd = tlIsoDate(tlAddDays(nextStart, sprintDays - 1));
+              setSelectedItem(null);
+              setChainFrom({
+                projectId: selectedItem.project_id || null,
+                predecessorId: selectedItem.id,
+                groupId: selectedItem.group_id || null,
+                startDate: nextStart,
+                endDate: nextEnd,
+              });
+              setCreating(true);
+            } : null}
             theme={theme} darkMode={darkMode}
-            onClose={() => { setCreating(false); setSelectedItem(null); setCreateForProject(null); }}
+            onClose={() => { setCreating(false); setSelectedItem(null); setCreateForProject(null); setChainFrom(null); }}
             onSave={async (payload) => {
               if (selectedItem) {
                 await updateItem(selectedItem.id, payload);
               } else {
                 await createItem(payload);
               }
-              setCreating(false); setSelectedItem(null);
+              setCreating(false); setSelectedItem(null); setChainFrom(null);
             }}
             onDelete={selectedItem ? async () => {
               await deleteItem(selectedItem.id);
@@ -3434,13 +3690,13 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
   );
 }
 
-function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId = null, projects, orgMembers = [], tasks = [], initialAssigneeIds = [], initialLinkedTaskIds = [], onOpenTask, theme, darkMode, onClose, onSave, onDelete }) {
+function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId = null, defaultPredecessorId = null, defaultGroupId = null, defaultStartDate = null, defaultEndDate = null, projects, sprintGroups = [], orgMembers = [], tasks = [], allItems = [], initialAssigneeIds = [], initialLinkedTaskIds = [], initialChecklist = [], onOpenTask, onChainNext, theme, darkMode, onClose, onSave, onDelete }) {
   const today = tlIsoDate(new Date());
   const defaultEnd = tlIsoDate(tlAddDays(new Date(), sprintDays - 1));
   const [title, setTitle] = useState(item?.title || "");
   const [description, setDescription] = useState(item?.description || "");
-  const [startDate, setStartDate] = useState(item?.start_date || today);
-  const [endDate, setEndDate] = useState(item?.end_date || defaultEnd);
+  const [startDate, setStartDate] = useState(item?.start_date || defaultStartDate || today);
+  const [endDate, setEndDate] = useState(item?.end_date || defaultEndDate || defaultEnd);
   const [projectId, setProjectId] = useState(item?.project_id || defaultProjectId || "");
   // Status is derived automatically from date range. We still send 'status' on save based on current dates.
   const deriveStatus = (s, e) => {
@@ -3464,11 +3720,62 @@ function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId =
   }, [startDate, sprintDays, autoEnd, creating]);
   const [assigneeIds, setAssigneeIds] = useState(initialAssigneeIds);
   const [linkedTaskIds, setLinkedTaskIds] = useState(initialLinkedTaskIds);
+  const [predecessorId, setPredecessorId] = useState(item?.predecessor_id || defaultPredecessorId || "");
+  // Sprint group: either an existing id OR "__new__" (then newGroupName is used) OR "" (no group)
+  const [groupId, setGroupId] = useState(item?.group_id || defaultGroupId || "");
+  const [newGroupName, setNewGroupName] = useState("");
+  const [checklist, setChecklist] = useState(initialChecklist); // [{id?, text, done, position}]
+  const [newChecklistText, setNewChecklistText] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const [assigneeMenuOpen, setAssigneeMenuOpen] = useState(false);
   const [taskMenuOpen, setTaskMenuOpen] = useState(false);
   const [taskSearch, setTaskSearch] = useState("");
+  const [pendingNewTasks, setPendingNewTasks] = useState([]); // [{tempId, title}] — created with sprint on save
+  const [newTaskText, setNewTaskText] = useState("");
+  // Speech-to-text for description
+  const recognitionRef = useRef(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const startDictation = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert("Spracherkennung wird in diesem Browser nicht unterstützt. Bitte Chrome oder Safari verwenden."); return; }
+    if (isRecording) { stopDictation(); return; }
+    const recognition = new SR();
+    recognition.lang = "de-DE";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    let finalTranscript = description || "";
+    let needsSpace = finalTranscript.length > 0 && !finalTranscript.endsWith(" ") && !finalTranscript.endsWith("\n");
+    recognition.onresult = (event) => {
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          let cleaned = t.trim();
+          if (cleaned.length > 0) {
+            const prevChar = finalTranscript.trim().slice(-1);
+            if (!prevChar || prevChar === "." || prevChar === "!" || prevChar === "?" || prevChar === "\n") {
+              cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+            }
+          }
+          const lastChar = cleaned.slice(-1);
+          if (cleaned.length > 0 && !/[.!?,;:\n]/.test(lastChar)) cleaned += ".";
+          finalTranscript += (needsSpace ? " " : "") + cleaned;
+          needsSpace = true;
+          setDescription(finalTranscript);
+        }
+      }
+    };
+    recognition.onerror = (e) => { if (e.error !== "no-speech") console.error("Speech error:", e.error); };
+    recognition.onend = () => { setIsRecording(false); recognitionRef.current = null; };
+    recognition.start();
+    recognitionRef.current = recognition;
+    setIsRecording(true);
+  };
+  const stopDictation = () => {
+    if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; }
+    setIsRecording(false);
+  };
+  useEffect(() => { return () => { if (recognitionRef.current) recognitionRef.current.stop(); }; }, []);
 
   const save = async () => {
     if (!title.trim() || saving) return;
@@ -3479,12 +3786,37 @@ function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId =
       start_date: startDate,
       end_date: endDate,
       project_id: projectId || null,
+      predecessor_id: predecessorId || null,
+      group_id: groupId === "__new__" ? null : (groupId || null),
+      new_group_name: groupId === "__new__" ? newGroupName.trim() : null,
       status,
       assignee_ids: assigneeIds,
       linked_task_ids: linkedTaskIds,
+      checklist,
+      new_tasks: pendingNewTasks.map(t => ({ title: t.title })),
     });
     setSaving(false);
   };
+
+  // Available sprint groups: filter by current project (or show all if no project)
+  const availableGroups = useMemo(() => {
+    return (sprintGroups || []).filter(g => {
+      if (!projectId) return !g.project_id; // no project chosen → only show project-less groups
+      return !g.project_id || g.project_id === projectId;
+    });
+  }, [sprintGroups, projectId]);
+
+  // Predecessor candidates: same project, not self, not creating cycles
+  const predecessorOptions = useMemo(() => {
+    return (allItems || []).filter(i => {
+      if (item && i.id === item.id) return false;
+      // Same project (or both 'no project')
+      const ip = projectId || null;
+      const ip2 = i.project_id || null;
+      if (ip !== ip2) return false;
+      return true;
+    });
+  }, [allItems, item, projectId]);
 
   // Helpers
   const memberById = (id) => orgMembers.find(m => m.user_id === id || m.id === id);
@@ -3503,29 +3835,136 @@ function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId =
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       transition={{ duration: 0.18 }}
       onClick={onClose}
-      style={{ position: "fixed", inset: 0, zIndex: 99998, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+      style={{ position: "fixed", inset: 0, zIndex: 99998, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 24px", overflowY: "auto" }}
     >
       <motion.div
         initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }}
         transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1.0] }}
         onClick={e => e.stopPropagation()}
-        style={{ width: "100%", maxWidth: 540, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26, boxShadow: "0 25px 80px rgba(0,0,0,0.4)" }}
+        style={{ width: "100%", maxWidth: 900, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26, boxShadow: "0 25px 80px rgba(0,0,0,0.4)", marginBottom: 24 }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-          <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.2 }}>{creating ? "Neuer Sprint" : "Sprint bearbeiten"}</div>
-          <motion.div onClick={onClose} whileTap={{ scale: 0.94 }} style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+            <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.2 }}>{creating ? "Neuer Sprint" : "Sprint bearbeiten"}</div>
+            <div title="Status wird automatisch aus den Daten berechnet" style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 999, background: TL_STATUS_COLORS[status] + "15", border: `1px solid ${TL_STATUS_COLORS[status]}30`, color: TL_STATUS_COLORS[status], fontSize: 11, fontFamily: FONT, fontWeight: 600, whiteSpace: "nowrap" }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: TL_STATUS_COLORS[status] }} />
+              {TL_STATUS_LABEL[status]}
+            </div>
+          </div>
+          <motion.div onClick={onClose} whileTap={{ scale: 0.94 }} style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, flexShrink: 0 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </motion.div>
         </div>
 
-        <input value={title} onChange={e => setTitle(e.target.value)} autoFocus placeholder="Was wird gemacht?"
-          style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 12, padding: "12px 14px", fontSize: 16, fontFamily: FONT, fontWeight: 500, color: theme.text, outline: "none", caretColor: theme.accent, marginBottom: 14 }}
-        />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 22, alignItems: "start" }}>
+        <div>
+        {/* 1. Projekt (full width) */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Projekt</label>
+          <select value={projectId} onChange={e => setProjectId(e.target.value)}
+            style={{
+              width: "100%",
+              background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+              border: `1px solid ${theme.borderFaint}`,
+              borderRadius: 10,
+              padding: "11px 36px 11px 14px",
+              fontSize: 13,
+              fontFamily: FONT,
+              color: theme.text,
+              outline: "none",
+              appearance: "none",
+              WebkitAppearance: "none",
+              MozAppearance: "none",
+              backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(theme.textDim)}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")`,
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "right 14px center",
+              backgroundSize: "12px 12px",
+            }}
+          >
+            <option value="">— Kein Projekt —</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
 
-        <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Beschreibung (optional)" rows={3}
-          style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 12, padding: "10px 14px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent, marginBottom: 14, resize: "vertical", lineHeight: 1.55 }}
-        />
+        {/* 2. Sprintgruppe + Sprinttitel (+ chain button) */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+          <div>
+            <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Sprintgruppe</label>
+            {groupId === "__new__" ? (
+              <div style={{ display: "flex", gap: 4 }}>
+                <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} autoFocus placeholder="Neue Gruppe…"
+                  style={{ flex: 1, minWidth: 0, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.accent}40`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent }}
+                />
+                <motion.div whileTap={{ scale: 0.92 }} onClick={() => { setGroupId(""); setNewGroupName(""); }} title="Abbrechen"
+                  style={{ width: 32, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 10, background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, cursor: "pointer", flexShrink: 0 }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </motion.div>
+              </div>
+            ) : (
+              <select value={groupId} onChange={e => { setGroupId(e.target.value); setNewGroupName(""); }}
+                style={{
+                  width: "100%",
+                  background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                  border: `1px solid ${theme.borderFaint}`,
+                  borderRadius: 10,
+                  padding: "10px 36px 10px 14px",
+                  fontSize: 13,
+                  fontFamily: FONT,
+                  color: theme.text,
+                  outline: "none",
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                  MozAppearance: "none",
+                  backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(theme.textDim)}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")`,
+                  backgroundRepeat: "no-repeat",
+                  backgroundPosition: "right 14px center",
+                  backgroundSize: "12px 12px",
+                }}
+              >
+                <option value="">— Keine Gruppe —</option>
+                {availableGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                <option value="__new__">+ Neue Gruppe…</option>
+              </select>
+            )}
+          </div>
+          <div>
+            <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Sprinttitel</label>
+            <div style={{ display: "flex", alignItems: "stretch", gap: 6 }}>
+              <input value={title} onChange={e => setTitle(e.target.value)} autoFocus placeholder="Sprint Title"
+                style={{ flex: 1, minWidth: 0, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent }}
+              />
+              {!creating && onChainNext && (
+                <motion.div onClick={onChainNext} whileTap={{ scale: 0.94 }} whileHover={{ background: theme.accent + "20" }}
+                  title="Folge-Sprint erstellen (verkettet)"
+                  style={{ width: 36, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 10, background: theme.accent + "15", border: `1px solid ${theme.accent}30`, color: theme.accent, cursor: "pointer", flexShrink: 0 }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </motion.div>
+              )}
+            </div>
+          </div>
+        </div>
 
+        {/* 4. Description */}
+        <div style={{ position: "relative", marginBottom: 14 }}>
+          <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Beschreibung (optional)" rows={3}
+            style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${isRecording ? "#E84393" : theme.borderFaint}`, borderRadius: 12, padding: "10px 40px 10px 14px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent, resize: "vertical", lineHeight: 1.55, display: "block" }}
+          />
+          <motion.div onClick={startDictation} whileTap={{ scale: 0.92 }}
+            title={isRecording ? "Diktat stoppen" : "Diktieren"}
+            style={{ position: "absolute", right: 8, top: 8, width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: isRecording ? "#E84393" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"), color: isRecording ? "#fff" : theme.textDim, transition: "background 0.15s", animation: isRecording ? "pulse 1.4s ease-in-out infinite" : "none" }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="2" width="6" height="12" rx="3"/>
+              <path d="M5 10a7 7 0 0014 0"/>
+              <line x1="12" y1="17" x2="12" y2="21"/>
+              <line x1="8" y1="21" x2="16" y2="21"/>
+            </svg>
+          </motion.div>
+        </div>
+
+        {/* 8. Dates */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
           <div>
             <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Start</label>
@@ -3534,7 +3973,7 @@ function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId =
             />
           </div>
           <div>
-            <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block", display: "flex", justifyContent: "space-between" }}>
+            <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "flex", justifyContent: "space-between" }}>
               <span>Ende</span>
               {creating && (
                 <motion.span onClick={() => setAutoEnd(v => !v)} whileTap={{ scale: 0.96 }}
@@ -3551,25 +3990,8 @@ function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId =
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, marginBottom: 18, alignItems: "end" }}>
-          <div>
-            <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Projekt</label>
-            <select value={projectId} onChange={e => setProjectId(e.target.value)}
-              style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none" }}
-            >
-              <option value="">— Kein Projekt —</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
-          {/* Status — auto-computed from dates, read-only chip */}
-          <div title="Status wird automatisch aus den Daten berechnet" style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 12px", borderRadius: 999, background: TL_STATUS_COLORS[status] + "15", border: `1px solid ${TL_STATUS_COLORS[status]}30`, color: TL_STATUS_COLORS[status], fontSize: 11, fontFamily: FONT, fontWeight: 600, whiteSpace: "nowrap" }}>
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: TL_STATUS_COLORS[status] }} />
-            {TL_STATUS_LABEL[status]}
-          </div>
-        </div>
-
-        {/* Assignees */}
-        <div style={{ marginBottom: 14 }}>
+        {/* 9. Assignees / Team */}
+        <div style={{ marginBottom: 0 }}>
           <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 8, display: "block" }}>Team</label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
             {assigneeIds.map(uid => {
@@ -3630,9 +4052,12 @@ function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId =
           </div>
         </div>
 
-        {/* Linked Kanban tasks */}
-        <div style={{ marginBottom: 18 }}>
-          <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 8, display: "block" }}>Verknüpfte Tasks ({linkedTaskIds.length})</label>
+        </div>{/* end left column */}
+        <div>{/* right column */}
+
+        {/* 5. Linked Kanban tasks */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 8, display: "block" }}>Verknüpfte Tasks ({linkedTaskIds.length + pendingNewTasks.length})</label>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {linkedTaskIds.map(tid => {
               const tk = tasks.find(x => x.id === tid);
@@ -3652,7 +4077,6 @@ function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId =
                       {tk.column_key && <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, padding: "1px 6px", borderRadius: 4, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 }}>{tk.column_key === "todo" ? "To Do" : tk.column_key === "progress" || tk.column_key === "in_progress" ? "In Arbeit" : tk.column_key === "review" ? "Review" : tk.column_key}</div>}
                     </div>
                   </div>
-                  {/* Open arrow icon */}
                   {onOpenTask && (
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: theme.textFaint, flexShrink: 0 }}>
                       <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
@@ -3664,6 +4088,40 @@ function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId =
                 </motion.div>
               );
             })}
+            {/* Pending new tasks — created together with sprint on save */}
+            {pendingNewTasks.map((nt) => (
+              <div key={nt.tempId} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", background: theme.accent + "10", border: `1px dashed ${theme.accent}40`, borderRadius: 10 }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: theme.accent, flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nt.title}</div>
+                  <div style={{ fontSize: 9, fontFamily: FONT, color: theme.accent, marginTop: 2, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 }}>Wird erstellt</div>
+                </div>
+                <motion.div whileTap={{ scale: 0.9 }} onClick={() => setPendingNewTasks(prev => prev.filter(x => x.tempId !== nt.tempId))} style={{ cursor: "pointer", color: theme.textDim, fontSize: 12, padding: 4 }}>✕</motion.div>
+              </div>
+            ))}
+            {/* + Task erstellen inline input */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <input value={newTaskText} onChange={e => setNewTaskText(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && newTaskText.trim()) {
+                    e.preventDefault();
+                    setPendingNewTasks(prev => [...prev, { tempId: `tmp-${Date.now()}-${Math.random().toString(36).slice(2,7)}`, title: newTaskText.trim() }]);
+                    setNewTaskText("");
+                  }
+                }}
+                placeholder="Task erstellen (Enter)…"
+                style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontFamily: FONT, color: theme.text, caretColor: theme.accent }}
+              />
+              {newTaskText.trim() && (
+                <motion.div whileTap={{ scale: 0.95 }} onClick={() => {
+                  setPendingNewTasks(prev => [...prev, { tempId: `tmp-${Date.now()}-${Math.random().toString(36).slice(2,7)}`, title: newTaskText.trim() }]);
+                  setNewTaskText("");
+                }}
+                  style={{ cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.accent, fontWeight: 600, padding: "2px 8px" }}
+                >+ Erstellen</motion.div>
+              )}
+            </div>
             <div style={{ position: "relative" }}>
               <motion.div onClick={() => setTaskMenuOpen(v => !v)} whileTap={{ scale: 0.97 }}
                 style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 12px", borderRadius: 10, background: "transparent", border: `1px dashed ${theme.borderFaint}`, cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}
@@ -3704,7 +4162,52 @@ function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId =
           </div>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+        {/* 6. Checklist */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 8, display: "block" }}>Checkliste ({checklist.filter(c => c.done).length}/{checklist.length})</label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {checklist.map((c, idx) => (
+              <div key={c.id || `new-${idx}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)" }}>
+                <motion.div whileTap={{ scale: 0.9 }} onClick={() => setChecklist(prev => prev.map((x, i) => i === idx ? { ...x, done: !x.done } : x))}
+                  style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${c.done ? theme.accent : theme.borderFaint}`, background: c.done ? theme.accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
+                >
+                  {c.done && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                </motion.div>
+                <input value={c.text} onChange={e => setChecklist(prev => prev.map((x, i) => i === idx ? { ...x, text: e.target.value } : x))}
+                  style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontFamily: FONT, color: c.done ? theme.textDim : theme.text, textDecoration: c.done ? "line-through" : "none", caretColor: theme.accent }}
+                />
+                <motion.div whileTap={{ scale: 0.9 }} onClick={() => setChecklist(prev => prev.filter((_, i) => i !== idx))} style={{ cursor: "pointer", color: theme.textFaint, fontSize: 12, padding: 2 }}>✕</motion.div>
+              </div>
+            ))}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px" }}>
+              <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px dashed ${theme.borderFaint}`, flexShrink: 0 }} />
+              <input value={newChecklistText} onChange={e => setNewChecklistText(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && newChecklistText.trim()) {
+                    e.preventDefault();
+                    setChecklist(prev => [...prev, { text: newChecklistText.trim(), done: false, position: prev.length }]);
+                    setNewChecklistText("");
+                  }
+                }}
+                placeholder="Eintrag hinzufügen (Enter)…"
+                style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontFamily: FONT, color: theme.text, caretColor: theme.accent }}
+              />
+              {newChecklistText.trim() && (
+                <motion.div whileTap={{ scale: 0.95 }} onClick={() => {
+                  setChecklist(prev => [...prev, { text: newChecklistText.trim(), done: false, position: prev.length }]);
+                  setNewChecklistText("");
+                }}
+                  style={{ cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.accent, fontWeight: 600, padding: "2px 8px" }}
+                >+ Hinzufügen</motion.div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        </div>{/* end right column */}
+        </div>{/* end two-column grid */}
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 18 }}>
           {onDelete && !confirmDel && (
             <motion.div onClick={() => setConfirmDel(true)} whileTap={{ scale: 0.97 }}
               style={{ padding: "10px 16px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: "#E84393", fontSize: 12, fontFamily: FONT, fontWeight: 500 }}
@@ -11196,6 +11699,37 @@ export default function CircularMenu() {
   const [inviteCode, setInviteCode] = useState("");          // invite code input
   const [joining, setJoining] = useState(false);             // joining workspace loading
   const [pendingInvites, setPendingInvites] = useState([]);  // pending invitations for user
+  const [orgLogoUploading, setOrgLogoUploading] = useState(false);
+  const orgLogoInputRef = useRef(null);
+  const uploadOrgLogo = async (file) => {
+    if (!file || !userOrg?.id) return;
+    setOrgLogoUploading(true);
+    try {
+      const ext = (file.name.split(".").pop() || "png").toLowerCase();
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const filePath = `org/${userOrg.id}/${fileName}`;
+      const { error } = await supabase.storage.from("project-logos").upload(filePath, file, { upsert: true, contentType: file.type });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from("project-logos").getPublicUrl(filePath);
+      const newUrl = urlData.publicUrl;
+      const { error: upErr } = await supabase.from("organizations").update({ logo_url: newUrl }).eq("id", userOrg.id);
+      if (upErr) throw upErr;
+      setUserOrg(o => o ? { ...o, logo_url: newUrl } : o);
+      setUserOrgs(prev => prev.map(o => o.id === userOrg.id ? { ...o, logo_url: newUrl } : o));
+    } catch (err) {
+      console.error("Workspace-Logo upload failed:", err);
+      alert("Logo-Upload fehlgeschlagen: " + (err.message || ""));
+    } finally {
+      setOrgLogoUploading(false);
+      if (orgLogoInputRef.current) orgLogoInputRef.current.value = "";
+    }
+  };
+  const removeOrgLogo = async () => {
+    if (!userOrg?.id) return;
+    await supabase.from("organizations").update({ logo_url: null }).eq("id", userOrg.id);
+    setUserOrg(o => o ? { ...o, logo_url: null } : o);
+    setUserOrgs(prev => prev.map(o => o.id === userOrg.id ? { ...o, logo_url: null } : o));
+  };
   const [teamInvites, setTeamInvites] = useState([]);        // pending invites sent by admin
   const [inviteEmails, setInviteEmails] = useState([]);      // email chips for invite input
   const [inviteInputVal, setInviteInputVal] = useState("");  // current text in invite input
@@ -14629,12 +15163,16 @@ export default function CircularMenu() {
                           border: `1px solid ${theme.borderFaint}`,
                         }}
                       >
-                        <div style={{
-                          width: 28, height: 28, borderRadius: 8,
-                          background: "linear-gradient(135deg, #8B7AFF30, #6C5CE730)",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 12, fontWeight: 600, fontFamily: FONT, color: "#8B7AFF",
-                        }}>{(userOrg.name || "W")[0]}</div>
+                        {userOrg.logo_url ? (
+                          <img src={userOrg.logo_url} alt="" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "cover", border: `1px solid ${theme.borderFaint}` }} />
+                        ) : (
+                          <div style={{
+                            width: 28, height: 28, borderRadius: 8,
+                            background: "linear-gradient(135deg, #8B7AFF30, #6C5CE730)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 12, fontWeight: 600, fontFamily: FONT, color: "#8B7AFF",
+                          }}>{(userOrg.name || "W")[0]}</div>
+                        )}
                         <div>
                           <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text, lineHeight: 1.2 }}>{userOrg.name}</div>
                           <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "capitalize" }}>{userOrgRole || "member"}</div>
@@ -14728,6 +15266,46 @@ export default function CircularMenu() {
                   borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`,
                   overflow: "hidden",
                 }}>
+                  {/* Workspace logo */}
+                  <div style={{ padding: "18px 20px", borderBottom: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", gap: 16 }}>
+                    <div style={{ position: "relative", flexShrink: 0 }}>
+                      {userOrg.logo_url ? (
+                        <img src={userOrg.logo_url} alt="" style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", border: `1px solid ${theme.border}` }} />
+                      ) : (
+                        <div style={{ width: 56, height: 56, borderRadius: 12, background: "linear-gradient(135deg, #8B7AFF, #6C5CE7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontFamily: FONT, color: "#fff", fontWeight: 600 }}>{(userOrg.name || "W")[0]}</div>
+                      )}
+                      {orgLogoUploading && (
+                        <div style={{ position: "absolute", inset: 0, borderRadius: 12, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <div style={{ width: 18, height: 18, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{appLanguage === "de" ? "Workspace-Logo" : "Workspace logo"}</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                        {userOrg.logo_url
+                          ? (appLanguage === "de" ? "Wird in Sidebar & Switcher angezeigt." : "Shown in sidebar & switcher.")
+                          : (appLanguage === "de" ? "PNG oder JPG, quadratisch empfohlen." : "PNG or JPG, square recommended.")}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                      <input ref={orgLogoInputRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadOrgLogo(f); }} style={{ display: "none" }} />
+                      <motion.div onClick={() => orgLogoInputRef.current?.click()} whileTap={{ scale: 0.97 }}
+                        style={{ padding: "7px 14px", borderRadius: 999, background: theme.accent, color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600, cursor: orgLogoUploading ? "wait" : "pointer", opacity: orgLogoUploading ? 0.7 : 1, display: "inline-flex", alignItems: "center", gap: 6 }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        {userOrg.logo_url
+                          ? (appLanguage === "de" ? "Ändern" : "Change")
+                          : (appLanguage === "de" ? "Hochladen" : "Upload")}
+                      </motion.div>
+                      {userOrg.logo_url && (
+                        <motion.div onClick={removeOrgLogo} whileTap={{ scale: 0.97 }}
+                          style={{ padding: "7px 12px", borderRadius: 999, background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}
+                        >{appLanguage === "de" ? "Entfernen" : "Remove"}</motion.div>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Invite member — chip-based input */}
                   <div style={{ padding: "18px 20px", borderBottom: `1px solid ${theme.borderFaint}` }}>
                     <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 12 }}>
