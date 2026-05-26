@@ -13235,6 +13235,8 @@ export default function CircularMenu() {
   const [dialogMode, setDialogMode] = useState(false);
   // When true, the next stopVoice() shouldn't send to AI — it should open the dialog with the transcript pre-filled.
   const voiceTargetDialogRef = useRef(false);
+  // Auto-stop timer: fires after a stretch of silence so the user doesn't have to click to confirm.
+  const silenceTimerRef = useRef(null);
   const [dialogMessages, setDialogMessages] = useState([]); // [{role:"user"|"assistant", content, timestamp}]
   const [dialogInput, setDialogInput] = useState("");
   const [dialogSending, setDialogSending] = useState(false);
@@ -13311,6 +13313,24 @@ export default function CircularMenu() {
       recognitionRef.current = recognition;
 
       let commandExecuted = false;
+      // Silence timer — auto-fires stopVoice after the user stops talking for ~1.6s
+      const SILENCE_MS = 1600;
+      const clearSilenceTimer = () => {
+        if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+      };
+      const armSilenceTimer = () => {
+        clearSilenceTimer();
+        silenceTimerRef.current = setTimeout(() => {
+          silenceTimerRef.current = null;
+          if (!commandExecuted) stopVoice();
+        }, SILENCE_MS);
+      };
+      // Initial grace window — give the user up to 6s to start speaking
+      silenceTimerRef.current = setTimeout(() => {
+        silenceTimerRef.current = null;
+        if (!commandExecuted) stopVoice();
+      }, 6000);
+
       recognition.onresult = (event) => {
         if (commandExecuted) return;
         let final = "";
@@ -13323,13 +13343,16 @@ export default function CircularMenu() {
         const currentText = correctTranscriptVocab(rawText);
         setTranscript(currentText);
 
+        // Reset silence countdown every time we get a recognition result
+        if (rawText.length > 0) armSilenceTimer();
+
         // Auto-detect voice commands. Run against the RAW transcript first so
         // vocab correction (e.g. "brand" → "BrandX") can't sabotage commands.
         if (rawText.length > 0) {
           const voiceNav = detectVoiceCommand(rawText) || detectVoiceCommand(currentText);
           if (voiceNav) {
             commandExecuted = true;
-            // Stop recognition immediately
+            clearSilenceTimer();
             try { recognition.stop(); } catch(e) {}
             recognitionRef.current = null;
             // Use setTimeout to ensure React processes state updates
@@ -13339,6 +13362,7 @@ export default function CircularMenu() {
               setAiStatus("");
               setAiResponse("");
               setTranscript("");
+              voiceTargetDialogRef.current = false;
               if (voiceNav.view) setCurrentView(voiceNav.view);
               if (voiceNav.action) voiceNav.action();
             }, 50);
@@ -13346,6 +13370,10 @@ export default function CircularMenu() {
         }
       };
       recognition.onerror = () => {};
+      recognition.onend = () => {
+        // Belt-and-braces: if recognition ends on its own (silence on some browsers), still fire stopVoice
+        clearSilenceTimer();
+      };
       recognition.start();
     } catch (e) {
       setTranscript("Mic not available in this environment");
@@ -13354,6 +13382,7 @@ export default function CircularMenu() {
 
   // Stop recording — pause mic, then let the user review/edit the transcript before sending.
   const stopVoice = async () => {
+    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
     try { if (recognitionRef.current) recognitionRef.current.stop(); } catch(e) {}
 
     const rawTranscript = (transcript || "").trim();
@@ -13531,7 +13560,6 @@ export default function CircularMenu() {
   // Send the transcript to the AI (called by both stopVoice and any external invokers)
   const submitVoiceMessage = async (overrideText) => {
     const userMessage = (overrideText ?? "").trim() || "Hello, what can you help me with?";
-    setVoiceReview(false);
     setAiSpeaking(true);
     setAiStatus("thinking");
     aiStoppedRef.current = false;
