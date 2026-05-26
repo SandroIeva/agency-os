@@ -2567,6 +2567,9 @@ function tlMonthLabel(d, short = false) {
 function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMode, t }) {
   const [items, setItems] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [assignees, setAssignees] = useState({}); // item_id -> [user_id]
+  const [linkedTasks, setLinkedTasks] = useState({}); // item_id -> [task_id]
   const [loading, setLoading] = useState(true);
   const [zoom, setZoom] = useState("week"); // 'day' | 'week' | 'month' | 'quarter'
   const [anchorDate, setAnchorDate] = useState(() => tlStartOfWeek(new Date()));
@@ -2586,12 +2589,12 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
 
   // ── Load data ─────────────────────────────────────────
   useEffect(() => {
-    if (!userOrg?.id) { setItems([]); setProjects([]); setLoading(false); return; }
+    if (!userOrg?.id) { setItems([]); setProjects([]); setTasks([]); setLoading(false); return; }
     let alive = true;
     (async () => {
       setLoading(true);
       try {
-        const [iRes, pRes] = await Promise.all([
+        const [iRes, pRes, tRes] = await Promise.all([
           supabase.from("timeline_items")
             .select("*")
             .eq("org_id", userOrg.id)
@@ -2600,11 +2603,41 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
             .select("id, name, color, logo_url")
             .eq("org_id", userOrg.id)
             .order("name", { ascending: true }),
+          supabase.from("tasks")
+            .select("id, title, project_id, project_name, column_key, priority, assignee_id")
+            .eq("org_id", userOrg.id)
+            .neq("column_key", "done")
+            .order("created_at", { ascending: false })
+            .limit(200),
         ]);
         if (!alive) return;
         if (iRes.error) throw iRes.error;
-        setItems(iRes.data || []);
+        const itemList = iRes.data || [];
+        setItems(itemList);
         setProjects(pRes.data || []);
+        setTasks(tRes.data || []);
+
+        // Load assignees + linked tasks for all items
+        if (itemList.length > 0) {
+          const ids = itemList.map(it => it.id);
+          const [aRes, lRes] = await Promise.all([
+            supabase.from("timeline_item_assignees").select("item_id, user_id").in("item_id", ids),
+            supabase.from("timeline_item_tasks").select("item_id, task_id").in("item_id", ids),
+          ]);
+          if (!alive) return;
+          const aMap = {};
+          (aRes.data || []).forEach(r => {
+            if (!aMap[r.item_id]) aMap[r.item_id] = [];
+            aMap[r.item_id].push(r.user_id);
+          });
+          setAssignees(aMap);
+          const lMap = {};
+          (lRes.data || []).forEach(r => {
+            if (!lMap[r.item_id]) lMap[r.item_id] = [];
+            lMap[r.item_id].push(r.task_id);
+          });
+          setLinkedTasks(lMap);
+        }
       } catch (e) {
         console.error("timeline load failed", e);
         setError(e.message || "Fehler beim Laden");
@@ -2705,6 +2738,22 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
   }, [zoom]);
 
   // ── CRUD helpers ───────────────────────────────────────
+  const persistAssignees = async (itemId, userIds) => {
+    await supabase.from("timeline_item_assignees").delete().eq("item_id", itemId);
+    if (userIds.length > 0) {
+      await supabase.from("timeline_item_assignees").insert(userIds.map(u => ({ item_id: itemId, user_id: u })));
+    }
+    setAssignees(prev => ({ ...prev, [itemId]: userIds }));
+  };
+
+  const persistLinkedTasks = async (itemId, taskIds) => {
+    await supabase.from("timeline_item_tasks").delete().eq("item_id", itemId);
+    if (taskIds.length > 0) {
+      await supabase.from("timeline_item_tasks").insert(taskIds.map(t => ({ item_id: itemId, task_id: t })));
+    }
+    setLinkedTasks(prev => ({ ...prev, [itemId]: taskIds }));
+  };
+
   const createItem = async (payload) => {
     const row = {
       org_id: userOrg.id,
@@ -2720,18 +2769,25 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
     const { data, error: e } = await supabase.from("timeline_items").insert(row).select().single();
     if (e) { console.error(e); return null; }
     setItems(prev => [...prev, data]);
+    if (payload.assignee_ids) await persistAssignees(data.id, payload.assignee_ids);
+    if (payload.linked_task_ids) await persistLinkedTasks(data.id, payload.linked_task_ids);
     return data;
   };
 
-  const updateItem = async (id, patch) => {
+  const updateItem = async (id, payload) => {
+    const { assignee_ids, linked_task_ids, ...patch } = payload;
     const { data, error: e } = await supabase.from("timeline_items").update(patch).eq("id", id).select().single();
     if (e) { console.error(e); return; }
     setItems(prev => prev.map(it => it.id === id ? data : it));
+    if (assignee_ids !== undefined) await persistAssignees(id, assignee_ids);
+    if (linked_task_ids !== undefined) await persistLinkedTasks(id, linked_task_ids);
   };
 
   const deleteItem = async (id) => {
     await supabase.from("timeline_items").delete().eq("id", id);
     setItems(prev => prev.filter(it => it.id !== id));
+    setAssignees(prev => { const n = { ...prev }; delete n[id]; return n; });
+    setLinkedTasks(prev => { const n = { ...prev }; delete n[id]; return n; });
   };
 
   // ── Drag/Resize handlers ──────────────────────────────
@@ -2811,21 +2867,142 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
   const totalWidth = VISIBLE_DAYS * pxPerDay;
   const gridHeight = Math.max(lanes.length * rowHeight + 40, 320);
 
+  // Group items per project for sidebar counts
+  const itemsByProject = useMemo(() => {
+    const m = { __none: 0 };
+    items.forEach(it => {
+      if (it.project_id) m[it.project_id] = (m[it.project_id] || 0) + 1;
+      else m.__none++;
+    });
+    return m;
+  }, [items]);
+
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
-      style={{ position: "fixed", inset: 0, background: theme.bg, display: "flex", flexDirection: "column", zIndex: 5 }}
+      style={{ position: "fixed", inset: 0, background: theme.bg, display: "flex", flexDirection: "row", zIndex: 5 }}
     >
+      {/* Left Sidebar */}
+      <div style={{
+        width: 280, flexShrink: 0,
+        borderRight: `1px solid ${theme.borderFaint}`,
+        background: darkMode ? "rgba(255,255,255,0.015)" : "rgba(0,0,0,0.015)",
+        display: "flex", flexDirection: "column",
+        overflowY: "auto",
+      }}>
+        {/* Workspace header */}
+        <div style={{ padding: "20px 18px 16px", borderBottom: `1px solid ${theme.borderFaint}` }}>
+          <motion.div onClick={onBack} whileTap={{ scale: 0.97 }}
+            style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: theme.textDim, marginBottom: 14 }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            <span style={{ fontSize: 11, fontFamily: FONT }}>{t("common.back")}</span>
+          </motion.div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg, #8B7AFF, #6C5CE7)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 13 }}>
+              {(userOrg?.name || "?")[0]}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{userOrg?.name || "Workspace"}</div>
+              <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 1 }}>Team Workspace</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick filters */}
+        <div style={{ padding: "12px 10px" }}>
+          <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 2, textTransform: "uppercase", padding: "4px 10px 8px", fontWeight: 600 }}>Ansicht</div>
+          <motion.div onClick={() => { setVisibleProjectIds(null); setShowNoProject(true); }} whileTap={{ scale: 0.99 }}
+            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 10px", borderRadius: 8, cursor: "pointer", background: visibleProjectIds === null && showNoProject ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)") : "transparent" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.textSub} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+              <span style={{ fontSize: 12, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Alle Items</span>
+            </div>
+            <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, fontWeight: 600 }}>{items.length}</span>
+          </motion.div>
+        </div>
+
+        {/* Projects */}
+        <div style={{ padding: "0 10px 12px" }}>
+          <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 2, textTransform: "uppercase", padding: "8px 10px 8px", fontWeight: 600 }}>Projekte</div>
+          {projects.map(p => {
+            const count = itemsByProject[p.id] || 0;
+            const isActive = visibleProjectIds !== null && visibleProjectIds.length === 1 && visibleProjectIds[0] === p.id;
+            // Get assignees for this project (filter org members who are on tasks in this project, or just show first 3 from orgMembers as placeholder)
+            const projMembers = orgMembers.filter(m => {
+              const uid = m.user_id || m.id;
+              return tasks.some(tk => tk.project_id === p.id && tk.assignee_id === uid);
+            }).slice(0, 3);
+            return (
+              <motion.div key={p.id} onClick={() => setVisibleProjectIds([p.id])} whileTap={{ scale: 0.99 }}
+                style={{ padding: "10px 10px", borderRadius: 8, cursor: "pointer", background: isActive ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)") : "transparent", marginBottom: 2 }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: 3, background: p.color || theme.accent, flexShrink: 0 }} />
+                  <span style={{ flex: 1, fontSize: 12, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+                  {count > 0 && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, fontWeight: 600 }}>{count}</span>}
+                </div>
+                {projMembers.length > 0 && (
+                  <div style={{ display: "flex", marginTop: 6, paddingLeft: 20 }}>
+                    {projMembers.map((m, idx) => {
+                      const av = m.avatar_url || m.profile?.avatar_url;
+                      const name = m.full_name || m.name || m.email?.split("@")[0] || "?";
+                      return av ? (
+                        <img key={m.user_id || m.id} src={av} alt="" referrerPolicy="no-referrer" style={{ width: 18, height: 18, borderRadius: "50%", border: `2px solid ${theme.bg}`, marginLeft: idx === 0 ? 0 : -5 }} />
+                      ) : (
+                        <div key={m.user_id || m.id} style={{ width: 18, height: 18, borderRadius: "50%", background: theme.accent + "40", color: theme.accent, border: `2px solid ${theme.bg}`, fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", marginLeft: idx === 0 ? 0 : -5 }}>{name[0].toUpperCase()}</div>
+                      );
+                    })}
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
+          {projects.length === 0 && (
+            <div style={{ padding: "8px 12px", fontSize: 11, fontFamily: FONT, color: theme.textFaint, fontStyle: "italic" }}>Noch keine Projekte</div>
+          )}
+          {itemsByProject.__none > 0 && (
+            <motion.div onClick={() => { setVisibleProjectIds([]); setShowNoProject(true); }} whileTap={{ scale: 0.99 }}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 10px", borderRadius: 8, cursor: "pointer", marginTop: 6, opacity: 0.7 }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 10, height: 10, borderRadius: 3, border: `1.5px dashed ${theme.borderFaint}`, flexShrink: 0 }} />
+                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, fontStyle: "italic" }}>Ohne Projekt</span>
+              </div>
+              <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, fontWeight: 600 }}>{itemsByProject.__none}</span>
+            </motion.div>
+          )}
+        </div>
+
+        {/* Team members */}
+        {orgMembers.length > 0 && (
+          <div style={{ padding: "0 10px 24px", marginTop: "auto" }}>
+            <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 2, textTransform: "uppercase", padding: "12px 10px 8px", fontWeight: 600 }}>Team</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "0 10px" }}>
+              {orgMembers.slice(0, 8).map(m => {
+                const av = m.avatar_url || m.profile?.avatar_url;
+                const name = m.full_name || m.name || m.email?.split("@")[0] || "?";
+                return av ? (
+                  <img key={m.user_id || m.id} src={av} alt="" referrerPolicy="no-referrer" title={name} style={{ width: 28, height: 28, borderRadius: "50%", border: `2px solid ${theme.borderFaint}` }} />
+                ) : (
+                  <div key={m.user_id || m.id} title={name} style={{ width: 28, height: 28, borderRadius: "50%", background: theme.accent + "30", color: theme.accent, border: `2px solid ${theme.borderFaint}`, fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{name[0].toUpperCase()}</div>
+                );
+              })}
+              {orgMembers.length > 8 && (
+                <div style={{ width: 28, height: 28, borderRadius: "50%", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", color: theme.textDim, fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>+{orgMembers.length - 8}</div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Main area */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
       {/* Top bar */}
       <div style={{ padding: "20px 28px 0", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <motion.div onClick={onBack} whileTap={{ scale: 0.97 }}
-            style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", padding: "6px 10px", borderRadius: 8, color: theme.textDim }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-            <span style={{ fontSize: 12, fontFamily: FONT }}>{t("common.back")}</span>
-          </motion.div>
           <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>Timeline</div>
           <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginLeft: 4 }}>
             {tlMonthLabel(anchorDate)}
@@ -3038,10 +3215,39 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                   {/* Status dot */}
                   <div style={{ width: 6, height: 6, borderRadius: "50%", background: isDone ? c : "rgba(255,255,255,0.85)", flexShrink: 0 }} />
                   <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.title}</span>
-                  {it.project_id && projectById[it.project_id] && (
-                    <span style={{ fontSize: 10, opacity: 0.85, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 100 }}>
-                      {projectById[it.project_id].name}
-                    </span>
+                  {/* Assignee avatars (up to 3, +N) */}
+                  {(assignees[it.id] || []).length > 0 && (() => {
+                    const userIds = assignees[it.id];
+                    const visible = userIds.slice(0, 3);
+                    const rest = userIds.length - visible.length;
+                    return (
+                      <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+                        {visible.map((uid, idx) => {
+                          const m = orgMembers.find(x => x.user_id === uid || x.id === uid);
+                          if (!m) return null;
+                          const av = m.avatar_url || m.profile?.avatar_url;
+                          const name = m.full_name || m.name || m.email?.split("@")[0] || "?";
+                          return av ? (
+                            <img key={uid} src={av} alt="" referrerPolicy="no-referrer"
+                              style={{ width: 22, height: 22, borderRadius: "50%", border: isDone ? `2px solid ${theme.bg}` : "2px solid rgba(255,255,255,0.4)", marginLeft: idx === 0 ? 0 : -6, objectFit: "cover" }} />
+                          ) : (
+                            <div key={uid} style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(255,255,255,0.25)", color: "#fff", border: isDone ? `2px solid ${theme.bg}` : "2px solid rgba(255,255,255,0.4)", fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", marginLeft: idx === 0 ? 0 : -6 }}>
+                              {name[0].toUpperCase()}
+                            </div>
+                          );
+                        })}
+                        {rest > 0 && (
+                          <div style={{ marginLeft: -6, padding: "0 6px", height: 22, borderRadius: 11, background: "rgba(255,255,255,0.18)", color: "#fff", border: isDone ? `2px solid ${theme.bg}` : "2px solid rgba(255,255,255,0.4)", fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center" }}>+{rest}</div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  {/* Linked task badge */}
+                  {(linkedTasks[it.id] || []).length > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 3, padding: "2px 7px", borderRadius: 999, background: "rgba(255,255,255,0.18)", fontSize: 9, fontWeight: 600, flexShrink: 0 }}>
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                      {(linkedTasks[it.id] || []).length}
+                    </div>
                   )}
                   {/* Right resize handle */}
                   <div onPointerDown={(e) => onItemDragStart(e, it, "resizeR")} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "ew-resize", zIndex: 2 }} />
@@ -3068,6 +3274,9 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
             creating={creating}
             projects={projects}
             orgMembers={orgMembers}
+            tasks={tasks}
+            initialAssigneeIds={selectedItem ? (assignees[selectedItem.id] || []) : []}
+            initialLinkedTaskIds={selectedItem ? (linkedTasks[selectedItem.id] || []) : []}
             theme={theme} darkMode={darkMode}
             onClose={() => { setCreating(false); setSelectedItem(null); }}
             onSave={async (payload) => {
@@ -3089,11 +3298,12 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
       {error && (
         <div style={{ position: "fixed", bottom: 80, left: "50%", transform: "translateX(-50%)", padding: "10px 18px", borderRadius: 999, background: "rgba(220, 53, 69, 0.95)", color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 500, boxShadow: "0 10px 30px rgba(0,0,0,0.3)" }}>{error}</div>
       )}
+      </div>{/* end main area */}
     </motion.div>
   );
 }
 
-function TimelineItemModal({ item, creating, projects, orgMembers, theme, darkMode, onClose, onSave, onDelete }) {
+function TimelineItemModal({ item, creating, projects, orgMembers = [], tasks = [], initialAssigneeIds = [], initialLinkedTaskIds = [], theme, darkMode, onClose, onSave, onDelete }) {
   const today = tlIsoDate(new Date());
   const tomorrow = tlIsoDate(tlAddDays(new Date(), 6));
   const [title, setTitle] = useState(item?.title || "");
@@ -3102,8 +3312,13 @@ function TimelineItemModal({ item, creating, projects, orgMembers, theme, darkMo
   const [endDate, setEndDate] = useState(item?.end_date || tomorrow);
   const [projectId, setProjectId] = useState(item?.project_id || "");
   const [status, setStatus] = useState(item?.status || "planned");
+  const [assigneeIds, setAssigneeIds] = useState(initialAssigneeIds);
+  const [linkedTaskIds, setLinkedTaskIds] = useState(initialLinkedTaskIds);
   const [saving, setSaving] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
+  const [assigneeMenuOpen, setAssigneeMenuOpen] = useState(false);
+  const [taskMenuOpen, setTaskMenuOpen] = useState(false);
+  const [taskSearch, setTaskSearch] = useState("");
 
   const save = async () => {
     if (!title.trim() || saving) return;
@@ -3115,9 +3330,23 @@ function TimelineItemModal({ item, creating, projects, orgMembers, theme, darkMo
       end_date: endDate,
       project_id: projectId || null,
       status,
+      assignee_ids: assigneeIds,
+      linked_task_ids: linkedTaskIds,
     });
     setSaving(false);
   };
+
+  // Helpers
+  const memberById = (id) => orgMembers.find(m => m.user_id === id || m.id === id);
+  const getMemberName = (m) => m?.full_name || m?.name || m?.email?.split("@")[0] || "—";
+  const getMemberAvatar = (m) => m?.avatar_url || m?.profile?.avatar_url || null;
+
+  // Filter tasks by current project (if any) or all when no project, plus search
+  const visibleTasks = tasks.filter(tk => {
+    if (projectId && tk.project_id && tk.project_id !== projectId) return false;
+    if (!taskSearch) return true;
+    return (tk.title || "").toLowerCase().includes(taskSearch.toLowerCase());
+  }).slice(0, 50);
 
   return (
     <motion.div
@@ -3183,6 +3412,126 @@ function TimelineItemModal({ item, creating, projects, orgMembers, theme, darkMo
                   >{TL_STATUS_LABEL[s]}</motion.div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+
+        {/* Assignees */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 8, display: "block" }}>Team</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+            {assigneeIds.map(uid => {
+              const m = memberById(uid);
+              if (!m) return null;
+              const av = getMemberAvatar(m);
+              return (
+                <div key={uid} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 4px 4px 4px", borderRadius: 999, background: theme.accent + "15", border: `1px solid ${theme.accent}30` }}>
+                  {av ? (
+                    <img src={av} alt="" referrerPolicy="no-referrer" style={{ width: 20, height: 20, borderRadius: "50%" }} />
+                  ) : (
+                    <div style={{ width: 20, height: 20, borderRadius: "50%", background: theme.accent, color: "#fff", fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{getMemberName(m)[0]}</div>
+                  )}
+                  <span style={{ fontSize: 11, fontFamily: FONT, color: theme.text, marginRight: 4 }}>{getMemberName(m)}</span>
+                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => setAssigneeIds(prev => prev.filter(x => x !== uid))} style={{ cursor: "pointer", color: theme.textDim, fontSize: 11, padding: "0 4px" }}>✕</motion.div>
+                </div>
+              );
+            })}
+            <div style={{ position: "relative" }}>
+              <motion.div onClick={() => setAssigneeMenuOpen(v => !v)} whileTap={{ scale: 0.96 }}
+                style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 12px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px dashed ${theme.borderFaint}`, cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Person hinzufügen
+              </motion.div>
+              <AnimatePresence>
+                {assigneeMenuOpen && (
+                  <>
+                    <div onClick={() => setAssigneeMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 9 }} />
+                    <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }}
+                      style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 10, minWidth: 240, maxHeight: 280, overflow: "auto", background: theme.cardBg, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, boxShadow: "0 10px 30px rgba(0,0,0,0.20)", padding: 4 }}
+                    >
+                      {orgMembers.length === 0 && (
+                        <div style={{ padding: 12, fontSize: 11, fontFamily: FONT, color: theme.textFaint, textAlign: "center" }}>Keine Team-Mitglieder</div>
+                      )}
+                      {orgMembers.filter(m => !assigneeIds.includes(m.user_id || m.id)).map(m => {
+                        const uid = m.user_id || m.id;
+                        const av = getMemberAvatar(m);
+                        return (
+                          <motion.div key={uid} onClick={() => { setAssigneeIds(prev => [...prev, uid]); setAssigneeMenuOpen(false); }}
+                            whileTap={{ scale: 0.99 }}
+                            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", cursor: "pointer", borderRadius: 8, fontSize: 12, fontFamily: FONT, color: theme.text }}
+                          >
+                            {av ? (
+                              <img src={av} alt="" referrerPolicy="no-referrer" style={{ width: 24, height: 24, borderRadius: "50%" }} />
+                            ) : (
+                              <div style={{ width: 24, height: 24, borderRadius: "50%", background: theme.accent + "40", color: theme.accent, fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{getMemberName(m)[0]}</div>
+                            )}
+                            <span>{getMemberName(m)}</span>
+                          </motion.div>
+                        );
+                      })}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        </div>
+
+        {/* Linked Kanban tasks */}
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 8, display: "block" }}>Verknüpfte Tasks ({linkedTaskIds.length})</label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {linkedTaskIds.map(tid => {
+              const tk = tasks.find(x => x.id === tid);
+              if (!tk) return null;
+              return (
+                <div key={tid} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: tk.priority === "high" ? "#E84393" : tk.priority === "medium" ? "#F59E0B" : "#8B7AFF", flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tk.title}</div>
+                    {tk.project_name && <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{tk.project_name}</div>}
+                  </div>
+                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => setLinkedTaskIds(prev => prev.filter(x => x !== tid))} style={{ cursor: "pointer", color: theme.textDim, fontSize: 12, padding: 4 }}>✕</motion.div>
+                </div>
+              );
+            })}
+            <div style={{ position: "relative" }}>
+              <motion.div onClick={() => setTaskMenuOpen(v => !v)} whileTap={{ scale: 0.97 }}
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 12px", borderRadius: 10, background: "transparent", border: `1px dashed ${theme.borderFaint}`, cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Kanban-Task verknüpfen
+              </motion.div>
+              <AnimatePresence>
+                {taskMenuOpen && (
+                  <>
+                    <div onClick={() => setTaskMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 9 }} />
+                    <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }}
+                      style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, right: 0, zIndex: 10, maxHeight: 320, overflow: "auto", background: theme.cardBg, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, boxShadow: "0 10px 30px rgba(0,0,0,0.20)", padding: 4 }}
+                    >
+                      <input autoFocus value={taskSearch} onChange={e => setTaskSearch(e.target.value)} placeholder="Task suchen…"
+                        style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "none", borderBottom: `1px solid ${theme.borderFaint}`, padding: "10px 12px", fontSize: 12, fontFamily: FONT, color: theme.text, outline: "none", marginBottom: 4 }}
+                      />
+                      {visibleTasks.length === 0 && (
+                        <div style={{ padding: 12, fontSize: 11, fontFamily: FONT, color: theme.textFaint, textAlign: "center" }}>Keine Tasks gefunden</div>
+                      )}
+                      {visibleTasks.filter(tk => !linkedTaskIds.includes(tk.id)).map(tk => (
+                        <motion.div key={tk.id} onClick={() => { setLinkedTaskIds(prev => [...prev, tk.id]); setTaskMenuOpen(false); setTaskSearch(""); }}
+                          whileTap={{ scale: 0.99 }}
+                          style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", cursor: "pointer", borderRadius: 8, fontSize: 12, fontFamily: FONT, color: theme.text }}
+                        >
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: tk.priority === "high" ? "#E84393" : tk.priority === "medium" ? "#F59E0B" : "#8B7AFF", flexShrink: 0 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tk.title}</div>
+                            {tk.project_name && <div style={{ fontSize: 10, color: theme.textDim, marginTop: 1 }}>{tk.project_name}</div>}
+                          </div>
+                        </motion.div>
+                      ))}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </div>
