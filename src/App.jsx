@@ -2908,9 +2908,9 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
       ? projectById[visibleProjectIds[0]]?.name || "1 Projekt"
       : `${visibleProjectIds.length} Projekte`;
 
-  const rowHeight = 52;
-  const bandPadding = 18; // bottom padding inside band (top is reserved for label)
-  const bandTopGap = 36; // space above band for "Project Name" plate
+  const rowHeight = 68; // height of one lane (bigger card)
+  const bandPadding = 22; // bottom padding inside band
+  const bandTopGap = 0; // no extra gap — labels live in the sidebar (aligned with bands)
   const headerHeight = 56;
   const totalWidth = VISIBLE_DAYS * pxPerDay;
   // Compute total height from bands (lanes + padding + top-gap for plate)
@@ -2947,16 +2947,16 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
         borderRight: `1px solid ${theme.borderFaint}`,
         background: darkMode ? "rgba(255,255,255,0.015)" : "rgba(0,0,0,0.015)",
         display: "flex", flexDirection: "column",
-        overflowY: "auto",
+        overflowY: "auto", overflowX: "hidden",
+        position: "relative",
+        // Bottom padding so content can scroll past the Hub logo area
+        paddingBottom: 140,
+        // Fade out bottom — content gracefully disappears before the i7 OS logo
+        maskImage: "linear-gradient(180deg, #000 0%, #000 calc(100% - 120px), transparent 100%)",
+        WebkitMaskImage: "linear-gradient(180deg, #000 0%, #000 calc(100% - 120px), transparent 100%)",
       }}>
-        {/* Workspace header */}
+        {/* Workspace header — no back button (Hub menu handles navigation) */}
         <div style={{ padding: "20px 18px 16px", borderBottom: `1px solid ${theme.borderFaint}` }}>
-          <motion.div onClick={onBack} whileTap={{ scale: 0.97 }}
-            style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: theme.textDim, marginBottom: 14 }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-            <span style={{ fontSize: 11, fontFamily: FONT }}>{t("common.back")}</span>
-          </motion.div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg, #8B7AFF, #6C5CE7)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 13 }}>
               {(userOrg?.name || "?")[0]}
@@ -2982,40 +2982,57 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
           </motion.div>
         </div>
 
-        {/* Projects — labeled list. Row-alignment with timeline bands is provided below as a separate aligned legend. */}
+        {/* Projects — checkbox to toggle visibility per project */}
         <div style={{ padding: "0 10px 12px" }}>
           <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 2, textTransform: "uppercase", padding: "8px 10px 8px", fontWeight: 600 }}>Projekte</div>
           {projects.map(p => {
             const count = itemsByProject[p.id] || 0;
-            const isActive = visibleProjectIds !== null && visibleProjectIds.length === 1 && visibleProjectIds[0] === p.id;
-            // Project members from org_members.project_members? Fallback: anyone with a task in this project
+            const isChecked = visibleProjectIds === null || visibleProjectIds.includes(p.id);
             const projMembers = orgMembers.filter(m => {
               const uid = m.user_id || m.id;
               return tasks.some(tk => tk.project_id === p.id && tk.assignee_id === uid);
-            }).slice(0, 3);
+            }).slice(0, 4);
             return (
-              <motion.div key={p.id} onClick={() => setVisibleProjectIds([p.id])} whileTap={{ scale: 0.99 }}
-                style={{ padding: "10px 10px", borderRadius: 8, cursor: "pointer", background: isActive ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)") : "transparent", marginBottom: 2 }}
+              <div key={p.id}
+                style={{ padding: "10px 10px", borderRadius: 8, marginBottom: 4, background: isChecked ? "transparent" : (darkMode ? "rgba(255,255,255,0.015)" : "rgba(0,0,0,0.01)"), opacity: isChecked ? 1 : 0.5, transition: "opacity 0.15s" }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: 3, background: p.color || theme.accent, flexShrink: 0 }} />
-                  <span style={{ flex: 1, fontSize: 12, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+                  {/* Checkbox */}
+                  <motion.div whileTap={{ scale: 0.92 }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const allProjectIds = projects.map(x => x.id);
+                      const current = visibleProjectIds === null ? allProjectIds : [...visibleProjectIds];
+                      const next = isChecked ? current.filter(x => x !== p.id) : [...current, p.id];
+                      setVisibleProjectIds(next.length === allProjectIds.length ? null : next);
+                    }}
+                    style={{
+                      width: 16, height: 16, borderRadius: 4, cursor: "pointer", flexShrink: 0,
+                      border: `1.5px solid ${isChecked ? (p.color || theme.accent) : theme.borderFaint}`,
+                      background: isChecked ? (p.color || theme.accent) : "transparent",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                  >
+                    {isChecked && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                  </motion.div>
+                  <span style={{ flex: 1, fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
                   {count > 0 && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, fontWeight: 600 }}>{count}</span>}
                 </div>
+                {/* Team avatars under project name */}
                 {projMembers.length > 0 && (
-                  <div style={{ display: "flex", marginTop: 6, paddingLeft: 20 }}>
+                  <div style={{ display: "flex", alignItems: "center", marginTop: 8, paddingLeft: 26 }}>
                     {projMembers.map((m, idx) => {
                       const av = m.profiles?.avatar_url || m.avatar_url;
                       const name = m.profiles?.display_name || m.full_name || m.name || m.profiles?.email?.split("@")[0] || m.email?.split("@")[0] || "?";
                       return av ? (
-                        <img key={m.user_id || m.id} src={av} alt="" referrerPolicy="no-referrer" style={{ width: 18, height: 18, borderRadius: "50%", border: `2px solid ${theme.bg}`, marginLeft: idx === 0 ? 0 : -5 }} />
+                        <img key={m.user_id || m.id} src={av} alt={name} title={name} referrerPolicy="no-referrer" style={{ width: 22, height: 22, borderRadius: "50%", border: `2px solid ${darkMode ? "#1a1a22" : "#fafafb"}`, marginLeft: idx === 0 ? 0 : -7 }} />
                       ) : (
-                        <div key={m.user_id || m.id} style={{ width: 18, height: 18, borderRadius: "50%", background: theme.accent + "40", color: theme.accent, border: `2px solid ${theme.bg}`, fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", marginLeft: idx === 0 ? 0 : -5 }}>{name[0].toUpperCase()}</div>
+                        <div key={m.user_id || m.id} title={name} style={{ width: 22, height: 22, borderRadius: "50%", background: (p.color || theme.accent) + "40", color: p.color || theme.accent, border: `2px solid ${darkMode ? "#1a1a22" : "#fafafb"}`, fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", marginLeft: idx === 0 ? 0 : -7 }}>{name[0].toUpperCase()}</div>
                       );
                     })}
                   </div>
                 )}
-              </motion.div>
+              </div>
             );
           })}
           {projects.length === 0 && (
@@ -3057,8 +3074,8 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
-          {/* Project filter */}
-          <div style={{ position: "relative" }}>
+          {false && (
+            <div style={{ position: "relative" }}>
             <motion.div onClick={() => setFilterMenuOpen(v => !v)} whileTap={{ scale: 0.97 }}
               style={{
                 display: "flex", alignItems: "center", gap: 6, padding: "6px 12px",
@@ -3124,6 +3141,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
               )}
             </AnimatePresence>
           </div>
+          )}
           {/* Today + nav */}
           <motion.div onClick={todayAnchor} whileTap={{ scale: 0.97 }}
             style={{ padding: "6px 12px", borderRadius: 999, background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`, fontSize: 12, fontFamily: FONT, color: theme.textSub, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
@@ -3277,24 +3295,6 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
               }} />
             ))}
 
-            {/* Project-name plates (absolute, sit at band-top above items) */}
-            {bands.map((b, bi) => (
-              <div key={`band-plate-${b.projectId}`} style={{
-                position: "absolute",
-                left: 12, top: bandTops[bi] - 22,
-                display: "flex", alignItems: "center", gap: 7,
-                padding: "3px 10px", borderRadius: 999,
-                background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-                border: `1px solid ${theme.borderFaint}`,
-                fontSize: 10, fontFamily: FONT, color: theme.textSub, fontWeight: 600,
-                letterSpacing: 0.3,
-                zIndex: 1,
-                pointerEvents: "none",
-              }}>
-                <span style={{ width: 8, height: 8, borderRadius: 2, background: b.project?.color || theme.textFaint, flexShrink: 0 }} />
-                <span style={{ whiteSpace: "nowrap" }}>{b.project ? b.project.name : "Ohne Projekt"}</span>
-              </div>
-            ))}
 
             {/* Item bars (grouped per band) */}
             {bands.map((band, bi) => band.lanes.map((lane, li) => lane.map((it) => {
@@ -3305,26 +3305,31 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
               const top = bandTops[bi] + (bandPadding / 2) + li * rowHeight;
               const c = itemColor(it);
               const isDone = it.status === "done";
+              const cardH = rowHeight - 14;
               return (
                 <div key={it.id}
-                  onPointerDown={(e) => onItemDragStart(e, it, "move")}
+                  onPointerDown={(e) => { if (e.target.dataset.handle) return; onItemDragStart(e, it, "move"); }}
                   onClick={(e) => { if (!dragRef.current) setSelectedItem(it); }}
                   style={{
-                    position: "absolute", left, top, width, height: rowHeight - 16,
-                    borderRadius: 10, cursor: "grab",
+                    position: "absolute", left, top, width, height: cardH,
+                    borderRadius: 12, cursor: "grab",
                     background: isDone ? "transparent" : c,
                     border: isDone ? `1.5px dashed ${c}` : "none",
                     color: isDone ? c : "#fff",
-                    padding: "0 12px",
-                    display: "flex", alignItems: "center", gap: 8,
+                    padding: "0 14px",
+                    display: "flex", alignItems: "center", gap: 10,
                     fontSize: 13, fontFamily: FONT, fontWeight: 500,
-                    boxShadow: isDone ? "none" : `0 4px 14px ${c}45`,
+                    boxShadow: isDone ? "none" : `0 6px 18px ${c}45`,
                     overflow: "hidden",
                     userSelect: "none",
                   }}
                 >
-                  {/* Left resize handle */}
-                  <div onPointerDown={(e) => onItemDragStart(e, it, "resizeL")} style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 6, cursor: "ew-resize", zIndex: 2 }} />
+                  {/* Left resize handle — visible || grip */}
+                  <div data-handle="L" onPointerDown={(e) => onItemDragStart(e, it, "resizeL")}
+                    style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 12, cursor: "ew-resize", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center", borderTopLeftRadius: 12, borderBottomLeftRadius: 12 }}
+                  >
+                    <div data-handle="L" style={{ width: 3, height: 18, borderRadius: 2, background: isDone ? c : "rgba(255,255,255,0.55)", boxShadow: isDone ? "none" : "inset 0 0 0 1px rgba(0,0,0,0.05)" }} />
+                  </div>
                   {/* Status dot */}
                   <div style={{ width: 6, height: 6, borderRadius: "50%", background: isDone ? c : "rgba(255,255,255,0.85)", flexShrink: 0 }} />
                   <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.title}</span>
@@ -3362,35 +3367,16 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                       {(linkedTasks[it.id] || []).length}
                     </div>
                   )}
-                  {/* Right resize handle */}
-                  <div onPointerDown={(e) => onItemDragStart(e, it, "resizeR")} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "ew-resize", zIndex: 2 }} />
+                  {/* Right resize handle — visible || grip */}
+                  <div data-handle="R" onPointerDown={(e) => onItemDragStart(e, it, "resizeR")}
+                    style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 12, cursor: "ew-resize", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center", borderTopRightRadius: 12, borderBottomRightRadius: 12 }}
+                  >
+                    <div data-handle="R" style={{ width: 3, height: 18, borderRadius: 2, background: isDone ? c : "rgba(255,255,255,0.55)" }} />
+                  </div>
                 </div>
               );
             })))}
 
-            {/* "+ Sprint hier" hint button per band — appears on hover (always rendered, opacity 0 by default via class) */}
-            {bands.map((band, bi) => (
-              <motion.div key={`band-add-${band.projectId}`}
-                onClick={() => { setCreateForProject(band.projectId === "__none" ? null : band.projectId); setCreating(true); }}
-                whileHover={{ opacity: 1 }}
-                style={{
-                  position: "absolute", left: 12,
-                  top: bandTops[bi] + 6,
-                  opacity: 0.35,
-                  cursor: "pointer",
-                  display: "flex", alignItems: "center", gap: 4,
-                  padding: "3px 8px", borderRadius: 999,
-                  background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-                  border: `1px dashed ${theme.borderFaint}`,
-                  fontSize: 10, fontFamily: FONT, color: theme.textDim, fontWeight: 500,
-                  zIndex: 1, transition: "opacity 0.15s",
-                  pointerEvents: "auto",
-                }}
-              >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Sprint hier
-              </motion.div>
-            ))}
 
             {/* Empty state */}
             {!loading && visibleItems.length === 0 && (
