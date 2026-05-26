@@ -13139,12 +13139,37 @@ export default function CircularMenu() {
       ], view: "calendar" },
       { patterns: isDE ? [
         "öffne kanban", "öffne kanbanboard", "öffne board",
-        "öffne projekte", "öffne aufgaben", "öffne tasks",
-        "öffne meine aufgaben",
+        "öffne aufgaben", "öffne tasks", "öffne meine aufgaben",
       ] : [
-        "open kanban", "open board", "open projects", "open tasks",
+        "open kanban", "open board", "open tasks",
         "open my tasks", "open todos",
       ], view: "kanban" },
+      { patterns: isDE ? [
+        "öffne timeline", "öffne den timeline", "öffne sprint", "öffne sprints",
+        "öffne sprintplanung", "öffne zeitstrahl", "öffne zeitleiste",
+        "öffne plan", "öffne planung",
+      ] : [
+        "open timeline", "open sprint", "open sprints",
+        "open sprint planning", "open plan", "open planning", "open gantt",
+      ], view: "timeline" },
+      { patterns: isDE ? [
+        "öffne brand", "öffne marke", "öffne brand onboarding",
+        "öffne brandbook", "öffne brand profil",
+      ] : [
+        "open brand", "open branding", "open brand onboarding",
+        "open brandbook", "open brand profile",
+      ], view: "brand" },
+      { patterns: isDE ? [
+        "öffne notizen", "öffne notes", "öffne meine notizen",
+      ] : [
+        "open notes", "open notebook", "open my notes",
+      ], view: "notes" },
+      { patterns: isDE ? [
+        "öffne projekte", "öffne projects", "öffne meine projekte",
+        "öffne projektübersicht",
+      ] : [
+        "open projects", "open my projects", "open project overview",
+      ], view: "projects" },
       { patterns: isDE ? [
         "öffne dateien", "öffne dokumente", "öffne drive",
         "öffne ordner", "öffne meine dateien", "öffne files",
@@ -13294,12 +13319,14 @@ export default function CircularMenu() {
           if (event.results[i].isFinal) final += event.results[i][0].transcript;
           else interim += event.results[i][0].transcript;
         }
-        const currentText = correctTranscriptVocab(final + interim);
+        const rawText = (final + interim).trim();
+        const currentText = correctTranscriptVocab(rawText);
         setTranscript(currentText);
 
-        // Auto-detect and execute voice commands in real-time
-        if (currentText.trim().length > 0) {
-          const voiceNav = detectVoiceCommand(currentText);
+        // Auto-detect voice commands. Run against the RAW transcript first so
+        // vocab correction (e.g. "brand" → "BrandX") can't sabotage commands.
+        if (rawText.length > 0) {
+          const voiceNav = detectVoiceCommand(rawText) || detectVoiceCommand(currentText);
           if (voiceNav) {
             commandExecuted = true;
             // Stop recognition immediately
@@ -13329,10 +13356,11 @@ export default function CircularMenu() {
   const stopVoice = async () => {
     try { if (recognitionRef.current) recognitionRef.current.stop(); } catch(e) {}
 
-    const cleaned = correctTranscriptVocab((transcript || "").trim());
+    const rawTranscript = (transcript || "").trim();
+    const cleaned = correctTranscriptVocab(rawTranscript);
 
-    // ── Local voice commands run instantly — no AI call needed ──
-    const voiceNav = detectVoiceCommand(cleaned);
+    // ── Local voice commands run instantly — match raw text first so vocab correction can't ruin them ──
+    const voiceNav = detectVoiceCommand(rawTranscript) || detectVoiceCommand(cleaned);
     if (voiceNav) {
       setVoiceMode(false);
       setAiSpeaking(false);
