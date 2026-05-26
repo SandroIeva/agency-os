@@ -2756,12 +2756,19 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
   // ── Today line position ────────────────────────────────
   const todayLeft = tlDaysBetween(viewStart, new Date()) * pxPerDay;
 
-  // ── Scroll to today on mount + when zoom changes ───────
+  // ── Scroll to today: re-runs when zoom changes OR loading finishes ─
+  // Without `loading` in deps, on mount the inner grid div isn't rendered
+  // yet (loading is true), so scrollLeft can't be set above 0 — that's
+  // why items weren't visible until the user toggled zoom and back.
   useEffect(() => {
-    if (!scrollRef.current) return;
-    const containerWidth = scrollRef.current.clientWidth;
-    scrollRef.current.scrollLeft = Math.max(0, todayLeft - containerWidth / 3);
-  }, [zoom]);
+    if (!scrollRef.current || loading) return;
+    // Defer one frame so the inner wide div has been laid out
+    requestAnimationFrame(() => {
+      if (!scrollRef.current) return;
+      const containerWidth = scrollRef.current.clientWidth;
+      scrollRef.current.scrollLeft = Math.max(0, todayLeft - containerWidth / 3);
+    });
+  }, [zoom, loading, todayLeft]);
 
   // ── CRUD helpers ───────────────────────────────────────
   const persistAssignees = async (itemId, userIds) => {
