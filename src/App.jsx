@@ -2518,6 +2518,706 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
   );
 }
 
+// ──── Timeline View (Sprint / Project planning) ────
+// Flat work items with start/end dates rendered on a horizontal time axis.
+// MVP supports: zoom Day/Week/Month/Quarter, drag-to-move, edge-resize,
+// project filter & color-coding, item detail modal, status (planned/active/done),
+// multi-assignee via org members.
+
+const TL_ZOOM_PX_PER_DAY = { day: 80, week: 28, month: 8, quarter: 3 };
+
+const TL_STATUS_COLORS = {
+  planned: "#8B7AFF",
+  active:  "#00B894",
+  done:    "#8E94A3",
+};
+
+const TL_STATUS_LABEL = {
+  planned: "Geplant",
+  active:  "Aktiv",
+  done:    "Erledigt",
+};
+
+// ── Date helpers (no external lib) ─────────────────────
+function tlAddDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+function tlStartOfDay(d) { const r = new Date(d); r.setHours(0,0,0,0); return r; }
+function tlIsoDate(d) {
+  const r = tlStartOfDay(d);
+  return `${r.getFullYear()}-${String(r.getMonth()+1).padStart(2,"0")}-${String(r.getDate()).padStart(2,"0")}`;
+}
+function tlDaysBetween(a, b) {
+  const ms = tlStartOfDay(b).getTime() - tlStartOfDay(a).getTime();
+  return Math.round(ms / 86400000);
+}
+function tlStartOfWeek(d) {
+  // Monday-anchored
+  const x = tlStartOfDay(d);
+  const day = x.getDay(); // 0=Sun
+  const diff = (day === 0 ? -6 : 1 - day);
+  return tlAddDays(x, diff);
+}
+function tlStartOfMonth(d) { const r = tlStartOfDay(d); r.setDate(1); return r; }
+function tlMonthLabel(d, short = false) {
+  const months = short
+    ? ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"]
+    : ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+  return `${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMode, t }) {
+  const [items, setItems] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [zoom, setZoom] = useState("week"); // 'day' | 'week' | 'month' | 'quarter'
+  const [anchorDate, setAnchorDate] = useState(() => tlStartOfWeek(new Date()));
+  const [visibleProjectIds, setVisibleProjectIds] = useState(null); // null = all
+  const [showNoProject, setShowNoProject] = useState(true);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [error, setError] = useState(null);
+
+  const scrollRef = useRef(null);
+  const pxPerDay = TL_ZOOM_PX_PER_DAY[zoom];
+
+  // Number of days visible — wide enough to allow scrolling left & right
+  const VISIBLE_DAYS = 365 * 2; // 2-year scroll range
+  const viewStart = useMemo(() => tlAddDays(anchorDate, -Math.floor(VISIBLE_DAYS / 2)), [anchorDate]);
+
+  // ── Load data ─────────────────────────────────────────
+  useEffect(() => {
+    if (!userOrg?.id) { setItems([]); setProjects([]); setLoading(false); return; }
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const [iRes, pRes] = await Promise.all([
+          supabase.from("timeline_items")
+            .select("*")
+            .eq("org_id", userOrg.id)
+            .order("start_date", { ascending: true }),
+          supabase.from("projects")
+            .select("id, name, color, logo_url")
+            .eq("org_id", userOrg.id)
+            .order("name", { ascending: true }),
+        ]);
+        if (!alive) return;
+        if (iRes.error) throw iRes.error;
+        setItems(iRes.data || []);
+        setProjects(pRes.data || []);
+      } catch (e) {
+        console.error("timeline load failed", e);
+        setError(e.message || "Fehler beim Laden");
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [userOrg?.id]);
+
+  // ── Visible items (filtered by project) ───────────────
+  const visibleItems = useMemo(() => items.filter(it => {
+    if (visibleProjectIds === null) return showNoProject || it.project_id;
+    if (!it.project_id) return showNoProject;
+    return visibleProjectIds.includes(it.project_id);
+  }), [items, visibleProjectIds, showNoProject]);
+
+  // ── Lane assignment (auto-stacking) ───────────────────
+  const lanes = useMemo(() => {
+    const ls = []; // ls[i] = array of items
+    const sorted = [...visibleItems].sort((a, b) => {
+      const aS = new Date(a.start_date).getTime();
+      const bS = new Date(b.start_date).getTime();
+      if (aS !== bS) return aS - bS;
+      return (a.position || 0) - (b.position || 0);
+    });
+    for (const it of sorted) {
+      const s = new Date(it.start_date).getTime();
+      const e = new Date(it.end_date).getTime();
+      let placed = false;
+      for (let i = 0; i < ls.length; i++) {
+        const overlaps = ls[i].some(o => {
+          const oS = new Date(o.start_date).getTime();
+          const oE = new Date(o.end_date).getTime();
+          return s <= oE && e >= oS;
+        });
+        if (!overlaps) { ls[i].push(it); placed = true; break; }
+      }
+      if (!placed) ls.push([it]);
+    }
+    return ls;
+  }, [visibleItems]);
+
+  // Project color lookup
+  const projectById = useMemo(() => {
+    const m = {};
+    projects.forEach(p => { m[p.id] = p; });
+    return m;
+  }, [projects]);
+
+  const itemColor = (it) => {
+    if (it.color) return it.color;
+    const p = it.project_id ? projectById[it.project_id] : null;
+    return p?.color || TL_STATUS_COLORS[it.status] || "#8B7AFF";
+  };
+
+  // ── Time axis labels ──────────────────────────────────
+  const axis = useMemo(() => {
+    const cells = [];
+    if (zoom === "day" || zoom === "week") {
+      for (let i = 0; i < VISIBLE_DAYS; i++) {
+        const d = tlAddDays(viewStart, i);
+        cells.push({ d, left: i * pxPerDay, width: pxPerDay });
+      }
+    } else if (zoom === "month") {
+      // Cells = months
+      let cursor = tlStartOfMonth(viewStart);
+      while (cursor.getTime() < tlAddDays(viewStart, VISIBLE_DAYS).getTime()) {
+        const nextMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+        const offset = Math.max(0, tlDaysBetween(viewStart, cursor));
+        const days = tlDaysBetween(cursor, nextMonth);
+        cells.push({ d: new Date(cursor), left: offset * pxPerDay, width: days * pxPerDay, span: days });
+        cursor = nextMonth;
+      }
+    } else { // quarter
+      let cursor = tlStartOfMonth(viewStart);
+      // Snap back to quarter start
+      cursor.setMonth(Math.floor(cursor.getMonth() / 3) * 3);
+      while (cursor.getTime() < tlAddDays(viewStart, VISIBLE_DAYS).getTime()) {
+        const nextQ = new Date(cursor.getFullYear(), cursor.getMonth() + 3, 1);
+        const offset = Math.max(0, tlDaysBetween(viewStart, cursor));
+        const days = tlDaysBetween(cursor, nextQ);
+        cells.push({ d: new Date(cursor), left: offset * pxPerDay, width: days * pxPerDay, span: days, isQuarter: true });
+        cursor = nextQ;
+      }
+    }
+    return cells;
+  }, [zoom, pxPerDay, viewStart]);
+
+  // ── Today line position ────────────────────────────────
+  const todayLeft = tlDaysBetween(viewStart, new Date()) * pxPerDay;
+
+  // ── Scroll to today on mount + when zoom changes ───────
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    const containerWidth = scrollRef.current.clientWidth;
+    scrollRef.current.scrollLeft = Math.max(0, todayLeft - containerWidth / 3);
+  }, [zoom]);
+
+  // ── CRUD helpers ───────────────────────────────────────
+  const createItem = async (payload) => {
+    const row = {
+      org_id: userOrg.id,
+      title: payload.title,
+      description: payload.description || null,
+      start_date: payload.start_date,
+      end_date: payload.end_date,
+      project_id: payload.project_id || null,
+      status: payload.status || "planned",
+      color: payload.color || null,
+      created_by: session.user.id,
+    };
+    const { data, error: e } = await supabase.from("timeline_items").insert(row).select().single();
+    if (e) { console.error(e); return null; }
+    setItems(prev => [...prev, data]);
+    return data;
+  };
+
+  const updateItem = async (id, patch) => {
+    const { data, error: e } = await supabase.from("timeline_items").update(patch).eq("id", id).select().single();
+    if (e) { console.error(e); return; }
+    setItems(prev => prev.map(it => it.id === id ? data : it));
+  };
+
+  const deleteItem = async (id) => {
+    await supabase.from("timeline_items").delete().eq("id", id);
+    setItems(prev => prev.filter(it => it.id !== id));
+  };
+
+  // ── Drag/Resize handlers ──────────────────────────────
+  const dragRef = useRef(null); // { itemId, mode, startX, origStart, origEnd, pxPerDay }
+
+  const onItemDragStart = (e, item, mode) => {
+    e.stopPropagation();
+    e.preventDefault();
+    dragRef.current = {
+      itemId: item.id,
+      mode, // 'move' | 'resizeL' | 'resizeR'
+      startX: e.clientX,
+      origStart: item.start_date,
+      origEnd: item.end_date,
+      pxPerDay,
+    };
+    window.addEventListener("pointermove", onItemDragMove);
+    window.addEventListener("pointerup", onItemDragEnd);
+  };
+
+  const onItemDragMove = (e) => {
+    const r = dragRef.current;
+    if (!r) return;
+    const dx = e.clientX - r.startX;
+    const days = Math.round(dx / r.pxPerDay);
+    if (days === 0) return;
+    setItems(prev => prev.map(it => {
+      if (it.id !== r.itemId) return it;
+      let ns = r.origStart, ne = r.origEnd;
+      if (r.mode === "move")     { ns = tlIsoDate(tlAddDays(r.origStart, days)); ne = tlIsoDate(tlAddDays(r.origEnd,   days)); }
+      if (r.mode === "resizeL")  { ns = tlIsoDate(tlAddDays(r.origStart, days));
+                                   if (new Date(ns).getTime() > new Date(r.origEnd).getTime()) ns = r.origEnd; }
+      if (r.mode === "resizeR")  { ne = tlIsoDate(tlAddDays(r.origEnd,   days));
+                                   if (new Date(ne).getTime() < new Date(r.origStart).getTime()) ne = r.origStart; }
+      return { ...it, start_date: ns, end_date: ne };
+    }));
+  };
+
+  const onItemDragEnd = () => {
+    const r = dragRef.current;
+    if (!r) return;
+    window.removeEventListener("pointermove", onItemDragMove);
+    window.removeEventListener("pointerup", onItemDragEnd);
+    // Persist the new dates
+    const current = items.find(it => it.id === r.itemId) ||
+      (() => { /* fall back to refetch */ return null; })();
+    // We read latest state via the closure on items; but items may be stale.
+    // Use a ref-fresh approach via functional setItems above already; here just commit:
+    const fresh = (window.__tl_items_fresh && window.__tl_items_fresh[r.itemId]) || null;
+    // Simpler: just push the latest from items state by id
+    setItems(prev => {
+      const f = prev.find(it => it.id === r.itemId);
+      if (f && (f.start_date !== r.origStart || f.end_date !== r.origEnd)) {
+        supabase.from("timeline_items").update({ start_date: f.start_date, end_date: f.end_date }).eq("id", r.itemId);
+      }
+      return prev;
+    });
+    dragRef.current = null;
+  };
+
+  // ── Header navigation ─────────────────────────────────
+  const todayAnchor = () => setAnchorDate(tlStartOfWeek(new Date()));
+  const navStep = (dir) => {
+    const step = { day: 7, week: 14, month: 60, quarter: 180 }[zoom];
+    setAnchorDate(prev => tlAddDays(prev, dir * step));
+  };
+
+  const visibleProjects = projects.filter(p => visibleProjectIds === null || visibleProjectIds.includes(p.id));
+  const activeFilterLabel = visibleProjectIds === null
+    ? "Alle Projekte"
+    : visibleProjectIds.length === 1
+      ? projectById[visibleProjectIds[0]]?.name || "1 Projekt"
+      : `${visibleProjectIds.length} Projekte`;
+
+  const rowHeight = 56;
+  const headerHeight = zoom === "day" || zoom === "week" ? 56 : 56;
+  const totalWidth = VISIBLE_DAYS * pxPerDay;
+  const gridHeight = Math.max(lanes.length * rowHeight + 40, 320);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+      style={{ position: "fixed", inset: 0, background: theme.bg, display: "flex", flexDirection: "column", zIndex: 5 }}
+    >
+      {/* Top bar */}
+      <div style={{ padding: "20px 28px 0", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <motion.div onClick={onBack} whileTap={{ scale: 0.97 }}
+            style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", padding: "6px 10px", borderRadius: 8, color: theme.textDim }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            <span style={{ fontSize: 12, fontFamily: FONT }}>{t("common.back")}</span>
+          </motion.div>
+          <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>Timeline</div>
+          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginLeft: 4 }}>
+            {tlMonthLabel(anchorDate)}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
+          {/* Project filter */}
+          <div style={{ position: "relative" }}>
+            <motion.div onClick={() => setFilterMenuOpen(v => !v)} whileTap={{ scale: 0.97 }}
+              style={{
+                display: "flex", alignItems: "center", gap: 6, padding: "6px 12px",
+                background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`,
+                borderRadius: 999, cursor: "pointer",
+                fontSize: 12, fontFamily: FONT, color: theme.textSub, fontWeight: 500,
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+              {activeFilterLabel}
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+            </motion.div>
+            <AnimatePresence>
+              {filterMenuOpen && (
+                <>
+                  <div onClick={() => setFilterMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 9 }} />
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.15 }}
+                    style={{
+                      position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 10,
+                      minWidth: 260, maxHeight: 360, overflow: "auto",
+                      background: theme.cardBg, border: `1px solid ${theme.borderFaint}`,
+                      borderRadius: 12, boxShadow: "0 10px 30px rgba(0,0,0,0.20)", padding: 4,
+                    }}
+                  >
+                    <div onClick={() => { setVisibleProjectIds(null); setShowNoProject(true); }}
+                      style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", cursor: "pointer", borderRadius: 8, fontSize: 12, fontFamily: FONT, color: theme.text, background: visibleProjectIds === null ? theme.hoverBg : "transparent" }}
+                    >
+                      <span style={{ width: 14, height: 14, borderRadius: 4, border: `1.5px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", justifyContent: "center", background: visibleProjectIds === null ? theme.accent : "transparent" }}>
+                        {visibleProjectIds === null && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                      </span>
+                      <span style={{ fontWeight: 600 }}>Alle Projekte</span>
+                    </div>
+                    {projects.map(p => {
+                      const active = visibleProjectIds === null || visibleProjectIds.includes(p.id);
+                      return (
+                        <div key={p.id} onClick={() => {
+                          const current = visibleProjectIds === null ? projects.map(x => x.id) : [...visibleProjectIds];
+                          const next = active ? current.filter(x => x !== p.id) : [...current, p.id];
+                          setVisibleProjectIds(next.length === projects.length ? null : next);
+                        }}
+                          style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", cursor: "pointer", borderRadius: 8, fontSize: 12, fontFamily: FONT, color: theme.text }}
+                        >
+                          <span style={{ width: 14, height: 14, borderRadius: 4, border: `1.5px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", justifyContent: "center", background: active ? (p.color || theme.accent) : "transparent" }}>
+                            {active && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                          </span>
+                          <span style={{ width: 10, height: 10, borderRadius: 3, background: p.color || theme.textDim }} />
+                          <span>{p.name}</span>
+                        </div>
+                      );
+                    })}
+                    <div onClick={() => setShowNoProject(v => !v)}
+                      style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", cursor: "pointer", borderRadius: 8, fontSize: 12, fontFamily: FONT, color: theme.textSub, borderTop: `1px solid ${theme.borderFaint}`, marginTop: 4, paddingTop: 10 }}
+                    >
+                      <span style={{ width: 14, height: 14, borderRadius: 4, border: `1.5px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", justifyContent: "center", background: showNoProject ? theme.accent : "transparent" }}>
+                        {showNoProject && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                      </span>
+                      <span style={{ fontStyle: "italic" }}>Ohne Projekt</span>
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+          {/* Today + nav */}
+          <motion.div onClick={todayAnchor} whileTap={{ scale: 0.97 }}
+            style={{ padding: "6px 12px", borderRadius: 999, background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`, fontSize: 12, fontFamily: FONT, color: theme.textSub, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+            Heute
+          </motion.div>
+          <motion.div onClick={() => navStep(-1)} whileTap={{ scale: 0.94 }} style={{ width: 28, height: 28, borderRadius: "50%", background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textSub }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </motion.div>
+          <motion.div onClick={() => navStep(1)} whileTap={{ scale: 0.94 }} style={{ width: 28, height: 28, borderRadius: "50%", background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textSub }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </motion.div>
+          {/* Zoom switcher */}
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 2, padding: 3, borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}` }}>
+            {[
+              { id: "day",     label: "Tag" },
+              { id: "week",    label: "Woche" },
+              { id: "month",   label: "Monat" },
+              { id: "quarter", label: "Quartal" },
+            ].map(z => {
+              const active = zoom === z.id;
+              return (
+                <motion.div key={z.id} onClick={() => setZoom(z.id)} whileTap={{ scale: 0.96 }}
+                  style={{
+                    padding: "5px 12px", borderRadius: 999, cursor: "pointer",
+                    fontSize: 11, fontFamily: FONT, fontWeight: active ? 600 : 500,
+                    color: active ? theme.text : theme.textDim,
+                    background: active ? (darkMode ? "rgba(255,255,255,0.08)" : "#ffffff") : "transparent",
+                    boxShadow: active ? (darkMode ? "0 1px 4px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.08)") : "none",
+                    border: active ? `1px solid ${theme.borderFaint}` : "1px solid transparent",
+                  }}
+                >{z.label}</motion.div>
+              );
+            })}
+          </div>
+          {/* New item */}
+          <motion.div onClick={() => setCreating(true)} whileTap={{ scale: 0.97 }}
+            style={{ padding: "6px 14px", borderRadius: 999, background: theme.accent, color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, boxShadow: `0 4px 14px ${theme.accent}45` }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Neues Item
+          </motion.div>
+        </div>
+      </div>
+
+      {/* Scrollable timeline body */}
+      <div ref={scrollRef} style={{ flex: 1, overflow: "auto", marginTop: 14, padding: "0 28px 32px" }}>
+        {loading ? (
+          <div style={{ padding: 60, textAlign: "center", color: theme.textDim, fontFamily: FONT, fontSize: 13 }}>Lädt…</div>
+        ) : (
+          <div style={{ position: "relative", width: totalWidth, minHeight: gridHeight }}>
+            {/* Axis header */}
+            <div style={{ position: "sticky", top: 0, zIndex: 3, background: theme.bg, height: headerHeight, borderBottom: `1px solid ${theme.borderFaint}` }}>
+              {/* Top label row (month / quarter) */}
+              {(zoom === "day" || zoom === "week") && (() => {
+                // Group days by month for the upper label
+                const months = [];
+                let prev = null;
+                axis.forEach((c) => {
+                  const key = `${c.d.getFullYear()}-${c.d.getMonth()}`;
+                  if (key !== prev) {
+                    months.push({ key, left: c.left, d: c.d, width: 0 });
+                    prev = key;
+                  }
+                  months[months.length - 1].width += c.width;
+                });
+                return months.map(m => (
+                  <div key={m.key} style={{ position: "absolute", left: m.left, top: 6, width: m.width, padding: "4px 8px", fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, fontWeight: 600 }}>
+                    {tlMonthLabel(m.d, true).toUpperCase()}
+                  </div>
+                ));
+              })()}
+              {/* Day labels */}
+              {(zoom === "day" || zoom === "week") && axis.map((c, i) => {
+                const isToday = tlDaysBetween(new Date(), c.d) === 0;
+                const isWeekend = c.d.getDay() === 0 || c.d.getDay() === 6;
+                return (
+                  <div key={i} style={{ position: "absolute", left: c.left, top: 26, width: c.width, height: headerHeight - 26, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", borderLeft: `1px solid ${theme.borderFaint}`, opacity: isWeekend ? 0.55 : 1 }}>
+                    <div style={{ fontSize: 9, fontFamily: FONT, color: isToday ? theme.accent : theme.textFaint, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      {["S","M","D","M","D","F","S"][c.d.getDay()]}
+                    </div>
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: isToday ? theme.accent : theme.textSub, fontWeight: isToday ? 700 : 500 }}>
+                      {c.d.getDate()}
+                    </div>
+                  </div>
+                );
+              })}
+              {/* Month/Quarter cells */}
+              {(zoom === "month" || zoom === "quarter") && axis.map((c, i) => (
+                <div key={i} style={{ position: "absolute", left: c.left, top: 0, width: c.width, height: headerHeight, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", borderLeft: `1px solid ${theme.borderFaint}` }}>
+                  <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textSub, fontWeight: 600 }}>{tlMonthLabel(c.d, true)}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Vertical grid lines */}
+            {axis.map((c, i) => (
+              <div key={`g${i}`} style={{ position: "absolute", left: c.left, top: headerHeight, bottom: 0, width: 1, background: theme.borderFaint, opacity: 0.6 }} />
+            ))}
+
+            {/* Today line */}
+            <div style={{ position: "absolute", left: todayLeft, top: headerHeight - 8, bottom: 0, width: 2, background: theme.accent, zIndex: 2, pointerEvents: "none" }}>
+              <div style={{ position: "absolute", top: -2, left: -5, width: 12, height: 12, borderRadius: "50%", background: theme.accent, boxShadow: `0 0 0 4px ${theme.bg}` }} />
+            </div>
+
+            {/* Item bars */}
+            {lanes.map((lane, li) => lane.map((it) => {
+              const startOffset = tlDaysBetween(viewStart, new Date(it.start_date));
+              const duration = tlDaysBetween(new Date(it.start_date), new Date(it.end_date)) + 1;
+              const left = startOffset * pxPerDay;
+              const width = Math.max(pxPerDay * 0.6, duration * pxPerDay - 4);
+              const top = headerHeight + 10 + li * rowHeight;
+              const c = itemColor(it);
+              const isDone = it.status === "done";
+              return (
+                <div key={it.id}
+                  onPointerDown={(e) => onItemDragStart(e, it, "move")}
+                  onClick={(e) => { if (!dragRef.current) setSelectedItem(it); }}
+                  style={{
+                    position: "absolute", left, top, width, height: rowHeight - 16,
+                    borderRadius: 10, cursor: "grab",
+                    background: isDone ? "transparent" : c,
+                    border: isDone ? `1.5px dashed ${c}` : "none",
+                    color: isDone ? c : "#fff",
+                    padding: "0 12px",
+                    display: "flex", alignItems: "center", gap: 8,
+                    fontSize: 13, fontFamily: FONT, fontWeight: 500,
+                    boxShadow: isDone ? "none" : `0 4px 14px ${c}45`,
+                    overflow: "hidden",
+                    userSelect: "none",
+                  }}
+                >
+                  {/* Left resize handle */}
+                  <div onPointerDown={(e) => onItemDragStart(e, it, "resizeL")} style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 6, cursor: "ew-resize", zIndex: 2 }} />
+                  {/* Status dot */}
+                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: isDone ? c : "rgba(255,255,255,0.85)", flexShrink: 0 }} />
+                  <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.title}</span>
+                  {it.project_id && projectById[it.project_id] && (
+                    <span style={{ fontSize: 10, opacity: 0.85, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 100 }}>
+                      {projectById[it.project_id].name}
+                    </span>
+                  )}
+                  {/* Right resize handle */}
+                  <div onPointerDown={(e) => onItemDragStart(e, it, "resizeR")} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "ew-resize", zIndex: 2 }} />
+                </div>
+              );
+            }))}
+
+            {/* Empty state */}
+            {!loading && visibleItems.length === 0 && (
+              <div style={{ position: "absolute", top: headerHeight + 60, left: "50%", transform: "translateX(-50%)", color: theme.textFaint, fontFamily: FONT, fontSize: 13, textAlign: "center" }}>
+                Noch keine Items.<br/>
+                <span style={{ fontSize: 12, color: theme.textFaint }}>Klick <strong style={{ color: theme.accent }}>+ Neues Item</strong> oben rechts.</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Create / Edit modal */}
+      <AnimatePresence>
+        {(creating || selectedItem) && (
+          <TimelineItemModal
+            item={selectedItem}
+            creating={creating}
+            projects={projects}
+            orgMembers={orgMembers}
+            theme={theme} darkMode={darkMode}
+            onClose={() => { setCreating(false); setSelectedItem(null); }}
+            onSave={async (payload) => {
+              if (selectedItem) {
+                await updateItem(selectedItem.id, payload);
+              } else {
+                await createItem(payload);
+              }
+              setCreating(false); setSelectedItem(null);
+            }}
+            onDelete={selectedItem ? async () => {
+              await deleteItem(selectedItem.id);
+              setSelectedItem(null);
+            } : null}
+          />
+        )}
+      </AnimatePresence>
+
+      {error && (
+        <div style={{ position: "fixed", bottom: 80, left: "50%", transform: "translateX(-50%)", padding: "10px 18px", borderRadius: 999, background: "rgba(220, 53, 69, 0.95)", color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 500, boxShadow: "0 10px 30px rgba(0,0,0,0.3)" }}>{error}</div>
+      )}
+    </motion.div>
+  );
+}
+
+function TimelineItemModal({ item, creating, projects, orgMembers, theme, darkMode, onClose, onSave, onDelete }) {
+  const today = tlIsoDate(new Date());
+  const tomorrow = tlIsoDate(tlAddDays(new Date(), 6));
+  const [title, setTitle] = useState(item?.title || "");
+  const [description, setDescription] = useState(item?.description || "");
+  const [startDate, setStartDate] = useState(item?.start_date || today);
+  const [endDate, setEndDate] = useState(item?.end_date || tomorrow);
+  const [projectId, setProjectId] = useState(item?.project_id || "");
+  const [status, setStatus] = useState(item?.status || "planned");
+  const [saving, setSaving] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+
+  const save = async () => {
+    if (!title.trim() || saving) return;
+    setSaving(true);
+    await onSave({
+      title: title.trim(),
+      description: description.trim() || null,
+      start_date: startDate,
+      end_date: endDate,
+      project_id: projectId || null,
+      status,
+    });
+    setSaving(false);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 99998, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }}
+        transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1.0] }}
+        onClick={e => e.stopPropagation()}
+        style={{ width: "100%", maxWidth: 540, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26, boxShadow: "0 25px 80px rgba(0,0,0,0.4)" }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+          <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.2 }}>{creating ? "Neues Timeline-Item" : "Item bearbeiten"}</div>
+          <motion.div onClick={onClose} whileTap={{ scale: 0.94 }} style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </motion.div>
+        </div>
+
+        <input value={title} onChange={e => setTitle(e.target.value)} autoFocus placeholder="Was wird gemacht?"
+          style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 12, padding: "12px 14px", fontSize: 16, fontFamily: FONT, fontWeight: 500, color: theme.text, outline: "none", caretColor: theme.accent, marginBottom: 14 }}
+        />
+
+        <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Beschreibung (optional)" rows={3}
+          style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 12, padding: "10px 14px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent, marginBottom: 14, resize: "vertical", lineHeight: 1.55 }}
+        />
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+          <div>
+            <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Start</label>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+              style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", colorScheme: darkMode ? "dark" : "light" }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Ende</label>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} min={startDate}
+              style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", colorScheme: darkMode ? "dark" : "light" }}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
+          <div>
+            <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Projekt</label>
+            <select value={projectId} onChange={e => setProjectId(e.target.value)}
+              style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none" }}
+            >
+              <option value="">— Kein Projekt —</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Status</label>
+            <div style={{ display: "flex", gap: 4, padding: 3, borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}>
+              {["planned","active","done"].map(s => {
+                const active = status === s;
+                return (
+                  <motion.div key={s} onClick={() => setStatus(s)} whileTap={{ scale: 0.96 }}
+                    style={{ flex: 1, padding: "7px 8px", borderRadius: 7, cursor: "pointer", fontSize: 11, fontFamily: FONT, fontWeight: active ? 600 : 500, color: active ? "#fff" : theme.textDim, background: active ? TL_STATUS_COLORS[s] : "transparent", textAlign: "center", transition: "background 0.15s" }}
+                  >{TL_STATUS_LABEL[s]}</motion.div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          {onDelete && !confirmDel && (
+            <motion.div onClick={() => setConfirmDel(true)} whileTap={{ scale: 0.97 }}
+              style={{ padding: "10px 16px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: "#E84393", fontSize: 12, fontFamily: FONT, fontWeight: 500 }}
+            >Löschen</motion.div>
+          )}
+          {onDelete && confirmDel && (
+            <div style={{ display: "flex", gap: 6 }}>
+              <motion.div onClick={() => setConfirmDel(false)} whileTap={{ scale: 0.97 }}
+                style={{ padding: "10px 14px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 12, fontFamily: FONT }}
+              >Abbrechen</motion.div>
+              <motion.div onClick={() => { onDelete(); onClose(); }} whileTap={{ scale: 0.97 }}
+                style={{ padding: "10px 16px", borderRadius: 999, cursor: "pointer", background: "#E84393", color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600 }}
+              >Wirklich löschen</motion.div>
+            </div>
+          )}
+          {!confirmDel && <div style={{ flex: 1 }} />}
+          <div style={{ display: "flex", gap: 8 }}>
+            <motion.div onClick={onClose} whileTap={{ scale: 0.97 }}
+              style={{ padding: "10px 18px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500 }}
+            >Abbrechen</motion.div>
+            <motion.div onClick={save} whileTap={{ scale: 0.97 }}
+              style={{ padding: "10px 22px", borderRadius: 999, cursor: (!title.trim() || saving) ? "not-allowed" : "pointer", background: title.trim() && !saving ? theme.accent : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"), color: title.trim() && !saving ? "#fff" : theme.textFaint, fontSize: 13, fontFamily: FONT, fontWeight: 600 }}
+            >{saving ? "Speichert…" : creating ? "Erstellen" : "Speichern"}</motion.div>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 // ──── Calendar View ────
 const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const MONTH_NAMES = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
@@ -11626,7 +12326,7 @@ export default function CircularMenu() {
     }
 
     // Let views with their own scrolling handle scroll natively
-    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "settings" || currentView === "notes" || currentView === "projects" || currentView === "brand") {
+    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "timeline" || currentView === "settings" || currentView === "notes" || currentView === "projects" || currentView === "brand") {
       return;
     }
 
@@ -11737,6 +12437,8 @@ export default function CircularMenu() {
       setCurrentView("notes");
     } else if (subItem.id === "kanban") {
       setCurrentView("kanban");
+    } else if (subItem.id === "timeline") {
+      setCurrentView("timeline");
     } else if (subItem.id === "tasks") {
       // Open the dashboard's expanded task panel ("Was steht an")
       setCurrentView("dashboard");
@@ -12410,6 +13112,13 @@ export default function CircularMenu() {
         <AnimatePresence>
           {currentView === "calendar" && (
             <CalendarView session={session} getProviderToken={getProviderToken} openMeetCall={openMeetCall} autoReLogin={autoReLogin} ensureValidToken={ensureValidToken} onBack={() => setCurrentView("dashboard")} theme={theme} darkMode={darkMode} t={t} userOrg={userOrg} />
+          )}
+        </AnimatePresence>
+
+        {/* TIMELINE VIEW */}
+        <AnimatePresence>
+          {currentView === "timeline" && (
+            <TimelineView session={session} userOrg={userOrg} orgMembers={orgMembers} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
