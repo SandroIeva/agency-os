@@ -598,6 +598,69 @@ const DEFAULT_COLUMNS = [
   { id: "col-done", key: "done", labelKey: "kanban.done", color: "#00B894", position: 3 },
 ];
 
+// ChatBubble — one message in the Dialog mode. Animates in (fade + lift),
+// and for assistant messages reveals the text gradually like a typing effect.
+// The "have we animated yet" state lives in a ref so re-renders don't replay.
+function ChatBubble({ message, theme, darkMode }) {
+  const isUser = message.role === "user";
+  const fullText = message.content || "";
+  const animatedRef = useRef(false);
+  const [revealed, setRevealed] = useState(() => (animatedRef.current || isUser) ? fullText.length : 0);
+
+  useEffect(() => {
+    if (animatedRef.current) return;
+    if (isUser) { animatedRef.current = true; setRevealed(fullText.length); return; }
+    // Reveal speed: scale with length so very long answers don't take forever
+    const totalMs = Math.min(Math.max(fullText.length * 9, 350), 2500);
+    const tick = 22;
+    const charsPerTick = Math.max(1, Math.ceil((fullText.length / totalMs) * tick));
+    let i = 0;
+    const interval = setInterval(() => {
+      i = Math.min(i + charsPerTick, fullText.length);
+      setRevealed(i);
+      if (i >= fullText.length) {
+        animatedRef.current = true;
+        clearInterval(interval);
+      }
+    }, tick);
+    return () => clearInterval(interval);
+  }, [fullText, isUser]);
+
+  const visible = isUser ? fullText : fullText.slice(0, revealed);
+  const stillTyping = !isUser && revealed < fullText.length;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.32, ease: [0.22, 0.68, 0.35, 1.0] }}
+      style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start" }}
+    >
+      <div style={{
+        maxWidth: "75%", padding: "11px 16px", borderRadius: 18,
+        background: isUser
+          ? theme.accent
+          : (message.error ? (darkMode ? "rgba(232,67,147,0.12)" : "rgba(232,67,147,0.08)") : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)")),
+        color: isUser ? "#fff" : (message.error ? "#E84393" : theme.text),
+        fontSize: 14, fontFamily: FONT, lineHeight: 1.55,
+        whiteSpace: "pre-wrap", wordBreak: "break-word",
+        borderBottomRightRadius: isUser ? 6 : 18,
+        borderBottomLeftRadius: isUser ? 18 : 6,
+        boxShadow: isUser ? `0 4px 14px ${theme.accent}30` : "none",
+      }}>
+        {visible}
+        {stillTyping && (
+          <span style={{
+            display: "inline-block", width: 6, height: 14, marginLeft: 2,
+            verticalAlign: "-2px", background: theme.text, opacity: 0.55,
+            borderRadius: 1, animation: "ai-caret-blink 0.9s steps(2) infinite",
+          }} />
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
 function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerNewTask, onNewTaskTriggered, userOrg, orgMembers, createNotification, myProjectNames = new Set() }) {
   const [tasks, setTasks] = useState([]);
   const [teamMembers, setTeamMembers] = useState({});
@@ -11677,7 +11740,15 @@ export default function CircularMenu() {
   const [llmKeys, setLlmKeys] = useState(() => {
     try { return JSON.parse(localStorage.getItem("agencyos-llm-keys") || "{}"); } catch { return {}; }
   });
-  const [llmKeyInputs, setLlmKeyInputs] = useState({ claude: "", openai: "", gemini: "" });
+  // Pre-fill the input drafts with whatever is already saved per provider, so when the user
+  // switches between LLMs they immediately see (as masked dots, since the input is type="password")
+  // that their key is still stored — no need to re-enter it each time.
+  const [llmKeyInputs, setLlmKeyInputs] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("agencyos-llm-keys") || "{}");
+      return { claude: saved.claude || "", openai: saved.openai || "", gemini: saved.gemini || "" };
+    } catch { return { claude: "", openai: "", gemini: "" }; }
+  });
   const [llmKeyStatus, setLlmKeyStatus] = useState({}); // { claude: "valid"|"invalid"|"checking" }
 
   // Voice selection state
@@ -13237,6 +13308,8 @@ export default function CircularMenu() {
   const voiceTargetDialogRef = useRef(false);
   // Auto-stop timer: fires after a stretch of silence so the user doesn't have to click to confirm.
   const silenceTimerRef = useRef(null);
+  // Mirror of `transcript` so stopVoice (called from stale timer closures) always reads the latest text.
+  const transcriptRef = useRef("");
   const [dialogMessages, setDialogMessages] = useState([]); // [{role:"user"|"assistant", content, timestamp}]
   const [dialogInput, setDialogInput] = useState("");
   const [dialogSending, setDialogSending] = useState(false);
@@ -13300,6 +13373,7 @@ export default function CircularMenu() {
     setVoiceMode(true);
     setAiSpeaking(false);
     setTranscript("");
+    transcriptRef.current = "";
     setAiResponse("");
     setAiStatus("listening");
 
@@ -13342,6 +13416,7 @@ export default function CircularMenu() {
         const rawText = (final + interim).trim();
         const currentText = correctTranscriptVocab(rawText);
         setTranscript(currentText);
+        transcriptRef.current = currentText;
 
         // Reset silence countdown every time we get a recognition result
         if (rawText.length > 0) armSilenceTimer();
@@ -13385,7 +13460,8 @@ export default function CircularMenu() {
     if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
     try { if (recognitionRef.current) recognitionRef.current.stop(); } catch(e) {}
 
-    const rawTranscript = (transcript || "").trim();
+    // Read from ref first — `transcript` state may be stale inside closures captured by setTimeout.
+    const rawTranscript = (transcriptRef.current || transcript || "").trim();
     const cleaned = correctTranscriptVocab(rawTranscript);
 
     // ── Local voice commands run instantly — match raw text first so vocab correction can't ruin them ──
@@ -14853,22 +14929,7 @@ export default function CircularMenu() {
                     </div>
                   )}
                   {dialogMessages.map((m, idx) => (
-                    <div key={idx} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
-                      <div style={{
-                        maxWidth: "75%", padding: "11px 16px", borderRadius: 18,
-                        background: m.role === "user"
-                          ? theme.accent
-                          : (m.error ? (darkMode ? "rgba(232,67,147,0.12)" : "rgba(232,67,147,0.08)") : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)")),
-                        color: m.role === "user" ? "#fff" : (m.error ? "#E84393" : theme.text),
-                        fontSize: 14, fontFamily: FONT, lineHeight: 1.55,
-                        whiteSpace: "pre-wrap", wordBreak: "break-word",
-                        borderBottomRightRadius: m.role === "user" ? 6 : 18,
-                        borderBottomLeftRadius: m.role === "user" ? 18 : 6,
-                        boxShadow: m.role === "user" ? `0 4px 14px ${theme.accent}30` : "none",
-                      }}>
-                        {m.content}
-                      </div>
-                    </div>
+                    <ChatBubble key={m.timestamp ? `${m.timestamp}-${idx}` : idx} message={m} theme={theme} darkMode={darkMode} />
                   ))}
                   {dialogSending && (
                     <div style={{ display: "flex", justifyContent: "flex-start" }}>
@@ -14939,9 +15000,6 @@ export default function CircularMenu() {
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                   </motion.div>
-                </div>
-                <div style={{ maxWidth: 760, margin: "8px auto 0", fontSize: 10, fontFamily: FONT, color: theme.textFaint, textAlign: "center" }}>
-                  {appLanguage === "de" ? "Enter zum Senden · Shift+Enter für Zeilenumbruch · Esc zum Schließen" : "Enter to send · Shift+Enter for new line · Esc to close"}
                 </div>
               </div>
             </motion.div>
@@ -16498,7 +16556,7 @@ export default function CircularMenu() {
                                         });
                                         if (res.ok) {
                                           setLlmKeys(prev => ({ ...prev, [p.id]: key }));
-                                          setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" }));
+                                          // Keep the input populated (as masked dots) so user can see the key is saved.
                                           setLlmKeyStatus(prev => ({ ...prev, [p.id]: "valid" }));
                                         } else {
                                           // 429 = rate limited but key format is valid — save it
@@ -16531,6 +16589,7 @@ export default function CircularMenu() {
                                     whileTap={{ scale: 0.95 }}
                                     onClick={() => {
                                       setLlmKeys(prev => { const n = { ...prev }; delete n[p.id]; return n; });
+                                      setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" }));
                                       setLlmKeyStatus(prev => { const n = { ...prev }; delete n[p.id]; return n; });
                                     }}
                                     style={{
