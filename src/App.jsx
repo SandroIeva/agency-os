@@ -788,6 +788,113 @@ function ImageLightbox({ url, onClose, onUploadStorage, onUploadDrive, theme, da
 // ChatBubble — one message in the Dialog mode. Animates in (fade + lift),
 // and for assistant messages reveals the text gradually like a typing effect.
 // Supports optional images (Gemini multimodal output) — click to open in lightbox.
+// Small in-memory cache + dedup map so the same URL isn't fetched twice per session.
+const _linkPreviewCache = new Map(); // url → { data, fetchedAt }
+const _linkPreviewInflight = new Map(); // url → Promise
+
+async function fetchLinkPreview(url) {
+  // Skip image URLs and Supabase storage URLs — they don't have meaningful OG data,
+  // and the chat shows them inline elsewhere already.
+  if (!url) return null;
+  if (/\.(png|jpe?g|gif|webp|svg|bmp|ico)(\?|$)/i.test(url)) return null;
+  if (/supabase\.co\/storage\//i.test(url)) return null;
+  const cached = _linkPreviewCache.get(url);
+  if (cached) return cached.data;
+  if (_linkPreviewInflight.has(url)) return _linkPreviewInflight.get(url);
+  const p = (async () => {
+    try {
+      const r = await fetch(`/api/link-preview?url=${encodeURIComponent(url)}`);
+      if (!r.ok) return null;
+      const data = await r.json();
+      if (data.error) return null;
+      _linkPreviewCache.set(url, { data, fetchedAt: Date.now() });
+      return data;
+    } catch { return null; }
+    finally { _linkPreviewInflight.delete(url); }
+  })();
+  _linkPreviewInflight.set(url, p);
+  return p;
+}
+
+// Pulls the first http(s) URL out of a string — used to drive the preview card.
+function firstUrlIn(text) {
+  if (!text) return null;
+  const m = text.match(/\bhttps?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]]/);
+  return m ? m[0] : null;
+}
+
+// Preview card shown below a message that contains a link. WhatsApp/Slack-style.
+function LinkPreviewCard({ url, theme, darkMode }) {
+  const [data, setData] = useState(() => _linkPreviewCache.get(url)?.data || null);
+  const [loading, setLoading] = useState(!data);
+  useEffect(() => {
+    let alive = true;
+    if (data) { setLoading(false); return; }
+    setLoading(true);
+    fetchLinkPreview(url).then(d => {
+      if (!alive) return;
+      setData(d || null);
+      setLoading(false);
+    });
+    return () => { alive = false; };
+  }, [url]); // eslint-disable-line
+  if (loading) {
+    return (
+      <div style={{
+        marginTop: 8, padding: 12, borderRadius: 12, maxWidth: 360,
+        background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)",
+        border: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}`,
+        display: "flex", gap: 10, alignItems: "center",
+      }}>
+        <div style={{ width: 44, height: 44, borderRadius: 8, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", animation: "pulse 1.4s ease-in-out infinite" }} />
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ height: 10, width: "60%", borderRadius: 4, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", animation: "pulse 1.4s ease-in-out infinite" }} />
+          <div style={{ height: 8, width: "90%", borderRadius: 4, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", animation: "pulse 1.4s ease-in-out infinite" }} />
+        </div>
+      </div>
+    );
+  }
+  if (!data) return null;
+  const { title, description, image, site, favicon } = data;
+  if (!title && !description && !image) return null;
+  return (
+    <motion.a
+      href={data.url || url} target="_blank" rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}
+      style={{
+        marginTop: 8, display: "block", maxWidth: 360, borderRadius: 12, overflow: "hidden",
+        background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+        border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
+        textDecoration: "none", color: "inherit",
+      }}
+    >
+      {image && (
+        <div style={{ width: "100%", aspectRatio: "1.91/1", background: darkMode ? "rgba(0,0,0,0.3)" : "rgba(0,0,0,0.04)", overflow: "hidden" }}>
+          <img
+            src={image} alt="" referrerPolicy="no-referrer"
+            onError={(e) => { e.currentTarget.parentElement.style.display = "none"; }}
+            style={{ display: "block", width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        </div>
+      )}
+      <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {favicon && (
+            <img src={favicon} alt="" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = "none"; }}
+              style={{ width: 14, height: 14, borderRadius: 3, flexShrink: 0 }} />
+          )}
+          <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, letterSpacing: 0.3, textTransform: "uppercase", fontWeight: 600 }}>
+            {site || new URL(data.url || url).hostname.replace(/^www\./, "")}
+          </span>
+        </div>
+        {title && <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text, lineHeight: 1.3 }}>{title}</div>}
+        {description && <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{description}</div>}
+      </div>
+    </motion.a>
+  );
+}
+
 // Render plain text with embedded http(s) URLs turned into clickable links.
 // Used inside chat bubbles so addresses the user (or the AI) drops in are tappable.
 function renderTextWithLinks(text, isUserBubble, accentColor) {
@@ -882,6 +989,7 @@ function ChatBubble({ message, theme, darkMode, appLanguage, onUploadStorage, on
                 borderRadius: 1, animation: "ai-caret-blink 0.9s steps(2) infinite",
               }} />
             )}
+            {!stillTyping && (() => { const u = firstUrlIn(visible); return u ? <LinkPreviewCard url={u} theme={theme} darkMode={darkMode} /> : null; })()}
           </div>
         )}
         {images.map((url, i) => (
@@ -8151,6 +8259,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                         {msg.text && (
                           <div style={{ padding: msg.attachment_url ? "0 12px 6px" : 0, wordBreak: "break-word" }}>
                             {renderTextWithLinks(msg.text, false, "#8B7AFF")}
+                            {(() => { const u = firstUrlIn(msg.text); return u ? <LinkPreviewCard url={u} theme={theme} darkMode={darkMode} /> : null; })()}
                           </div>
                         )}
                       </div>
