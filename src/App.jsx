@@ -874,6 +874,21 @@ function ChatBubble({ message, theme, darkMode, appLanguage, onUploadStorage, on
             </div>
           </motion.div>
         ))}
+        {/* "✓ In Dateien gespeichert" indicator */}
+        {images.length > 0 && message.imagesSaved && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+            style={{
+              fontSize: 10, fontFamily: FONT, fontWeight: 500,
+              color: darkMode ? "#22C55E" : "#0F8A4C",
+              display: "inline-flex", alignItems: "center", gap: 5,
+              padding: "2px 4px",
+            }}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            {appLanguage === "de" ? "In Dateien gespeichert" : "Saved to Files"}
+          </motion.div>
+        )}
       </div>
 
       <AnimatePresence>
@@ -11972,6 +11987,14 @@ export default function CircularMenu() {
   const [llmKeys, setLlmKeys] = useState(() => {
     try { return JSON.parse(localStorage.getItem("agencyos-llm-keys") || "{}"); } catch { return {}; }
   });
+  // Auto-save every AI-generated image into the workspace's Files view.
+  // ON by default — user can toggle off in Settings → AI-Modelle.
+  const [autoSaveAiImages, setAutoSaveAiImages] = useState(() => {
+    const v = localStorage.getItem("agencyos-autosave-ai-images");
+    return v === null ? true : v === "1";
+  });
+  useEffect(() => { localStorage.setItem("agencyos-autosave-ai-images", autoSaveAiImages ? "1" : "0"); }, [autoSaveAiImages]);
+
   // Input drafts: kept separate from `llmKeys` (the actual stored secrets) and ALWAYS start empty.
   // We never echo a saved key back into the field — it would either confuse the user, or cause
   // accidental key concatenation when pasting (which is invisible under type="password").
@@ -13817,6 +13840,83 @@ export default function CircularMenu() {
     return new Blob([bytes], { type: mime });
   };
 
+  // Find or lazily create the "AI Generated" virtual folder for the current user/org,
+  // so auto-saved images stay neatly grouped instead of cluttering the Files root.
+  // Result is cached in a ref to avoid hammering the DB on every image.
+  const aiFolderIdRef = useRef(null);
+  const AI_FOLDER_NAME = "AI Generated";
+  const ensureAiFolder = async () => {
+    if (aiFolderIdRef.current) return aiFolderIdRef.current;
+    if (!userOrg?.id || !session?.user?.id) return null;
+    try {
+      const { data: existing } = await supabase
+        .from("user_folders")
+        .select("id")
+        .eq("user_id", session.user.id)
+        .eq("name", AI_FOLDER_NAME)
+        .is("parent_id", null)
+        .maybeSingle();
+      if (existing?.id) {
+        aiFolderIdRef.current = existing.id;
+        return existing.id;
+      }
+      const { data: created, error } = await supabase
+        .from("user_folders")
+        .insert({
+          user_id: session.user.id,
+          org_id: userOrg.id,
+          name: AI_FOLDER_NAME,
+          parent_id: null,
+        })
+        .select("id")
+        .single();
+      if (error) throw error;
+      aiFolderIdRef.current = created.id;
+      return created.id;
+    } catch (e) {
+      console.warn("[AI folder] could not ensure folder:", e.message);
+      return null;
+    }
+  };
+
+  // Persist an AI-generated image into the workspace's "Dateien" repository.
+  // Goes into the auto-created "AI Generated" folder so it stays organized.
+  const saveAiImageToFiles = async (dataUrl, prompt) => {
+    if (!userOrg?.id || !session?.user?.id) return null;
+    const blob = dataUrl.startsWith("data:") ? dataUrlToBlob(dataUrl) : await (await fetch(dataUrl)).blob();
+    if (!blob) return null;
+    const ext = (blob.type.split("/")[1] || "png").replace("jpeg", "jpg");
+    const stamp = new Date().toISOString().slice(0, 10);
+    // Friendly filename: "<prompt-snippet>.png" — falls back to date if prompt is empty.
+    const snippet = (prompt || "").trim().replace(/\s+/g, " ").slice(0, 60) || stamp;
+    const safeSnippet = snippet.replace(/[^\w\s.\-äöüÄÖÜß]/g, "").trim() || stamp;
+    const fileName = `${safeSnippet}.${ext}`;
+    const storagePath = `${session.user.id}/ai-generated/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    // Auto-create / look up the "AI Generated" folder so the file lands there
+    const folderId = await ensureAiFolder();
+    try {
+      const { error: upErr } = await supabase.storage.from("user-files").upload(storagePath, blob, { contentType: blob.type, upsert: false });
+      if (upErr) throw upErr;
+      const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(storagePath, 60 * 60 * 24 * 365);
+      const { data: inserted, error: insErr } = await supabase.from("user_files").insert({
+        user_id: session.user.id,
+        org_id: userOrg.id,
+        name: fileName,
+        mime_type: blob.type || "image/png",
+        size_bytes: blob.size,
+        storage_path: storagePath,
+        storage_provider: "supabase",
+        public_url: signed?.signedUrl || null,
+        folder_id: folderId,
+      }).select().single();
+      if (insErr) throw insErr;
+      return { rowId: inserted.id, path: storagePath, url: signed?.signedUrl || null, name: fileName, folderId };
+    } catch (e) {
+      console.warn("[AI auto-save] failed:", e.message);
+      return null;
+    }
+  };
+
   // Upload an AI-generated image to Supabase Storage AND register a short-link
   // so the user copies a clean `https://alpha.i7os.com/i/<slug>` URL instead of a
   // 300-char Supabase Storage URL.
@@ -13991,12 +14091,29 @@ export default function CircularMenu() {
       const textPart = (data.content || []).find(c => c.type === "text")?.text || "";
       const imageParts = (data.content || []).filter(c => c.type === "image");
       if (textPart || imageParts.length > 0) {
+        const msgTimestamp = Date.now();
         setDialogMessages(prev => [...prev, {
           role: "assistant",
           content: textPart || (imageParts.length > 0 ? (appLanguage === "de" ? "Hier ist dein Bild:" : "Here is your image:") : ""),
           images: imageParts.map(p => p.url),
-          timestamp: Date.now(),
+          imagesSaved: false,
+          timestamp: msgTimestamp,
         }]);
+        // Auto-save generated images to the Files view if the user has it enabled.
+        // Runs in the background so the chat UI doesn't wait on the upload.
+        if (imageParts.length > 0 && autoSaveAiImages) {
+          (async () => {
+            const savedRefs = [];
+            for (const img of imageParts) {
+              const r = await saveAiImageToFiles(img.url, text);
+              savedRefs.push(r);
+            }
+            const succeeded = savedRefs.some(Boolean);
+            if (succeeded) {
+              setDialogMessages(prev => prev.map(m => m.timestamp === msgTimestamp ? { ...m, imagesSaved: true } : m));
+            }
+          })();
+        }
       } else if (data.error) {
         const providerName = data.provider ? data.provider.charAt(0).toUpperCase() + data.provider.slice(1) : "KI";
         setDialogMessages(prev => [...prev, { role: "assistant", content: `${providerName}: ${data.error}`, timestamp: Date.now(), error: true }]);
@@ -16858,6 +16975,55 @@ export default function CircularMenu() {
                   border: `1px solid ${theme.border}`,
                   overflow: "hidden",
                 }}>
+                  {/* Auto-save toggle for AI-generated images */}
+                  <motion.div
+                    whileHover={{ backgroundColor: theme.hoverBg }}
+                    onClick={() => setAutoSaveAiImages(v => !v)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 14,
+                      padding: "16px 20px", cursor: "pointer",
+                      borderBottom: `1px solid ${theme.borderFaint}`,
+                    }}
+                  >
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.text} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21 15 16 10 5 21"/>
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
+                        {appLanguage === "de" ? "AI-Bilder automatisch speichern" : "Auto-save AI images"}
+                      </div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.4 }}>
+                        {appLanguage === "de"
+                          ? "Generierte Bilder werden direkt in deine Dateien-Übersicht gelegt."
+                          : "Generated images go straight into your Files view."}
+                      </div>
+                    </div>
+                    {/* iOS-style switch */}
+                    <div style={{
+                      width: 42, height: 24, borderRadius: 12, position: "relative", flexShrink: 0,
+                      background: autoSaveAiImages ? theme.accent : (darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.18)"),
+                      transition: "background 0.2s",
+                    }}>
+                      <motion.div
+                        animate={{ x: autoSaveAiImages ? 20 : 2 }}
+                        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                        style={{
+                          position: "absolute", top: 2, width: 20, height: 20,
+                          borderRadius: "50%", background: "#fff",
+                          boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                        }}
+                      />
+                    </div>
+                  </motion.div>
+
                   {/* Provider cards */}
                   {[
                     { id: "gemini", name: "Gemini", sub: "Google", color: "#4285F4",
