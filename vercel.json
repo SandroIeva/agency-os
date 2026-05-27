@@ -3,6 +3,7 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
-    { "source": "/((?!api/|@|node_modules/|src/|.*\\.).*)", "destination": "/" }
+    { "source": "/i/:slug", "destination": "/api/redirect?slug=:slug" },
+    { "source": "/((?!api/|@|node_modules/|src/|i/|.*\\.).*)", "destination": "/" }
   ]
 }

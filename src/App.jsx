@@ -598,19 +598,207 @@ const DEFAULT_COLUMNS = [
   { id: "col-done", key: "done", labelKey: "kanban.done", color: "#00B894", position: 3 },
 ];
 
+// ImageLightbox — full-screen viewer for AI-generated images, with action toolbar:
+//   Download · Copy Image · Copy Link · Upload to Drive · Open in new tab
+// Pulls heavy actions (upload to Supabase / Drive) in from the parent via callbacks.
+function ImageLightbox({ url, onClose, onUploadStorage, onUploadDrive, theme, darkMode, appLanguage }) {
+  const [toast, setToast] = useState(null); // { text, kind: "ok"|"err" }
+  const [linkUrl, setLinkUrl] = useState(null); // once we've uploaded, cache the public URL so subsequent "Copy link" doesn't re-upload
+  const [busy, setBusy] = useState(null);       // "link" | "drive" | null
+  const flash = (text, kind = "ok") => {
+    setToast({ text, kind });
+    setTimeout(() => setToast(null), 2200);
+  };
+
+  // Decode a data: URL into a Blob (used by every action that wants the raw bytes)
+  const dataUrlToBlob = (durl) => {
+    const m = durl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!m) return null;
+    const mime = m[1] || "image/png";
+    const bin = atob(m[2]);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  };
+
+  const download = () => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `i7os-image-${Date.now()}.png`;
+    document.body.appendChild(a); a.click(); a.remove();
+    flash(appLanguage === "de" ? "Heruntergeladen" : "Downloaded");
+  };
+
+  // Browser Clipboard API only accepts image/png for write — convert anything else via canvas.
+  const blobToPngBlob = (blob) => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob((b) => b ? resolve(b) : reject(new Error("toBlob failed")), "image/png");
+    };
+    img.onerror = () => reject(new Error("image decode failed"));
+    img.src = URL.createObjectURL(blob);
+  });
+
+  const copyImage = async () => {
+    try {
+      let blob = url.startsWith("data:") ? dataUrlToBlob(url) : await (await fetch(url)).blob();
+      if (!blob) throw new Error("decode failed");
+      if (blob.type !== "image/png") blob = await blobToPngBlob(blob);
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      flash(appLanguage === "de" ? "Bild kopiert" : "Image copied");
+    } catch (e) {
+      flash((appLanguage === "de" ? "Kopieren fehlgeschlagen: " : "Copy failed: ") + (e.message || ""), "err");
+    }
+  };
+
+  const copyLink = async () => {
+    try {
+      let publicUrl = linkUrl;
+      if (!publicUrl) {
+        if (!onUploadStorage) throw new Error("upload nicht verfügbar");
+        setBusy("link");
+        publicUrl = await onUploadStorage(url);
+        setLinkUrl(publicUrl);
+      }
+      await navigator.clipboard.writeText(publicUrl);
+      flash(appLanguage === "de" ? "Link kopiert" : "Link copied");
+    } catch (e) {
+      flash((appLanguage === "de" ? "Link fehlgeschlagen: " : "Link failed: ") + (e.message || ""), "err");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const uploadToDrive = async () => {
+    if (!onUploadDrive) { flash(appLanguage === "de" ? "Drive nicht verbunden" : "Drive not connected", "err"); return; }
+    setBusy("drive");
+    try {
+      await onUploadDrive(url);
+      flash(appLanguage === "de" ? "Auf Drive hochgeladen" : "Uploaded to Drive");
+    } catch (e) {
+      flash((appLanguage === "de" ? "Drive-Upload fehlgeschlagen: " : "Drive upload failed: ") + (e.message || ""), "err");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const openInTab = () => {
+    if (url.startsWith("data:")) {
+      const blob = dataUrlToBlob(url);
+      const objectUrl = URL.createObjectURL(blob);
+      window.open(objectUrl, "_blank");
+    } else {
+      window.open(url, "_blank");
+    }
+  };
+
+  const ActionBtn = ({ icon, label, onClick, busyKey }) => (
+    <motion.button onClick={onClick} whileTap={{ scale: 0.95 }} disabled={!!busyKey && busy === busyKey}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 7,
+        padding: "8px 12px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)"}`,
+        background: darkMode ? "rgba(20,20,26,0.7)" : "rgba(255,255,255,0.85)",
+        color: darkMode ? "#ffffffDD" : "#1a1a2eEE",
+        fontSize: 11, fontFamily: FONT, fontWeight: 500, cursor: "pointer",
+        backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+        opacity: busy && busy !== busyKey ? 0.5 : 1, transition: "opacity 0.15s",
+      }}
+    >
+      {busy === busyKey ? (
+        <div style={{ width: 12, height: 12, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: theme.accent, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+      ) : icon}
+      <span>{label}</span>
+    </motion.button>
+  );
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 99999,
+        background: "rgba(8, 8, 12, 0.92)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        display: "flex", flexDirection: "column", padding: 24,
+      }}
+    >
+      {/* Top action bar */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <div style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff60", letterSpacing: 2, textTransform: "uppercase", fontWeight: 600 }}>
+          {appLanguage === "de" ? "Bild-Vorschau" : "Image preview"}
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <ActionBtn icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>} label={appLanguage === "de" ? "Download" : "Download"} onClick={download} />
+          <ActionBtn icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>} label={appLanguage === "de" ? "Kopieren" : "Copy"} onClick={copyImage} />
+          <ActionBtn icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>} label={appLanguage === "de" ? "Link kopieren" : "Copy link"} onClick={copyLink} busyKey="link" />
+          {onUploadDrive && <ActionBtn icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="14 2 6 22 22 12 14 2"/></svg>} label={appLanguage === "de" ? "Zu Drive" : "To Drive"} onClick={uploadToDrive} busyKey="drive" />}
+          <ActionBtn icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>} label={appLanguage === "de" ? "Neuer Tab" : "Open"} onClick={openInTab} />
+          <motion.button onClick={onClose} whileTap={{ scale: 0.94 }}
+            style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#ffffffCC", background: "rgba(255,255,255,0.06)", border: `1px solid rgba(255,255,255,0.10)`, marginLeft: 6 }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </motion.button>
+        </div>
+      </div>
+
+      {/* Image */}
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 0 }}>
+        <motion.img
+          src={url} alt=""
+          initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }}
+          style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 12, boxShadow: "0 30px 80px rgba(0,0,0,0.55)" }}
+        />
+      </div>
+
+      {/* Link preview when available */}
+      {linkUrl && (
+        <div style={{ marginTop: 14, padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: 8, maxWidth: 720, marginLeft: "auto", marginRight: "auto", width: "100%" }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffffff70" strokeWidth="2" strokeLinecap="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 11, fontFamily: FONT, color: "#ffffff90", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{linkUrl}</span>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+          style={{
+            position: "absolute", bottom: 32, left: "50%", transform: "translateX(-50%)",
+            padding: "10px 18px", borderRadius: 999,
+            background: toast.kind === "err" ? "rgba(232,67,147,0.92)" : "rgba(34,197,94,0.92)",
+            color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 500,
+            boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+          }}
+        >{toast.text}</motion.div>
+      )}
+    </motion.div>
+  );
+}
+
 // ChatBubble — one message in the Dialog mode. Animates in (fade + lift),
 // and for assistant messages reveals the text gradually like a typing effect.
-// The "have we animated yet" state lives in a ref so re-renders don't replay.
-function ChatBubble({ message, theme, darkMode }) {
+// Supports optional images (Gemini multimodal output) — click to open in lightbox.
+function ChatBubble({ message, theme, darkMode, appLanguage, onUploadStorage, onUploadDrive }) {
   const isUser = message.role === "user";
   const fullText = message.content || "";
+  const images = Array.isArray(message.images) ? message.images : [];
   const animatedRef = useRef(false);
   const [revealed, setRevealed] = useState(() => (animatedRef.current || isUser) ? fullText.length : 0);
+  const [previewImage, setPreviewImage] = useState(null);
 
   useEffect(() => {
     if (animatedRef.current) return;
     if (isUser) { animatedRef.current = true; setRevealed(fullText.length); return; }
-    // Reveal speed: scale with length so very long answers don't take forever
     const totalMs = Math.min(Math.max(fullText.length * 9, 350), 2500);
     const tick = 22;
     const charsPerTick = Math.max(1, Math.ceil((fullText.length / totalMs) * tick));
@@ -637,7 +825,8 @@ function ChatBubble({ message, theme, darkMode }) {
       style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start" }}
     >
       <div style={{
-        maxWidth: "75%", padding: "11px 16px", borderRadius: 18,
+        maxWidth: "75%", padding: images.length > 0 ? "10px 10px 10px 10px" : "11px 16px",
+        borderRadius: 18,
         background: isUser
           ? theme.accent
           : (message.error ? (darkMode ? "rgba(232,67,147,0.12)" : "rgba(232,67,147,0.08)") : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)")),
@@ -647,16 +836,59 @@ function ChatBubble({ message, theme, darkMode }) {
         borderBottomRightRadius: isUser ? 6 : 18,
         borderBottomLeftRadius: isUser ? 18 : 6,
         boxShadow: isUser ? `0 4px 14px ${theme.accent}30` : "none",
+        display: "flex", flexDirection: "column", gap: 8,
       }}>
-        {visible}
-        {stillTyping && (
-          <span style={{
-            display: "inline-block", width: 6, height: 14, marginLeft: 2,
-            verticalAlign: "-2px", background: theme.text, opacity: 0.55,
-            borderRadius: 1, animation: "ai-caret-blink 0.9s steps(2) infinite",
-          }} />
+        {visible && (
+          <div style={{ padding: images.length > 0 ? "4px 8px 0" : 0 }}>
+            {visible}
+            {stillTyping && (
+              <span style={{
+                display: "inline-block", width: 6, height: 14, marginLeft: 2,
+                verticalAlign: "-2px", background: theme.text, opacity: 0.55,
+                borderRadius: 1, animation: "ai-caret-blink 0.9s steps(2) infinite",
+              }} />
+            )}
+          </div>
         )}
+        {images.map((url, i) => (
+          <motion.div
+            key={i}
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.1 + i * 0.05, duration: 0.3 }}
+            whileHover={{ scale: 1.01 }}
+            onClick={() => setPreviewImage(url)}
+            style={{ display: "block", borderRadius: 12, overflow: "hidden", maxWidth: 420, cursor: "zoom-in", position: "relative" }}
+          >
+            <img src={url} alt="" style={{ display: "block", width: "100%", height: "auto" }} />
+            <div style={{
+              position: "absolute", top: 8, right: 8,
+              padding: "4px 8px", borderRadius: 999,
+              background: "rgba(0,0,0,0.55)", color: "#fff",
+              fontSize: 10, fontFamily: FONT, fontWeight: 500,
+              display: "inline-flex", alignItems: "center", gap: 4, opacity: 0.85,
+              backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+            }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+              {appLanguage === "de" ? "Klicken" : "Click"}
+            </div>
+          </motion.div>
+        ))}
       </div>
+
+      <AnimatePresence>
+        {previewImage && (
+          <ImageLightbox
+            url={previewImage}
+            onClose={() => setPreviewImage(null)}
+            onUploadStorage={onUploadStorage}
+            onUploadDrive={onUploadDrive}
+            theme={theme}
+            darkMode={darkMode}
+            appLanguage={appLanguage}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -11740,15 +11972,11 @@ export default function CircularMenu() {
   const [llmKeys, setLlmKeys] = useState(() => {
     try { return JSON.parse(localStorage.getItem("agencyos-llm-keys") || "{}"); } catch { return {}; }
   });
-  // Pre-fill the input drafts with whatever is already saved per provider, so when the user
-  // switches between LLMs they immediately see (as masked dots, since the input is type="password")
-  // that their key is still stored — no need to re-enter it each time.
-  const [llmKeyInputs, setLlmKeyInputs] = useState(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem("agencyos-llm-keys") || "{}");
-      return { claude: saved.claude || "", openai: saved.openai || "", gemini: saved.gemini || "" };
-    } catch { return { claude: "", openai: "", gemini: "" }; }
-  });
+  // Input drafts: kept separate from `llmKeys` (the actual stored secrets) and ALWAYS start empty.
+  // We never echo a saved key back into the field — it would either confuse the user, or cause
+  // accidental key concatenation when pasting (which is invisible under type="password").
+  // The "is this saved?" signal lives in the green status dot and the placeholder text instead.
+  const [llmKeyInputs, setLlmKeyInputs] = useState({ claude: "", openai: "", gemini: "" });
   const [llmKeyStatus, setLlmKeyStatus] = useState({}); // { claude: "valid"|"invalid"|"checking" }
 
   // Voice selection state
@@ -12199,9 +12427,12 @@ export default function CircularMenu() {
     localStorage.setItem("agencyos-google-token-ts", String(now));
   }, []);
 
-  // Check if stored token is still likely valid (< 45 min old, Google tokens expire at 60 min)
+  // Check if stored token is still likely valid. Google tokens expire at 60 min — we treat
+  // anything older than 25 min as stale so there's a generous safety buffer. The background
+  // refresh runs every 5 min, so in practice the token is always re-issued long before it would
+  // expire.
   const isTokenFresh = useCallback(() => {
-    return googleTokenRef.current && (Date.now() - googleTokenTsRef.current < 45 * 60 * 1000);
+    return googleTokenRef.current && (Date.now() - googleTokenTsRef.current < 25 * 60 * 1000);
   }, []);
 
   // Synchronous getter — returns cached token (may be stale, use ensureValidToken for guaranteed fresh)
@@ -12416,26 +12647,29 @@ export default function CircularMenu() {
     });
   }, []);
 
-  // ── ensureValidToken: async getter that guarantees a fresh token ──
-  // Call this BEFORE any Google API request instead of getProviderToken()
+  // ── ensureValidToken: async getter that GUARANTEES a fresh (<25 min) token ──
+  // If we can't refresh, returns null instead of a stale token — so callers can detect
+  // failure cleanly and trigger the reconnect flow without burning a 401 first.
   const ensureValidToken = useCallback(async () => {
-    // 1. If cached token is still fresh (< 50 min), use it
-    if (isTokenFresh()) {
-      return googleTokenRef.current;
-    }
-    // 2. Check if current Supabase session has a provider_token
+    if (isTokenFresh()) return googleTokenRef.current;
+    // Try a Supabase session check first — if Supabase happened to refresh provider_token already
     try {
       const { data: { session: s } } = await supabase.auth.getSession();
       if (s?.provider_token) {
         storeGoogleToken(s.provider_token);
-        return s.provider_token;
+        if (s.provider_refresh_token && s.user?.id) {
+          try { await persistGoogleRefreshToken(s.provider_refresh_token, s.user.id); } catch {}
+        }
+        if (isTokenFresh()) return s.provider_token;
       }
     } catch (e) { /* ignore */ }
-    // 3. Token is stale or missing — refresh it
-    console.log("[TokenMgr] Token stale or missing, refreshing...");
+    // Run the full refresh pipeline (server-side with stored refresh_token, then Supabase)
     const newToken = await autoReLogin();
-    return newToken || googleTokenRef.current || null;
-  }, [storeGoogleToken, isTokenFresh, autoReLogin]);
+    if (newToken) return newToken;
+    // Refresh failed completely — return null so the caller can surface a clear "reconnect" prompt
+    // instead of trying to use a stale token and hitting a Google 401.
+    return null;
+  }, [storeGoogleToken, persistGoogleRefreshToken, isTokenFresh, autoReLogin]);
 
   const handleLogout = async () => {
     localStorage.removeItem("agencyos-google-token");
@@ -12457,7 +12691,8 @@ export default function CircularMenu() {
       console.log("[TokenMgr] Token stale on mount, refreshing...");
       autoReLoginRef.current();
     }
-    // Periodic check every 10 minutes (was 3 — reduce spam)
+    // Periodic refresh every 5 minutes — well below Google's 60-minute expiry, so the cached
+    // access token is always recent and the user never hits a 401 from a stale token.
     const interval = setInterval(() => {
       if (!isTokenFreshRef.current()) {
         console.log("[TokenMgr] Periodic refresh triggered");
@@ -12474,7 +12709,7 @@ export default function CircularMenu() {
           setSession(s);
         }
       }).catch((e) => { console.warn("[Auth] Periodic refresh failed:", e.message); });
-    }, 10 * 60 * 1000);
+    }, 5 * 60 * 1000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!session]);
@@ -13571,6 +13806,138 @@ export default function CircularMenu() {
     setDialogMicActive(true);
   };
 
+  // Convert a data: URL to a Blob — shared utility used by image actions
+  const dataUrlToBlob = (durl) => {
+    const m = durl?.match(/^data:([^;]+);base64,(.+)$/);
+    if (!m) return null;
+    const mime = m[1] || "image/png";
+    const bin = atob(m[2]);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  };
+
+  // Upload an AI-generated image to Supabase Storage AND register a short-link
+  // so the user copies a clean `https://alpha.i7os.com/i/<slug>` URL instead of a
+  // 300-char Supabase Storage URL.
+  const uploadImageToStorage = async (dataUrl) => {
+    if (!userOrg?.id) throw new Error("kein Workspace");
+    const blob = dataUrl.startsWith("data:") ? dataUrlToBlob(dataUrl) : await (await fetch(dataUrl)).blob();
+    if (!blob) throw new Error("decode failed");
+    const ext = (blob.type.split("/")[1] || "png").replace("jpeg", "jpg");
+    const path = `ai-images/${userOrg.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { error } = await supabase.storage.from("chat-attachments").upload(path, blob, { contentType: blob.type, upsert: false });
+    if (error) throw new Error(error.message);
+    const { data: pub } = supabase.storage.from("chat-attachments").getPublicUrl(path);
+    const targetUrl = pub.publicUrl;
+
+    // Try to create a short URL — fall back to the raw Supabase URL if anything fails.
+    try {
+      // 6-char base62 slug ≈ 56 billion possibilities — unguessable in practice
+      const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"; // no 0/O/I/l/1
+      const newSlug = (n = 6) => Array.from({ length: n }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+      // Retry up to 3 times in the extremely unlikely event of a collision
+      for (let i = 0; i < 3; i++) {
+        const slug = newSlug();
+        const { error: insErr } = await supabase.from("short_links").insert({
+          slug,
+          target_url: targetUrl,
+          org_id: userOrg.id,
+          kind: "image",
+          created_by: session?.user?.id || null,
+        });
+        if (!insErr) {
+          // The short-link host: prefer the current origin if it has a "real" domain,
+          // otherwise hard-fall-back to alpha.i7os.com so links work cross-environment (localhost included).
+          const host = (typeof window !== "undefined" && window.location && window.location.host && !/localhost|127\.0\.0\.1/i.test(window.location.host))
+            ? `${window.location.protocol}//${window.location.host}`
+            : "https://alpha.i7os.com";
+          return `${host}/i/${slug}`;
+        }
+        // 23505 = unique constraint violation → retry with a new slug
+        if (!/duplicate|unique/i.test(insErr.message || "")) break;
+      }
+    } catch (e) {
+      console.warn("[ShortLink] failed, falling back to raw URL", e);
+    }
+    return targetUrl;
+  };
+
+  // Upload an AI-generated image to the user's Google Drive (org-shared folder if connected, else root).
+  const uploadImageToDrive = async (dataUrl) => {
+    const blob = dataUrl.startsWith("data:") ? dataUrlToBlob(dataUrl) : await (await fetch(dataUrl)).blob();
+    if (!blob) throw new Error("decode failed");
+    const filename = `i7os-image-${Date.now()}.${(blob.type.split("/")[1] || "png").replace("jpeg", "jpg")}`;
+    const metadata = {
+      name: filename,
+      mimeType: blob.type,
+      ...(orgDriveFolder?.id ? { parents: [orgDriveFolder.id] } : {}),
+    };
+    const sharedFlag = orgDriveFolder?.type === "shared_drive" ? "&supportsAllDrives=true" : "";
+
+    const attempt = async (token) => {
+      const body = new FormData();
+      body.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+      body.append("file", blob);
+      return fetch(`https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink${sharedFlag}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body,
+      });
+    };
+
+    // Resolve the best token we can
+    const resolveToken = async () => {
+      let t = null;
+      try { if (ensureValidToken) t = await ensureValidToken(); } catch {}
+      if (!t) { try { if (getProviderToken) t = getProviderToken(); } catch {} }
+      if (!t) t = session?.provider_token;
+      return (typeof t === "string" && t.length > 10) ? t : null;
+    };
+
+    let token = await resolveToken();
+    if (!token) {
+      throw new Error("Kein Google-Token vorhanden — bitte unten rechts auf das Profil klicken und Google-Login erneuern.");
+    }
+    let r = await attempt(token);
+
+    // 401 → token might be stale (Supabase doesn't auto-refresh provider_tokens past ~1h).
+    // Force a refresh via autoReLogin and try once more.
+    if (r.status === 401 && autoReLogin) {
+      try {
+        const fresh = await autoReLogin();
+        if (fresh && typeof fresh === "string") {
+          r = await attempt(fresh);
+        }
+      } catch {}
+    }
+
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      const msg = err.error?.message || `HTTP ${r.status}`;
+      if (r.status === 401) {
+        throw new Error("Google-Token abgelaufen. Bitte oben rechts auf den Avatar → Logout → erneut mit Google einloggen.");
+      }
+      if (r.status === 403) {
+        throw new Error("Keine Drive-Berechtigung. Beim Google-Login musst du den Drive-Zugriff zustimmen.");
+      }
+      throw new Error(msg);
+    }
+    return r.json();
+  };
+
+  // Detect if the user is asking for an image. Gemini's image-preview model is then used
+  // instead of the regular text model.
+  const detectImageIntent = (text) => {
+    if (!text) return false;
+    const t = text.toLowerCase();
+    const de = /\b(bild|bilder|illustration|grafik|skizze|zeichnung|logo|icon|mockup|mock-up|render|rendering|foto)\b/.test(t)
+      && /\b(erstell|generier|mach|zeichn|kreier|design|entwirf|bau|render|skizzier)\w*/.test(t);
+    const en = /\b(image|picture|illustration|graphic|sketch|drawing|logo|icon|mockup|render|photo)\b/.test(t)
+      && /\b(create|generate|make|draw|design|sketch|render|produce|build)\w*/.test(t);
+    return de || en;
+  };
+
   const sendDialogMessage = async () => {
     const text = (dialogInput || "").trim();
     if (!text || dialogSending) return;
@@ -13605,6 +13972,8 @@ export default function CircularMenu() {
         return;
       }
 
+      // Both OpenAI (DALL·E 3) and Gemini (Imagen) can generate images. Claude cannot.
+      const wantsImage = detectImageIntent(text) && (llmProvider === "gemini" || llmProvider === "openai");
       const response = await fetch("/api/chat-multi", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -13614,12 +13983,20 @@ export default function CircularMenu() {
           provider: llmProvider,
           apiKey: activeKey || undefined,
           oauthToken: googleToken || undefined,
+          wantsImage,
         }),
       });
       const data = await response.json();
-      const aiText = data.content?.[0]?.text;
-      if (aiText) {
-        setDialogMessages(prev => [...prev, { role: "assistant", content: aiText, timestamp: Date.now() }]);
+      // Response shape: content: [{type:"text", text}, {type:"image", url}]
+      const textPart = (data.content || []).find(c => c.type === "text")?.text || "";
+      const imageParts = (data.content || []).filter(c => c.type === "image");
+      if (textPart || imageParts.length > 0) {
+        setDialogMessages(prev => [...prev, {
+          role: "assistant",
+          content: textPart || (imageParts.length > 0 ? (appLanguage === "de" ? "Hier ist dein Bild:" : "Here is your image:") : ""),
+          images: imageParts.map(p => p.url),
+          timestamp: Date.now(),
+        }]);
       } else if (data.error) {
         const providerName = data.provider ? data.provider.charAt(0).toUpperCase() + data.provider.slice(1) : "KI";
         setDialogMessages(prev => [...prev, { role: "assistant", content: `${providerName}: ${data.error}`, timestamp: Date.now(), error: true }]);
@@ -14888,17 +15265,44 @@ export default function CircularMenu() {
             >
               {/* Header */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}` }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{ width: 28, height: 28, borderRadius: 8, background: theme.accent + "20", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
                   </div>
                   <div>
                     <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, lineHeight: 1.2 }}>{appLanguage === "de" ? "i7 OS Assistent" : "i7 OS Assistant"}</div>
-                    <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>
-                      {(llmProvider || "claude").charAt(0).toUpperCase() + (llmProvider || "claude").slice(1)}
-                      {dialogMessages.length > 0 && ` · ${dialogMessages.length} ${appLanguage === "de" ? "Nachrichten" : "messages"}`}
-                    </div>
+                    {dialogMessages.length > 0 && (
+                      <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                        {dialogMessages.length} {appLanguage === "de" ? "Nachrichten" : "messages"}
+                      </div>
+                    )}
                   </div>
+                  {/* Provider status pill — colored dot + provider name + key/oauth indicator */}
+                  {(() => {
+                    const provName = (llmProvider || "claude");
+                    const provLabel = provName === "openai" ? "ChatGPT" : provName === "gemini" ? "Gemini" : provName === "claude" ? "Claude" : provName;
+                    const provColor = provName === "claude" ? "#D97757" : provName === "openai" ? "#10A37F" : "#4285F4";
+                    const hasKey = !!llmKeys[provName];
+                    const hasOAuth = provName === "gemini" && !hasKey && session;
+                    const connected = hasKey || hasOAuth;
+                    return (
+                      <div style={{
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                        padding: "5px 10px", borderRadius: 999,
+                        background: connected ? provColor + "18" : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
+                        border: `1px solid ${connected ? provColor + "35" : theme.borderFaint}`,
+                        marginLeft: 6,
+                      }}>
+                        <div style={{ width: 7, height: 7, borderRadius: "50%", background: connected ? "#22C55E" : "#9CA3AF" }} />
+                        <span style={{ fontSize: 10, fontFamily: FONT, fontWeight: 600, color: connected ? provColor : theme.textDim, letterSpacing: 0.3 }}>{provLabel}</span>
+                        {connected && (
+                          <span style={{ fontSize: 9, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}>
+                            · {hasKey ? (appLanguage === "de" ? "API-Key" : "API key") : "OAuth"}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   {dialogMessages.length > 0 && (
@@ -14929,7 +15333,11 @@ export default function CircularMenu() {
                     </div>
                   )}
                   {dialogMessages.map((m, idx) => (
-                    <ChatBubble key={m.timestamp ? `${m.timestamp}-${idx}` : idx} message={m} theme={theme} darkMode={darkMode} />
+                    <ChatBubble key={m.timestamp ? `${m.timestamp}-${idx}` : idx} message={m} theme={theme} darkMode={darkMode}
+                      appLanguage={appLanguage}
+                      onUploadStorage={uploadImageToStorage}
+                      onUploadDrive={uploadImageToDrive}
+                    />
                   ))}
                   {dialogSending && (
                     <div style={{ display: "flex", justifyContent: "flex-start" }}>
@@ -16523,7 +16931,9 @@ export default function CircularMenu() {
                                   type="password"
                                   value={llmKeyInputs[p.id] || ""}
                                   onChange={(e) => setLlmKeyInputs(prev => ({ ...prev, [p.id]: e.target.value }))}
-                                  placeholder={hasKey ? t("settings.keySaved") : (p.id === "gemini" ? t("settings.geminiKeyOpt") : p.id === "claude" ? t("settings.claudeKey") : t("settings.chatgptKey"))}
+                                  placeholder={hasKey
+                                    ? (appLanguage === "de" ? "Key gespeichert · zum Ersetzen neuen Key eingeben" : "Key saved · enter a new one to replace")
+                                    : (p.id === "claude" ? "sk-ant-api03-…" : p.id === "openai" ? "sk-…" : "AIza…")}
                                   style={{
                                     flex: 1, padding: "10px 14px", borderRadius: 12,
                                     background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
@@ -16556,7 +16966,8 @@ export default function CircularMenu() {
                                         });
                                         if (res.ok) {
                                           setLlmKeys(prev => ({ ...prev, [p.id]: key }));
-                                          // Keep the input populated (as masked dots) so user can see the key is saved.
+                                          // Clear the input — never let a real key sit visibly in the field.
+                                          setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" }));
                                           setLlmKeyStatus(prev => ({ ...prev, [p.id]: "valid" }));
                                         } else {
                                           // 429 = rate limited but key format is valid — save it
