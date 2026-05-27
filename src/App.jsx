@@ -8148,7 +8148,11 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                             </a>
                           )
                         )}
-                        {msg.text && <div style={{ padding: msg.attachment_url ? "0 12px 6px" : 0 }}>{msg.text}</div>}
+                        {msg.text && (
+                          <div style={{ padding: msg.attachment_url ? "0 12px 6px" : 0, wordBreak: "break-word" }}>
+                            {renderTextWithLinks(msg.text, false, "#8B7AFF")}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </motion.div>
