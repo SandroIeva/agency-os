@@ -788,6 +788,40 @@ function ImageLightbox({ url, onClose, onUploadStorage, onUploadDrive, theme, da
 // ChatBubble — one message in the Dialog mode. Animates in (fade + lift),
 // and for assistant messages reveals the text gradually like a typing effect.
 // Supports optional images (Gemini multimodal output) — click to open in lightbox.
+// Render plain text with embedded http(s) URLs turned into clickable links.
+// Used inside chat bubbles so addresses the user (or the AI) drops in are tappable.
+function renderTextWithLinks(text, isUserBubble, accentColor) {
+  if (!text) return null;
+  const URL_RE = /\bhttps?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]]/g;
+  const out = [];
+  let last = 0;
+  let m;
+  let i = 0;
+  while ((m = URL_RE.exec(text)) !== null) {
+    if (m.index > last) out.push(<span key={`t-${i++}`}>{text.slice(last, m.index)}</span>);
+    const url = m[0];
+    out.push(
+      <a
+        key={`l-${i++}`}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          color: isUserBubble ? "#fff" : accentColor,
+          textDecoration: "underline",
+          textDecorationColor: isUserBubble ? "rgba(255,255,255,0.6)" : accentColor + "80",
+          textUnderlineOffset: 2,
+          wordBreak: "break-all",
+        }}
+      >{url}</a>
+    );
+    last = m.index + url.length;
+  }
+  if (last < text.length) out.push(<span key={`t-${i++}`}>{text.slice(last)}</span>);
+  return out;
+}
+
 function ChatBubble({ message, theme, darkMode, appLanguage, onUploadStorage, onUploadDrive }) {
   const isUser = message.role === "user";
   const fullText = message.content || "";
@@ -840,7 +874,7 @@ function ChatBubble({ message, theme, darkMode, appLanguage, onUploadStorage, on
       }}>
         {visible && (
           <div style={{ padding: images.length > 0 ? "4px 8px 0" : 0 }}>
-            {visible}
+            {renderTextWithLinks(visible, isUser, theme.accent)}
             {stillTyping && (
               <span style={{
                 display: "inline-block", width: 6, height: 14, marginLeft: 2,
