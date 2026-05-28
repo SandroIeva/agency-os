@@ -13648,8 +13648,10 @@ export default function CircularMenu() {
   //   3. Refresh the temperature every 15 minutes.
   //   4. Errors are logged (console.warn) so future regressions are diagnosable.
   useEffect(() => {
-    const WEATHER_CACHE_KEY = "i7os.weather.cache";   // { temp, ts }
-    const GEO_CACHE_KEY     = "i7os.weather.geo";     // { lat, lon, ts }
+    // v2 cache keys — bumped so old (potentially bad) wttr.in values are dropped on
+    // the next reload. Don't downgrade the version without thinking about it.
+    const WEATHER_CACHE_KEY = "i7os.weather.cache.v2";  // { temp, ts }
+    const GEO_CACHE_KEY     = "i7os.weather.geo.v2";    // { lat, lon, ts }
     const GEO_TTL_MS        = 24 * 60 * 60 * 1000;    // 24h — IP location rarely changes
     const TEMP_TTL_MS       = 30 * 60 * 1000;         // 30 min stale-while-revalidate
     const REFRESH_INTERVAL  = 15 * 60 * 1000;         // refresh every 15 min
@@ -13709,35 +13711,10 @@ export default function CircularMenu() {
       return null;
     };
 
-    // wttr.in is a one-shot service: gives IP-geolocated current temp as a tiny
-    // plain-text response (~5 bytes). We try it first — fastest, no chained calls.
-    const tryWttr = async () => {
-      try {
-        const r = await fetchWithTimeout("https://wttr.in/?format=%t", 6000);
-        if (!r.ok) { console.warn("[weather] wttr.in returned", r.status); return false; }
-        const text = (await r.text()).trim();
-        // Format examples: "+22°C", "-3°C", "0°C". Strip the °C suffix and parse.
-        const m = text.match(/(-?\d+)/);
-        if (m) {
-          const t = parseInt(m[1], 10);
-          if (!Number.isNaN(t)) {
-            setWeather(t);
-            try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ temp: t, ts: Date.now() })); } catch (e) {}
-            return true;
-          }
-        }
-        console.warn("[weather] wttr.in unexpected payload:", text);
-        return false;
-      } catch (e) {
-        console.warn("[weather] wttr.in fetch failed", e.message);
-        return false;
-      }
-    };
-
+    // Open-meteo is the source of truth — it's an actual meteorology API, not a
+    // community/scraper service like wttr.in (which was returning -8°C in Lübeck
+    // in late May, i.e. visibly wrong). We just need a lat/lon to call it.
     const fetchTemp = async () => {
-      // Strategy 1: single-call wttr.in
-      if (await tryWttr()) return;
-      // Strategy 2: geo provider chain → open-meteo
       const geo = await getGeo();
       if (!geo) { console.warn("[weather] no geolocation available — keeping last value"); return; }
       try {
@@ -13752,6 +13729,8 @@ export default function CircularMenu() {
           const rounded = Math.round(t);
           setWeather(rounded);
           try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ temp: rounded, ts: Date.now() })); } catch (e) {}
+        } else {
+          console.warn("[weather] open-meteo payload missing temperature:", data);
         }
       } catch (e) {
         console.warn("[weather] open-meteo fetch failed", e.message);
