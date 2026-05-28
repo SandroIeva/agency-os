@@ -13656,6 +13656,10 @@ export default function CircularMenu() {
     const TEMP_TTL_MS       = 30 * 60 * 1000;         // 30 min stale-while-revalidate
     const REFRESH_INTERVAL  = 15 * 60 * 1000;         // refresh every 15 min
 
+    // Sweep old (pre-v2) keys so a previously cached bad value from wttr.in
+    // can't haunt the UI forever.
+    try { localStorage.removeItem("i7os.weather.cache"); localStorage.removeItem("i7os.weather.geo"); } catch (e) {}
+
     // Hydrate from cache so reloads don't show a dash for a few seconds.
     try {
       const raw = localStorage.getItem(WEATHER_CACHE_KEY);
@@ -13717,6 +13721,7 @@ export default function CircularMenu() {
     const fetchTemp = async () => {
       const geo = await getGeo();
       if (!geo) { console.warn("[weather] no geolocation available — keeping last value"); return; }
+      console.info("[weather] geo →", geo.lat.toFixed(3), geo.lon.toFixed(3));
       try {
         const r = await fetchWithTimeout(
           `https://api.open-meteo.com/v1/forecast?latitude=${geo.lat}&longitude=${geo.lon}&current_weather=true&temperature_unit=celsius`,
@@ -13727,6 +13732,7 @@ export default function CircularMenu() {
         const t = data?.current_weather?.temperature;
         if (typeof t === "number") {
           const rounded = Math.round(t);
+          console.info("[weather] temp →", rounded, "°C");
           setWeather(rounded);
           try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ temp: rounded, ts: Date.now() })); } catch (e) {}
         } else {
