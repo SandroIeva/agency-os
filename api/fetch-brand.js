@@ -1,9 +1,9 @@
 // /api/fetch-brand.js
-// Dual-purpose endpoint:
+// Multi-purpose endpoint (kept in one file to stay under Vercel's 12-function Hobby limit):
 //   POST { url }               → full brand analysis (logo download, colour mining, fonts, …)
 //   GET  ?url=…&mode=preview   → lightweight Open Graph preview (title, description, image)
-// The two share their HTML-scrape and meta-extraction logic — keeping them in the same file
-// so we stay under Vercel's 12-function Hobby limit.
+//   GET  ?mode=weather         → IP-geolocated current temperature (server-side, bypasses
+//                                browser CORS issues with public geo providers)
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -11,6 +11,56 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") return res.status(200).end();
+
+  // ── Weather mode — served entirely server-side so the browser doesn't have to
+  // wrestle with CORS-blocked geo providers. We read the real client IP from
+  // Vercel's forwarded headers, look up coords with a free geo API, then call
+  // open-meteo for the temperature. Cache 10 min at the edge to keep cost low.
+  if (req.method === "GET" && req.query?.mode === "weather") {
+    try {
+      const fwd = req.headers["x-forwarded-for"] || req.headers["x-real-ip"] || "";
+      const ip = String(fwd).split(",")[0].trim();
+      let lat = null, lon = null, city = null;
+      // Try a couple of server-side geo providers in order. Server-to-server has
+      // no CORS issues and these all support HTTPS on free tier.
+      const geoProviders = [
+        ip ? `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=lat,lon,city,status` : null,
+        `https://ipwho.is/${encodeURIComponent(ip)}`,
+        "https://freeipapi.com/api/json" + (ip ? `/${encodeURIComponent(ip)}` : ""),
+      ].filter(Boolean);
+      for (const gurl of geoProviders) {
+        try {
+          const r = await fetch(gurl, { signal: AbortSignal.timeout(4000) });
+          if (!r.ok) continue;
+          const j = await r.json();
+          // ip-api: { status:"success", lat, lon, city }
+          // ipwho.is: { success:true, latitude, longitude, city }
+          // freeipapi: { latitude, longitude, cityName }
+          const tLat = j.lat ?? j.latitude;
+          const tLon = j.lon ?? j.longitude;
+          if (typeof tLat === "number" && typeof tLon === "number") {
+            lat = tLat; lon = tLon; city = j.city || j.cityName || null;
+            break;
+          }
+        } catch (_) { /* try next */ }
+      }
+      if (lat == null || lon == null) {
+        return res.status(502).json({ error: "Geo lookup failed" });
+      }
+      const wr = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&temperature_unit=celsius`,
+        { signal: AbortSignal.timeout(5000) }
+      );
+      if (!wr.ok) return res.status(502).json({ error: "Weather API failed" });
+      const wd = await wr.json();
+      const t = wd?.current_weather?.temperature;
+      if (typeof t !== "number") return res.status(502).json({ error: "Weather payload invalid" });
+      res.setHeader("Cache-Control", "public, s-maxage=600, stale-while-revalidate=1800");
+      return res.status(200).json({ temp: Math.round(t), city, lat, lon });
+    } catch (e) {
+      return res.status(500).json({ error: "Weather lookup error: " + (e?.message || "unknown") });
+    }
+  }
 
   const isPreviewMode = req.method === "GET" || (req.query && req.query.mode === "preview");
   if (req.method !== "POST" && req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });

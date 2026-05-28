@@ -13678,68 +13678,25 @@ export default function CircularMenu() {
       return fetch(url, { signal: ctl.signal }).finally(() => clearTimeout(timer));
     };
 
-    const getGeo = async () => {
-      // Cache check first — geo barely changes per device.
-      try {
-        const raw = localStorage.getItem(GEO_CACHE_KEY);
-        if (raw) {
-          const cached = JSON.parse(raw);
-          if (cached?.lat && cached?.lon && Date.now() - (cached.ts || 0) < GEO_TTL_MS) {
-            return { lat: cached.lat, lon: cached.lon };
-          }
-        }
-      } catch (e) {}
-
-      // Provider chain. NOTE: ip-api.com's free tier is HTTP-only — on HTTPS it
-      // returns 403, so it's intentionally omitted. The remaining providers all
-      // support HTTPS + CORS on their free tier.
-      const providers = [
-        { url: "https://ipwho.is/",       pick: (j) => (j.success !== false && j.latitude ? { lat: j.latitude, lon: j.longitude } : null) },
-        { url: "https://freeipapi.com/api/json", pick: (j) => (j.latitude ? { lat: j.latitude, lon: j.longitude } : null) },
-        { url: "https://ipapi.co/json/",  pick: (j) => (j.latitude ? { lat: j.latitude, lon: j.longitude } : null) },
-      ];
-      for (const p of providers) {
-        try {
-          const r = await fetchWithTimeout(p.url, 5000);
-          if (!r.ok) { console.warn("[weather] geo provider returned", r.status, p.url); continue; }
-          const j = await r.json();
-          const picked = p.pick(j);
-          if (picked?.lat && picked?.lon) {
-            try { localStorage.setItem(GEO_CACHE_KEY, JSON.stringify({ ...picked, ts: Date.now() })); } catch (e) {}
-            return picked;
-          }
-        } catch (e) {
-          console.warn("[weather] geo provider failed", p.url, e.message);
-        }
-      }
-      return null;
-    };
-
-    // Open-meteo is the source of truth — it's an actual meteorology API, not a
-    // community/scraper service like wttr.in (which was returning -8°C in Lübeck
-    // in late May, i.e. visibly wrong). We just need a lat/lon to call it.
+    // Single same-origin call to our own /api/fetch-brand?mode=weather endpoint.
+    // That endpoint does the IP→coords lookup and the open-meteo call server-side,
+    // sidestepping the entire CORS-mess we were hitting in the browser (ipwho.is
+    // 403, freeipapi.com/ipapi.co no Allow-Origin header, etc.). The endpoint also
+    // edge-caches its response for 10 min so cost stays trivial.
     const fetchTemp = async () => {
-      const geo = await getGeo();
-      if (!geo) { console.warn("[weather] no geolocation available — keeping last value"); return; }
-      console.info("[weather] geo →", geo.lat.toFixed(3), geo.lon.toFixed(3));
       try {
-        const r = await fetchWithTimeout(
-          `https://api.open-meteo.com/v1/forecast?latitude=${geo.lat}&longitude=${geo.lon}&current_weather=true&temperature_unit=celsius`,
-          6000
-        );
-        if (!r.ok) { console.warn("[weather] open-meteo returned", r.status); return; }
+        const r = await fetchWithTimeout("/api/fetch-brand?mode=weather", 8000);
+        if (!r.ok) { console.warn("[weather] backend returned", r.status); return; }
         const data = await r.json();
-        const t = data?.current_weather?.temperature;
-        if (typeof t === "number") {
-          const rounded = Math.round(t);
-          console.info("[weather] temp →", rounded, "°C");
-          setWeather(rounded);
-          try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ temp: rounded, ts: Date.now() })); } catch (e) {}
+        if (typeof data?.temp === "number") {
+          console.info("[weather] temp →", data.temp, "°C", data.city ? `(${data.city})` : "");
+          setWeather(data.temp);
+          try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ temp: data.temp, ts: Date.now() })); } catch (e) {}
         } else {
-          console.warn("[weather] open-meteo payload missing temperature:", data);
+          console.warn("[weather] backend payload missing temperature:", data);
         }
       } catch (e) {
-        console.warn("[weather] open-meteo fetch failed", e.message);
+        console.warn("[weather] backend fetch failed", e.message);
       }
     };
 
