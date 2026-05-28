@@ -13673,7 +13673,7 @@ export default function CircularMenu() {
     };
 
     const getGeo = async () => {
-      // Cache check
+      // Cache check first — geo barely changes per device.
       try {
         const raw = localStorage.getItem(GEO_CACHE_KEY);
         if (raw) {
@@ -13684,14 +13684,13 @@ export default function CircularMenu() {
         }
       } catch (e) {}
 
-      // Try a chain of providers. Each one's failure is logged but non-fatal.
+      // Provider chain. NOTE: ip-api.com's free tier is HTTP-only — on HTTPS it
+      // returns 403, so it's intentionally omitted. The remaining providers all
+      // support HTTPS + CORS on their free tier.
       const providers = [
-        // ip-api.com — free, no API key, very high quota (~45 req/min), good uptime
-        { url: "https://ip-api.com/json/?fields=lat,lon", pick: (j) => ({ lat: j.lat, lon: j.lon }) },
-        // ipwho.is — free fallback, no rate limit on free tier
-        { url: "https://ipwho.is/", pick: (j) => (j.success ? { lat: j.latitude, lon: j.longitude } : null) },
-        // ipapi.co — original; kept last because it's the one most commonly blocked
-        { url: "https://ipapi.co/json/", pick: (j) => ({ lat: j.latitude, lon: j.longitude }) },
+        { url: "https://ipwho.is/",       pick: (j) => (j.success !== false && j.latitude ? { lat: j.latitude, lon: j.longitude } : null) },
+        { url: "https://freeipapi.com/api/json", pick: (j) => (j.latitude ? { lat: j.latitude, lon: j.longitude } : null) },
+        { url: "https://ipapi.co/json/",  pick: (j) => (j.latitude ? { lat: j.latitude, lon: j.longitude } : null) },
       ];
       for (const p of providers) {
         try {
@@ -13710,7 +13709,35 @@ export default function CircularMenu() {
       return null;
     };
 
+    // wttr.in is a one-shot service: gives IP-geolocated current temp as a tiny
+    // plain-text response (~5 bytes). We try it first — fastest, no chained calls.
+    const tryWttr = async () => {
+      try {
+        const r = await fetchWithTimeout("https://wttr.in/?format=%t", 6000);
+        if (!r.ok) { console.warn("[weather] wttr.in returned", r.status); return false; }
+        const text = (await r.text()).trim();
+        // Format examples: "+22°C", "-3°C", "0°C". Strip the °C suffix and parse.
+        const m = text.match(/(-?\d+)/);
+        if (m) {
+          const t = parseInt(m[1], 10);
+          if (!Number.isNaN(t)) {
+            setWeather(t);
+            try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ temp: t, ts: Date.now() })); } catch (e) {}
+            return true;
+          }
+        }
+        console.warn("[weather] wttr.in unexpected payload:", text);
+        return false;
+      } catch (e) {
+        console.warn("[weather] wttr.in fetch failed", e.message);
+        return false;
+      }
+    };
+
     const fetchTemp = async () => {
+      // Strategy 1: single-call wttr.in
+      if (await tryWttr()) return;
+      // Strategy 2: geo provider chain → open-meteo
       const geo = await getGeo();
       if (!geo) { console.warn("[weather] no geolocation available — keeping last value"); return; }
       try {
