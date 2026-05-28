@@ -20,20 +20,19 @@ Core rules:
 // ── App knowledge ────────────────────────────
 const APP_KNOWLEDGE = `
 About Agency OS:
-- Agency OS is a unified workspace for creative agencies. It combines project management, file management, calendar, communication and AI assistance in one interface.
-- The app has these main views: Dashboard (home), Calendar (Google Calendar sync), Kanban (project boards), Files (Google Drive sync), Chat, and Settings.
-- Navigation works through a radial menu in the center of the screen. Users can also swipe up for an overview panel or swipe down for a tasks view.
+- Agency OS (also written "i7 OS") is a unified workspace for creative agencies. It combines project management, file management, calendar, communication and AI assistance in one interface.
+- The app has these main views: Dashboard (home), Calendar (Google Calendar sync), Kanban (project boards), Files (Google Drive sync), Team Chat, Brand, and Settings.
+- Navigation works through a linear two-column menu that opens when the user clicks the Plus button at the bottom center of the screen. The left column lists top-level categories; clicking a category reveals its sub-items in the right column. There is also a Grid button (left of Plus) that returns to the Dashboard, and a Mic button (between Grid and Plus) that opens the AI dialog. Users can swipe up for an overview panel or swipe down for a tasks view.
 - The app supports Dark Mode and Light Mode.
 - Google Calendar and Google Drive are connected via OAuth.
-- The AI assistant (you) lives in the center of the dashboard as an interactive 3D sphere. Users speak to you via voice input and you respond with voice (text-to-speech) and text.
+- The AI assistant (you) lives in the bottom-right of the dashboard as an interactive 3D sphere, and inside the Mic-triggered Dialog. Users speak to you via voice input and you respond with voice (text-to-speech) and text.
 
-Main menu categories:
-- CHAT: Team, Clients, AI, Channels, Calls, Archive
-- PLAN: Kanban, Timeline, Tasks, Calendar
-- BRAND: Assets, Identity, Intelligence, Personas, Analyze, Guidelines
-- PROJECTS: Notes, Briefs, Wiki, Templates, Proposals, Reports
-- FILES: Images, Videos, Docs, Fonts, Links
-- TASK: To-Do, Reminder, Note`;
+Main menu categories (Plus button → linear two-column menu):
+- BRAND: Files, Brand Identity, Design System, Brand Strategy, Channels
+- CREATE: Project, Brief, Document
+- AGENTS: (coming soon)
+- MESSENGER: opens Team Chat directly
+- PLAN: Kanban, Timeline, Tasks, Calendar`;
 
 // ── Capabilities ─────────────────────────────
 const CAPABILITIES = `
@@ -51,7 +50,7 @@ What you CANNOT do (yet):
 
 // ── Context-aware additions ──────────────────
 const VIEW_CONTEXTS = {
-  dashboard: "The user is on the Dashboard — the main home screen with the AI sphere, radial menu, and quick access to all features.",
+  dashboard: "The user is on the Dashboard — the main home screen with the AI sphere, the linear two-column menu (opened via the bottom Plus button), and quick access to all features.",
   calendar: "The user is viewing their Calendar, which syncs with Google Calendar. They can see events, create new ones, and join Google Meet calls.",
   kanban: "The user is on the Kanban board for project management. They can organize tasks across columns like Backlog, In Progress, Review, and Done.",
   files: "The user is in the Files view, which syncs with Google Drive. They can browse, search and open their documents, images, and other files.",

@@ -13,6 +13,30 @@ const translations = {
   "menu.files": { de: "DATEIEN", en: "FILES" },
   "menu.agents": { de: "AGENTEN", en: "AGENTS" },
 
+  // ── Linear Menu (new two-column flyout, TitleCase variants) ──
+  "linearMenu.brand":         { de: "Marke",        en: "Brand" },
+  "linearMenu.create":        { de: "Erstellen",    en: "Create" },
+  "linearMenu.agents":        { de: "Agenten",      en: "Agents" },
+  "linearMenu.messenger":     { de: "Messenger",    en: "Messenger" },
+  "linearMenu.plan":          { de: "Plan",         en: "Plan" },
+  // Brand sub-items
+  "linearMenu.files":         { de: "Dateien",          en: "Files" },
+  "linearMenu.brandIdentity": { de: "Markenidentität",  en: "Brand Identity" },
+  "linearMenu.designSystem":  { de: "Design System",    en: "Design System" },
+  "linearMenu.brandStrategy": { de: "Markenstrategie",  en: "Brand Strategy" },
+  "linearMenu.channels":      { de: "Kanäle",           en: "Channels" },
+  // Create sub-items
+  "linearMenu.project":       { de: "Projekt",          en: "Project" },
+  "linearMenu.brief":         { de: "Brief",            en: "Brief" },
+  "linearMenu.document":      { de: "Dokument",         en: "Document" },
+  // Plan sub-items
+  "linearMenu.kanban":        { de: "Kanban",           en: "Kanban" },
+  "linearMenu.timeline":      { de: "Timeline",         en: "Timeline" },
+  "linearMenu.tasks":         { de: "Aufgaben",         en: "Tasks" },
+  "linearMenu.calendar":      { de: "Kalender",         en: "Calendar" },
+  // Empty-state
+  "linearMenu.comingSoon":    { de: "Bald verfügbar",   en: "Coming soon" },
+
   // ── Chat Submenu ─────────────────────────────
   "sub.team": { de: "Team", en: "Team" },
   "sub.clients": { de: "Kunden", en: "Clients" },

@@ -1,15 +1,21 @@
 // /api/fetch-brand.js
-// Server-side fetch a brand's public website and extract name, claim, description,
-// logo candidate(s) and a rough color palette. Used by the Brand Onboarding wizard.
+// Dual-purpose endpoint:
+//   POST { url }               → full brand analysis (logo download, colour mining, fonts, …)
+//   GET  ?url=…&mode=preview   → lightweight Open Graph preview (title, description, image)
+// The two share their HTML-scrape and meta-extraction logic — keeping them in the same file
+// so we stay under Vercel's 12-function Hobby limit.
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  let { url } = req.body || {};
+  const isPreviewMode = req.method === "GET" || (req.query && req.query.mode === "preview");
+  if (req.method !== "POST" && req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
+
+  let url = req.method === "GET" ? (req.query?.url || "") : (req.body?.url || "");
   if (!url || typeof url !== "string") return res.status(400).json({ error: "Missing url" });
   url = url.trim();
   if (!/^https?:\/\//i.test(url)) url = "https://" + url;
@@ -75,6 +81,27 @@ export default async function handler(req, res) {
       const parts = rawTitle.split(/\s*[|·—–-]\s+/).map(s => s.trim()).filter(Boolean);
       const tagline = parts.find(p => p !== name && p.length > 6);
       if (tagline && tagline.length < 90) claim = tagline;
+    }
+
+    // ── Early return: lightweight preview mode (used by chat link cards) ──
+    // We have everything we need (title, description, og:image, site name); skip the
+    // heavy work (logo pixel-fetching, CSS scraping for colours and fonts).
+    if (isPreviewMode) {
+      const origin = new URL(finalUrl).origin;
+      const ogImage = meta("og:image") || meta("twitter:image") || meta("twitter:image:src");
+      const previewImage = ogImage
+        ? absolutize(ogImage)
+        : (absolutize(linkHref("apple-touch-icon")) || absolutize(linkHref("icon")) || `${origin}/favicon.ico`);
+      const favicon = absolutize(linkHref("apple-touch-icon")) || absolutize(linkHref("icon")) || `${origin}/favicon.ico`;
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      return res.status(200).json({
+        url: finalUrl,
+        title: (name || rawTitle || parsed.hostname)?.slice(0, 200) || null,
+        description: description ? description.slice(0, 280) : null,
+        image: previewImage,
+        site: meta("og:site_name") || meta("application-name") || parsed.hostname.replace(/^www\./, ""),
+        favicon,
+      });
     }
 
     // ── Logo ─────────────────────────────────────────────────────────────

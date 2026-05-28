@@ -63,6 +63,33 @@ const PLUS_MENU_ITEMS_DEF = [
   { id: "ideate", labelKey: "plus.ideate", sub: [{ id: "brainstorm", labelKey: "plus.brainstorm" }, { id: "moodboard", labelKey: "plus.moodboard" }, { id: "concept", labelKey: "plus.concept" }] },
 ];
 
+// ── New linear two-column menu (replaces the radial menu) ─────────────────
+// Per design on Figma "Page 5" — left column = top-level categories, right column = sub-items
+// for the selected category. The old radial code is kept in place but gated behind LINEAR_MENU.
+const LINEAR_MENU = true;
+const LINEAR_MENU_ITEMS_DEF = [
+  { id: "brand",     labelKey: "linearMenu.brand",     sub: [
+    { id: "files",    labelKey: "linearMenu.files" },
+    { id: "identity", labelKey: "linearMenu.brandIdentity" },
+    { id: "design",   labelKey: "linearMenu.designSystem" },
+    { id: "strategy", labelKey: "linearMenu.brandStrategy" },
+    { id: "channels", labelKey: "linearMenu.channels" },
+  ]},
+  { id: "create",    labelKey: "linearMenu.create",    sub: [
+    { id: "project",  labelKey: "linearMenu.project" },
+    { id: "brief",    labelKey: "linearMenu.brief" },
+    { id: "document", labelKey: "linearMenu.document" },
+  ]},
+  { id: "agents",    labelKey: "linearMenu.agents",    sub: [] },
+  { id: "messenger", labelKey: "linearMenu.messenger", sub: [] },
+  { id: "plan",      labelKey: "linearMenu.plan",      sub: [
+    { id: "kanban",   labelKey: "linearMenu.kanban" },
+    { id: "timeline", labelKey: "linearMenu.timeline" },
+    { id: "tasks",    labelKey: "linearMenu.tasks" },
+    { id: "calendar", labelKey: "linearMenu.calendar" },
+  ]},
+];
+
 const FONT = "'Geist', -apple-system, sans-serif";
 const VAPID_PUBLIC_KEY = "BJJ_TXEs7qnwTKLnYO5_pvuuzr6oB59d4xpSCssTZCkfujAaQYlCwxptfnUPXxhSnikKcG4rPH1FuU4CTYh4gvg";
 
@@ -798,19 +825,25 @@ async function fetchLinkPreview(url) {
   if (!url) return null;
   if (/\.(png|jpe?g|gif|webp|svg|bmp|ico)(\?|$)/i.test(url)) return null;
   if (/supabase\.co\/storage\//i.test(url)) return null;
-  const cached = _linkPreviewCache.get(url);
-  if (cached) return cached.data;
+  if (_linkPreviewCache.has(url)) return _linkPreviewCache.get(url).data; // includes cached nulls so we don't retry forever
   if (_linkPreviewInflight.has(url)) return _linkPreviewInflight.get(url);
   const p = (async () => {
+    let data = null;
     try {
-      const r = await fetch(`/api/link-preview?url=${encodeURIComponent(url)}`);
-      if (!r.ok) return null;
-      const data = await r.json();
-      if (data.error) return null;
-      _linkPreviewCache.set(url, { data, fetchedAt: Date.now() });
-      return data;
-    } catch { return null; }
-    finally { _linkPreviewInflight.delete(url); }
+      const r = await fetch(`/api/fetch-brand?mode=preview&url=${encodeURIComponent(url)}`);
+      if (r.ok) {
+        const j = await r.json().catch(() => null);
+        if (j && !j.error) data = j;
+        else console.warn("[LinkPreview] no data for", url, j);
+      } else {
+        console.warn("[LinkPreview] fetch failed", url, r.status);
+      }
+    } catch (e) {
+      console.warn("[LinkPreview] error", url, e.message);
+    }
+    _linkPreviewCache.set(url, { data, fetchedAt: Date.now() });
+    _linkPreviewInflight.delete(url);
+    return data;
   })();
   _linkPreviewInflight.set(url, p);
   return p;
@@ -6947,13 +6980,33 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
           padding: "4px 20px 12px", display: "flex", flexDirection: "column", gap: 4,
           overflowY: "auto", flex: 1, minHeight: 0,
         }}>
-          {loading && (
-            <motion.div
-              animate={{ opacity: [0.3, 0.7, 0.3] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-              style={{ padding: 40, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}
-            >Loading files from Google Drive...</motion.div>
-          )}
+          <AnimatePresence mode="wait">
+            {loading && (
+              <motion.div
+                key="loading"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                style={{ padding: "60px 20px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}
+              >
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }}
+                  style={{
+                    width: 32, height: 32, borderRadius: "50%",
+                    border: `2.5px solid ${theme.borderFaint}`,
+                    borderTopColor: theme.accent,
+                  }}
+                />
+                <motion.div
+                  animate={{ opacity: [0.5, 1, 0.5] }}
+                  transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+                  style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, letterSpacing: 0.3 }}
+                >{t("files.loading") || "Dateien werden geladen…"}</motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {error && (
             <div style={{ padding: 32, textAlign: "center", fontSize: 13, fontFamily: FONT, color: "#E84393" }}>
@@ -6970,9 +7023,11 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
             return (
               <motion.div
                 key={file.id}
-                initial={{ opacity: 0, y: 12 }}
+                // No per-row stagger — would create a "popping" sequence when transitioning from
+                // the loading spinner to the list, which reads as flicker. All rows fade in together.
+                initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.04 + i * 0.025, duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
+                transition={{ duration: 0.18, ease: [0.22, 0.68, 0.35, 1.0] }}
                 className="hover-row"
                 onClick={() => {
                   if (isFolder) { navigateToFolder(file); return; }
@@ -12057,6 +12112,12 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab: raw
 export default function CircularMenu() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  // Linear menu: index of the currently-hovered/selected category in LINEAR_MENU_ITEMS_DEF.
+  // 0-indexed so "Brand" (first in the list) is the default selection — matches the Figma design
+  // where "Plan" is highlighted because that's what was clicked, but we default to first item.
+  // null = no category clicked yet → right (sub-)column stays empty. A click on a
+  // non-leaf category sets the index; hover never changes it.
+  const [linearCatIdx, setLinearCatIdx] = useState(null);
   const [subOpen, setSubOpen] = useState(false);
   const [subHover, setSubHover] = useState(-1);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -13572,23 +13633,110 @@ export default function CircularMenu() {
     return () => window.removeEventListener("keydown", handler);
   }, [currentView, menuOpen, voiceMode, aiSpeaking, startviewCards]);
 
+  // ── Weather widget (top-right) ──────────────────────────────────────────────
+  // Used to be a one-shot fetch from ipapi.co → open-meteo, which silently failed
+  // way too often: ipapi.co is rate-limited (1k/day per IP), commonly blocked by
+  // privacy extensions / Brave Shields, and on a slow request the whole chain
+  // would just time out → the placeholder dash stuck around forever.
+  //
+  // New behaviour:
+  //   1. Hydrate immediately from localStorage if we have a fresh-ish value
+  //      (so the user sees a number on reload while we re-fetch in the background).
+  //   2. Try a chain of geo providers with a per-request timeout, fall through on
+  //      failure. Cache the lat/lon in localStorage so subsequent loads skip the
+  //      geo step entirely.
+  //   3. Refresh the temperature every 15 minutes.
+  //   4. Errors are logged (console.warn) so future regressions are diagnosable.
   useEffect(() => {
-    // IP-based geolocation — no permission prompt, city-level accuracy
-    (async () => {
-      try {
-        const geoRes = await fetch("https://ipapi.co/json/");
-        if (!geoRes.ok) return;
-        const geo = await geoRes.json();
-        if (!geo.latitude || !geo.longitude) return;
-        const res = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${geo.latitude}&longitude=${geo.longitude}&current_weather=true&temperature_unit=celsius`
-        );
-        const data = await res.json();
-        if (data?.current_weather?.temperature !== undefined) {
-          setWeather(Math.round(data.current_weather.temperature));
+    const WEATHER_CACHE_KEY = "i7os.weather.cache";   // { temp, ts }
+    const GEO_CACHE_KEY     = "i7os.weather.geo";     // { lat, lon, ts }
+    const GEO_TTL_MS        = 24 * 60 * 60 * 1000;    // 24h — IP location rarely changes
+    const TEMP_TTL_MS       = 30 * 60 * 1000;         // 30 min stale-while-revalidate
+    const REFRESH_INTERVAL  = 15 * 60 * 1000;         // refresh every 15 min
+
+    // Hydrate from cache so reloads don't show a dash for a few seconds.
+    try {
+      const raw = localStorage.getItem(WEATHER_CACHE_KEY);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        if (cached && typeof cached.temp === "number" && Date.now() - (cached.ts || 0) < TEMP_TTL_MS) {
+          setWeather(cached.temp);
         }
-      } catch { /* keep dash */ }
-    })();
+      }
+    } catch (e) { /* corrupt cache — ignore */ }
+
+    // fetch with hard timeout — bare fetch can hang for 30s+ on slow networks.
+    const fetchWithTimeout = (url, ms = 6000) => {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), ms);
+      return fetch(url, { signal: ctl.signal }).finally(() => clearTimeout(timer));
+    };
+
+    const getGeo = async () => {
+      // Cache check
+      try {
+        const raw = localStorage.getItem(GEO_CACHE_KEY);
+        if (raw) {
+          const cached = JSON.parse(raw);
+          if (cached?.lat && cached?.lon && Date.now() - (cached.ts || 0) < GEO_TTL_MS) {
+            return { lat: cached.lat, lon: cached.lon };
+          }
+        }
+      } catch (e) {}
+
+      // Try a chain of providers. Each one's failure is logged but non-fatal.
+      const providers = [
+        // ip-api.com — free, no API key, very high quota (~45 req/min), good uptime
+        { url: "https://ip-api.com/json/?fields=lat,lon", pick: (j) => ({ lat: j.lat, lon: j.lon }) },
+        // ipwho.is — free fallback, no rate limit on free tier
+        { url: "https://ipwho.is/", pick: (j) => (j.success ? { lat: j.latitude, lon: j.longitude } : null) },
+        // ipapi.co — original; kept last because it's the one most commonly blocked
+        { url: "https://ipapi.co/json/", pick: (j) => ({ lat: j.latitude, lon: j.longitude }) },
+      ];
+      for (const p of providers) {
+        try {
+          const r = await fetchWithTimeout(p.url, 5000);
+          if (!r.ok) { console.warn("[weather] geo provider returned", r.status, p.url); continue; }
+          const j = await r.json();
+          const picked = p.pick(j);
+          if (picked?.lat && picked?.lon) {
+            try { localStorage.setItem(GEO_CACHE_KEY, JSON.stringify({ ...picked, ts: Date.now() })); } catch (e) {}
+            return picked;
+          }
+        } catch (e) {
+          console.warn("[weather] geo provider failed", p.url, e.message);
+        }
+      }
+      return null;
+    };
+
+    const fetchTemp = async () => {
+      const geo = await getGeo();
+      if (!geo) { console.warn("[weather] no geolocation available — keeping last value"); return; }
+      try {
+        const r = await fetchWithTimeout(
+          `https://api.open-meteo.com/v1/forecast?latitude=${geo.lat}&longitude=${geo.lon}&current_weather=true&temperature_unit=celsius`,
+          6000
+        );
+        if (!r.ok) { console.warn("[weather] open-meteo returned", r.status); return; }
+        const data = await r.json();
+        const t = data?.current_weather?.temperature;
+        if (typeof t === "number") {
+          const rounded = Math.round(t);
+          setWeather(rounded);
+          try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ temp: rounded, ts: Date.now() })); } catch (e) {}
+        }
+      } catch (e) {
+        console.warn("[weather] open-meteo fetch failed", e.message);
+      }
+    };
+
+    fetchTemp();
+    const id = setInterval(fetchTemp, REFRESH_INTERVAL);
+    // Re-fetch when the tab comes back into focus — common case after laptop sleep
+    const onVis = () => { if (document.visibilityState === "visible") fetchTemp(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
   }, []);
   const audioRef = useRef(null);
   const [highlightWordIndex, setHighlightWordIndex] = useState(-1);
@@ -13726,6 +13874,124 @@ export default function CircularMenu() {
     if (!dialogScrollRef.current) return;
     dialogScrollRef.current.scrollTop = dialogScrollRef.current.scrollHeight;
   }, [dialogMessages, dialogMode]);
+
+  // ── Conversation persistence ────────────────────────────────────────────────
+  // We keep every chat the user has ever had locally (scoped by user id), so reopening
+  // the mic / chat lands them in the LAST conversation they were in instead of a blank
+  // slate. A switcher in the header lets them jump between past chats or start a new one.
+  const DIALOG_STORAGE_KEY = (uid) => `i7os.dialog.conversations.${uid || "anon"}`;
+  const [dialogConversationId, setDialogConversationId] = useState(null);
+  const [dialogConversations, setDialogConversations] = useState([]); // [{id,title,updatedAt,createdAt}]
+  const [conversationSwitcherOpen, setConversationSwitcherOpen] = useState(false);
+  const dialogSaveTimerRef = useRef(null);
+  const dialogLoadedRef = useRef(false);
+
+  const newConversationId = () =>
+    (typeof crypto !== "undefined" && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `c-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  // Load conversations once we know which user we're dealing with. Pick the most recent
+  // one as the active chat so the next mic-click resumes where the user left off.
+  useEffect(() => {
+    const uid = session?.user?.id;
+    if (!uid || dialogLoadedRef.current) return;
+    try {
+      const raw = localStorage.getItem(DIALOG_STORAGE_KEY(uid));
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const convs = Array.isArray(parsed?.conversations) ? parsed.conversations : [];
+        convs.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        setDialogConversations(convs.map(c => ({ id: c.id, title: c.title, updatedAt: c.updatedAt, createdAt: c.createdAt })));
+        const lastId = parsed?.currentId || convs[0]?.id;
+        const found = convs.find(c => c.id === lastId);
+        if (found) {
+          setDialogConversationId(found.id);
+          setDialogMessages(Array.isArray(found.messages) ? found.messages : []);
+        }
+      }
+    } catch (e) { /* corrupt storage — ignore, start fresh */ }
+    dialogLoadedRef.current = true;
+  }, [session?.user?.id]);
+
+  // When we enter dialog mode without an active conversation, mint a new one. This is
+  // the cold-start path (first time ever, or after the user deleted everything).
+  useEffect(() => {
+    if (!dialogMode) return;
+    if (dialogConversationId) return;
+    setDialogConversationId(newConversationId());
+  }, [dialogMode, dialogConversationId]);
+
+  // Debounced write-through to localStorage. We persist the full message array under
+  // the active conversation id so refreshes / re-opens see the same history.
+  useEffect(() => {
+    const uid = session?.user?.id;
+    if (!uid || !dialogConversationId) return;
+    if (!dialogLoadedRef.current) return; // don't clobber storage during initial hydration
+    clearTimeout(dialogSaveTimerRef.current);
+    dialogSaveTimerRef.current = setTimeout(() => {
+      try {
+        const key = DIALOG_STORAGE_KEY(uid);
+        const raw = localStorage.getItem(key);
+        const parsed = raw ? JSON.parse(raw) : { conversations: [], currentId: null };
+        const firstUser = dialogMessages.find(m => m.role === "user");
+        const fallbackTitle = appLanguage === "de" ? "Neuer Dialog" : "New chat";
+        const title = (firstUser?.content || "").trim().slice(0, 48) || fallbackTitle;
+        const idx = parsed.conversations.findIndex(c => c.id === dialogConversationId);
+        const createdAt = idx >= 0 ? parsed.conversations[idx].createdAt || Date.now() : Date.now();
+        const entry = { id: dialogConversationId, title, messages: dialogMessages, updatedAt: Date.now(), createdAt };
+        // Skip writing empty placeholder conversations until the user has actually said something
+        if (idx < 0 && dialogMessages.length === 0) return;
+        if (idx >= 0) parsed.conversations[idx] = entry; else parsed.conversations.push(entry);
+        parsed.conversations.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        parsed.currentId = dialogConversationId;
+        localStorage.setItem(key, JSON.stringify(parsed));
+        setDialogConversations(parsed.conversations.map(c => ({ id: c.id, title: c.title, updatedAt: c.updatedAt, createdAt: c.createdAt })));
+      } catch (e) { /* quota or serialise error — fail silently, in-memory state is unaffected */ }
+    }, 250);
+    return () => clearTimeout(dialogSaveTimerRef.current);
+  }, [dialogMessages, dialogConversationId, session?.user?.id, appLanguage]);
+
+  const startNewConversation = () => {
+    setDialogMessages([]);
+    setDialogInput("");
+    setDialogConversationId(newConversationId());
+    setConversationSwitcherOpen(false);
+  };
+
+  const switchToConversation = (id) => {
+    const uid = session?.user?.id;
+    if (!uid) return;
+    try {
+      const raw = localStorage.getItem(DIALOG_STORAGE_KEY(uid));
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      const found = (parsed.conversations || []).find(c => c.id === id);
+      if (!found) return;
+      setDialogConversationId(id);
+      setDialogMessages(Array.isArray(found.messages) ? found.messages : []);
+      setConversationSwitcherOpen(false);
+    } catch (e) {}
+  };
+
+  const deleteConversation = (id) => {
+    const uid = session?.user?.id;
+    if (!uid) return;
+    try {
+      const key = DIALOG_STORAGE_KEY(uid);
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      parsed.conversations = (parsed.conversations || []).filter(c => c.id !== id);
+      localStorage.setItem(key, JSON.stringify(parsed));
+      setDialogConversations(parsed.conversations.map(c => ({ id: c.id, title: c.title, updatedAt: c.updatedAt, createdAt: c.createdAt })));
+      if (dialogConversationId === id) {
+        const next = parsed.conversations[0];
+        if (next) switchToConversation(next.id);
+        else startNewConversation();
+      }
+    } catch (e) {}
+  };
 
   // ── Vocabulary correction: fix common phonetic mishearings of important names ──
   // E.g. "Epics", "Apics", "Apicks", "Epix" → "APPICS". Triggered on every recognised final phrase.
@@ -13936,8 +14202,9 @@ export default function CircularMenu() {
     setDialogMicActive(false);
   };
   const resetDialog = () => {
-    setDialogMessages([]);
-    setDialogInput("");
+    // "Neuer Dialog" button now actually starts a fresh conversation instead of wiping
+    // the active one — the previous chat stays accessible via the switcher.
+    startNewConversation();
   };
 
   // Toggle mic dictation inside the dialog input
@@ -14633,7 +14900,7 @@ export default function CircularMenu() {
     }
   };
 
-  const handleClose = () => { try { sounds.menuClose(); } catch(e) {} setMenuOpen(false); setSubOpen(false); setSubHover(-1); if (containerRef.current) containerRef.current.scrollTop = 0; };
+  const handleClose = () => { try { sounds.menuClose(); } catch(e) {} setMenuOpen(false); setSubOpen(false); setSubHover(-1); setLinearCatIdx(null); if (containerRef.current) containerRef.current.scrollTop = 0; };
 
   const currentItem = activeItems[activeIndex];
 
@@ -15109,7 +15376,7 @@ export default function CircularMenu() {
       {/* Click-away for notification dropdown */}
       {notifOpen && <div onClick={() => setNotifOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 49 }} />}
 
-      {/* Top-right bar: Bell + Weather — only visible on dashboard */}
+      {/* Top-right bar: Bell + Weather — only visible on dashboard; blurred when linear menu opens */}
       <AnimatePresence>
         {!panelOpen && !tasksOpen && currentView === "dashboard" && (
           <motion.div
@@ -15271,6 +15538,7 @@ export default function CircularMenu() {
 
         {menuOpen && <div onClick={handleClose} style={{ position: "absolute", inset: 0, zIndex: 0 }} />}
 
+
         {/* KANBAN VIEW */}
         <AnimatePresence>
           {currentView === "kanban" && (
@@ -15358,19 +15626,23 @@ export default function CircularMenu() {
           )}
         </AnimatePresence>
 
-        {/* START VIEW — visible when on dashboard, menu closed, not in voice mode */}
+        {/* START VIEW — visible on dashboard. Stays fully visible behind the linear menu;
+            the menu has its own backdrop blur so we don't need to fade/blur the page itself. */}
         <AnimatePresence>
-          {currentView === "dashboard" && !menuOpen && !voiceMode && !aiSpeaking && (
+          {currentView === "dashboard" && !voiceMode && !aiSpeaking && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
-              animate={(panelOpen || tasksOpen) ? { opacity: 0.2, scale: 0.9, filter: "blur(8px)", y: 0 } : { opacity: 1, scale: 1, filter: "blur(0px)", y: 0 }}
+              animate={(panelOpen || tasksOpen)
+                ? { opacity: 0.2, scale: 0.9, filter: "blur(8px)", y: 0 }
+                : { opacity: 1, scale: 1, filter: "blur(0px)", y: 0 }}
               exit={{ opacity: 0, y: -10, filter: "blur(4px)" }}
-              transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
+              transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
               style={{
                 position: "absolute", inset: 0,
                 display: "flex", flexDirection: "column",
                 padding: "60px 80px",
                 transformOrigin: "50% 50%",
+                pointerEvents: menuOpen ? "none" : "auto",
               }}
             >
               {/* Greeting */}
@@ -15385,12 +15657,20 @@ export default function CircularMenu() {
                 }}>{t("dash.subtitle")}</div>
               </div>
 
-              {/* Tasks — real data from Kanban + Calendar, padded to always show 4 cards */}
-              <div style={{
-                display: "flex", flexDirection: "column", gap: 10,
-                maxWidth: 720, alignSelf: "center", width: "100%",
-                marginTop: "auto", marginBottom: 100,
-              }}>
+              {/* Tasks — real data from Kanban + Calendar, padded to always show 4 cards.
+                  Fade out only when the linear menu opens (greeting above stays visible). */}
+              <motion.div
+                animate={menuOpen
+                  ? { opacity: 0.7, filter: "blur(8px)" }
+                  : { opacity: 1, filter: "blur(0px)" }}
+                transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
+                style={{
+                  display: "flex", flexDirection: "column", gap: 10,
+                  maxWidth: 720, alignSelf: "center", width: "100%",
+                  marginTop: "auto", marginBottom: 100,
+                  pointerEvents: menuOpen ? "none" : "auto",
+                }}
+              >
               {startviewCards.map((task, i) => (
                 <motion.div
                   key={task.key}
@@ -15455,7 +15735,7 @@ export default function CircularMenu() {
                   </div>
                 </motion.div>
               ))}
-              </div>
+              </motion.div>
 
             </motion.div>
           )}
@@ -15568,13 +15848,98 @@ export default function CircularMenu() {
                     );
                   })()}
                 </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {dialogMessages.length > 0 && (
-                    <motion.div onClick={resetDialog} whileTap={{ scale: 0.95 }}
-                      title={appLanguage === "de" ? "Verlauf löschen" : "Clear history"}
-                      style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"}`, color: theme.textDim, fontSize: 11, fontFamily: FONT, fontWeight: 500 }}
-                    >{appLanguage === "de" ? "Neuer Dialog" : "New chat"}</motion.div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", position: "relative" }}>
+                  {/* Conversation switcher — list of past chats, default lands in last one */}
+                  {dialogConversations.length > 0 && (
+                    <div style={{ position: "relative" }}>
+                      <motion.div onClick={() => setConversationSwitcherOpen(v => !v)} whileTap={{ scale: 0.95 }}
+                        title={appLanguage === "de" ? "Konversationen" : "Conversations"}
+                        style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", background: "transparent",
+                          border: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"}`,
+                          color: theme.textDim, fontSize: 11, fontFamily: FONT, fontWeight: 500,
+                          display: "flex", alignItems: "center", gap: 6 }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                        <span>{dialogConversations.length}</span>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                      </motion.div>
+                      <AnimatePresence>
+                        {conversationSwitcherOpen && (
+                          <>
+                            {/* Backdrop to close on outside click */}
+                            <div onClick={() => setConversationSwitcherOpen(false)}
+                              style={{ position: "fixed", inset: 0, zIndex: 1 }} />
+                            <motion.div
+                              initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                              transition={{ duration: 0.16 }}
+                              style={{
+                                position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 2,
+                                width: 280, maxHeight: 360, overflowY: "auto",
+                                background: darkMode ? "rgba(20, 20, 28, 0.96)" : "rgba(255, 255, 255, 0.98)",
+                                backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+                                border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
+                                borderRadius: 14,
+                                boxShadow: "0 20px 50px rgba(0,0,0,0.18)",
+                                padding: 6,
+                              }}
+                            >
+                              {dialogConversations.map(c => {
+                                const isActive = c.id === dialogConversationId;
+                                return (
+                                  <div key={c.id}
+                                    onClick={() => switchToConversation(c.id)}
+                                    style={{
+                                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                                      gap: 8, padding: "9px 10px", borderRadius: 9, cursor: "pointer",
+                                      background: isActive ? (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)") : "transparent",
+                                      transition: "background 0.18s ease",
+                                    }}
+                                    onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)"; }}
+                                    onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
+                                  >
+                                    <div style={{ minWidth: 0, flex: 1 }}>
+                                      <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 500, color: theme.text,
+                                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.title || (appLanguage === "de" ? "Neuer Dialog" : "New chat")}</div>
+                                      <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                                        {(() => {
+                                          const d = new Date(c.updatedAt || c.createdAt || Date.now());
+                                          const now = new Date();
+                                          const sameDay = d.toDateString() === now.toDateString();
+                                          return sameDay
+                                            ? d.toLocaleTimeString(appLanguage === "de" ? "de-DE" : "en-US", { hour: "2-digit", minute: "2-digit" })
+                                            : d.toLocaleDateString(appLanguage === "de" ? "de-DE" : "en-US", { day: "2-digit", month: "short" });
+                                        })()}
+                                      </div>
+                                    </div>
+                                    <div onClick={(e) => { e.stopPropagation(); deleteConversation(c.id); }}
+                                      title={appLanguage === "de" ? "Löschen" : "Delete"}
+                                      style={{ padding: 4, borderRadius: 6, color: theme.textDim, cursor: "pointer", opacity: 0.6 }}
+                                      onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
+                                      onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.6"; }}
+                                    >
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </motion.div>
+                          </>
+                        )}
+                      </AnimatePresence>
+                    </div>
                   )}
+                  <motion.div onClick={startNewConversation} whileTap={{ scale: 0.95 }}
+                    title={appLanguage === "de" ? "Neuer Dialog" : "New chat"}
+                    style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", background: "transparent",
+                      border: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"}`,
+                      color: theme.textDim, fontSize: 11, fontFamily: FONT, fontWeight: 500,
+                      display: "flex", alignItems: "center", gap: 5 }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    <span>{appLanguage === "de" ? "Neuer Dialog" : "New chat"}</span>
+                  </motion.div>
                   <motion.div onClick={closeDialogMode} whileTap={{ scale: 0.92 }}
                     style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
                   >
@@ -15763,7 +16128,7 @@ export default function CircularMenu() {
 
         {/* Sub items — rounded rect cards in circular arrangement */}
         <AnimatePresence>
-          {menuOpen && subOpen && currentItem.sub.map((sub, i) => {
+          {!LINEAR_MENU && menuOpen && subOpen && currentItem.sub.map((sub, i) => {
             const count = currentItem.sub.length;
             const angleStep = (2 * Math.PI) / count;
             const angle = -Math.PI / 2 + i * angleStep;
@@ -15821,7 +16186,7 @@ export default function CircularMenu() {
 
         {/* Segmented ring */}
         <AnimatePresence>
-          {menuOpen && !subOpen && (
+          {!LINEAR_MENU && menuOpen && !subOpen && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -15841,7 +16206,7 @@ export default function CircularMenu() {
 
         {/* Sub ring */}
         <AnimatePresence>
-          {menuOpen && subOpen && (
+          {!LINEAR_MENU && menuOpen && subOpen && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -15866,7 +16231,7 @@ export default function CircularMenu() {
             bottom so the dashboard gradient/nav bar reads cleanly underneath.
             pointer-events:none so wheel events reach the menu container. */}
         <AnimatePresence>
-          {menuOpen && currentView !== "dashboard" && (
+          {!LINEAR_MENU && menuOpen && currentView !== "dashboard" && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -15885,7 +16250,7 @@ export default function CircularMenu() {
 
         {/* Mask circle */}
         <AnimatePresence>
-          {menuOpen && (
+          {!LINEAR_MENU && menuOpen && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -15903,7 +16268,7 @@ export default function CircularMenu() {
 
         {/* Center label */}
         <AnimatePresence>
-          {menuOpen && (
+          {!LINEAR_MENU && menuOpen && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -15935,6 +16300,176 @@ export default function CircularMenu() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* ─────────────────────────────────────────────────────────────
+            NEW LINEAR MENU — two columns: categories left, sub-items right.
+            Opens when the user clicks the Plus button (same `menuOpen` flag).
+            Portal'd into document.body so position:fixed actually centres
+            against the viewport (no ancestor transform interference).
+            ────────────────────────────────────────────────────────── */}
+        {LINEAR_MENU && createPortal(
+          <div style={{
+            // Full-viewport flex container — centres the menu via flexbox so we don't fight
+            // framer-motion over the transform property (which it animates and would overwrite
+            // any translate(-50%, -50%) we set inline). Pointer events disabled on the wrapper
+            // so clicks outside the inner card pass through to the backdrop close handler.
+            position: "fixed", inset: 0, zIndex: 15,
+            display: "flex", alignItems: "flex-end", justifyContent: "center",
+            paddingBottom: "calc(8vh + 50px)",
+            pointerEvents: "none",
+          }}>
+          <AnimatePresence>
+            {menuOpen && (() => {
+            // Localise labels — pull translations from t() at render time so language switches apply instantly.
+            const cats = LINEAR_MENU_ITEMS_DEF.map(c => ({
+              ...c,
+              label: c.labelKey ? t(c.labelKey) : c.label,
+              sub: (c.sub || []).map(s => ({ ...s, label: s.labelKey ? t(s.labelKey) : s.label })),
+            }));
+            // Sub-menu only appears AFTER the user clicks a category. While linearCatIdx
+            // is null, the right column stays empty — discoverable by intent, not by hover.
+            const activeCat = (linearCatIdx == null) ? null : cats[Math.max(0, Math.min(linearCatIdx, cats.length - 1))];
+            const subs = activeCat?.sub || [];
+            const navigate = (catId, subId) => {
+              // Reuse handleSubClick mapping when possible
+              if (catId === "plan") {
+                if (["kanban", "timeline", "tasks", "calendar"].includes(subId)) {
+                  setMenuOpen(false);
+                  setCurrentView(subId);
+                  return;
+                }
+              }
+              if (catId === "brand") {
+                setMenuOpen(false);
+                // Brand → "Files" actually means the global Files repository, not a brand-onboarding tab
+                if (subId === "files") { setCurrentView("files"); return; }
+                // Other brand sub-IDs land on the brand-onboarding view (tab routing TBD)
+                setCurrentView("brand");
+                return;
+              }
+              if (catId === "messenger") {
+                setMenuOpen(false);
+                setCurrentView("chat");
+                return;
+              }
+              if (catId === "create" || catId === "agents") {
+                // Sub-routes not wired up yet — close menu, stay on dashboard
+                setMenuOpen(false);
+                return;
+              }
+              setMenuOpen(false);
+            };
+            // Sizes scaled from the 2× Figma design (3456×2234 → ~1728×1117 logical px).
+            // Menu in Figma: 972×596 with 50 corner-radius, sub-items each ~53 high + 35 gap,
+            // selected pill 350×77 with 18 corner-radius. We render at ~1× of those sizes.
+            return (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.97, y: 6 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.97, y: 4 }}
+                transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1.0] }}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  // Centring is handled by the outer flex wrapper — this card just sets its
+                  // own size and styling. pointerEvents:auto so clicks on it still work.
+                  pointerEvents: "auto",
+                  width: 540, padding: "30px 46px",
+                  borderRadius: 25,
+                  background: darkMode ? "rgba(133, 133, 133, 0.10)" : "rgba(133, 133, 133, 0.10)",
+                  backdropFilter: "blur(40px) saturate(150%)",
+                  WebkitBackdropFilter: "blur(40px) saturate(150%)",
+                  border: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.55)"}`,
+                  boxShadow: darkMode
+                    ? "0 28px 80px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)"
+                    : "0 28px 80px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.6)",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1px 1fr",
+                  // 46 = 28 visible breathing room + 18 pill overhang on each side, so the
+                  // pill-to-divider gap matches the pill-to-container-edge gap exactly (28px).
+                  columnGap: 46,
+                }}
+              >
+                {/* Left column — categories. Padding constant on every row; the background just
+                    fades in/out as you mouse over different items. Nothing shifts, nothing scales. */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {cats.map((c, idx) => {
+                    const isActive = idx === linearCatIdx;
+                    // Leaf categories (no sub-items) navigate directly on click — e.g. Messenger → Team Chat
+                    const isLeaf = !c.sub || c.sub.length === 0;
+                    const onCategoryClick = () => {
+                      if (isLeaf) {
+                        navigate(c.id, null);
+                      } else {
+                        setLinearCatIdx(idx);
+                      }
+                    };
+                    const hoverBg = darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
+                    return (
+                      <div key={c.id}
+                        onClick={onCategoryClick}
+                        // Hover = same subtle grey wash as the sub-items. Active state (dark pill)
+                        // only applies AFTER a click — hovering never switches categories anymore.
+                        onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = hoverBg; }}
+                        onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
+                        style={{
+                          // Symmetric overhang on BOTH sides — pill extends 18px past the column
+                          // on the left (container edge) and on the right (divider) for visual parity
+                          // with the sub-items column.
+                          padding: "11px 18px",
+                          marginLeft: -18,
+                          marginRight: -18,
+                          borderRadius: 9,
+                          cursor: "pointer",
+                          fontSize: 15, fontFamily: FONT, fontWeight: 500,
+                          letterSpacing: 0,
+                          background: isActive ? "rgba(7, 13, 34, 0.80)" : "transparent",
+                          color: isActive
+                            ? "rgba(255,255,255,0.90)"
+                            : (darkMode ? "rgba(255,255,255,0.80)" : "rgba(0,0,0,0.80)"),
+                          // Silky ease-out curve — quick start, very slow tail. Feels like glass.
+                          transition: "background 0.7s cubic-bezier(0.16, 1, 0.3, 1), color 0.7s cubic-bezier(0.16, 1, 0.3, 1)",
+                        }}
+                      >{c.label}</div>
+                    );
+                  })}
+                </div>
+
+                {/* Vertical divider — matches the 1px line in Figma */}
+                <div style={{ width: 1, alignSelf: "stretch", background: darkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.20)", opacity: 0.6 }} />
+
+                {/* Right column — sub-items for active category. Empty until the user
+                    clicks a category on the left (activeCat = null while nothing is picked). */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {!activeCat ? null : subs.length > 0 ? subs.map((s) => (
+                    <div key={s.id}
+                      onClick={() => navigate(activeCat.id, s.id)}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                      style={{
+                        // Same trick as the left column, but mirrored on BOTH sides: text flush left,
+                        // hover pill overhangs 18px to the left (toward divider) AND 18px to the right
+                        // (toward the container edge) — so the gap to the visible edge matches the
+                        // left column's gap to the divider.
+                        padding: "11px 18px", marginLeft: -18, marginRight: -18, borderRadius: 9, cursor: "pointer",
+                        fontSize: 15, fontFamily: FONT, fontWeight: 500,
+                        color: darkMode ? "rgba(255,255,255,0.80)" : "rgba(0,0,0,0.80)",
+                        background: "transparent",
+                        transition: "background 0.7s cubic-bezier(0.16, 1, 0.3, 1)",
+                      }}
+                    >{s.label}</div>
+                  )) : (
+                    <div style={{ padding: "11px 18px", fontSize: 13, fontFamily: FONT, color: darkMode ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.4)", fontStyle: "italic" }}>
+                      {t("linearMenu.comingSoon")}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })()}
+          </AnimatePresence>
+          </div>,
+          document.body
+        )}
 
       </div>
 
@@ -17681,14 +18216,9 @@ export default function CircularMenu() {
             whileTap={{ scale: 0.95 }}
             transition={smoothSpring}
             onClick={() => {
-              if (menuOpen && menuSource === "grid") { handleClose(); return; }
-              // If the (plus-)menu is open, close it before navigating
+              // Grid icon = always go home (dashboard). Close any open menu, then navigate.
               if (menuOpen) handleClose();
-              // First click in a non-dashboard view → just navigate back to dashboard
-              if (currentView !== "dashboard") { setCurrentView("dashboard"); return; }
-              // Already on dashboard → open the menu
-              setMenuSource("grid"); setActiveIndex(0); try { sounds.menuOpen(); } catch(e) {}
-              setTimeout(() => { setMenuOpen(true); setSubOpen(false); }, 300);
+              setCurrentView("dashboard");
             }}
             style={{ cursor: "pointer" }}>
             <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
@@ -17727,7 +18257,7 @@ export default function CircularMenu() {
               if (menuOpen && menuSource === "plus") { handleClose(); return; }
               // Open menu directly — view stays mounted behind. Menu has its
               // own dark center + blur backdrop, so no need to switch views first.
-              setMenuSource("plus"); setActiveIndex(0); try { sounds.menuOpen(); } catch(e) {}
+              setMenuSource("plus"); setActiveIndex(0); setLinearCatIdx(0); try { sounds.menuOpen(); } catch(e) {}
               setMenuOpen(true); setSubOpen(false);
             }}
             style={{ cursor: "pointer" }}>
