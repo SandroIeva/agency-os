@@ -335,23 +335,25 @@ function AISphere({ darkMode = true }) {
         // coordinate along that rotating flow drags features into long, curling,
         // feathery ribbons — the stirred-silk / smoke look of the reference,
         // including the hook that curls back on itself.
+        // Lower spatial frequencies than before → big, soft, coarse ribbons
+        // instead of fine grain ("krisselig").
         vec2 w = uv;
         for (int i = 0; i < 4; i++) {
-          float a = fbm(vec3(w * 1.4, t * 0.5)) * 6.2831 + r * 3.4 - t * 1.1;
-          w += 0.22 * vec2(cos(a), sin(a));
+          float a = fbm(vec3(w * 0.95, t * 0.5)) * 6.2831 + r * 3.0 - t * 1.1;
+          w += 0.26 * vec2(cos(a), sin(a));
         }
 
         // Warped fields for colour + structure
         vec3 q = vec3(
-          fbm(vec3(w * 2.0, t * 0.40)),
-          fbm(vec3(w * 2.0 + 3.7, t * 0.40 + 1.0)),
-          fbm(vec3(w * 1.3 - 2.1, t * 0.30))
+          fbm(vec3(w * 1.3, t * 0.40)),
+          fbm(vec3(w * 1.3 + 3.7, t * 0.40 + 1.0)),
+          fbm(vec3(w * 0.9 - 2.1, t * 0.30))
         );
-        float flow = fbm(vec3(w * 2.4 + q.xy, t * 0.35));
+        float flow = fbm(vec3(w * 1.5 + q.xy, t * 0.35));
 
-        // Thin bright filaments (the silky wisps that catch the light)
-        float fil = fbm(vec3(w * 4.6 + q.xy * 1.5, t * 0.6));
-        float wisp = pow(smoothstep(0.52, 0.92, fil), 2.2);
+        // Broad soft highlight (no thin grainy filaments)
+        float fil = fbm(vec3(w * 1.9 + q.xy, t * 0.6));
+        float wisp = pow(smoothstep(0.50, 0.95, fil), 1.5) * 0.6;
 
         // ── Iridescent pastel palette ───────────────────────────────────
         vec3 white  = vec3(0.97, 0.985, 1.00);
@@ -624,25 +626,26 @@ function AISpeakingSphere({ darkMode = true, speaking = false, audioLevel = null
         // Iterative rotational advection — stirring strength swells while talking.
         // Each pass uses a different time scale + offset so the curls keep
         // re-tangling instead of cycling through the same shapes.
-        float adv = 0.22 + amp * 0.12;
-        float swirlK = 3.4 + amp * 1.8;
+        // Lower spatial frequencies → coarse, soft ribbons (not fine grain).
+        float adv = 0.26 + amp * 0.14;
+        float swirlK = 3.0 + amp * 1.8;
         vec2 w = uv;
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 4; i++) {
           float fi = float(i);
-          float a = fbm(vec3(w * 1.4, t * 0.5 + fi * 1.7)) * 6.2831
+          float a = fbm(vec3(w * 0.95, t * 0.5 + fi * 1.7)) * 6.2831
                     + r * swirlK
                     - t * (1.1 + fi * 0.13);
           w += adv * vec2(cos(a), sin(a));
         }
 
         vec3 q = vec3(
-          fbm(vec3(w * 2.0, t * 0.40)),
-          fbm(vec3(w * 2.0 + 3.7, t * 0.40 + 1.0)),
-          fbm(vec3(w * 1.3 - 2.1, t * 0.30 + 4.0))
+          fbm(vec3(w * 1.3, t * 0.40)),
+          fbm(vec3(w * 1.3 + 3.7, t * 0.40 + 1.0)),
+          fbm(vec3(w * 0.9 - 2.1, t * 0.30 + 4.0))
         );
-        float flow = fbm(vec3(w * 2.4 + q.xy, t * 0.35));
-        float fil = fbm(vec3(w * 4.6 + q.xy * 1.5, t * 0.6));
-        float wisp = pow(smoothstep(0.52, 0.92, fil), 2.2) * (1.0 + amp * 0.5);
+        float flow = fbm(vec3(w * 1.5 + q.xy, t * 0.35));
+        float fil = fbm(vec3(w * 1.9 + q.xy, t * 0.6));
+        float wisp = pow(smoothstep(0.50, 0.95, fil), 1.5) * 0.6 * (1.0 + amp * 0.5);
 
         vec3 white  = vec3(0.97, 0.985, 1.00);
         vec3 cyan   = vec3(0.28, 0.91, 0.93);
@@ -731,15 +734,17 @@ function AISpeakingSphere({ darkMode = true, speaking = false, audioLevel = null
       let target = 0.0;
       if (speak) {
         if (haveVoice) {
-          target = 0.12 + Math.min(lvl * 1.8, 1.25); // floor so it never goes dead mid-word
+          // lvl is already an expanded 0..1.3 loudness; small floor keeps it alive.
+          target = 0.08 + lvl;
         } else {
           const slow  = fbm1(tt * 0.55);
           const burst = Math.pow(fbm1(tt * 1.50 + 100.0), 3.0);
           target = 0.34 + slow * 0.28 + burst * 0.5;
         }
       }
-      // Track fast when voice-driven (catch syllables), ease gently otherwise.
-      amp += (target - amp) * (speak ? (haveVoice ? 0.34 : 0.16) : 0.07);
+      // The analyser already snaps fast, so track it almost directly when voice-
+      // driven — that's what makes the bounce read as synced to the speech.
+      amp += (target - amp) * (speak ? (haveVoice ? 0.55 : 0.16) : 0.07);
       uniforms.amp.value = amp;
 
       // Morph rate rises with the voice energy — the swirl visibly stirs harder
@@ -13893,20 +13898,28 @@ export default function CircularMenu() {
       // reply uses a fresh Audio(), so this is always safe.
       const source = ctx.createMediaElementSource(audioEl);
       const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.78;
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.55; // less smoothing → syllables read clearly
       source.connect(analyser);
       analyser.connect(ctx.destination); // keep it audible
       audioAnalyserRef.current = analyser;
-      const data = new Uint8Array(analyser.frequencyBinCount);
+      const data = new Uint8Array(analyser.fftSize);
       const tick = () => {
-        analyser.getByteFrequencyData(data);
-        // Average the low-mid bins where speech energy lives.
-        let sum = 0; const n = Math.min(data.length, 40);
-        for (let i = 2; i < n; i++) sum += data[i];
-        const avg = sum / (n - 2) / 255; // 0..1
-        // Light extra smoothing on top of the analyser's own.
-        audioLevelRef.current += (avg - audioLevelRef.current) * 0.5;
+        // Time-domain RMS = direct loudness, independent of frequency content.
+        // More reliable + punchier than averaging frequency bins.
+        analyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) {
+          const v = (data[i] - 128) / 128; // -1..1
+          sum += v * v;
+        }
+        const rms = Math.sqrt(sum / data.length); // 0..~0.5 for speech
+        // Expand: subtract a small noise floor, scale up, so quiet passages drop
+        // toward 0 and loud syllables surge — gives an obvious synced bounce.
+        const level = Math.max(0, (rms - 0.015)) * 5.0;
+        // Asymmetric smoothing: snap UP fast (catch attacks), fall a bit slower.
+        const k = level > audioLevelRef.current ? 0.6 : 0.22;
+        audioLevelRef.current += (Math.min(level, 1.3) - audioLevelRef.current) * k;
         audioLevelRafRef.current = requestAnimationFrame(tick);
       };
       tick();
