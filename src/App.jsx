@@ -18220,10 +18220,10 @@ export default function CircularMenu() {
           >
             <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
               <rect x="0.6" y="0.6" width="50.4" height="50.4" rx="25.2" stroke={darkMode ? "white" : "#1a1a2e"} strokeOpacity={dialogMode ? 0.45 : 0.15} strokeWidth="1.2" />
-              {/* Four-point sparkle centered at (26, 26), spans 18→34 = 16px wide,
-                  matching the plus-icon's footprint. Concave curves give the classic
-                  Gemini / Copilot AI-star look. */}
-              <path d="M26 18 C26.3 23.5 28.5 25.7 34 26 C28.5 26.3 26.3 28.5 26 34 C25.7 28.5 23.5 26.3 18 26 C23.5 25.7 25.7 23.5 26 18 Z"
+              {/* Four-point sparkle centered at (26, 26), spans 15→37 = 22px wide.
+                  Slightly larger than the other glyphs so the AI star carries weight
+                  as the "talk to me" anchor. */}
+              <path d="M26 15 C26.45 23.3 28.7 25.55 37 26 C28.7 26.45 26.45 28.7 26 37 C25.55 28.7 23.3 26.45 15 26 C23.3 25.55 25.55 23.3 26 15 Z"
                 fill={theme.iconColor} />
             </svg>
           </motion.div>
@@ -18270,11 +18270,15 @@ export default function CircularMenu() {
                 animate={{ strokeOpacity: menuOpen && menuSource === "plus" ? 0.5 : 0.15 }}
                 transition={gentleTween}
                 strokeWidth="1.2" />
-              <motion.path
-                d="M33.5845 24.5186V26.8564H27.3618V33.1143H24.9888V26.8564H18.7134V24.5186H24.9888V18.2432H27.3618V24.5186H33.5845Z"
-                animate={{ fill: menuOpen && menuSource === "plus" ? (darkMode ? "#ffffff" : "#1a1a2e") : theme.iconColor }}
-                transition={gentleTween}
-              />
+              {/* Two-stroke "burger" — minimal, evokes a menu / drawer without the
+                  third middle line. Lines centered around y=26 with 8px spacing. */}
+              {[22, 30].map((y) => (
+                <motion.line key={y} x1="18" x2="34" y1={y} y2={y}
+                  strokeLinecap="round" strokeWidth="2.4"
+                  animate={{ stroke: menuOpen && menuSource === "plus" ? (darkMode ? "#ffffff" : "#1a1a2e") : theme.iconColor }}
+                  transition={gentleTween}
+                />
+              ))}
             </svg>
           </motion.div>
         </div>
