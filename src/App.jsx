@@ -13862,11 +13862,13 @@ export default function CircularMenu() {
 
   // Load conversations once we know which user we're dealing with. Pick the most recent
   // one as the active chat so the next mic-click resumes where the user left off.
+  // Also handles the "user re-authenticated as someone else" case by re-running on uid change.
   useEffect(() => {
     const uid = session?.user?.id;
-    if (!uid || dialogLoadedRef.current) return;
+    if (!uid) return;
     try {
       const raw = localStorage.getItem(DIALOG_STORAGE_KEY(uid));
+      console.info("[dialog] loader running for uid", uid, "found raw?", !!raw);
       if (raw) {
         const parsed = JSON.parse(raw);
         const convs = Array.isArray(parsed?.conversations) ? parsed.conversations : [];
@@ -13875,19 +13877,33 @@ export default function CircularMenu() {
         const lastId = parsed?.currentId || convs[0]?.id;
         const found = convs.find(c => c.id === lastId);
         if (found) {
-          setDialogConversationId(found.id);
-          setDialogMessages(Array.isArray(found.messages) ? found.messages : []);
+          // Guard: if the user already typed/sent something into a fresh dialog before the
+          // loader caught up, don't clobber it. We let that in-flight conv stay live (the
+          // save-effect will persist it under whatever id was minted) and just refresh the
+          // sidebar list. They can switch into older chats via the header dropdown.
+          setDialogMessages(prev => {
+            if (prev && prev.length > 0) {
+              console.info("[dialog] loader skipped hydrate — already have", prev.length, "in-flight messages");
+              return prev;
+            }
+            console.info("[dialog] hydrated conv", found.id, "with", found.messages?.length || 0, "messages");
+            setDialogConversationId(found.id);
+            return Array.isArray(found.messages) ? found.messages : [];
+          });
         }
       }
-    } catch (e) { /* corrupt storage — ignore, start fresh */ }
+    } catch (e) { console.warn("[dialog] hydrate failed", e); }
     dialogLoadedRef.current = true;
   }, [session?.user?.id]);
 
-  // When we enter dialog mode without an active conversation, mint a new one. This is
-  // the cold-start path (first time ever, or after the user deleted everything).
+  // When we enter dialog mode without an active conversation, mint a new one. CRITICAL:
+  // we only mint AFTER the loader has finished (dialogLoadedRef.current === true).
+  // Otherwise a mic-click during initial session-load would create a brand-new convId
+  // and the loader's hydrate would then race-overwrite it, effectively losing history.
   useEffect(() => {
     if (!dialogMode) return;
     if (dialogConversationId) return;
+    if (!dialogLoadedRef.current) return;
     setDialogConversationId(newConversationId());
   }, [dialogMode, dialogConversationId]);
 

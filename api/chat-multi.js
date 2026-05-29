@@ -109,49 +109,70 @@ export default async function handler(req, res) {
 
     // ── ChatGPT (OpenAI) ───────────────────────
     if (provider === "openai") {
-      // ── Image generation via DALL·E 3 ─────────────────────────────────────
-      // OpenAI's image API is simple, reliable, and works in the EU without the
-      // Cloud-Console / Imagen runaround. We use base64 to embed inline.
+      // ── Image generation via OpenAI ─────────────────────────────────────
+      // We try gpt-image-1 first (current model, always returns b64, doesn't accept
+      // response_format), then fall back to dall-e-3 if the org isn't verified for
+      // gpt-image-1. Avoid sending response_format entirely — OpenAI started rejecting
+      // it on newer image endpoints with "Unknown parameter: 'response_format'".
       if (wantsImage) {
         const lastUserMsg = [...conversation].reverse().find(m => m.role === "user")?.content || "";
-        try {
+        const callOpenAI = async (model) => {
+          const body = { model, prompt: lastUserMsg, n: 1, size: "1024x1024" };
           const r = await withTimeout(fetch("https://api.openai.com/v1/images/generations", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-              model: "dall-e-3",
-              prompt: lastUserMsg,
-              n: 1,
-              size: "1024x1024",
-              response_format: "b64_json",
-            }),
-          }), UPSTREAM_TIMEOUT_MS, "DALL·E");
-          const d = await r.json();
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+            body: JSON.stringify(body),
+          }), UPSTREAM_TIMEOUT_MS, model);
+          const d = await r.json().catch(() => ({}));
+          return { r, d };
+        };
+        // Normalise OpenAI's response — could be b64_json (gpt-image-1) or url (dall-e fallback).
+        const toDataUrl = async (item) => {
+          if (item?.b64_json) return `data:image/png;base64,${item.b64_json}`;
+          if (item?.url) {
+            try {
+              const imgRes = await withTimeout(fetch(item.url), UPSTREAM_TIMEOUT_MS, "image-fetch");
+              if (!imgRes.ok) return null;
+              const buf = await imgRes.arrayBuffer();
+              const b64 = Buffer.from(buf).toString("base64");
+              return `data:image/png;base64,${b64}`;
+            } catch { return null; }
+          }
+          return null;
+        };
+        try {
+          let { r, d } = await callOpenAI("gpt-image-1");
+          // Fall back to dall-e-3 if the org isn't verified for gpt-image-1.
+          if (!r.ok) {
+            const errMsg = (d?.error?.message || "").toLowerCase();
+            const orgVerify = errMsg.includes("must be verified") || errMsg.includes("gpt-image-1");
+            if (r.status === 403 || r.status === 404 || orgVerify) {
+              ({ r, d } = await callOpenAI("dall-e-3"));
+            }
+          }
           if (r.ok) {
-            const b64 = d.data?.[0]?.b64_json;
-            if (b64) {
+            const item = d.data?.[0];
+            const dataUrl = await toDataUrl(item);
+            if (dataUrl) {
               return res.status(200).json({
-                content: [{ type: "image", url: `data:image/png;base64,${b64}`, mimeType: "image/png" }],
+                content: [{ type: "image", url: dataUrl, mimeType: "image/png" }],
                 provider: "openai",
-                model: "dall-e-3",
+                model: d.model || "gpt-image-1",
                 hasImages: true,
               });
             }
-            return res.status(502).json({ error: "DALL·E hat keine Bilddaten zurückgegeben.", provider: "openai" });
+            return res.status(502).json({ error: "OpenAI hat keine Bilddaten zurückgegeben.", provider: "openai" });
           }
           const raw = d.error?.message || JSON.stringify(d.error) || `HTTP ${r.status}`;
           return res.status(r.status).json({
-            error: hintFor("DALL·E", r.status, raw) || raw,
+            error: hintFor("OpenAI Image", r.status, raw) || raw,
             provider: "openai",
             statusCode: r.status,
             rawError: raw,
           });
         } catch (e) {
           return res.status(504).json({
-            error: `DALL·E timed out: ${e.message || "unknown"}`,
+            error: `OpenAI Image timed out: ${e.message || "unknown"}`,
             provider: "openai",
           });
         }
