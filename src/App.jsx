@@ -14970,6 +14970,44 @@ export default function CircularMenu() {
     setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript("");
   };
 
+  // Ask another question from the speaking view: interrupt any current speech
+  // (without bailing to the dashboard), then immediately start listening again.
+  const askAgain = () => {
+    aiStoppedRef.current = true;          // halt the in-flight TTS/response flow
+    stopKaraokeHighlight();
+    teardownAudioAnalyser();
+    if (audioRef.current) {
+      try {
+        const audio = audioRef.current;
+        audioRef.current = null;
+        audio.onended = null; audio.onerror = null; audio.onpause = null;
+        audio.pause(); audio.removeAttribute('src'); audio.load();
+      } catch(e) {}
+    }
+    try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch(e) {}
+    // startVoice resets aiStoppedRef and flips us into listening mode.
+    startVoice();
+  };
+
+  // Leave the AI voice/speaking view cleanly and return to the dashboard. Used by
+  // the bottom grid button (the only other option in that view).
+  const goDashboard = () => {
+    if (menuOpen) handleClose();
+    if (aiSpeaking || voiceMode) {
+      try { if (recognitionRef.current) { recognitionRef.current.onresult = null; recognitionRef.current.stop(); recognitionRef.current = null; } } catch(e) {}
+      if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+      aiStoppedRef.current = true;
+      stopKaraokeHighlight();
+      teardownAudioAnalyser();
+      if (audioRef.current) {
+        try { const a = audioRef.current; audioRef.current = null; a.onended = null; a.onerror = null; a.pause(); a.removeAttribute('src'); a.load(); } catch(e) {}
+      }
+      try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch(e) {}
+      setVoiceMode(false); setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript("");
+    }
+    setCurrentView("dashboard");
+  };
+
   const handleWheel = useCallback((e) => {
     // When menu is open, always route wheel to menu navigation — regardless
     // of which view is behind it
@@ -16298,9 +16336,9 @@ export default function CircularMenu() {
                 }}
               >{aiStatus === "thinking" ? t("ai.thinking") : ""}</motion.div>
 
-              {/* Pulsing glow behind sphere — click to stop */}
+              {/* Pulsing glow behind sphere — click to ask another question */}
               <motion.div
-                onClick={stopAI}
+                onClick={askAgain}
                 animate={{
                   boxShadow: aiStatus === "speaking" ? [
                     "0 0 40px rgba(150,220,235,0.16), 0 0 80px rgba(190,170,250,0.06)",
@@ -16319,7 +16357,7 @@ export default function CircularMenu() {
               {(aiStatus === "speaking" || aiStatus === "idle") && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}
                   style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40", letterSpacing: 2, marginTop: 20 }}>
-                  {aiStatus === "speaking" ? t("ai.clickToStop") : t("ai.clickToClose")}
+                  {appLanguage === "de" ? "KLICK ZUM WEITERSPRECHEN" : "CLICK TO ASK AGAIN"}
                 </motion.div>
               )}
 
@@ -18440,8 +18478,10 @@ export default function CircularMenu() {
         <div style={{
           display: "flex", gap: 12, alignItems: "center",
         }}>
-          {/* Icon1: Mic — opens AI dialog via voice. Restored from the sparkle experiment;
-              order kept (mic left, dashboard center, burger right). */}
+          {/* Icon1: Mic — opens AI dialog via voice. Hidden while the AI voice view
+              is active so the user only has "go to dashboard" (grid) + "ask again"
+              (click the sphere). */}
+          {!(aiSpeaking || voiceMode) && (
           <motion.div
             whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }} transition={smoothSpring}
             style={{ cursor: "pointer" }}
@@ -18453,16 +18493,14 @@ export default function CircularMenu() {
               <path d="M26.2839 28.4991C28.0558 28.4991 29.5239 27.0309 29.5239 25.2591V18.7791C29.5239 16.9566 28.0558 15.5391 26.2839 15.5391C24.512 15.5391 23.0439 16.9566 23.0439 18.7791V25.2591C23.0439 27.0309 24.512 28.4991 26.2839 28.4991ZM32.6627 25.2591C32.1564 25.2591 31.7008 25.6134 31.5995 26.1703C31.1439 28.7016 28.967 30.6253 26.2839 30.6253C23.6008 30.6253 21.4239 28.7016 20.9683 26.1703C20.867 25.6134 20.4114 25.2591 19.9052 25.2591C19.247 25.2591 18.7408 25.8159 18.842 26.4741C19.3483 29.7141 21.9302 32.2453 25.2208 32.7009V34.9791C25.2208 35.5359 25.6764 36.0422 26.2839 36.0422C26.8914 36.0422 27.347 35.5359 27.347 34.9791V32.7009C30.6377 32.2453 33.2195 29.7141 33.7258 26.4741C33.8777 25.8159 33.3208 25.2591 32.6627 25.2591Z" fill={theme.iconColor}/>
             </svg>
           </motion.div>
+          )}
 
           {/* Icon2: Grid → Dashboard (center) */}
           <motion.div
             whileHover={{ scale: 1.08 }}
             whileTap={{ scale: 0.95 }}
             transition={smoothSpring}
-            onClick={() => {
-              if (menuOpen) handleClose();
-              setCurrentView("dashboard");
-            }}
+            onClick={goDashboard}
             style={{ cursor: "pointer" }}>
             <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
               <motion.rect x="0.6" y="0.6" width="50.4" height="50.4" rx="25.2"
@@ -18478,7 +18516,8 @@ export default function CircularMenu() {
             </svg>
           </motion.div>
 
-          {/* Icon3: Plus */}
+          {/* Icon3: Burger menu — hidden during the AI voice view (see Icon1). */}
+          {!(aiSpeaking || voiceMode) && (
           <motion.div
             whileHover={{ scale: 1.08 }}
             whileTap={{ scale: 0.95 }}
@@ -18507,6 +18546,7 @@ export default function CircularMenu() {
               ))}
             </svg>
           </motion.div>
+          )}
         </div>
 
         {/* Sphere — right third */}
