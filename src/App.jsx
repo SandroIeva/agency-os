@@ -586,6 +586,8 @@ function AISpeakingSphere({ darkMode = true, speaking = false }) {
     const fragmentShader = `
       uniform float time;
       uniform float amp;
+      uniform float flowT;     // variable-rate morph clock (integrated in JS)
+      uniform vec2  center;    // wandering vortex centre
       varying vec3 vNormal;
       varying vec3 vPosition;
 
@@ -610,28 +612,35 @@ function AISpeakingSphere({ darkMode = true, speaking = false }) {
         vec3 viewDir = vec3(0.0, 0.0, 1.0);
         float fres = 1.0 - max(dot(vNormal, viewDir), 0.0);
 
-        vec2 uv = vNormal.xy * 1.25;
+        // Vortex centre wanders, so the swirl isn't pinned dead-centre.
+        vec2 uv = vNormal.xy * 1.25 - center;
         float r = length(uv);
-        // Speaking speeds the morph up and adds a subtle radial breathing pulse.
-        float t = time * (0.22 + amp * 0.35);
+        // Morph clock comes from JS at a *variable* rate (never loops). amp adds a
+        // little extra speed on top while speaking.
+        float t = flowT + amp * 0.4;
 
         // Iterative rotational advection — stirring strength swells while talking.
-        float adv = 0.22 + amp * 0.10;
-        float swirlK = 3.4 + amp * 1.6;
+        // Each pass uses a different time scale + offset so the curls keep
+        // re-tangling instead of cycling through the same shapes.
+        float adv = 0.22 + amp * 0.12;
+        float swirlK = 3.4 + amp * 1.8;
         vec2 w = uv;
-        for (int i = 0; i < 4; i++) {
-          float a = fbm(vec3(w * 1.4, t * 0.5)) * 6.2831 + r * swirlK - t * 1.1;
+        for (int i = 0; i < 5; i++) {
+          float fi = float(i);
+          float a = fbm(vec3(w * 1.4, t * 0.5 + fi * 1.7)) * 6.2831
+                    + r * swirlK
+                    - t * (1.1 + fi * 0.13);
           w += adv * vec2(cos(a), sin(a));
         }
 
         vec3 q = vec3(
           fbm(vec3(w * 2.0, t * 0.40)),
           fbm(vec3(w * 2.0 + 3.7, t * 0.40 + 1.0)),
-          fbm(vec3(w * 1.3 - 2.1, t * 0.30))
+          fbm(vec3(w * 1.3 - 2.1, t * 0.30 + 4.0))
         );
         float flow = fbm(vec3(w * 2.4 + q.xy, t * 0.35));
         float fil = fbm(vec3(w * 4.6 + q.xy * 1.5, t * 0.6));
-        float wisp = pow(smoothstep(0.52, 0.92, fil), 2.2);
+        float wisp = pow(smoothstep(0.52, 0.92, fil), 2.2) * (1.0 + amp * 0.5);
 
         vec3 white  = vec3(0.97, 0.985, 1.00);
         vec3 cyan   = vec3(0.28, 0.91, 0.93);
@@ -677,26 +686,62 @@ function AISpeakingSphere({ darkMode = true, speaking = false }) {
     renderer.domElement.style.width = "200px";
     renderer.domElement.style.height = "200px";
 
-    const uniforms = { time: { value: 0.0 }, amp: { value: 0.0 } };
+    const uniforms = {
+      time:   { value: 0.0 },
+      amp:    { value: 0.0 },
+      flowT:  { value: 0.0 },
+      center: { value: new T.Vector2(0, 0) },
+    };
     const geo = new T.SphereGeometry(12, 128, 128);
     const mat = new T.ShaderMaterial({ uniforms, vertexShader, fragmentShader, transparent: true });
     const mesh = new T.Mesh(geo, mat);
     scene.add(mesh);
 
+    // ── 1D smooth value-noise — drives organic, NON-repeating envelopes ──
+    // sin-stacks loop audibly; layered value noise does not. Used for the speech
+    // amplitude, the morph rate, and the wandering vortex centre.
+    const rand1 = (i) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+    const snoise1 = (x) => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return rand1(i) * (1 - u) + rand1(i + 1) * u; };
+    const fbm1 = (x) => { let v = 0, a = 0.5; for (let k = 0; k < 4; k++) { v += a * snoise1(x); x *= 2; a *= 0.5; } return v; };
+
     const start = Date.now();
-    let amp = 0; // smoothed toward the speaking target so it eases in/out
+    let amp = 0;        // smoothed speech amplitude
+    let flowT = 0;      // integrated, variable-rate morph clock
+    let last = Date.now();
     let raf;
     const animate = () => {
       raf = requestAnimationFrame(animate);
-      const tt = (Date.now() - start) * 0.001;
+      const now = Date.now();
+      const dt = Math.min((now - last) / 1000, 0.05); last = now;
+      const tt = (now - start) * 0.001;
       uniforms.time.value = tt;
-      // Ease amp toward 1 while speaking, 0 otherwise. The extra sine adds a
-      // lively flicker on top so it doesn't sit at a flat value while talking.
-      const target = speakingRef.current ? (0.78 + Math.sin(tt * 6.0) * 0.18 + Math.sin(tt * 11.0) * 0.04) : 0.0;
-      amp += (target - amp) * 0.12;
+
+      const speak = speakingRef.current;
+
+      // Speech envelope: a slow swell + faster ripple + occasional sharp bursts
+      // (^3 makes them spiky, like word emphasis). All from non-repeating noise.
+      const slow  = fbm1(tt * 0.55);
+      const fast  = fbm1(tt * 2.30 + 50.0);
+      const burst = Math.pow(fbm1(tt * 1.50 + 100.0), 3.0);
+      const env   = 0.38 + slow * 0.30 + fast * 0.24 + burst * 0.55;
+      const target = speak ? env : 0.0;
+      amp += (target - amp) * (speak ? 0.18 : 0.07);
       uniforms.amp.value = amp;
-      // Gentle breathing scale while speaking
-      const s = 1.0 + (speakingRef.current ? Math.sin(tt * 4.0) * 0.02 * amp : 0.0);
+
+      // Variable morph rate — the swirl speeds up and eases off on its own so it
+      // never settles into a recognisable cycle.
+      const rate = 0.30 + amp * 0.95 + fbm1(tt * 0.33 + 7.0) * 0.55;
+      flowT += dt * rate;
+      uniforms.flowT.value = flowT;
+
+      // Vortex centre drifts (only noticeably while active).
+      uniforms.center.value.set(
+        (fbm1(tt * 0.23 + 20.0) - 0.5) * 0.55 * amp,
+        (fbm1(tt * 0.23 + 40.0) - 0.5) * 0.55 * amp
+      );
+
+      // Breathing scale, also noise-modulated so the pulse isn't a metronome.
+      const s = 1.0 + (speak ? (fbm1(tt * 1.8 + 5.0) - 0.5) * 0.05 * amp : 0.0);
       mesh.scale.set(s, s, s);
       renderer.render(scene, camera);
     };
