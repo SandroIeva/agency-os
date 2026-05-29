@@ -15945,7 +15945,11 @@ export default function CircularMenu() {
               </div>
 
               {/* Messages */}
-              <div ref={dialogScrollRef} style={{ flex: 1, overflowY: "auto", padding: "24px 20px" }}>
+              {/* minHeight:0 is critical: flex items default to min-height:auto which
+                  refuses to shrink below content height, so overflow:auto never triggers
+                  and the scrollbar never appears. Once content exceeds viewport you'd be
+                  unable to scroll back up through history. */}
+              <div ref={dialogScrollRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", padding: "24px 20px" }}>
                 <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 }}>
                   {dialogMessages.length === 0 && (
                     <div style={{ textAlign: "center", padding: "60px 20px", color: theme.textDim }}>
