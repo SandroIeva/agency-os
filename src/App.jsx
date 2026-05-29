@@ -545,10 +545,17 @@ function WaveformEqualizer({ onAudioData, darkMode = true }) {
   );
 }
 
-// AI Speaking Sphere — the sphere animates in the center while "responding"
-function AISpeakingSphere({ darkMode = true }) {
+// AI Speaking Sphere — the big sphere shown while the AI responds. Same
+// iridescent stirred-silk look as the small nav sphere, plus a `speaking`
+// reactivity: when the AI talks the swirl stirs faster, intensifies and the
+// orb gently pulses, so it reads as alive and interactive.
+function AISpeakingSphere({ darkMode = true, speaking = false }) {
   const containerRef = useRef(null);
   const [ready, setReady] = useState(false);
+  // Mirror `speaking` into a ref so the render loop can read it without us
+  // having to tear down & rebuild the whole WebGL context on every toggle.
+  const speakingRef = useRef(speaking);
+  useEffect(() => { speakingRef.current = speaking; }, [speaking]);
 
   useEffect(() => {
     if (window.THREE) { setReady(true); return; }
@@ -573,8 +580,12 @@ function AISpeakingSphere({ darkMode = true }) {
       }
     `;
 
+    // Same shader as the small sphere, with an extra `amp` uniform (0..1) that
+    // the speaking state drives: higher amp = faster stirring + bolder swirl +
+    // a touch more glow.
     const fragmentShader = `
       uniform float time;
+      uniform float amp;
       varying vec3 vNormal;
       varying vec3 vPosition;
 
@@ -596,30 +607,61 @@ function AISpeakingSphere({ darkMode = true }) {
         return v;
       }
       void main() {
-        vec3 pos = vPosition * 0.055;
-        float t = time * 0.18;
-        float n1 = fbm(pos + vec3(t, 0.0, 0.0));
-        float n2 = fbm(pos + vec3(0.0, t*0.7, t*0.25));
-        float n3 = fbm(pos*0.9 + vec3(-t*0.4, t*0.35, 0.0));
-        vec3 rose = vec3(${darkMode ? "0.82, 0.28, 0.48" : "0.95, 0.35, 0.55"});
-        vec3 purple = vec3(${darkMode ? "0.52, 0.25, 0.72" : "0.62, 0.32, 0.88"});
-        vec3 deepblue = vec3(${darkMode ? "0.2, 0.35, 0.78" : "0.3, 0.5, 0.95"});
-        vec3 teal = vec3(${darkMode ? "0.3, 0.6, 0.68" : "0.2, 0.75, 0.82"});
-        vec3 mauve = vec3(${darkMode ? "0.72, 0.3, 0.6" : "0.85, 0.38, 0.72"});
-        vec3 color = mix(rose, purple, smoothstep(0.28, 0.72, n1));
-        color = mix(color, deepblue, smoothstep(0.32, 0.68, n2));
-        color = mix(color, teal, smoothstep(0.38, 0.72, n3));
-        color = mix(color, mauve, smoothstep(0.5, 0.72, n1*n2));
-        vec3 lightDir = normalize(vec3(0.8, 1.2, 1.5));
-        vec3 viewDir = normalize(vec3(0.0, 0.0, 1.0));
-        float diffuse = max(dot(vNormal, lightDir), 0.0) * 0.6 + 0.4;
-        vec3 halfDir = normalize(lightDir + viewDir);
-        float spec = pow(max(dot(vNormal, halfDir), 0.0), 24.0) * 0.2;
-        float rim = smoothstep(0.4, 1.0, 1.0 - max(dot(vNormal, viewDir), 0.0)) * 0.35;
-        vec3 final = color * diffuse + vec3(1.0) * spec + color * rim * 0.5;
-        float edge = smoothstep(0.0, 0.5, dot(vNormal, viewDir));
-        final *= ${darkMode ? "0.4" : "0.55"} + edge * ${darkMode ? "0.6" : "0.5"};
-        gl_FragColor = vec4(final, 1.0);
+        vec3 viewDir = vec3(0.0, 0.0, 1.0);
+        float fres = 1.0 - max(dot(vNormal, viewDir), 0.0);
+
+        vec2 uv = vNormal.xy * 1.25;
+        float r = length(uv);
+        // Speaking speeds the morph up and adds a subtle radial breathing pulse.
+        float t = time * (0.22 + amp * 0.35);
+
+        // Iterative rotational advection — stirring strength swells while talking.
+        float adv = 0.22 + amp * 0.10;
+        float swirlK = 3.4 + amp * 1.6;
+        vec2 w = uv;
+        for (int i = 0; i < 4; i++) {
+          float a = fbm(vec3(w * 1.4, t * 0.5)) * 6.2831 + r * swirlK - t * 1.1;
+          w += adv * vec2(cos(a), sin(a));
+        }
+
+        vec3 q = vec3(
+          fbm(vec3(w * 2.0, t * 0.40)),
+          fbm(vec3(w * 2.0 + 3.7, t * 0.40 + 1.0)),
+          fbm(vec3(w * 1.3 - 2.1, t * 0.30))
+        );
+        float flow = fbm(vec3(w * 2.4 + q.xy, t * 0.35));
+        float fil = fbm(vec3(w * 4.6 + q.xy * 1.5, t * 0.6));
+        float wisp = pow(smoothstep(0.52, 0.92, fil), 2.2);
+
+        vec3 white  = vec3(0.97, 0.985, 1.00);
+        vec3 cyan   = vec3(0.28, 0.91, 0.93);
+        vec3 purple = vec3(0.64, 0.43, 0.96);
+        vec3 pink   = vec3(0.98, 0.56, 0.88);
+        vec3 blue   = vec3(0.55, 0.72, 0.99);
+
+        float sat = smoothstep(0.12, 0.95, r) * (1.0 + amp * 0.18);
+
+        vec3 color = white;
+        color = mix(color, cyan,   smoothstep(0.30, 0.72, flow) * sat);
+        color = mix(color, purple, smoothstep(0.45, 0.85, q.x) * sat);
+        color = mix(color, pink,   smoothstep(0.50, 0.90, q.z) * sat);
+        color = mix(color, blue,   smoothstep(0.40, 0.80, q.y) * sat * 0.6);
+        color = mix(color, white,  wisp * 0.78);
+
+        color = mix(color, cyan, smoothstep(0.55, 0.95, fres) * 0.55);
+        color = mix(color, pink, smoothstep(0.82, 1.00, fres) * 0.28);
+
+        vec3 lightDir = normalize(vec3(0.3, 0.7, 1.0));
+        float diffuse = max(dot(vNormal, lightDir), 0.0) * 0.16 + 0.86;
+        vec3 final = color * diffuse;
+
+        float rim = pow(fres, 1.7);
+        final += mix(cyan, white, 0.5) * rim * (0.50 + amp * 0.30);
+
+        final = mix(final, white, ${darkMode ? "0.05" : "0.10"});
+
+        float alpha = 0.92 + rim * 0.08;
+        gl_FragColor = vec4(final, alpha);
       }
     `;
 
@@ -635,26 +677,44 @@ function AISpeakingSphere({ darkMode = true }) {
     renderer.domElement.style.width = "200px";
     renderer.domElement.style.height = "200px";
 
-    const uniforms = { time: { value: 0.0 } };
+    const uniforms = { time: { value: 0.0 }, amp: { value: 0.0 } };
     const geo = new T.SphereGeometry(12, 128, 128);
-    const mat = new T.ShaderMaterial({ uniforms, vertexShader, fragmentShader });
+    const mat = new T.ShaderMaterial({ uniforms, vertexShader, fragmentShader, transparent: true });
     const mesh = new T.Mesh(geo, mat);
     scene.add(mesh);
 
     const start = Date.now();
+    let amp = 0; // smoothed toward the speaking target so it eases in/out
     let raf;
     const animate = () => {
       raf = requestAnimationFrame(animate);
-      uniforms.time.value = (Date.now() - start) * 0.001;
-      mesh.rotation.y += 0.012;
-      mesh.rotation.x += 0.004;
+      const tt = (Date.now() - start) * 0.001;
+      uniforms.time.value = tt;
+      // Ease amp toward 1 while speaking, 0 otherwise. The extra sine adds a
+      // lively flicker on top so it doesn't sit at a flat value while talking.
+      const target = speakingRef.current ? (0.78 + Math.sin(tt * 6.0) * 0.18 + Math.sin(tt * 11.0) * 0.04) : 0.0;
+      amp += (target - amp) * 0.12;
+      uniforms.amp.value = amp;
+      // Gentle breathing scale while speaking
+      const s = 1.0 + (speakingRef.current ? Math.sin(tt * 4.0) * 0.02 * amp : 0.0);
+      mesh.scale.set(s, s, s);
       renderer.render(scene, camera);
     };
     animate();
     return () => { cancelAnimationFrame(raf); renderer.dispose(); };
   }, [ready, darkMode]);
 
-  return <div ref={containerRef} style={{ width: 200, height: 200, borderRadius: "50%", overflow: "hidden" }} />;
+  return (
+    <div style={{ width: 200, height: 200, position: "relative" }}>
+      {/* Soft bloom halo to match the small sphere */}
+      <div style={{
+        position: "absolute", inset: -24, borderRadius: "50%", pointerEvents: "none",
+        background: "radial-gradient(circle at 50% 42%, rgba(255,255,255,0.5) 0%, rgba(210,245,250,0.28) 48%, rgba(240,200,235,0.14) 68%, rgba(255,255,255,0) 82%)",
+        filter: "blur(14px)",
+      }} />
+      <div ref={containerRef} style={{ position: "relative", width: 200, height: 200, borderRadius: "50%", overflow: "hidden" }} />
+    </div>
+  );
 }
 
 // Kanban board data
@@ -16117,10 +16177,10 @@ export default function CircularMenu() {
                 onClick={stopAI}
                 animate={{
                   boxShadow: aiStatus === "speaking" ? [
-                    "0 0 40px rgba(130,80,200,0.15), 0 0 80px rgba(130,80,200,0.05)",
-                    "0 0 70px rgba(130,80,200,0.3), 0 0 140px rgba(130,80,200,0.12)",
-                    "0 0 40px rgba(130,80,200,0.15), 0 0 80px rgba(130,80,200,0.05)",
-                  ] : "0 0 30px rgba(130,80,200,0.1)",
+                    "0 0 40px rgba(150,220,235,0.16), 0 0 80px rgba(190,170,250,0.06)",
+                    "0 0 75px rgba(150,220,235,0.30), 0 0 150px rgba(190,170,250,0.14)",
+                    "0 0 40px rgba(150,220,235,0.16), 0 0 80px rgba(190,170,250,0.06)",
+                  ] : "0 0 30px rgba(180,210,240,0.10)",
                   scale: aiStatus === "speaking" ? [1, 1.04, 1] : 1,
                 }}
                 transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
@@ -16128,7 +16188,7 @@ export default function CircularMenu() {
                 whileTap={{ scale: 0.95 }}
                 style={{ borderRadius: "50%", cursor: "pointer" }}
               >
-                <AISpeakingSphere darkMode={darkMode} />
+                <AISpeakingSphere darkMode={darkMode} speaking={aiStatus === "speaking"} />
               </motion.div>
               {(aiStatus === "speaking" || aiStatus === "idle") && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}
