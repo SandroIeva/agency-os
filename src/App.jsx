@@ -286,7 +286,7 @@ function AISphere({ darkMode = true }) {
       varying vec3 vPosition;
       varying vec2 vUv;
 
-      // Smooth noise for soft gradients
+      // Smooth value noise for soft gradients
       float hash(vec3 p) {
         p = fract(p * 0.3183099 + 0.1);
         p *= 17.0;
@@ -315,49 +315,66 @@ function AISphere({ darkMode = true }) {
       }
 
       void main() {
-        // Flowing noise pattern across the surface — larger scale = softer gradients
-        vec3 pos = vPosition * 0.055;
-        float t = time * 0.18;
+        // View direction in view-space (vNormal is already in view space, so the
+        // camera looks down +Z). Used for fresnel / thin-film iridescence.
+        vec3 viewDir = vec3(0.0, 0.0, 1.0);
+        float fres = 1.0 - max(dot(vNormal, viewDir), 0.0);
 
-        float n1 = fbm(pos + vec3(t, 0.0, 0.0));
-        float n2 = fbm(pos + vec3(0.0, t * 0.7, t * 0.25));
-        float n3 = fbm(pos * 0.9 + vec3(-t * 0.4, t * 0.35, 0.0));
+        float t = time * 0.26;
+        vec3 p = vPosition * 0.075;
 
-        // Blend colors — adjusted per theme
-        vec3 rose = vec3(${darkMode ? "0.82, 0.28, 0.48" : "0.95, 0.35, 0.55"});
-        vec3 purple = vec3(${darkMode ? "0.52, 0.25, 0.72" : "0.62, 0.32, 0.88"});
-        vec3 deepblue = vec3(${darkMode ? "0.2, 0.35, 0.78" : "0.3, 0.5, 0.95"});
-        vec3 teal = vec3(${darkMode ? "0.3, 0.6, 0.68" : "0.2, 0.75, 0.82"});
-        vec3 mauve = vec3(${darkMode ? "0.72, 0.3, 0.6" : "0.85, 0.38, 0.72"});
+        // ── Domain warping ──────────────────────────────────────────────
+        // Feed noise back into itself to bend the flow into the curling,
+        // swirling ribbons you see in a soap bubble. Each pass evolves on its
+        // own time offset so the surface never settles into a static pattern.
+        vec3 q = vec3(
+          fbm(p + vec3(0.0, t, 0.0)),
+          fbm(p + vec3(5.2, 1.3, t * 0.6)),
+          fbm(p + vec3(t * 0.45, 2.8, 1.7))
+        );
+        float swirl = fbm(p + 2.6 * q + vec3(1.7, t * 0.5, 9.2));
+        float warp2 = fbm(p + 2.0 * q + vec3(t * 0.3, 4.1, 6.5));
 
-        vec3 color = mix(rose, purple, smoothstep(0.28, 0.72, n1));
-        color = mix(color, deepblue, smoothstep(0.32, 0.68, n2));
-        color = mix(color, teal, smoothstep(0.38, 0.72, n3));
-        color = mix(color, mauve, smoothstep(0.5, 0.72, n1 * n2));
+        // ── Iridescent pastel palette (from the reference: cyan, lavender,
+        //    soft pink/magenta, periwinkle blue, near-white highlights) ───
+        vec3 cyan   = vec3(0.46, 0.88, 0.93);
+        vec3 lav    = vec3(0.73, 0.64, 0.97);
+        vec3 pink   = vec3(0.97, 0.68, 0.89);
+        vec3 blue   = vec3(0.60, 0.78, 0.98);
+        vec3 white  = vec3(0.98, 0.99, 1.00);
 
-        // Soft 3D lighting
-        vec3 lightDir = normalize(vec3(0.8, 1.2, 1.5));
-        vec3 viewDir = normalize(vec3(0.0, 0.0, 1.0));
+        vec3 color = mix(cyan, lav, smoothstep(0.20, 0.80, swirl));
+        color = mix(color, pink, smoothstep(0.30, 0.90, q.x));
+        color = mix(color, blue, smoothstep(0.35, 0.85, q.y));
+        color = mix(color, white, smoothstep(0.55, 0.95, swirl * warp2 + 0.18));
 
-        float diffuse = max(dot(vNormal, lightDir), 0.0);
-        diffuse = diffuse * 0.6 + 0.4; // soft fill, never fully dark
+        // Thin-film shift — hue glides toward cyan/pink as the surface turns
+        // away from the camera, the way a bubble's edge does.
+        color = mix(color, cyan, smoothstep(0.35, 0.95, fres) * 0.45);
+        color = mix(color, pink, smoothstep(0.55, 1.00, fres) * 0.30);
 
-        // Soft specular — subtle, not shiny
+        // ── Lighting — kept very bright & airy so it stays pastel ────────
+        vec3 lightDir = normalize(vec3(0.4, 0.8, 1.0));
+        float diffuse = max(dot(vNormal, lightDir), 0.0) * 0.30 + 0.72;
+
+        // Soft broad specular sheen
         vec3 halfDir = normalize(lightDir + viewDir);
-        float spec = pow(max(dot(vNormal, halfDir), 0.0), 24.0) * 0.2;
+        float spec = pow(max(dot(vNormal, halfDir), 0.0), 18.0) * 0.35;
 
-        // Rim glow
-        float rim = 1.0 - max(dot(vNormal, viewDir), 0.0);
-        rim = smoothstep(0.4, 1.0, rim) * 0.35;
+        // Bright rim halo — the luminous edge that makes it read as a bubble
+        float rim = pow(fres, 1.6);
 
-        // Combine
-        vec3 final = color * diffuse + vec3(1.0) * spec + color * rim * 0.5;
+        vec3 final = color * diffuse;
+        final += white * spec;
+        final += mix(cyan, white, 0.5) * rim * 0.65;
 
-        // Slight vignette at edges for depth
-        float edge = smoothstep(0.0, 0.5, dot(vNormal, viewDir));
-        final *= ${darkMode ? "0.4" : "0.55"} + edge * ${darkMode ? "0.6" : "0.5"};
+        // Lift everything slightly toward white for the soft, milky look
+        final = mix(final, white, ${darkMode ? "0.06" : "0.12"});
 
-        gl_FragColor = vec4(final, 1.0);
+        // Center reads a touch more translucent than the luminous rim
+        float alpha = 0.90 + rim * 0.10;
+
+        gl_FragColor = vec4(final, alpha);
       }
     `;
 
@@ -381,6 +398,7 @@ function AISphere({ darkMode = true }) {
       uniforms,
       vertexShader,
       fragmentShader,
+      transparent: true,
     });
     const mesh = new T.Mesh(geo, mat);
     scene.add(mesh);
@@ -389,9 +407,13 @@ function AISphere({ darkMode = true }) {
     let raf;
     const animate = () => {
       raf = requestAnimationFrame(animate);
-      uniforms.time.value = (Date.now() - start) * 0.001;
-      mesh.rotation.y += 0.008;
-      mesh.rotation.x += 0.003;
+      const tt = (Date.now() - start) * 0.001;
+      uniforms.time.value = tt;
+      // Gentle, slightly irregular tumble — the wobble on X/Z keeps the swirl
+      // from looking like a plain spin and adds the "alive" feel the user wanted.
+      mesh.rotation.y += 0.006;
+      mesh.rotation.x = Math.sin(tt * 0.32) * 0.18;
+      mesh.rotation.z = Math.cos(tt * 0.21) * 0.10;
       renderer.render(scene, camera);
     };
     animate();
@@ -401,11 +423,19 @@ function AISphere({ darkMode = true }) {
 
   return (
     <motion.div
-      ref={containerRef}
       whileHover={{ scale: 1.12 }}
       transition={smoothSpring}
-      style={{ width: 48, height: 48, cursor: "pointer", borderRadius: "50%", overflow: "hidden" }}
-    />
+      style={{ width: 48, height: 48, cursor: "pointer", position: "relative", overflow: "visible" }}
+    >
+      {/* Soft iridescent bloom halo — the luminous glow that spills past the orb
+          in the reference. Sits behind the canvas, doesn't affect layout. */}
+      <div style={{
+        position: "absolute", inset: -10, borderRadius: "50%", pointerEvents: "none",
+        background: "radial-gradient(circle at 50% 45%, rgba(150,230,240,0.55) 0%, rgba(190,170,250,0.32) 38%, rgba(245,180,225,0.18) 60%, rgba(255,255,255,0) 78%)",
+        filter: "blur(5px)",
+      }} />
+      <div ref={containerRef} style={{ position: "relative", width: 48, height: 48, borderRadius: "50%", overflow: "hidden" }} />
+    </motion.div>
   );
 }
 
@@ -18269,7 +18299,7 @@ export default function CircularMenu() {
               {/* Two-stroke "burger" — minimal, evokes a menu / drawer without the
                   third middle line. Lines centered around y=26 with 8px spacing. */}
               {[22, 30].map((y) => (
-                <motion.line key={y} x1="18" x2="34" y1={y} y2={y}
+                <motion.line key={y} x1="17" x2="35" y1={y} y2={y}
                   strokeLinecap="round" strokeWidth="2.4"
                   animate={{ stroke: menuOpen && menuSource === "plus" ? (darkMode ? "#ffffff" : "#1a1a2e") : theme.iconColor }}
                   transition={gentleTween}
