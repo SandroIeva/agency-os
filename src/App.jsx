@@ -549,13 +549,15 @@ function WaveformEqualizer({ onAudioData, darkMode = true }) {
 // iridescent stirred-silk look as the small nav sphere, plus a `speaking`
 // reactivity: when the AI talks the swirl stirs faster, intensifies and the
 // orb gently pulses, so it reads as alive and interactive.
-function AISpeakingSphere({ darkMode = true, speaking = false }) {
+function AISpeakingSphere({ darkMode = true, speaking = false, audioLevel = null }) {
   const containerRef = useRef(null);
   const [ready, setReady] = useState(false);
   // Mirror `speaking` into a ref so the render loop can read it without us
   // having to tear down & rebuild the whole WebGL context on every toggle.
   const speakingRef = useRef(speaking);
   useEffect(() => { speakingRef.current = speaking; }, [speaking]);
+  // Ref holding the live 0..1 voice loudness (written by the parent's analyser).
+  const audioLevelRef = audioLevel;
 
   useEffect(() => {
     if (window.THREE) { setReady(true); return; }
@@ -717,31 +719,43 @@ function AISpeakingSphere({ darkMode = true, speaking = false }) {
       uniforms.time.value = tt;
 
       const speak = speakingRef.current;
+      // Live voice loudness (0..1) from the parent's analyser, if available.
+      const lvl = (audioLevelRef && typeof audioLevelRef.current === "number") ? audioLevelRef.current : 0;
+      const haveVoice = lvl > 0.002;
 
-      // Speech envelope: a slow swell + faster ripple + occasional sharp bursts
-      // (^3 makes them spiky, like word emphasis). All from non-repeating noise.
-      const slow  = fbm1(tt * 0.55);
-      const fast  = fbm1(tt * 2.30 + 50.0);
-      const burst = Math.pow(fbm1(tt * 1.50 + 100.0), 3.0);
-      const env   = 0.38 + slow * 0.30 + fast * 0.24 + burst * 0.55;
-      const target = speak ? env : 0.0;
-      amp += (target - amp) * (speak ? 0.18 : 0.07);
+      // Target amplitude:
+      //  • If we have a real voice signal → track it directly so the swirl
+      //    pulses in time with the speech (loud syllable = bigger surge).
+      //  • Otherwise (e.g. browser-synth TTS with no analysable stream) fall
+      //    back to a non-repeating noise envelope so it still feels alive.
+      let target = 0.0;
+      if (speak) {
+        if (haveVoice) {
+          target = 0.12 + Math.min(lvl * 1.8, 1.25); // floor so it never goes dead mid-word
+        } else {
+          const slow  = fbm1(tt * 0.55);
+          const burst = Math.pow(fbm1(tt * 1.50 + 100.0), 3.0);
+          target = 0.34 + slow * 0.28 + burst * 0.5;
+        }
+      }
+      // Track fast when voice-driven (catch syllables), ease gently otherwise.
+      amp += (target - amp) * (speak ? (haveVoice ? 0.34 : 0.16) : 0.07);
       uniforms.amp.value = amp;
 
-      // Variable morph rate — the swirl speeds up and eases off on its own so it
-      // never settles into a recognisable cycle.
-      const rate = 0.30 + amp * 0.95 + fbm1(tt * 0.33 + 7.0) * 0.55;
+      // Morph rate rises with the voice energy — the swirl visibly stirs harder
+      // on louder passages and calms on pauses, locking the motion to the speech.
+      const rate = 0.26 + amp * 1.15;
       flowT += dt * rate;
       uniforms.flowT.value = flowT;
 
-      // Vortex centre drifts (only noticeably while active).
+      // Vortex centre nudges with the voice (only noticeably while active).
       uniforms.center.value.set(
-        (fbm1(tt * 0.23 + 20.0) - 0.5) * 0.55 * amp,
-        (fbm1(tt * 0.23 + 40.0) - 0.5) * 0.55 * amp
+        (fbm1(tt * 0.30 + 20.0) - 0.5) * 0.5 * amp,
+        (fbm1(tt * 0.30 + 40.0) - 0.5) * 0.5 * amp
       );
 
-      // Breathing scale, also noise-modulated so the pulse isn't a metronome.
-      const s = 1.0 + (speak ? (fbm1(tt * 1.8 + 5.0) - 0.5) * 0.05 * amp : 0.0);
+      // Breathing scale tracks the voice amplitude directly for tight sync.
+      const s = 1.0 + amp * 0.045;
       mesh.scale.set(s, s, s);
       renderer.render(scene, camera);
     };
@@ -13857,6 +13871,55 @@ export default function CircularMenu() {
     return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
   }, []);
   const audioRef = useRef(null);
+
+  // ── Live audio analysis for the speaking sphere ──────────────────────────────
+  // We route the TTS <audio> through a Web Audio AnalyserNode and write a smoothed
+  // 0..1 loudness into audioLevelRef every frame. The speaking sphere reads that
+  // ref in its own render loop, so the swirl reacts to the *actual voice* instead
+  // of a synthetic animation.
+  const audioCtxRef = useRef(null);
+  const audioAnalyserRef = useRef(null);
+  const audioLevelRef = useRef(0);
+  const audioLevelRafRef = useRef(null);
+
+  const setupAudioAnalyser = (audioEl) => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") ctx.resume();
+      // A given media element can only ever back one MediaElementSource. Each TTS
+      // reply uses a fresh Audio(), so this is always safe.
+      const source = ctx.createMediaElementSource(audioEl);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.78;
+      source.connect(analyser);
+      analyser.connect(ctx.destination); // keep it audible
+      audioAnalyserRef.current = analyser;
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        analyser.getByteFrequencyData(data);
+        // Average the low-mid bins where speech energy lives.
+        let sum = 0; const n = Math.min(data.length, 40);
+        for (let i = 2; i < n; i++) sum += data[i];
+        const avg = sum / (n - 2) / 255; // 0..1
+        // Light extra smoothing on top of the analyser's own.
+        audioLevelRef.current += (avg - audioLevelRef.current) * 0.5;
+        audioLevelRafRef.current = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch (e) { /* analyser unavailable — sphere falls back to a gentle idle */ }
+  };
+
+  const teardownAudioAnalyser = () => {
+    if (audioLevelRafRef.current) cancelAnimationFrame(audioLevelRafRef.current);
+    audioLevelRafRef.current = null;
+    audioAnalyserRef.current = null;
+    audioLevelRef.current = 0;
+  };
+
   const [highlightWordIndex, setHighlightWordIndex] = useState(-1);
   const highlightTimerRef = useRef(null);
   const scrollAccum = useRef(0);
@@ -14779,6 +14842,7 @@ export default function CircularMenu() {
           if (aiStoppedRef.current) return;
           const audioUrl = URL.createObjectURL(audioBlob);
           const audio = new Audio(audioUrl);
+          audio.crossOrigin = "anonymous";
           audioRef.current = audio;
           // Start karaoke highlight once we know the audio duration
           audio.onloadedmetadata = () => {
@@ -14789,11 +14853,14 @@ export default function CircularMenu() {
           audio.onended = () => {
             if (aiStoppedRef.current) return;
             stopKaraokeHighlight();
+            teardownAudioAnalyser();
             URL.revokeObjectURL(audioUrl);
             audioRef.current = null;
             if (!aiStoppedRef.current) { setAiStatus("idle"); }
           };
           audio.onerror = null;
+          // Wire the live amplitude analyser so the sphere reacts to the voice
+          setupAudioAnalyser(audio);
           audio.play();
         } else {
           if (!aiStoppedRef.current) speakWithBrowser(aiText);
@@ -14873,6 +14940,7 @@ export default function CircularMenu() {
   const stopAI = () => {
     aiStoppedRef.current = true;
     stopKaraokeHighlight();
+    teardownAudioAnalyser();
     if (audioRef.current) {
       try {
         const audio = audioRef.current;
@@ -16233,7 +16301,7 @@ export default function CircularMenu() {
                 whileTap={{ scale: 0.95 }}
                 style={{ borderRadius: "50%", cursor: "pointer" }}
               >
-                <AISpeakingSphere darkMode={darkMode} speaking={aiStatus === "speaking"} />
+                <AISpeakingSphere darkMode={darkMode} speaking={aiStatus === "speaking"} audioLevel={audioLevelRef} />
               </motion.div>
               {(aiStatus === "speaking" || aiStatus === "idle") && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}
