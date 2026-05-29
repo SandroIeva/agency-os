@@ -18210,13 +18210,30 @@ export default function CircularMenu() {
         <div style={{
           display: "flex", gap: 12, alignItems: "center",
         }}>
-          {/* Icon1: Grid */}
+          {/* Icon1: AI Sparkle — opens the AI dialog. Single centered four-point sparkle,
+              sized to match the Plus glyph (~16×16 inside the 52 viewBox). */}
+          <motion.div
+            whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }} transition={smoothSpring}
+            style={{ cursor: "pointer" }}
+            onClick={startVoiceForDialog}
+            title={appLanguage === "de" ? "Mit KI sprechen / chatten" : "Talk or chat with the AI"}
+          >
+            <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
+              <rect x="0.6" y="0.6" width="50.4" height="50.4" rx="25.2" stroke={darkMode ? "white" : "#1a1a2e"} strokeOpacity={dialogMode ? 0.45 : 0.15} strokeWidth="1.2" />
+              {/* Four-point sparkle centered at (26, 26), spans 18→34 = 16px wide,
+                  matching the plus-icon's footprint. Concave curves give the classic
+                  Gemini / Copilot AI-star look. */}
+              <path d="M26 18 C26.3 23.5 28.5 25.7 34 26 C28.5 26.3 26.3 28.5 26 34 C25.7 28.5 23.5 26.3 18 26 C23.5 25.7 25.7 23.5 26 18 Z"
+                fill={theme.iconColor} />
+            </svg>
+          </motion.div>
+
+          {/* Icon2: Grid → Dashboard (center) */}
           <motion.div
             whileHover={{ scale: 1.08 }}
             whileTap={{ scale: 0.95 }}
             transition={smoothSpring}
             onClick={() => {
-              // Grid icon = always go home (dashboard). Close any open menu, then navigate.
               if (menuOpen) handleClose();
               setCurrentView("dashboard");
             }}
@@ -18232,30 +18249,6 @@ export default function CircularMenu() {
                   transition={gentleTween}
                   strokeWidth="2" fill="none" />
               ))}
-            </svg>
-          </motion.div>
-
-          {/* Icon2: AI Sparkle — opens the AI dialog. Voice recording still starts the
-              same way (startVoiceForDialog → speak → auto-send), but the icon now
-              communicates "talk with AI" rather than "record audio". The classic
-              four-point sparkle is the established convention for generative AI
-              (Google Gemini, Apple Intelligence, Notion AI, etc.). */}
-          <motion.div
-            whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }} transition={smoothSpring}
-            style={{ cursor: "pointer" }}
-            onClick={startVoiceForDialog}
-            title={appLanguage === "de" ? "Mit KI sprechen / chatten" : "Talk or chat with the AI"}
-          >
-            <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
-              <rect x="0.6" y="0.6" width="50.4" height="50.4" rx="25.2" stroke={darkMode ? "white" : "#1a1a2e"} strokeOpacity={dialogMode ? 0.45 : 0.15} strokeWidth="1.2" />
-              {/* Main sparkle, centered around (26, 26). Two perpendicular concave-curve
-                  diamonds (the "Google Gemini star") + two smaller satellite sparkles. */}
-              <path d="M26 14 C26.5 19.5 28.5 21.5 34 22 C28.5 22.5 26.5 24.5 26 30 C25.5 24.5 23.5 22.5 18 22 C23.5 21.5 25.5 19.5 26 14 Z"
-                fill={theme.iconColor} />
-              <path d="M34.5 30 C34.75 32.75 35.75 33.75 38.5 34 C35.75 34.25 34.75 35.25 34.5 38 C34.25 35.25 33.25 34.25 30.5 34 C33.25 33.75 34.25 32.75 34.5 30 Z"
-                fill={theme.iconColor} opacity="0.7" />
-              <path d="M18 33 C18.2 35 18.8 35.6 20.5 35.8 C18.8 36 18.2 36.6 18 38.5 C17.8 36.6 17.2 36 15.5 35.8 C17.2 35.6 17.8 35 18 33 Z"
-                fill={theme.iconColor} opacity="0.55" />
             </svg>
           </motion.div>
 
