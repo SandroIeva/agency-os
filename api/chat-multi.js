@@ -110,10 +110,12 @@ export default async function handler(req, res) {
     // ── ChatGPT (OpenAI) ───────────────────────
     if (provider === "openai") {
       // ── Image generation via OpenAI ─────────────────────────────────────
-      // We try gpt-image-1 first (current model, always returns b64, doesn't accept
-      // response_format), then fall back to dall-e-3 if the org isn't verified for
-      // gpt-image-1. Avoid sending response_format entirely — OpenAI started rejecting
-      // it on newer image endpoints with "Unknown parameter: 'response_format'".
+      // dall-e-3 is the default because it's the most broadly accessible: any paid
+      // OpenAI key can use it without org verification. gpt-image-1 is newer but
+      // requires the org to be verified (passport/selfie), so it fails for most casual
+      // accounts. We attempt to upgrade to gpt-image-1 ONLY if dall-e-3 itself fails
+      // — gpt-image-1 won't help in that case either typically, but we still try as a
+      // last resort. Never send response_format: OpenAI started rejecting it.
       if (wantsImage) {
         const lastUserMsg = [...conversation].reverse().find(m => m.role === "user")?.content || "";
         const callOpenAI = async (model) => {
@@ -141,14 +143,14 @@ export default async function handler(req, res) {
           return null;
         };
         try {
-          let { r, d } = await callOpenAI("gpt-image-1");
-          // Fall back to dall-e-3 if the org isn't verified for gpt-image-1.
-          if (!r.ok) {
-            const errMsg = (d?.error?.message || "").toLowerCase();
-            const orgVerify = errMsg.includes("must be verified") || errMsg.includes("gpt-image-1");
-            if (r.status === 403 || r.status === 404 || orgVerify) {
-              ({ r, d } = await callOpenAI("dall-e-3"));
-            }
+          // Strategy: dall-e-3 first (works on virtually all paid keys). Only fall through
+          // to gpt-image-1 if dall-e-3 errors AND it doesn't look like an unrecoverable
+          // billing/auth issue (no point retrying with a different model if the key is bad).
+          let usedModel = "dall-e-3";
+          let { r, d } = await callOpenAI("dall-e-3");
+          if (!r.ok && r.status !== 401 && r.status !== 429) {
+            const fb = await callOpenAI("gpt-image-1");
+            if (fb.r.ok) { r = fb.r; d = fb.d; usedModel = "gpt-image-1"; }
           }
           if (r.ok) {
             const item = d.data?.[0];
@@ -157,15 +159,20 @@ export default async function handler(req, res) {
               return res.status(200).json({
                 content: [{ type: "image", url: dataUrl, mimeType: "image/png" }],
                 provider: "openai",
-                model: d.model || "gpt-image-1",
+                model: d.model || usedModel,
                 hasImages: true,
               });
             }
             return res.status(502).json({ error: "OpenAI hat keine Bilddaten zurückgegeben.", provider: "openai" });
           }
           const raw = d.error?.message || JSON.stringify(d.error) || `HTTP ${r.status}`;
+          // Specific hint for the verification wall (gpt-image-1 only)
+          const verifyHit = /must be verified|verify.*organization/i.test(raw);
+          const hint = verifyHit
+            ? "OpenAI verlangt für die Bild-Generierung eine verifizierte Organisation. Im OpenAI-Dashboard unter Settings → Organization → Verification kannst du das anstoßen. Alternativ: Gemini-API wählen (funktioniert ohne Verifikation)."
+            : (hintFor("OpenAI Image", r.status, raw) || raw);
           return res.status(r.status).json({
-            error: hintFor("OpenAI Image", r.status, raw) || raw,
+            error: hint,
             provider: "openai",
             statusCode: r.status,
             rawError: raw,
