@@ -18235,16 +18235,27 @@ export default function CircularMenu() {
             </svg>
           </motion.div>
 
-          {/* Icon2: Mic — record voice, then load the Dialog with the transcript pre-filled */}
+          {/* Icon2: AI Sparkle — opens the AI dialog. Voice recording still starts the
+              same way (startVoiceForDialog → speak → auto-send), but the icon now
+              communicates "talk with AI" rather than "record audio". The classic
+              four-point sparkle is the established convention for generative AI
+              (Google Gemini, Apple Intelligence, Notion AI, etc.). */}
           <motion.div
             whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }} transition={smoothSpring}
             style={{ cursor: "pointer" }}
             onClick={startVoiceForDialog}
-            title={appLanguage === "de" ? "Sprechen, dann im Dialog bearbeiten" : "Speak, then review in dialog"}
+            title={appLanguage === "de" ? "Mit KI sprechen / chatten" : "Talk or chat with the AI"}
           >
             <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
               <rect x="0.6" y="0.6" width="50.4" height="50.4" rx="25.2" stroke={darkMode ? "white" : "#1a1a2e"} strokeOpacity={dialogMode ? 0.45 : 0.15} strokeWidth="1.2" />
-              <path d="M26.2839 28.4991C28.0558 28.4991 29.5239 27.0309 29.5239 25.2591V18.7791C29.5239 16.9566 28.0558 15.5391 26.2839 15.5391C24.512 15.5391 23.0439 16.9566 23.0439 18.7791V25.2591C23.0439 27.0309 24.512 28.4991 26.2839 28.4991ZM32.6627 25.2591C32.1564 25.2591 31.7008 25.6134 31.5995 26.1703C31.1439 28.7016 28.967 30.6253 26.2839 30.6253C23.6008 30.6253 21.4239 28.7016 20.9683 26.1703C20.867 25.6134 20.4114 25.2591 19.9052 25.2591C19.247 25.2591 18.7408 25.8159 18.842 26.4741C19.3483 29.7141 21.9302 32.2453 25.2208 32.7009V34.9791C25.2208 35.5359 25.6764 36.0422 26.2839 36.0422C26.8914 36.0422 27.347 35.5359 27.347 34.9791V32.7009C30.6377 32.2453 33.2195 29.7141 33.7258 26.4741C33.8777 25.8159 33.3208 25.2591 32.6627 25.2591Z" fill={theme.iconColor}/>
+              {/* Main sparkle, centered around (26, 26). Two perpendicular concave-curve
+                  diamonds (the "Google Gemini star") + two smaller satellite sparkles. */}
+              <path d="M26 14 C26.5 19.5 28.5 21.5 34 22 C28.5 22.5 26.5 24.5 26 30 C25.5 24.5 23.5 22.5 18 22 C23.5 21.5 25.5 19.5 26 14 Z"
+                fill={theme.iconColor} />
+              <path d="M34.5 30 C34.75 32.75 35.75 33.75 38.5 34 C35.75 34.25 34.75 35.25 34.5 38 C34.25 35.25 33.25 34.25 30.5 34 C33.25 33.75 34.25 32.75 34.5 30 Z"
+                fill={theme.iconColor} opacity="0.7" />
+              <path d="M18 33 C18.2 35 18.8 35.6 20.5 35.8 C18.8 36 18.2 36.6 18 38.5 C17.8 36.6 17.2 36 15.5 35.8 C17.2 35.6 17.8 35 18 33 Z"
+                fill={theme.iconColor} opacity="0.55" />
             </svg>
           </motion.div>
 
