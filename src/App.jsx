@@ -14134,13 +14134,21 @@ export default function CircularMenu() {
       return;
     }
 
-    // Dialog target (Mic button in bottom bar): pre-fill the dialog input — do NOT auto-send.
+    // Dialog target (Mic button in bottom bar): open dialog AND auto-send the
+    // transcript straight to the LLM. The user explicitly wanted hands-free —
+    // speak, dialog opens, response streams back, no extra Send-click needed.
     if (voiceTargetDialogRef.current) {
       voiceTargetDialogRef.current = false;
       setVoiceMode(false);
       setAiStatus("");
       setTranscript("");
-      openDialogMode(cleaned);
+      openDialogMode();           // open the dialog overlay (no prefill — we send directly)
+      if (cleaned) {
+        // Defer one tick so the dialog mount + persistence-hydrate effects finish first;
+        // otherwise the new message could land in the freshly-minted convo BEFORE the
+        // loader hydrate, then get clobbered by the loader.
+        setTimeout(() => { sendDialogMessage(cleaned); }, 60);
+      }
       return;
     }
 
@@ -14437,8 +14445,11 @@ export default function CircularMenu() {
     return de || en;
   };
 
-  const sendDialogMessage = async () => {
-    const text = (dialogInput || "").trim();
+  const sendDialogMessage = async (overrideText) => {
+    // Optional overrideText lets callers (e.g. the bottom-mic voice flow) submit a
+    // message without first having to set state and wait a render — state writes
+    // wouldn't be visible inside this same call otherwise.
+    const text = (typeof overrideText === "string" ? overrideText : (dialogInput || "")).trim();
     if (!text || dialogSending) return;
 
     // Stop mic if still listening
