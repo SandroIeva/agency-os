@@ -48,7 +48,10 @@ const translations = {
   "assets.creations":          { de: "Creations",                 en: "Creations" },
   "assets.inspirations":       { de: "Inspirations",              en: "Inspirations" },
   "assets.creationsEmptyTitle":{ de: "Noch keine Kreationen",     en: "No creations yet" },
-  "assets.creationsEmptyHint": { de: "Mit KI generierte Bilder erscheinen hier automatisch.", en: "AI-generated images show up here automatically." },
+  "assets.creationsEmptyHint": { de: "Mit KI generierte Bilder erscheinen hier automatisch — oder lade eigene hoch.", en: "AI-generated images show up here automatically — or upload your own." },
+  "assets.all":                { de: "Alle",                      en: "All" },
+  "assets.images":             { de: "Bilder",                    en: "Images" },
+  "assets.videos":             { de: "Videos",                    en: "Videos" },
   "assets.inspirationsTitle":  { de: "Inspirationen",             en: "Inspirations" },
   "assets.inspirationsHint":   { de: "Speichere Referenzen und Fundstücke aus dem Web hier. Bald verfügbar.", en: "Save references and finds from the web here. Coming soon." },
 

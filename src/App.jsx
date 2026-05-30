@@ -10968,55 +10968,120 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
   );
 }
 
-// Creations tab — gallery of the user's generated outputs (AI images saved into
-// the workspace). Pulls images from user_files; newest first.
+// Creations tab — gallery of the workspace's images AND videos (AI-generated +
+// user uploads). Filter by media type; upload your own via the button.
 function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t }) {
   const [files, setFiles] = useState(null); // null = loading
-  useEffect(() => {
-    (async () => {
-      if (!userOrg?.id) { setFiles([]); return; }
-      const { data } = await supabase.from("user_files")
-        .select("id,name,public_url,mime_type,created_at")
-        .eq("org_id", userOrg.id)
-        .ilike("mime_type", "image/%")
-        .order("created_at", { ascending: false }).limit(120);
-      setFiles(data || []);
-    })();
+  const [filter, setFilter] = useState("all"); // all | image | video
+  const [uploading, setUploading] = useState(false);
+  const [zoom, setZoom] = useState(null); // the file object being previewed
+  const inputRef = useRef(null);
+
+  const load = useCallback(async () => {
+    if (!userOrg?.id) { setFiles([]); return; }
+    const { data } = await supabase.from("user_files")
+      .select("id,name,public_url,mime_type,created_at")
+      .eq("org_id", userOrg.id)
+      .or("mime_type.ilike.image/%,mime_type.ilike.video/%")
+      .order("created_at", { ascending: false }).limit(160);
+    setFiles(data || []);
   }, [userOrg?.id]);
+  useEffect(() => { load(); }, [load]);
 
-  const [zoom, setZoom] = useState(null);
+  const upload = async (fileList) => {
+    const arr = Array.from(fileList || []).filter(f => f.type.startsWith("image/") || f.type.startsWith("video/"));
+    if (!arr.length || !userOrg?.id || !session?.user?.id) return;
+    setUploading(true);
+    const added = [];
+    for (const file of arr) {
+      const ext = (file.name.split(".").pop() || "bin").toLowerCase();
+      const path = `${session.user.id}/creations/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("user-files").upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) continue;
+      const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(path, 60 * 60 * 24 * 365);
+      const { data, error } = await supabase.from("user_files").insert({
+        user_id: session.user.id, org_id: userOrg.id, name: file.name,
+        mime_type: file.type, size_bytes: file.size, storage_path: path,
+        storage_provider: "supabase", public_url: signed?.signedUrl || null,
+      }).select("id,name,public_url,mime_type,created_at").single();
+      if (!error && data) added.push(data);
+    }
+    setFiles(prev => [...added, ...(prev || [])]);
+    setUploading(false);
+  };
 
-  if (files === null) {
-    return <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>;
-  }
-  if (files.length === 0) {
-    return (
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: theme.textDim, textAlign: "center", gap: 14, padding: 20 }}>
-        <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 160, damping: 16 }}
-          style={{ width: 84, height: 84, borderRadius: 24, background: grad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: glow }}>
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 6.9 18.2l1.9-5.8L4 8.8h6.1z"/></svg>
-        </motion.div>
-        <div style={{ fontSize: 15.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("assets.creationsEmptyTitle") || "Noch keine Kreationen"}</div>
-        <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 330, lineHeight: 1.55 }}>{t("assets.creationsEmptyHint") || "Mit KI generierte Bilder erscheinen hier automatisch."}</div>
-      </div>
-    );
-  }
+  const isVideo = (f) => (f.mime_type || "").startsWith("video/");
+  const visible = (files || []).filter(f => filter === "all" ? true : filter === "video" ? isVideo(f) : !isVideo(f));
+
+  const uploadBtn = (
+    <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => inputRef.current?.click()}
+      style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, background: accent, color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer", opacity: uploading ? 0.6 : 1 }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      {uploading ? (t("common.loading") || "Lädt…") : (t("moodboard.upload") || "Hochladen")}
+    </motion.div>
+  );
+  const filterBar = (
+    <div style={{ display: "inline-flex", padding: 3, borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}` }}>
+      {[["all", t("assets.all") || "Alle"], ["image", t("assets.images") || "Bilder"], ["video", t("assets.videos") || "Videos"]].map(([m, label]) => (
+        <div key={m} onClick={() => setFilter(m)} style={{ padding: "6px 14px", borderRadius: 999, cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 500, color: filter === m ? "#fff" : theme.textDim, background: filter === m ? accent : "transparent", transition: "all 0.2s ease" }}>{label}</div>
+      ))}
+    </div>
+  );
+
   return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
-      <div style={{ columnCount: 4, columnGap: 14 }}>
-        {files.map((f, i) => (
-          <motion.div key={f.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.02, 0.35), duration: 0.3 }}
-            onClick={() => setZoom(f.public_url)}
-            style={{ breakInside: "avoid", marginBottom: 14, borderRadius: 14, overflow: "hidden", cursor: "pointer", border: `1px solid ${theme.borderFaint}` }}>
-            <img src={f.public_url} alt={f.name} style={{ width: "100%", display: "block" }} loading="lazy" />
-          </motion.div>
-        ))}
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <input ref={inputRef} type="file" accept="image/*,video/*" multiple style={{ display: "none" }} onChange={e => { upload(e.target.files); e.target.value = ""; }} />
+      {/* Toolbar */}
+      <div style={{ padding: "14px 26px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        {filterBar}
+        {uploadBtn}
       </div>
+
+      {files === null ? (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
+      ) : visible.length === 0 ? (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: theme.textDim, textAlign: "center", gap: 14, padding: 20 }}>
+          <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 160, damping: 16 }}
+            style={{ width: 84, height: 84, borderRadius: 24, background: grad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: glow }}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 6.9 18.2l1.9-5.8L4 8.8h6.1z"/></svg>
+          </motion.div>
+          <div style={{ fontSize: 15.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("assets.creationsEmptyTitle") || "Noch keine Kreationen"}</div>
+          <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 330, lineHeight: 1.55 }}>{t("assets.creationsEmptyHint") || "Mit KI generierte Bilder erscheinen hier automatisch — oder lade eigene hoch."}</div>
+          <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }} onClick={() => inputRef.current?.click()}
+            style={{ marginTop: 4, padding: "11px 22px", borderRadius: 999, background: accent, color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
+            {t("moodboard.upload") || "Hochladen"}
+          </motion.div>
+        </div>
+      ) : (
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 26px 26px" }}>
+          <div style={{ columnCount: 4, columnGap: 14 }}>
+            {visible.map((f, i) => (
+              <motion.div key={f.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.02, 0.35), duration: 0.3 }}
+                onClick={() => setZoom(f)}
+                style={{ breakInside: "avoid", marginBottom: 14, borderRadius: 14, overflow: "hidden", cursor: "pointer", border: `1px solid ${theme.borderFaint}`, position: "relative", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
+                {isVideo(f) ? (
+                  <>
+                    <video src={f.public_url} muted playsInline preload="metadata" style={{ width: "100%", display: "block" }} />
+                    <div style={{ position: "absolute", top: 8, right: 8, width: 24, height: 24, borderRadius: 7, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
+                    </div>
+                  </>
+                ) : (
+                  <img src={f.public_url} alt={f.name} style={{ width: "100%", display: "block" }} loading="lazy" />
+                )}
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <AnimatePresence>
         {zoom && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setZoom(null)}
             style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 30 }}>
-            <motion.img initial={{ scale: 0.94 }} animate={{ scale: 1 }} src={zoom} alt="" style={{ maxWidth: "92%", maxHeight: "88vh", borderRadius: 14, objectFit: "contain" }} />
+            {isVideo(zoom)
+              ? <motion.video initial={{ scale: 0.94 }} animate={{ scale: 1 }} src={zoom.public_url} controls autoPlay onClick={e => e.stopPropagation()} style={{ maxWidth: "92%", maxHeight: "88vh", borderRadius: 14 }} />
+              : <motion.img initial={{ scale: 0.94 }} animate={{ scale: 1 }} src={zoom.public_url} alt="" style={{ maxWidth: "92%", maxHeight: "88vh", borderRadius: 14, objectFit: "contain" }} />}
           </motion.div>
         )}
       </AnimatePresence>
