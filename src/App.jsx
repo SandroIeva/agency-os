@@ -10532,6 +10532,11 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
   // Assets has three tabs: Moodboards (curated boards), Creations (your generated
   // outputs) and Inspirations (saved references).
   const [tab, setTab] = useState("moodboards");
+  // Creations upload is triggered from the header (same slot as the "New board"
+  // button), but the file input + logic live in CreationsTab — so it registers a
+  // picker fn here and reports its uploading state up.
+  const creationsPick = useRef(null);
+  const [creationsUploading, setCreationsUploading] = useState(false);
   const [boards, setBoards] = useState([]);
   const [loadingBoards, setLoadingBoards] = useState(true);
   const [activeBoard, setActiveBoard] = useState(null);
@@ -10747,6 +10752,13 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
                 {t("moodboard.new") || "Neues Board"}
               </motion.div>
             )}
+            {tab === "creations" && (
+              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => creationsPick.current?.()}
+                style={{ ...iconBtn, background: accent, color: "#fff", border: "none", opacity: creationsUploading ? 0.6 : 1 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                {creationsUploading ? (t("common.loading") || "Lädt…") : (t("moodboard.upload") || "Hochladen")}
+              </motion.div>
+            )}
           </div>
 
           {/* Tab switcher — text only, solid purple underline (no gradient, no icons) */}
@@ -10783,7 +10795,8 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
 
           {/* ── CREATIONS tab ── */}
           {tab === "creations" && (
-            <CreationsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} grad={grad} glow={glow} t={t} />
+            <CreationsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} grad={grad} glow={glow} t={t}
+              pickRef={creationsPick} onUploadingChange={setCreationsUploading} />
           )}
 
           {/* ── INSPIRATIONS tab ── */}
@@ -10970,12 +10983,16 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
 
 // Creations tab — gallery of the workspace's images AND videos (AI-generated +
 // user uploads). Filter by media type; upload your own via the button.
-function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t }) {
+function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, pickRef, onUploadingChange }) {
   const [files, setFiles] = useState(null); // null = loading
   const [filter, setFilter] = useState("all"); // all | image | video
   const [uploading, setUploading] = useState(false);
   const [zoom, setZoom] = useState(null); // the file object being previewed
   const inputRef = useRef(null);
+  // Register the file-picker trigger so the header Upload button can call it,
+  // and surface uploading state upward.
+  useEffect(() => { if (pickRef) pickRef.current = () => inputRef.current?.click(); }, [pickRef]);
+  useEffect(() => { onUploadingChange?.(uploading); }, [uploading, onUploadingChange]);
 
   const load = useCallback(async () => {
     if (!userOrg?.id) { setFiles([]); return; }
@@ -11013,13 +11030,6 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   const isVideo = (f) => (f.mime_type || "").startsWith("video/");
   const visible = (files || []).filter(f => filter === "all" ? true : filter === "video" ? isVideo(f) : !isVideo(f));
 
-  const uploadBtn = (
-    <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => inputRef.current?.click()}
-      style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, background: accent, color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer", opacity: uploading ? 0.6 : 1 }}>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      {uploading ? (t("common.loading") || "Lädt…") : (t("moodboard.upload") || "Hochladen")}
-    </motion.div>
-  );
   const filterBar = (
     <div style={{ display: "inline-flex", padding: 3, borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}` }}>
       {[["all", t("assets.all") || "Alle"], ["image", t("assets.images") || "Bilder"], ["video", t("assets.videos") || "Videos"]].map(([m, label]) => (
@@ -11031,10 +11041,9 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <input ref={inputRef} type="file" accept="image/*,video/*" multiple style={{ display: "none" }} onChange={e => { upload(e.target.files); e.target.value = ""; }} />
-      {/* Toolbar */}
-      <div style={{ padding: "14px 26px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+      {/* Toolbar — filter only (upload lives in the header, like Moodboards) */}
+      <div style={{ padding: "14px 26px", display: "flex", alignItems: "center", gap: 12 }}>
         {filterBar}
-        {uploadBtn}
       </div>
 
       {files === null ? (
