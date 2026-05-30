@@ -42,6 +42,16 @@ const translations = {
   // Empty-state
   "linearMenu.comingSoon":    { de: "Bald verfügbar",   en: "Coming soon" },
 
+  // ── Assets (Brand → Assets: Moodboards / Creations / Inspirations) ──
+  "assets.title":              { de: "Assets",                    en: "Assets" },
+  "assets.moodboards":         { de: "Moodboards",                en: "Moodboards" },
+  "assets.creations":          { de: "Creations",                 en: "Creations" },
+  "assets.inspirations":       { de: "Inspirations",              en: "Inspirations" },
+  "assets.creationsEmptyTitle":{ de: "Noch keine Kreationen",     en: "No creations yet" },
+  "assets.creationsEmptyHint": { de: "Mit KI generierte Bilder erscheinen hier automatisch.", en: "AI-generated images show up here automatically." },
+  "assets.inspirationsTitle":  { de: "Inspirationen",             en: "Inspirations" },
+  "assets.inspirationsHint":   { de: "Speichere Referenzen und Fundstücke aus dem Web hier. Bald verfügbar.", en: "Save references and finds from the web here. Coming soon." },
+
   // ── Moodboards (Brand → Assets) ─────────────
   "moodboard.title":           { de: "Moodboards",                en: "Moodboards" },
   "moodboard.untitled":        { de: "Neues Moodboard",           en: "New moodboard" },

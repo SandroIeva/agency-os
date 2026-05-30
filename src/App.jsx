@@ -10528,7 +10528,10 @@ async function extractColors(url, count = 5) {
 // a Grid (overview of everything) and a freeform Canvas (drag images around).
 // Images upload to the public brand-assets bucket so their URLs can later be
 // reused as reference inputs for image/video generation (Higgsfield etc.).
-function MoodboardsView({ onBack, session, userOrg, theme, darkMode, t }) {
+function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
+  // Assets has three tabs: Moodboards (curated boards), Creations (your generated
+  // outputs) and Inspirations (saved references).
+  const [tab, setTab] = useState("moodboards");
   const [boards, setBoards] = useState([]);
   const [loadingBoards, setLoadingBoards] = useState(true);
   const [activeBoard, setActiveBoard] = useState(null);
@@ -10714,37 +10717,60 @@ function MoodboardsView({ onBack, session, userOrg, theme, darkMode, t }) {
     border: `1px solid ${theme.borderFaint}`, color: theme.text, background: "transparent",
   };
 
-  // ════════════════════════ BOARDS LIST ════════════════════════
+  // ════════════════════════ ASSETS (tabbed: Moodboards / Creations / Inspirations) ════════════════════════
   if (!activeBoard) {
+    const ASSET_TABS = [
+      { id: "moodboards",   label: t("assets.moodboards") || "Moodboards",
+        icon: <><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></> },
+      { id: "creations",    label: t("assets.creations") || "Creations",
+        icon: <><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 6.9 18.2l1.9-5.8L4 8.8h6.1z"/></> },
+      { id: "inspirations", label: t("assets.inspirations") || "Inspirations",
+        icon: <><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 00-4 12.7c.6.5 1 .9 1 1.8h6c0-.9.4-1.3 1-1.8A7 7 0 0012 2z"/></> },
+    ];
     return (
       <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
         style={panelWrap}>
         <div style={card}>
           {/* Header */}
-          <div style={{ padding: "20px 26px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${theme.borderFaint}` }}>
+          <div style={{ padding: "18px 26px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <motion.div whileTap={{ scale: 0.92 }} onClick={onBack} style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
               </motion.div>
               <div style={{ width: 38, height: 38, borderRadius: 11, background: grad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: glow }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>
               </div>
-              <div>
-                <div style={{ fontSize: 19, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{t("moodboard.title") || "Moodboards"}</div>
-                <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{boards.length} {boards.length === 1 ? (t("moodboard.boardOne") || "Board") : (t("moodboard.boardMany") || "Boards")}</div>
-              </div>
+              <div style={{ fontSize: 19, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{t("assets.title") || "Assets"}</div>
             </div>
-            <motion.div whileTap={{ scale: 0.96 }} onClick={() => setCreating(true)}
-              style={{ ...iconBtn, background: accent, color: "#fff", border: "none" }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              {t("moodboard.new") || "Neues Board"}
-            </motion.div>
+            {tab === "moodboards" && (
+              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setCreating(true)}
+                style={{ ...iconBtn, background: grad, color: "#fff", border: "none", boxShadow: glow }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                {t("moodboard.new") || "Neues Board"}
+              </motion.div>
+            )}
           </div>
 
-          {/* Inline create */}
+          {/* Tab switcher */}
+          <div style={{ padding: "14px 26px 0", display: "flex", gap: 6, borderBottom: `1px solid ${theme.borderFaint}` }}>
+            {ASSET_TABS.map(tb => {
+              const active = tab === tb.id;
+              return (
+                <div key={tb.id} onClick={() => setTab(tb.id)}
+                  style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 14px 13px", cursor: "pointer", position: "relative",
+                    fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: active ? theme.text : theme.textDim, transition: "color 0.2s ease" }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{tb.icon}</svg>
+                  {tb.label}
+                  {active && <motion.div layoutId="assetsTabUnderline" style={{ position: "absolute", left: 8, right: 8, bottom: -1, height: 2.5, borderRadius: 2, background: grad }} />}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Inline create (moodboards only) */}
           <AnimatePresence>
-            {creating && (
+            {tab === "moodboards" && creating && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                 style={{ overflow: "hidden", borderBottom: `1px solid ${theme.borderFaint}` }}>
                 <div style={{ padding: "16px 26px", display: "flex", gap: 10, alignItems: "center" }}>
@@ -10759,7 +10785,18 @@ function MoodboardsView({ onBack, session, userOrg, theme, darkMode, t }) {
             )}
           </AnimatePresence>
 
-          {/* Boards grid */}
+          {/* ── CREATIONS tab ── */}
+          {tab === "creations" && (
+            <CreationsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} grad={grad} glow={glow} t={t} />
+          )}
+
+          {/* ── INSPIRATIONS tab ── */}
+          {tab === "inspirations" && (
+            <InspirationsTab theme={theme} darkMode={darkMode} grad={grad} glow={glow} t={t} />
+          )}
+
+          {/* ── MOODBOARDS tab (boards grid) ── */}
+          {tab === "moodboards" && (
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
             {loadingBoards ? (
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
@@ -10797,6 +10834,7 @@ function MoodboardsView({ onBack, session, userOrg, theme, darkMode, t }) {
               </div>
             )}
           </div>
+          )}
         </div>
       </motion.div>
     );
@@ -10931,6 +10969,76 @@ function MoodboardsView({ onBack, session, userOrg, theme, darkMode, t }) {
         )}
       </AnimatePresence>
     </motion.div>
+  );
+}
+
+// Creations tab — gallery of the user's generated outputs (AI images saved into
+// the workspace). Pulls images from user_files; newest first.
+function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t }) {
+  const [files, setFiles] = useState(null); // null = loading
+  useEffect(() => {
+    (async () => {
+      if (!userOrg?.id) { setFiles([]); return; }
+      const { data } = await supabase.from("user_files")
+        .select("id,name,public_url,mime_type,created_at")
+        .eq("org_id", userOrg.id)
+        .ilike("mime_type", "image/%")
+        .order("created_at", { ascending: false }).limit(120);
+      setFiles(data || []);
+    })();
+  }, [userOrg?.id]);
+
+  const [zoom, setZoom] = useState(null);
+
+  if (files === null) {
+    return <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>;
+  }
+  if (files.length === 0) {
+    return (
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: theme.textDim, textAlign: "center", gap: 14, padding: 20 }}>
+        <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 160, damping: 16 }}
+          style={{ width: 84, height: 84, borderRadius: 24, background: grad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: glow }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 6.9 18.2l1.9-5.8L4 8.8h6.1z"/></svg>
+        </motion.div>
+        <div style={{ fontSize: 15.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("assets.creationsEmptyTitle") || "Noch keine Kreationen"}</div>
+        <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 330, lineHeight: 1.55 }}>{t("assets.creationsEmptyHint") || "Mit KI generierte Bilder erscheinen hier automatisch."}</div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
+      <div style={{ columnCount: 4, columnGap: 14 }}>
+        {files.map((f, i) => (
+          <motion.div key={f.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.02, 0.35), duration: 0.3 }}
+            onClick={() => setZoom(f.public_url)}
+            style={{ breakInside: "avoid", marginBottom: 14, borderRadius: 14, overflow: "hidden", cursor: "pointer", border: `1px solid ${theme.borderFaint}` }}>
+            <img src={f.public_url} alt={f.name} style={{ width: "100%", display: "block" }} loading="lazy" />
+          </motion.div>
+        ))}
+      </div>
+      <AnimatePresence>
+        {zoom && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setZoom(null)}
+            style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 30 }}>
+            <motion.img initial={{ scale: 0.94 }} animate={{ scale: 1 }} src={zoom} alt="" style={{ maxWidth: "92%", maxHeight: "88vh", borderRadius: 14, objectFit: "contain" }} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// Inspirations tab — saved references (lightweight; the full system lands next).
+function InspirationsTab({ theme, darkMode, grad, glow, t }) {
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: theme.textDim, textAlign: "center", gap: 14, padding: 20 }}>
+      <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 160, damping: 16 }}
+        style={{ width: 84, height: 84, borderRadius: 24, background: grad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: glow }}>
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 00-4 12.7c.6.5 1 .9 1 1.8h6c0-.9.4-1.3 1-1.8A7 7 0 0012 2z"/></svg>
+      </motion.div>
+      <div style={{ fontSize: 15.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("assets.inspirationsTitle") || "Inspirationen"}</div>
+      <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 340, lineHeight: 1.55 }}>{t("assets.inspirationsHint") || "Speichere Referenzen und Fundstücke aus dem Web hier. Bald verfügbar."}</div>
+    </div>
   );
 }
 
@@ -15621,7 +15729,7 @@ export default function CircularMenu() {
     }
 
     // Let views with their own scrolling handle scroll natively
-    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "timeline" || currentView === "settings" || currentView === "notes" || currentView === "projects" || currentView === "brand" || currentView === "moodboards") {
+    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "timeline" || currentView === "settings" || currentView === "notes" || currentView === "projects" || currentView === "brand" || currentView === "assets") {
       return;
     }
 
@@ -16442,10 +16550,10 @@ export default function CircularMenu() {
           )}
         </AnimatePresence>
 
-        {/* MOODBOARDS VIEW (Brand → Assets) */}
+        {/* ASSETS VIEW (Brand → Assets): Moodboards / Creations / Inspirations */}
         <AnimatePresence>
-          {currentView === "moodboards" && (
-            <MoodboardsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} />
+          {currentView === "assets" && (
+            <AssetsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
@@ -17211,9 +17319,9 @@ export default function CircularMenu() {
               if (catId === "brand") {
                 setMenuOpen(false);
                 setBrandPillar(subId || "strategy");
-                // "Assets" opens the Moodboards surface; the other pillars open the
-                // Brand view (per-pillar tab routing gets wired as those pages are built).
-                if (subId === "assets") { setCurrentView("moodboards"); return; }
+                // "Assets" opens the Assets surface (Moodboards / Creations / Inspirations);
+                // the other pillars open the Brand view (per-pillar tab routing TBD).
+                if (subId === "assets") { setCurrentView("assets"); return; }
                 setCurrentView("brand");
                 return;
               }
