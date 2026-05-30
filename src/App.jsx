@@ -68,12 +68,17 @@ const PLUS_MENU_ITEMS_DEF = [
 // for the selected category. The old radial code is kept in place but gated behind LINEAR_MENU.
 const LINEAR_MENU = true;
 const LINEAR_MENU_ITEMS_DEF = [
+  // Brand = 5 pillars (Strategie · Identität · Design System · Touchpoints · Assets).
+  // Each pillar opens a page whose individual topics live in tabs, so the menu stays
+  // flat no matter how many brand features get added. "Assets" holds Moodboards +
+  // references. Files was intentionally removed — asset access is contextual, not a
+  // standalone browser.
   { id: "brand",     labelKey: "linearMenu.brand",     sub: [
-    { id: "files",    labelKey: "linearMenu.files" },
-    { id: "identity", labelKey: "linearMenu.brandIdentity" },
-    { id: "design",   labelKey: "linearMenu.designSystem" },
-    { id: "strategy", labelKey: "linearMenu.brandStrategy" },
-    { id: "channels", labelKey: "linearMenu.channels" },
+    { id: "strategy",    labelKey: "linearMenu.strategy" },
+    { id: "identity",    labelKey: "linearMenu.identity" },
+    { id: "design",      labelKey: "linearMenu.designSystem" },
+    { id: "touchpoints", labelKey: "linearMenu.touchpoints" },
+    { id: "assets",      labelKey: "linearMenu.assets" },
   ]},
   { id: "create",    labelKey: "linearMenu.create",    sub: [
     { id: "project",  labelKey: "linearMenu.project" },
@@ -12286,6 +12291,9 @@ export default function CircularMenu() {
   // null = no category clicked yet → right (sub-)column stays empty. A click on a
   // non-leaf category sets the index; hover never changes it.
   const [linearCatIdx, setLinearCatIdx] = useState(null);
+  // Which Brand pillar the user picked from the menu (strategy/identity/design/touchpoints/assets).
+  // The Brand view can read this to preselect the matching pillar/tab.
+  const [brandPillar, setBrandPillar] = useState("strategy");
   const [subOpen, setSubOpen] = useState(false);
   const [subHover, setSubHover] = useState(-1);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -16609,9 +16617,10 @@ export default function CircularMenu() {
               }
               if (catId === "brand") {
                 setMenuOpen(false);
-                // Brand → "Files" actually means the global Files repository, not a brand-onboarding tab
-                if (subId === "files") { setCurrentView("files"); return; }
-                // Other brand sub-IDs land on the brand-onboarding view (tab routing TBD)
+                // The 5 brand pillars all open the Brand view for now; per-pillar tab
+                // routing (and the Moodboards page under "assets") gets wired as those
+                // pages are built. We stash the chosen pillar so the view can preselect it.
+                setBrandPillar(subId || "strategy");
                 setCurrentView("brand");
                 return;
               }

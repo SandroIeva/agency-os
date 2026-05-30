@@ -19,10 +19,15 @@ const translations = {
   "linearMenu.agents":        { de: "Agenten",      en: "Agents" },
   "linearMenu.messenger":     { de: "Messenger",    en: "Messenger" },
   "linearMenu.plan":          { de: "Plan",         en: "Plan" },
-  // Brand sub-items
+  // Brand pillars (5 top-level areas; detail lives in tabs inside each page)
+  "linearMenu.strategy":      { de: "Strategie",        en: "Strategy" },
+  "linearMenu.identity":      { de: "Identität",        en: "Identity" },
+  "linearMenu.designSystem":  { de: "Design System",    en: "Design System" },
+  "linearMenu.touchpoints":   { de: "Touchpoints",      en: "Touchpoints" },
+  "linearMenu.assets":        { de: "Assets",           en: "Assets" },
+  // Legacy Brand sub-item labels (kept for any older references)
   "linearMenu.files":         { de: "Dateien",          en: "Files" },
   "linearMenu.brandIdentity": { de: "Markenidentität",  en: "Brand Identity" },
-  "linearMenu.designSystem":  { de: "Design System",    en: "Design System" },
   "linearMenu.brandStrategy": { de: "Markenstrategie",  en: "Brand Strategy" },
   "linearMenu.channels":      { de: "Kanäle",           en: "Channels" },
   // Create sub-items
