@@ -10489,6 +10489,519 @@ const BRAND_NEXT_STEPS = [
   { key: "voice",        labelKey: "brand.nextSteps.voice",        hintKey: "brand.nextSteps.voiceHint" },
 ];
 
+// ── Client-side dominant-color extraction ──────────────────────────────────
+// Downscale the image onto a tiny canvas, quantise pixels into coarse buckets,
+// return the most frequent ones as hex. Used to auto-build a board's palette.
+// Fails gracefully (returns []) if the image taints the canvas (no CORS).
+async function extractColors(url, count = 5) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const w = 48, h = 48;
+        const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+        const ctx = cv.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        const data = ctx.getImageData(0, 0, w, h).data;
+        const buckets = {};
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i + 3] < 200) continue;
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          const key = `${r >> 5},${g >> 5},${b >> 5}`;
+          (buckets[key] || (buckets[key] = { c: 0, r: 0, g: 0, b: 0 }));
+          const bk = buckets[key]; bk.c++; bk.r += r; bk.g += g; bk.b += b;
+        }
+        const hex = Object.values(buckets)
+          .sort((a, b) => b.c - a.c).slice(0, count)
+          .map(bk => "#" + [bk.r, bk.g, bk.b].map(x => Math.round(x / bk.c).toString(16).padStart(2, "0")).join(""));
+        resolve(hex);
+      } catch (e) { resolve([]); }
+    };
+    img.onerror = () => resolve([]);
+    img.src = url;
+  });
+}
+
+// ── Moodboards ──────────────────────────────────────────────────────────────
+// Org-scoped collections of visual references (under Brand → Assets). Two views:
+// a Grid (overview of everything) and a freeform Canvas (drag images around).
+// Images upload to the public brand-assets bucket so their URLs can later be
+// reused as reference inputs for image/video generation (Higgsfield etc.).
+function MoodboardsView({ onBack, session, userOrg, theme, darkMode, t }) {
+  const [boards, setBoards] = useState([]);
+  const [loadingBoards, setLoadingBoards] = useState(true);
+  const [activeBoard, setActiveBoard] = useState(null);
+  const [items, setItems] = useState([]);
+  const [loadingItems, setLoadingItems] = useState(false);
+  const [view, setView] = useState("grid");          // grid | canvas
+  const [tagFilter, setTagFilter] = useState(null);
+  const [urlInput, setUrlInput] = useState("");
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [selectedItem, setSelectedItem] = useState(null); // item open in the detail/lightbox
+  const fileInputRef = useRef(null);
+  const canvasRef = useRef(null);
+  const accent = theme.accent || "#8B7AFF";
+
+  // ── Data loading ──
+  const loadBoards = useCallback(async () => {
+    if (!userOrg?.id) { setLoadingBoards(false); return; }
+    setLoadingBoards(true);
+    const { data } = await supabase.from("moodboards").select("*").eq("org_id", userOrg.id).eq("archived", false).order("updated_at", { ascending: false });
+    setBoards(data || []);
+    setLoadingBoards(false);
+  }, [userOrg?.id]);
+
+  useEffect(() => { loadBoards(); }, [loadBoards]);
+
+  const openBoard = async (board) => {
+    setActiveBoard(board);
+    setView(board.view_mode || "grid");
+    setTagFilter(null);
+    setLoadingItems(true);
+    const { data } = await supabase.from("moodboard_items").select("*").eq("board_id", board.id).order("position", { ascending: true });
+    setItems(data || []);
+    setLoadingItems(false);
+  };
+
+  const closeBoard = () => { setActiveBoard(null); setItems([]); setSelectedItem(null); loadBoards(); };
+
+  // ── Board CRUD ──
+  const createBoard = async () => {
+    const title = (newTitle.trim() || (t("moodboard.untitled") || "Neues Moodboard"));
+    if (!userOrg?.id) return;
+    setBusy(true);
+    const { data, error } = await supabase.from("moodboards").insert({
+      org_id: userOrg.id, created_by: session?.user?.id, title,
+    }).select().single();
+    setBusy(false);
+    setCreating(false); setNewTitle("");
+    if (!error && data) { setBoards(prev => [data, ...prev]); openBoard(data); }
+  };
+
+  const deleteBoard = async (board) => {
+    await supabase.from("moodboards").delete().eq("id", board.id);
+    setBoards(prev => prev.filter(b => b.id !== board.id));
+    if (activeBoard?.id === board.id) closeBoard();
+  };
+
+  const renameBoard = async (title) => {
+    if (!activeBoard) return;
+    setActiveBoard(prev => ({ ...prev, title }));
+    await supabase.from("moodboards").update({ title, updated_at: new Date().toISOString() }).eq("id", activeBoard.id);
+  };
+
+  const setBoardView = async (mode) => {
+    setView(mode);
+    if (activeBoard) { setActiveBoard(prev => ({ ...prev, view_mode: mode })); await supabase.from("moodboards").update({ view_mode: mode }).eq("id", activeBoard.id); }
+  };
+
+  // ── Aggregate the board palette from all item colors (most frequent first) ──
+  const recomputePalette = async (allItems) => {
+    if (!activeBoard) return;
+    const freq = {};
+    allItems.forEach(it => (it.colors || []).forEach(c => { freq[c] = (freq[c] || 0) + 1; }));
+    const palette = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([c]) => c);
+    setActiveBoard(prev => ({ ...prev, color_palette: palette }));
+    await supabase.from("moodboards").update({ color_palette: palette, updated_at: new Date().toISOString() }).eq("id", activeBoard.id);
+  };
+
+  // ── Add items ──
+  const addImageFiles = async (files) => {
+    if (!activeBoard || !files?.length) return;
+    setBusy(true);
+    const newItems = [];
+    let pos = items.length;
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) continue;
+      const ext = (file.name.split(".").pop() || "png").toLowerCase();
+      const path = `moodboards/${activeBoard.id}/${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type, upsert: true });
+      if (upErr) continue;
+      const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
+      const url = pub?.publicUrl;
+      const colors = url ? await extractColors(url) : [];
+      const { data, error } = await supabase.from("moodboard_items").insert({
+        board_id: activeBoard.id, org_id: userOrg.id, created_by: session?.user?.id,
+        type: "image", url, source: "upload", colors,
+        position: pos++, x: 40 + (pos % 5) * 60, y: 40 + Math.floor(pos / 5) * 60, w: 240,
+      }).select().single();
+      if (!error && data) newItems.push(data);
+    }
+    const merged = [...items, ...newItems];
+    setItems(merged);
+    setBusy(false);
+    if (newItems.length) recomputePalette(merged);
+  };
+
+  const addUrl = async () => {
+    const raw = urlInput.trim();
+    if (!raw || !activeBoard) return;
+    setBusy(true);
+    let url = raw; if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+    const isImage = /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(url);
+    const colors = isImage ? await extractColors(url) : [];
+    const pos = items.length;
+    const { data, error } = await supabase.from("moodboard_items").insert({
+      board_id: activeBoard.id, org_id: userOrg.id, created_by: session?.user?.id,
+      type: isImage ? "image" : "link", url, source: "url", colors,
+      position: pos, x: 40 + (pos % 5) * 60, y: 40 + Math.floor(pos / 5) * 60, w: 240,
+      metadata: { sourceUrl: url },
+    }).select().single();
+    setBusy(false); setUrlInput(""); setShowUrlInput(false);
+    if (!error && data) { const merged = [...items, data]; setItems(merged); if (isImage) recomputePalette(merged); }
+  };
+
+  const deleteItem = async (item) => {
+    await supabase.from("moodboard_items").delete().eq("id", item.id);
+    const merged = items.filter(i => i.id !== item.id);
+    setItems(merged); setSelectedItem(null); recomputePalette(merged);
+  };
+
+  const updateItem = async (id, patch) => {
+    setItems(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i));
+    await supabase.from("moodboard_items").update(patch).eq("id", id);
+  };
+
+  // ── Canvas drag ──
+  const dragState = useRef(null);
+  const onTilePointerDown = (e, item) => {
+    if (view !== "canvas") return;
+    e.preventDefault();
+    const rect = canvasRef.current.getBoundingClientRect();
+    dragState.current = { id: item.id, offsetX: e.clientX - rect.left - item.x, offsetY: e.clientY - rect.top - item.y };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onTilePointerMove = (e) => {
+    if (!dragState.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = Math.max(0, e.clientX - rect.left - dragState.current.offsetX);
+    const y = Math.max(0, e.clientY - rect.top - dragState.current.offsetY);
+    setItems(prev => prev.map(i => i.id === dragState.current.id ? { ...i, x, y } : i));
+  };
+  const onTilePointerUp = (e) => {
+    if (!dragState.current) return;
+    const it = items.find(i => i.id === dragState.current.id);
+    if (it) updateItem(it.id, { x: it.x, y: it.y });
+    dragState.current = null;
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
+  };
+
+  // All tags present across the active board's items
+  const allTags = Array.from(new Set(items.flatMap(i => i.tags || []))).sort();
+  const visibleItems = tagFilter ? items.filter(i => (i.tags || []).includes(tagFilter)) : items;
+
+  const panelWrap = {
+    position: "absolute", inset: 0, display: "flex",
+    alignItems: "center", justifyContent: "center", padding: "20px 40px 80px",
+  };
+  const card = {
+    width: "100%", maxWidth: 980, height: "100%",
+    background: theme.cardBg, backdropFilter: "blur(40px)",
+    border: `1px solid ${theme.borderFaint}`, borderRadius: 24, overflow: "hidden",
+    display: "flex", flexDirection: "column",
+  };
+  const iconBtn = {
+    display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer",
+    padding: "8px 14px", borderRadius: 999, fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
+    border: `1px solid ${theme.borderFaint}`, color: theme.text, background: "transparent",
+  };
+
+  // ════════════════════════ BOARDS LIST ════════════════════════
+  if (!activeBoard) {
+    return (
+      <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
+        style={panelWrap}>
+        <div style={card}>
+          {/* Header */}
+          <div style={{ padding: "20px 26px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${theme.borderFaint}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <motion.div whileTap={{ scale: 0.92 }} onClick={onBack} style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+              </motion.div>
+              <div>
+                <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.2 }}>{t("moodboard.title") || "Moodboards"}</div>
+                <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{boards.length} {boards.length === 1 ? (t("moodboard.boardOne") || "Board") : (t("moodboard.boardMany") || "Boards")}</div>
+              </div>
+            </div>
+            <motion.div whileTap={{ scale: 0.96 }} onClick={() => setCreating(true)}
+              style={{ ...iconBtn, background: accent, color: "#fff", border: "none" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              {t("moodboard.new") || "Neues Board"}
+            </motion.div>
+          </div>
+
+          {/* Inline create */}
+          <AnimatePresence>
+            {creating && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                style={{ overflow: "hidden", borderBottom: `1px solid ${theme.borderFaint}` }}>
+                <div style={{ padding: "16px 26px", display: "flex", gap: 10, alignItems: "center" }}>
+                  <input autoFocus value={newTitle} onChange={e => setNewTitle(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") createBoard(); if (e.key === "Escape") { setCreating(false); setNewTitle(""); } }}
+                    placeholder={t("moodboard.namePlaceholder") || "Board-Name…"}
+                    style={{ flex: 1, padding: "10px 14px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none" }} />
+                  <motion.div whileTap={{ scale: 0.96 }} onClick={createBoard} style={{ ...iconBtn, background: accent, color: "#fff", border: "none", opacity: busy ? 0.6 : 1 }}>{t("moodboard.create") || "Erstellen"}</motion.div>
+                  <motion.div whileTap={{ scale: 0.96 }} onClick={() => { setCreating(false); setNewTitle(""); }} style={iconBtn}>{t("common.cancel") || "Abbrechen"}</motion.div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Boards grid */}
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
+            {loadingBoards ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
+            ) : boards.length === 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, textAlign: "center", gap: 8 }}>
+                <div style={{ fontSize: 40, opacity: 0.3 }}>🎨</div>
+                <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.emptyTitle") || "Noch keine Moodboards"}</div>
+                <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 320, lineHeight: 1.5 }}>{t("moodboard.emptyHint") || "Erstelle dein erstes Moodboard und sammle Referenzbilder, Farben und Inspirationen."}</div>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 18 }}>
+                {boards.map(board => (
+                  <MoodboardCard key={board.id} board={board} theme={theme} darkMode={darkMode} accent={accent}
+                    onOpen={() => openBoard(board)} onDelete={() => deleteBoard(board)} t={t} />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  // ════════════════════════ BOARD DETAIL ════════════════════════
+  return (
+    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
+      style={panelWrap}>
+      <div style={card}>
+        {/* Header */}
+        <div style={{ padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderBottom: `1px solid ${theme.borderFaint}`, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+            <motion.div whileTap={{ scale: 0.92 }} onClick={closeBoard} style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+            </motion.div>
+            <input value={activeBoard.title} onChange={e => renameBoard(e.target.value)}
+              style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, background: "transparent", border: "none", outline: "none", letterSpacing: -0.2, minWidth: 0, maxWidth: 320 }} />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            {/* View toggle */}
+            <div style={{ display: "inline-flex", padding: 3, borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}` }}>
+              {[["grid", t("moodboard.grid") || "Raster"], ["canvas", t("moodboard.canvas") || "Canvas"]].map(([m, label]) => (
+                <div key={m} onClick={() => setBoardView(m)} style={{ padding: "6px 14px", borderRadius: 999, cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 500, color: view === m ? "#fff" : theme.textDim, background: view === m ? accent : "transparent", transition: "all 0.2s ease" }}>{label}</div>
+              ))}
+            </div>
+            <motion.div whileTap={{ scale: 0.96 }} onClick={() => fileInputRef.current?.click()} style={{ ...iconBtn, opacity: busy ? 0.6 : 1 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              {t("moodboard.upload") || "Hochladen"}
+            </motion.div>
+            <motion.div whileTap={{ scale: 0.96 }} onClick={() => setShowUrlInput(v => !v)} style={iconBtn}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+              URL
+            </motion.div>
+            <input ref={fileInputRef} type="file" accept="image/*" multiple style={{ display: "none" }}
+              onChange={e => { addImageFiles(Array.from(e.target.files || [])); e.target.value = ""; }} />
+          </div>
+        </div>
+
+        {/* URL input row */}
+        <AnimatePresence>
+          {showUrlInput && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: "hidden", borderBottom: `1px solid ${theme.borderFaint}` }}>
+              <div style={{ padding: "12px 24px", display: "flex", gap: 10 }}>
+                <input autoFocus value={urlInput} onChange={e => setUrlInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") addUrl(); if (e.key === "Escape") setShowUrlInput(false); }}
+                  placeholder={t("moodboard.urlPlaceholder") || "Bild- oder Website-URL einfügen…"}
+                  style={{ flex: 1, padding: "9px 13px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none" }} />
+                <motion.div whileTap={{ scale: 0.96 }} onClick={addUrl} style={{ ...iconBtn, background: accent, color: "#fff", border: "none" }}>{t("moodboard.add") || "Hinzufügen"}</motion.div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Palette + tag filter strip */}
+        {(activeBoard.color_palette?.length > 0 || allTags.length > 0) && (
+          <div style={{ padding: "10px 24px", display: "flex", alignItems: "center", gap: 14, borderBottom: `1px solid ${theme.borderFaint}`, flexWrap: "wrap" }}>
+            {activeBoard.color_palette?.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1 }}>{t("moodboard.palette") || "Palette"}</span>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {activeBoard.color_palette.slice(0, 8).map((c, i) => (
+                    <div key={i} title={c} onClick={() => navigator.clipboard?.writeText(c)} style={{ width: 18, height: 18, borderRadius: 5, background: c, border: `1px solid ${theme.borderFaint}`, cursor: "pointer" }} />
+                  ))}
+                </div>
+              </div>
+            )}
+            {allTags.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                {[null, ...allTags].map((tg, i) => (
+                  <div key={i} onClick={() => setTagFilter(tg)} style={{ padding: "3px 10px", borderRadius: 999, cursor: "pointer", fontSize: 11, fontFamily: FONT, fontWeight: 500, background: tagFilter === tg ? accent : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"), color: tagFilter === tg ? "#fff" : theme.textDim }}>{tg === null ? (t("moodboard.allTags") || "Alle") : "#" + tg}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Content */}
+        <div style={{ flex: 1, minHeight: 0, overflow: view === "canvas" ? "hidden" : "auto", position: "relative" }}>
+          {loadingItems ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
+          ) : items.length === 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, textAlign: "center", gap: 8, padding: 20 }}>
+              <div style={{ fontSize: 36, opacity: 0.3 }}>🖼️</div>
+              <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.boardEmptyTitle") || "Board ist leer"}</div>
+              <div style={{ fontSize: 12.5, fontFamily: FONT, maxWidth: 300, lineHeight: 1.5 }}>{t("moodboard.boardEmptyHint") || "Lade Bilder hoch oder füge eine URL ein, um Referenzen zu sammeln."}</div>
+            </div>
+          ) : view === "grid" ? (
+            // ── GRID (masonry columns) ──
+            <div style={{ columnCount: 4, columnGap: 14, padding: 20 }}>
+              {visibleItems.map(item => (
+                <div key={item.id} onClick={() => setSelectedItem(item)}
+                  style={{ breakInside: "avoid", marginBottom: 14, borderRadius: 12, overflow: "hidden", cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", position: "relative" }}>
+                  {item.type === "image" ? (
+                    <img src={item.thumb_url || item.url} alt="" style={{ width: "100%", display: "block" }} loading="lazy" />
+                  ) : (
+                    <div style={{ padding: 16, fontSize: 12, fontFamily: FONT, color: theme.text, wordBreak: "break-all" }}>🔗 {item.url}</div>
+                  )}
+                  {(item.note || (item.tags || []).length > 0) && (
+                    <div style={{ padding: "7px 10px", fontSize: 11, fontFamily: FONT, color: theme.textDim }}>
+                      {item.note}{(item.tags || []).length > 0 && <span style={{ color: accent }}> {(item.tags || []).map(x => "#" + x).join(" ")}</span>}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            // ── CANVAS (freeform drag) ──
+            <div ref={canvasRef} style={{ position: "absolute", inset: 0, overflow: "auto",
+              backgroundImage: `radial-gradient(${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"} 1px, transparent 1px)`, backgroundSize: "22px 22px" }}>
+              <div style={{ position: "relative", width: 2000, height: 1400 }}>
+                {visibleItems.map(item => (
+                  <div key={item.id}
+                    onPointerDown={e => onTilePointerDown(e, item)} onPointerMove={onTilePointerMove} onPointerUp={onTilePointerUp}
+                    onDoubleClick={() => setSelectedItem(item)}
+                    style={{ position: "absolute", left: item.x, top: item.y, width: item.w || 240, touchAction: "none", cursor: "grab",
+                      borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.18)", border: `1px solid ${theme.borderFaint}`, background: theme.cardBg }}>
+                    {item.type === "image" ? (
+                      <img src={item.thumb_url || item.url} alt="" draggable={false} style={{ width: "100%", display: "block", pointerEvents: "none" }} />
+                    ) : (
+                      <div style={{ padding: 14, fontSize: 12, fontFamily: FONT, color: theme.text, wordBreak: "break-all" }}>🔗 {item.url}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Item detail / lightbox */}
+      <AnimatePresence>
+        {selectedItem && (
+          <MoodboardItemDetail item={selectedItem} theme={theme} darkMode={darkMode} accent={accent} t={t}
+            onClose={() => setSelectedItem(null)} onDelete={() => deleteItem(selectedItem)}
+            onSave={(patch) => { updateItem(selectedItem.id, patch); setSelectedItem(prev => ({ ...prev, ...patch })); }} />
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// Board cover = collage of the first up-to-4 item images (fetched lazily per card).
+function MoodboardCard({ board, theme, darkMode, accent, onOpen, onDelete, t }) {
+  const [covers, setCovers] = useState([]);
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("moodboard_items").select("url,type").eq("board_id", board.id).eq("type", "image").order("position").limit(4);
+      setCovers((data || []).map(d => d.url).filter(Boolean));
+      const { count: c } = await supabase.from("moodboard_items").select("id", { count: "exact", head: true }).eq("board_id", board.id);
+      setCount(c || 0);
+    })();
+  }, [board.id]);
+  return (
+    <motion.div whileHover={{ y: -3 }} onClick={onOpen}
+      style={{ cursor: "pointer", borderRadius: 16, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", position: "relative" }}>
+      <div style={{ aspectRatio: "4/3", display: "grid", gridTemplateColumns: covers.length > 1 ? "1fr 1fr" : "1fr", gridAutoRows: "1fr", gap: 2, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+        {covers.length === 0 ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, opacity: 0.25 }}>🎨</div>
+        ) : covers.slice(0, 4).map((u, i) => (
+          <img key={i} src={u} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", gridColumn: covers.length === 3 && i === 0 ? "span 2" : "auto" }} loading="lazy" />
+        ))}
+      </div>
+      <div style={{ padding: "11px 13px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{board.title}</div>
+          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>{count} {count === 1 ? (t("moodboard.itemOne") || "Element") : (t("moodboard.itemMany") || "Elemente")}</div>
+        </div>
+        <div onClick={e => { e.stopPropagation(); onDelete(); }} title={t("common.delete") || "Löschen"} style={{ color: theme.textDim, opacity: 0.5, cursor: "pointer", padding: 4, flexShrink: 0 }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+        </div>
+      </div>
+      {board.color_palette?.length > 0 && (
+        <div style={{ display: "flex", height: 5 }}>{board.color_palette.slice(0, 6).map((c, i) => <div key={i} style={{ flex: 1, background: c }} />)}</div>
+      )}
+    </motion.div>
+  );
+}
+
+// Item detail overlay — large preview + note + tags + delete.
+function MoodboardItemDetail({ item, theme, darkMode, accent, t, onClose, onDelete, onSave }) {
+  const [note, setNote] = useState(item.note || "");
+  const [tagsText, setTagsText] = useState((item.tags || []).join(", "));
+  const save = () => {
+    const tags = tagsText.split(",").map(s => s.trim().replace(/^#/, "")).filter(Boolean);
+    onSave({ note, tags });
+    onClose();
+  };
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 30 }}>
+      <motion.div initial={{ scale: 0.94, y: 12 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 8 }} onClick={e => e.stopPropagation()}
+        style={{ display: "flex", gap: 0, maxWidth: 900, maxHeight: "84vh", background: theme.cardBg, borderRadius: 18, overflow: "hidden", border: `1px solid ${theme.borderFaint}` }}>
+        <div style={{ flex: "1 1 auto", display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "#0c0c12" : "#f0f0f3", minWidth: 360 }}>
+          {item.type === "image"
+            ? <img src={item.url} alt="" style={{ maxWidth: "100%", maxHeight: "84vh", display: "block", objectFit: "contain" }} />
+            : <a href={item.url} target="_blank" rel="noreferrer" style={{ padding: 40, color: accent, fontFamily: FONT, wordBreak: "break-all" }}>{item.url}</a>}
+        </div>
+        <div style={{ width: 280, flexShrink: 0, padding: 20, display: "flex", flexDirection: "column", gap: 16, borderLeft: `1px solid ${theme.borderFaint}` }}>
+          <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.details") || "Details"}</div>
+          {item.colors?.length > 0 && (
+            <div>
+              <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{t("moodboard.colors") || "Farben"}</div>
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>{item.colors.map((c, i) => <div key={i} title={c} onClick={() => navigator.clipboard?.writeText(c)} style={{ width: 24, height: 24, borderRadius: 6, background: c, border: `1px solid ${theme.borderFaint}`, cursor: "pointer" }} />)}</div>
+            </div>
+          )}
+          <div>
+            <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{t("moodboard.note") || "Notiz"}</div>
+            <textarea value={note} onChange={e => setNote(e.target.value)} placeholder={t("moodboard.notePlaceholder") || "Notiz hinzufügen…"} rows={3}
+              style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none", resize: "vertical" }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{t("moodboard.tags") || "Tags"}</div>
+            <input value={tagsText} onChange={e => setTagsText(e.target.value)} placeholder="minimal, warm, typo…"
+              style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none" }} />
+          </div>
+          <div style={{ flex: 1 }} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <motion.div whileTap={{ scale: 0.96 }} onClick={save} style={{ flex: 1, textAlign: "center", padding: "9px 0", borderRadius: 10, background: accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>{t("common.save") || "Speichern"}</motion.div>
+            <motion.div whileTap={{ scale: 0.96 }} onClick={onDelete} title={t("common.delete") || "Löschen"} style={{ padding: "9px 12px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, color: "#e5484d", cursor: "pointer", display: "flex", alignItems: "center" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+            </motion.div>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab }) {
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
   const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
@@ -15035,7 +15548,7 @@ export default function CircularMenu() {
     }
 
     // Let views with their own scrolling handle scroll natively
-    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "timeline" || currentView === "settings" || currentView === "notes" || currentView === "projects" || currentView === "brand") {
+    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "timeline" || currentView === "settings" || currentView === "notes" || currentView === "projects" || currentView === "brand" || currentView === "moodboards") {
       return;
     }
 
@@ -15856,6 +16369,13 @@ export default function CircularMenu() {
           )}
         </AnimatePresence>
 
+        {/* MOODBOARDS VIEW (Brand → Assets) */}
+        <AnimatePresence>
+          {currentView === "moodboards" && (
+            <MoodboardsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} />
+          )}
+        </AnimatePresence>
+
         {/* FILES VIEW */}
         <AnimatePresence>
           {currentView === "files" && (
@@ -16617,10 +17137,10 @@ export default function CircularMenu() {
               }
               if (catId === "brand") {
                 setMenuOpen(false);
-                // The 5 brand pillars all open the Brand view for now; per-pillar tab
-                // routing (and the Moodboards page under "assets") gets wired as those
-                // pages are built. We stash the chosen pillar so the view can preselect it.
                 setBrandPillar(subId || "strategy");
+                // "Assets" opens the Moodboards surface; the other pillars open the
+                // Brand view (per-pillar tab routing gets wired as those pages are built).
+                if (subId === "assets") { setCurrentView("moodboards"); return; }
                 setCurrentView("brand");
                 return;
               }

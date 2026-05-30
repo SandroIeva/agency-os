@@ -42,6 +42,33 @@ const translations = {
   // Empty-state
   "linearMenu.comingSoon":    { de: "Bald verfügbar",   en: "Coming soon" },
 
+  // ── Moodboards (Brand → Assets) ─────────────
+  "moodboard.title":           { de: "Moodboards",                en: "Moodboards" },
+  "moodboard.untitled":        { de: "Neues Moodboard",           en: "New moodboard" },
+  "moodboard.new":             { de: "Neues Board",               en: "New board" },
+  "moodboard.create":          { de: "Erstellen",                 en: "Create" },
+  "moodboard.namePlaceholder": { de: "Board-Name…",               en: "Board name…" },
+  "moodboard.boardOne":        { de: "Board",                     en: "board" },
+  "moodboard.boardMany":       { de: "Boards",                    en: "boards" },
+  "moodboard.itemOne":         { de: "Element",                   en: "item" },
+  "moodboard.itemMany":        { de: "Elemente",                  en: "items" },
+  "moodboard.emptyTitle":      { de: "Noch keine Moodboards",     en: "No moodboards yet" },
+  "moodboard.emptyHint":       { de: "Erstelle dein erstes Moodboard und sammle Referenzbilder, Farben und Inspirationen.", en: "Create your first moodboard to collect reference images, colors and inspiration." },
+  "moodboard.boardEmptyTitle": { de: "Board ist leer",            en: "Board is empty" },
+  "moodboard.boardEmptyHint":  { de: "Lade Bilder hoch oder füge eine URL ein, um Referenzen zu sammeln.", en: "Upload images or add a URL to start collecting references." },
+  "moodboard.grid":            { de: "Raster",                    en: "Grid" },
+  "moodboard.canvas":          { de: "Canvas",                    en: "Canvas" },
+  "moodboard.upload":          { de: "Hochladen",                 en: "Upload" },
+  "moodboard.add":             { de: "Hinzufügen",                en: "Add" },
+  "moodboard.urlPlaceholder":  { de: "Bild- oder Website-URL einfügen…", en: "Paste an image or website URL…" },
+  "moodboard.palette":         { de: "Palette",                   en: "Palette" },
+  "moodboard.allTags":         { de: "Alle",                      en: "All" },
+  "moodboard.details":         { de: "Details",                   en: "Details" },
+  "moodboard.colors":          { de: "Farben",                    en: "Colors" },
+  "moodboard.note":            { de: "Notiz",                     en: "Note" },
+  "moodboard.notePlaceholder": { de: "Notiz hinzufügen…",         en: "Add a note…" },
+  "moodboard.tags":            { de: "Tags",                      en: "Tags" },
+
   // ── Chat Submenu ─────────────────────────────
   "sub.team": { de: "Team", en: "Team" },
   "sub.clients": { de: "Kunden", en: "Clients" },
