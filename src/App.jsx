@@ -10545,6 +10545,10 @@ function MoodboardsView({ onBack, session, userOrg, theme, darkMode, t }) {
   const fileInputRef = useRef(null);
   const canvasRef = useRef(null);
   const accent = theme.accent || "#8B7AFF";
+  // Iridescent brand gradient — echoes the AI sphere's palette, used across the
+  // moodboard UI for accents, hover glows and the empty-state art.
+  const grad = `linear-gradient(135deg, ${accent} 0%, #9B6BFF 45%, #5BC8E8 100%)`;
+  const glow = "0 18px 50px rgba(124,122,255,0.28)";
 
   // ── Data loading ──
   const loadBoards = useCallback(async () => {
@@ -10723,8 +10727,11 @@ function MoodboardsView({ onBack, session, userOrg, theme, darkMode, t }) {
               <motion.div whileTap={{ scale: 0.92 }} onClick={onBack} style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
               </motion.div>
+              <div style={{ width: 38, height: 38, borderRadius: 11, background: grad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: glow }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+              </div>
               <div>
-                <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.2 }}>{t("moodboard.title") || "Moodboards"}</div>
+                <div style={{ fontSize: 19, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{t("moodboard.title") || "Moodboards"}</div>
                 <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{boards.length} {boards.length === 1 ? (t("moodboard.boardOne") || "Board") : (t("moodboard.boardMany") || "Boards")}</div>
               </div>
             </div>
@@ -10757,16 +10764,35 @@ function MoodboardsView({ onBack, session, userOrg, theme, darkMode, t }) {
             {loadingBoards ? (
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
             ) : boards.length === 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, textAlign: "center", gap: 8 }}>
-                <div style={{ fontSize: 40, opacity: 0.3 }}>🎨</div>
-                <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.emptyTitle") || "Noch keine Moodboards"}</div>
-                <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 320, lineHeight: 1.5 }}>{t("moodboard.emptyHint") || "Erstelle dein erstes Moodboard und sammle Referenzbilder, Farben und Inspirationen."}</div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, textAlign: "center", gap: 14 }}>
+                <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 160, damping: 16 }}
+                  style={{ width: 92, height: 92, borderRadius: 26, background: grad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: glow }}>
+                  <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+                </motion.div>
+                <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.emptyTitle") || "Noch keine Moodboards"}</div>
+                <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 340, lineHeight: 1.55 }}>{t("moodboard.emptyHint") || "Erstelle dein erstes Moodboard und sammle Referenzbilder, Farben und Inspirationen."}</div>
+                <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }} onClick={() => setCreating(true)}
+                  style={{ marginTop: 6, padding: "11px 22px", borderRadius: 999, background: grad, color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer", boxShadow: glow }}>
+                  {t("moodboard.new") || "Neues Board"}
+                </motion.div>
               </div>
             ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 18 }}>
-                {boards.map(board => (
-                  <MoodboardCard key={board.id} board={board} theme={theme} darkMode={darkMode} accent={accent}
-                    onOpen={() => openBoard(board)} onDelete={() => deleteBoard(board)} t={t} />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 18 }}>
+                {/* Create tile */}
+                <motion.div whileHover={{ scale: 1.015 }} whileTap={{ scale: 0.99 }} onClick={() => setCreating(true)}
+                  style={{ cursor: "pointer", borderRadius: 18, aspectRatio: "3/4", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12,
+                    border: `1.5px dashed ${darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.16)"}`, color: theme.textDim,
+                    background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)" }}>
+                  <div style={{ width: 52, height: 52, borderRadius: 16, background: grad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: glow }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  </div>
+                  <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.new") || "Neues Board"}</div>
+                </motion.div>
+                {boards.map((board, i) => (
+                  <motion.div key={board.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.03 + i * 0.04, duration: 0.35, ease: [0.22, 0.68, 0.35, 1] }}>
+                    <MoodboardCard board={board} theme={theme} darkMode={darkMode} accent={accent} grad={grad} glow={glow}
+                      onOpen={() => openBoard(board)} onDelete={() => deleteBoard(board)} t={t} />
+                  </motion.div>
                 ))}
               </div>
             )}
@@ -10853,28 +10879,23 @@ function MoodboardsView({ onBack, session, userOrg, theme, darkMode, t }) {
           {loadingItems ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
           ) : items.length === 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, textAlign: "center", gap: 8, padding: 20 }}>
-              <div style={{ fontSize: 36, opacity: 0.3 }}>🖼️</div>
-              <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.boardEmptyTitle") || "Board ist leer"}</div>
-              <div style={{ fontSize: 12.5, fontFamily: FONT, maxWidth: 300, lineHeight: 1.5 }}>{t("moodboard.boardEmptyHint") || "Lade Bilder hoch oder füge eine URL ein, um Referenzen zu sammeln."}</div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, textAlign: "center", gap: 14, padding: 20 }}>
+              <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 160, damping: 16 }}
+                style={{ width: 84, height: 84, borderRadius: 24, background: grad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: glow }}>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              </motion.div>
+              <div style={{ fontSize: 15.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.boardEmptyTitle") || "Board ist leer"}</div>
+              <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 320, lineHeight: 1.55 }}>{t("moodboard.boardEmptyHint") || "Lade Bilder hoch oder füge eine URL ein, um Referenzen zu sammeln."}</div>
+              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }} onClick={() => fileInputRef.current?.click()}
+                style={{ marginTop: 4, padding: "11px 22px", borderRadius: 999, background: grad, color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer", boxShadow: glow }}>
+                {t("moodboard.upload") || "Hochladen"}
+              </motion.div>
             </div>
           ) : view === "grid" ? (
             // ── GRID (masonry columns) ──
             <div style={{ columnCount: 4, columnGap: 14, padding: 20 }}>
-              {visibleItems.map(item => (
-                <div key={item.id} onClick={() => setSelectedItem(item)}
-                  style={{ breakInside: "avoid", marginBottom: 14, borderRadius: 12, overflow: "hidden", cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", position: "relative" }}>
-                  {item.type === "image" ? (
-                    <img src={item.thumb_url || item.url} alt="" style={{ width: "100%", display: "block" }} loading="lazy" />
-                  ) : (
-                    <div style={{ padding: 16, fontSize: 12, fontFamily: FONT, color: theme.text, wordBreak: "break-all" }}>🔗 {item.url}</div>
-                  )}
-                  {(item.note || (item.tags || []).length > 0) && (
-                    <div style={{ padding: "7px 10px", fontSize: 11, fontFamily: FONT, color: theme.textDim }}>
-                      {item.note}{(item.tags || []).length > 0 && <span style={{ color: accent }}> {(item.tags || []).map(x => "#" + x).join(" ")}</span>}
-                    </div>
-                  )}
-                </div>
+              {visibleItems.map((item, i) => (
+                <MoodboardGridTile key={item.id} item={item} i={i} theme={theme} darkMode={darkMode} accent={accent} onOpen={() => setSelectedItem(item)} />
               ))}
             </div>
           ) : (
@@ -10914,9 +10935,12 @@ function MoodboardsView({ onBack, session, userOrg, theme, darkMode, t }) {
 }
 
 // Board cover = collage of the first up-to-4 item images (fetched lazily per card).
-function MoodboardCard({ board, theme, darkMode, accent, onOpen, onDelete, t }) {
+// Title + meta sit OVER the cover behind a gradient scrim; the card lifts with a
+// coloured glow on hover and reveals a delete button.
+function MoodboardCard({ board, theme, darkMode, accent, grad, glow, onOpen, onDelete, t }) {
   const [covers, setCovers] = useState([]);
   const [count, setCount] = useState(0);
+  const [hover, setHover] = useState(false);
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from("moodboard_items").select("url,type").eq("board_id", board.id).eq("type", "image").order("position").limit(4);
@@ -10925,27 +10949,76 @@ function MoodboardCard({ board, theme, darkMode, accent, onOpen, onDelete, t }) 
       setCount(c || 0);
     })();
   }, [board.id]);
+  const palette = board.color_palette || [];
   return (
-    <motion.div whileHover={{ y: -3 }} onClick={onOpen}
-      style={{ cursor: "pointer", borderRadius: 16, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", position: "relative" }}>
-      <div style={{ aspectRatio: "4/3", display: "grid", gridTemplateColumns: covers.length > 1 ? "1fr 1fr" : "1fr", gridAutoRows: "1fr", gap: 2, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+    <motion.div whileHover={{ y: -5 }} transition={{ type: "spring", stiffness: 300, damping: 22 }}
+      onHoverStart={() => setHover(true)} onHoverEnd={() => setHover(false)} onClick={onOpen}
+      style={{ cursor: "pointer", borderRadius: 18, overflow: "hidden", position: "relative", aspectRatio: "3/4",
+        border: `1px solid ${hover ? "transparent" : theme.borderFaint}`,
+        boxShadow: hover ? glow : "0 4px 14px rgba(0,0,0,0.06)", transition: "box-shadow 0.3s ease, border-color 0.3s ease" }}>
+      {/* Cover collage */}
+      <div style={{ position: "absolute", inset: 0, display: "grid", gridTemplateColumns: covers.length > 1 ? "1fr 1fr" : "1fr", gridAutoRows: "1fr", gap: 2, background: covers.length ? "transparent" : grad }}>
         {covers.length === 0 ? (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, opacity: 0.25 }}>🎨</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          </div>
         ) : covers.slice(0, 4).map((u, i) => (
-          <img key={i} src={u} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", gridColumn: covers.length === 3 && i === 0 ? "span 2" : "auto" }} loading="lazy" />
+          <motion.img key={i} src={u} alt="" animate={{ scale: hover ? 1.05 : 1 }} transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1] }}
+            style={{ width: "100%", height: "100%", objectFit: "cover", gridColumn: covers.length === 3 && i === 0 ? "span 2" : "auto" }} loading="lazy" />
         ))}
       </div>
-      <div style={{ padding: "11px 13px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{board.title}</div>
-          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>{count} {count === 1 ? (t("moodboard.itemOne") || "Element") : (t("moodboard.itemMany") || "Elemente")}</div>
-        </div>
-        <div onClick={e => { e.stopPropagation(); onDelete(); }} title={t("common.delete") || "Löschen"} style={{ color: theme.textDim, opacity: 0.5, cursor: "pointer", padding: 4, flexShrink: 0 }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+      {/* Scrim */}
+      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.15) 45%, transparent 70%)" }} />
+      {/* Delete (hover) */}
+      <motion.div animate={{ opacity: hover ? 1 : 0, y: hover ? 0 : -4 }} onClick={e => { e.stopPropagation(); onDelete(); }} title={t("common.delete") || "Löschen"}
+        style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.45)", backdropFilter: "blur(6px)", color: "#fff", cursor: "pointer" }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+      </motion.div>
+      {/* Title + meta */}
+      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "13px 14px 14px" }}>
+        <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: -0.2, textShadow: "0 1px 8px rgba(0,0,0,0.4)" }}>{board.title}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5 }}>
+          <span style={{ fontSize: 11, fontFamily: FONT, color: "rgba(255,255,255,0.8)" }}>{count} {count === 1 ? (t("moodboard.itemOne") || "Element") : (t("moodboard.itemMany") || "Elemente")}</span>
+          {palette.length > 0 && (
+            <div style={{ display: "flex", gap: 3, marginLeft: "auto" }}>
+              {palette.slice(0, 5).map((c, i) => <div key={i} style={{ width: 11, height: 11, borderRadius: 4, background: c, boxShadow: "0 0 0 1px rgba(255,255,255,0.35)" }} />)}
+            </div>
+          )}
         </div>
       </div>
-      {board.color_palette?.length > 0 && (
-        <div style={{ display: "flex", height: 5 }}>{board.color_palette.slice(0, 6).map((c, i) => <div key={i} style={{ flex: 1, background: c }} />)}</div>
+    </motion.div>
+  );
+}
+
+// A single masonry grid tile — image zooms slightly on hover and a gradient
+// scrim reveals the note/tags; staggered entrance.
+function MoodboardGridTile({ item, i, theme, darkMode, accent, onOpen }) {
+  const [hover, setHover] = useState(false);
+  const hasMeta = item.note || (item.tags || []).length > 0;
+  return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.025, 0.4), duration: 0.35 }}
+      onHoverStart={() => setHover(true)} onHoverEnd={() => setHover(false)} onClick={onOpen}
+      style={{ breakInside: "avoid", marginBottom: 14, borderRadius: 14, overflow: "hidden", cursor: "pointer", position: "relative",
+        border: `1px solid ${hover ? "transparent" : theme.borderFaint}`,
+        boxShadow: hover ? "0 14px 36px rgba(0,0,0,0.20)" : "none", transition: "box-shadow 0.3s ease, border-color 0.3s ease",
+        background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
+      {item.type === "image" ? (
+        <div style={{ overflow: "hidden" }}>
+          <motion.img src={item.thumb_url || item.url} alt="" animate={{ scale: hover ? 1.06 : 1 }} transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1] }}
+            style={{ width: "100%", display: "block" }} loading="lazy" />
+        </div>
+      ) : (
+        <div style={{ padding: 16, fontSize: 12, fontFamily: FONT, color: theme.text, wordBreak: "break-all", display: "flex", gap: 8, alignItems: "flex-start" }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+          {item.url}
+        </div>
+      )}
+      {hasMeta && item.type === "image" && (
+        <motion.div animate={{ opacity: hover ? 1 : 0 }} transition={{ duration: 0.25 }}
+          style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "18px 12px 10px", background: "linear-gradient(to top, rgba(0,0,0,0.78), transparent)", pointerEvents: "none" }}>
+          {item.note && <div style={{ fontSize: 11.5, fontFamily: FONT, color: "#fff", lineHeight: 1.4 }}>{item.note}</div>}
+          {(item.tags || []).length > 0 && <div style={{ fontSize: 11, fontFamily: FONT, color: "rgba(255,255,255,0.75)", marginTop: 3 }}>{(item.tags || []).map(x => "#" + x).join(" ")}</div>}
+        </motion.div>
       )}
     </motion.div>
   );
