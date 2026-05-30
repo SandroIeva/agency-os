@@ -10720,12 +10720,9 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
   // ════════════════════════ ASSETS (tabbed: Moodboards / Creations / Inspirations) ════════════════════════
   if (!activeBoard) {
     const ASSET_TABS = [
-      { id: "moodboards",   label: t("assets.moodboards") || "Moodboards",
-        icon: <><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></> },
-      { id: "creations",    label: t("assets.creations") || "Creations",
-        icon: <><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 6.9 18.2l1.9-5.8L4 8.8h6.1z"/></> },
-      { id: "inspirations", label: t("assets.inspirations") || "Inspirations",
-        icon: <><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 00-4 12.7c.6.5 1 .9 1 1.8h6c0-.9.4-1.3 1-1.8A7 7 0 0012 2z"/></> },
+      { id: "moodboards",   label: t("assets.moodboards") || "Moodboards" },
+      { id: "creations",    label: t("assets.creations") || "Creations" },
+      { id: "inspirations", label: t("assets.inspirations") || "Inspirations" },
     ];
     return (
       <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -10738,31 +10735,30 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
               <motion.div whileTap={{ scale: 0.92 }} onClick={onBack} style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
               </motion.div>
-              <div style={{ width: 38, height: 38, borderRadius: 11, background: grad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: glow }}>
+              <div style={{ width: 38, height: 38, borderRadius: 11, background: "#1a1a2e", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>
               </div>
               <div style={{ fontSize: 19, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{t("assets.title") || "Assets"}</div>
             </div>
             {tab === "moodboards" && (
               <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setCreating(true)}
-                style={{ ...iconBtn, background: grad, color: "#fff", border: "none", boxShadow: glow }}>
+                style={{ ...iconBtn, background: accent, color: "#fff", border: "none" }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 {t("moodboard.new") || "Neues Board"}
               </motion.div>
             )}
           </div>
 
-          {/* Tab switcher */}
-          <div style={{ padding: "14px 26px 0", display: "flex", gap: 6, borderBottom: `1px solid ${theme.borderFaint}` }}>
+          {/* Tab switcher — text only, solid purple underline (no gradient, no icons) */}
+          <div style={{ padding: "14px 26px 0", display: "flex", gap: 4, borderBottom: `1px solid ${theme.borderFaint}` }}>
             {ASSET_TABS.map(tb => {
               const active = tab === tb.id;
               return (
                 <div key={tb.id} onClick={() => setTab(tb.id)}
-                  style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 14px 13px", cursor: "pointer", position: "relative",
+                  style={{ padding: "10px 14px 13px", cursor: "pointer", position: "relative",
                     fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: active ? theme.text : theme.textDim, transition: "color 0.2s ease" }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{tb.icon}</svg>
                   {tb.label}
-                  {active && <motion.div layoutId="assetsTabUnderline" style={{ position: "absolute", left: 8, right: 8, bottom: -1, height: 2.5, borderRadius: 2, background: grad }} />}
+                  {active && <motion.div layoutId="assetsTabUnderline" style={{ position: "absolute", left: 8, right: 8, bottom: -1, height: 2.5, borderRadius: 2, background: accent }} />}
                 </div>
               );
             })}
@@ -10809,7 +10805,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
                 <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.emptyTitle") || "Noch keine Moodboards"}</div>
                 <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 340, lineHeight: 1.55 }}>{t("moodboard.emptyHint") || "Erstelle dein erstes Moodboard und sammle Referenzbilder, Farben und Inspirationen."}</div>
                 <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }} onClick={() => setCreating(true)}
-                  style={{ marginTop: 6, padding: "11px 22px", borderRadius: 999, background: grad, color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer", boxShadow: glow }}>
+                  style={{ marginTop: 6, padding: "11px 22px", borderRadius: 999, background: accent, color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
                   {t("moodboard.new") || "Neues Board"}
                 </motion.div>
               </div>
@@ -10820,7 +10816,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
                   style={{ cursor: "pointer", borderRadius: 18, aspectRatio: "3/4", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12,
                     border: `1.5px dashed ${darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.16)"}`, color: theme.textDim,
                     background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)" }}>
-                  <div style={{ width: 52, height: 52, borderRadius: 16, background: grad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: glow }}>
+                  <div style={{ width: 52, height: 52, borderRadius: 16, background: accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                   </div>
                   <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.new") || "Neues Board"}</div>
@@ -10925,7 +10921,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
               <div style={{ fontSize: 15.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.boardEmptyTitle") || "Board ist leer"}</div>
               <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 320, lineHeight: 1.55 }}>{t("moodboard.boardEmptyHint") || "Lade Bilder hoch oder füge eine URL ein, um Referenzen zu sammeln."}</div>
               <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }} onClick={() => fileInputRef.current?.click()}
-                style={{ marginTop: 4, padding: "11px 22px", borderRadius: 999, background: grad, color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer", boxShadow: glow }}>
+                style={{ marginTop: 4, padding: "11px 22px", borderRadius: 999, background: accent, color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
                 {t("moodboard.upload") || "Hochladen"}
               </motion.div>
             </div>
