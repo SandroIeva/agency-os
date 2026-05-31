@@ -11216,7 +11216,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
 // user uploads). Filter by media type; upload your own via the button.
 function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, pickRef, onUploadingChange }) {
   const [files, setFiles] = useState(null); // null = loading
-  const [filter, setFilter] = useState("image"); // image | video
+  const [openFolder, setOpenFolder] = useState(null); // null = folder overview | "image" | "video"
   const [uploading, setUploading] = useState(false);
   const [zoom, setZoom] = useState(null); // the file object being previewed
   const inputRef = useRef(null);
@@ -11256,78 +11256,121 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
       if (!error && data) { added.push(data); if (!firstType) firstType = file.type.startsWith("video/") ? "video" : "image"; }
     }
     setFiles(prev => [...added, ...(prev || [])]);
-    if (firstType) setFilter(firstType); // jump to the type we just added so it's visible
+    if (firstType) setOpenFolder(firstType); // jump into the folder we just added to
     setUploading(false);
   };
 
   const isVideo = (f) => (f.mime_type || "").startsWith("video/");
-  const visible = (files || []).filter(f => filter === "video" ? isVideo(f) : !isVideo(f));
+  const images = (files || []).filter(f => !isVideo(f));
+  const videos = (files || []).filter(f => isVideo(f));
+  const items = openFolder === "video" ? videos : images;
   const fmtMeta = (f) => {
     const ext = ((f.name || "").split(".").pop() || (f.mime_type || "").split("/")[1] || "").toUpperCase();
     const mb = f.size_bytes ? `${Math.max(1, Math.round(f.size_bytes / 1e6))}MB` : null;
     return [mb, ext].filter(Boolean).join(" · ");
   };
 
-  // Binary Images / Videos switch, styled for the dark glassy list.
-  const toggle = (
-    <div style={{ display: "inline-flex", padding: 3, borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.045)", border: `1px solid ${theme.borderFaint}` }}>
-      {[["image", t("assets.images") || "Bilder"], ["video", t("assets.videos") || "Videos"]].map(([m, label]) => (
-        <div key={m} onClick={() => setFilter(m)} style={{ padding: "6px 16px", borderRadius: 999, cursor: "pointer", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, color: filter === m ? "#fff" : theme.textDim, background: filter === m ? accent : "transparent", transition: "all 0.2s ease" }}>{label}</div>
-      ))}
-    </div>
-  );
+  // One Creations folder tile (Images / Videos) — preview collage + name + count.
+  const FolderTile = ({ type, list, label }) => {
+    const covers = list.slice(0, 4);
+    return (
+      <motion.div whileHover={{ y: -4 }} transition={{ type: "spring", stiffness: 300, damping: 22 }} onClick={() => setOpenFolder(type)}
+        style={{ cursor: "pointer", borderRadius: 18, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
+        <div style={{ aspectRatio: "16/9", display: "grid", gridTemplateColumns: covers.length > 1 ? "1fr 1fr" : "1fr", gridAutoRows: "1fr", gap: 2, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+          {covers.length === 0 ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim }}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+            </div>
+          ) : covers.map((f, i) => (
+            <div key={f.id} style={{ position: "relative", overflow: "hidden", gridColumn: covers.length === 3 && i === 0 ? "span 2" : "auto" }}>
+              {type === "video"
+                ? <video src={f.public_url} muted playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : <img src={f.public_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />}
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 11 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: "#1a1a2e", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            {type === "video"
+              ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+              : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>}
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 14.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{label}</div>
+            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{list.length} {list.length === 1 ? (t("assets.itemOne") || "Element") : (t("assets.itemMany") || "Elemente")}</div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+      </motion.div>
+    );
+  };
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <input ref={inputRef} type="file" accept="image/*,video/*" multiple style={{ display: "none" }} onChange={e => { upload(e.target.files); e.target.value = ""; }} />
-      {/* Toolbar — Images/Videos switch (upload lives in the header, like Moodboards) */}
-      <div style={{ padding: "14px 26px", display: "flex", alignItems: "center", gap: 12 }}>
-        {toggle}
-        {files && <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{visible.length} {filter === "video" ? (t("assets.videos") || "Videos") : (t("assets.images") || "Bilder")}</span>}
-      </div>
 
       {files === null ? (
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
-      ) : visible.length === 0 ? (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: theme.textDim, textAlign: "center", gap: 14, padding: 20 }}>
-          <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 160, damping: 16 }}
-            style={{ width: 84, height: 84, borderRadius: 24, background: grad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: glow }}>
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 6.9 18.2l1.9-5.8L4 8.8h6.1z"/></svg>
-          </motion.div>
-          <div style={{ fontSize: 15.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("assets.creationsEmptyTitle") || "Noch keine Kreationen"}</div>
-          <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 330, lineHeight: 1.55 }}>{t("assets.creationsEmptyHint") || "Mit KI generierte Bilder erscheinen hier automatisch — oder lade eigene hoch."}</div>
-          <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }} onClick={() => inputRef.current?.click()}
-            style={{ marginTop: 4, padding: "11px 22px", borderRadius: 999, background: accent, color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
-            {t("moodboard.upload") || "Hochladen"}
-          </motion.div>
+      ) : openFolder === null ? (
+        // ── Folder overview: always two folders, Bilder + Videos ──
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 18 }}>
+            <FolderTile type="image" list={images} label={t("assets.images") || "Bilder"} />
+            <FolderTile type="video" list={videos} label={t("assets.videos") || "Videos"} />
+          </div>
         </div>
       ) : (
-        // Dark glassy LIST view: row = thumbnail + name + "size · TYPE"
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 22px 22px", display: "flex", flexDirection: "column", gap: 7 }}>
-          {visible.map((f, i) => (
-            <motion.div key={f.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.28 }}
-              onClick={() => setZoom(f)} className="hover-row"
-              style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 14, cursor: "pointer",
-                background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)", border: `1px solid ${theme.borderFaint}` }}>
-              <div style={{ width: 46, height: 46, borderRadius: 11, overflow: "hidden", flexShrink: 0, position: "relative", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
-                {isVideo(f) ? (
-                  <>
-                    <video src={f.public_url} muted playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.25)" }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
-                    </div>
-                  </>
-                ) : (
-                  <img src={f.public_url} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
-                )}
-              </div>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name || "—"}</div>
-                <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{fmtMeta(f)}</div>
-              </div>
+        // ── Inside a folder: back row + list ──
+        <>
+          <div style={{ padding: "14px 26px", display: "flex", alignItems: "center", gap: 10 }}>
+            <motion.div whileTap={{ scale: 0.94 }} onClick={() => setOpenFolder(null)} style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", color: theme.textDim, fontSize: 13, fontFamily: FONT, fontWeight: 500 }}>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+              {openFolder === "video" ? (t("assets.videos") || "Videos") : (t("assets.images") || "Bilder")}
             </motion.div>
-          ))}
-        </div>
+            <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>· {items.length}</span>
+          </div>
+          {items.length === 0 ? (
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: theme.textDim, textAlign: "center", gap: 14, padding: 20 }}>
+              <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 160, damping: 16 }}
+                style={{ width: 84, height: 84, borderRadius: 24, background: grad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: glow }}>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 6.9 18.2l1.9-5.8L4 8.8h6.1z"/></svg>
+              </motion.div>
+              <div style={{ fontSize: 15.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("assets.creationsEmptyTitle") || "Noch keine Kreationen"}</div>
+              <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 330, lineHeight: 1.55 }}>{t("assets.creationsEmptyHint") || "Mit KI generierte Bilder erscheinen hier automatisch — oder lade eigene hoch."}</div>
+              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }} onClick={() => inputRef.current?.click()}
+                style={{ marginTop: 4, padding: "11px 22px", borderRadius: 999, background: accent, color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
+                {t("moodboard.upload") || "Hochladen"}
+              </motion.div>
+            </div>
+          ) : (
+            // Dark glassy LIST: row = thumbnail + name + "size · TYPE"
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 22px 22px", display: "flex", flexDirection: "column", gap: 7 }}>
+              {items.map((f, i) => (
+                <motion.div key={f.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.28 }}
+                  onClick={() => setZoom(f)} className="hover-row"
+                  style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 14, cursor: "pointer",
+                    background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)", border: `1px solid ${theme.borderFaint}` }}>
+                  <div style={{ width: 46, height: 46, borderRadius: 11, overflow: "hidden", flexShrink: 0, position: "relative", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
+                    {isVideo(f) ? (
+                      <>
+                        <video src={f.public_url} muted playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.25)" }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
+                        </div>
+                      </>
+                    ) : (
+                      <img src={f.public_url} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
+                    )}
+                  </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name || "—"}</div>
+                    <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{fmtMeta(f)}</div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <AnimatePresence>

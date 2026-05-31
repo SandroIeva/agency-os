@@ -52,6 +52,8 @@ const translations = {
   "assets.all":                { de: "Alle",                      en: "All" },
   "assets.images":             { de: "Bilder",                    en: "Images" },
   "assets.videos":             { de: "Videos",                    en: "Videos" },
+  "assets.itemOne":            { de: "Element",                   en: "item" },
+  "assets.itemMany":           { de: "Elemente",                  en: "items" },
   "assets.inspirationsTitle":  { de: "Inspirationen",             en: "Inspirations" },
   "assets.inspirationsHint":   { de: "Speichere Referenzen und Fundstücke aus dem Web hier. Bald verfügbar.", en: "Save references and finds from the web here. Coming soon." },
 
