@@ -12995,11 +12995,14 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
               >Bearbeiten</motion.button>
             </div>
 
+            {/* This view IS one pillar (Strategie / Identität / Brand Design — set from
+                the menu). The tab bar shows ONLY this pillar's sub-points; switching
+                pillars happens via the main menu, not here. */}
             <div style={{ display: "flex", gap: 4, padding: "10px 20px 0", borderBottom: `1px solid ${theme.borderFaint}` }}>
-              {BRAND_PILLAR_TABS.map(({ key, label, view }) => {
-                const active = !view && brandTab === key;
+              {pillarSubs.map(({ key, label }) => {
+                const active = brandSub === key;
                 return (
-                  <motion.div key={key} whileTap={{ scale: 0.96 }} onClick={() => view ? onNavigate?.(view) : setBrandTab(key)}
+                  <motion.div key={key} whileTap={{ scale: 0.96 }} onClick={() => setBrandSub(key)}
                     style={{
                       padding: "8px 14px", borderRadius: "10px 10px 0 0", cursor: "pointer",
                       fontSize: 12, fontFamily: FONT, fontWeight: active ? 600 : 500,
@@ -13116,14 +13119,6 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
 
                   return (
                     <>
-                      {subs.length > 0 && (
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          {subs.map(s => {
-                            const on = brandSub === s.key;
-                            return <div key={s.key} onClick={() => setBrandSub(s.key)} style={{ padding: "7px 14px", borderRadius: 999, cursor: "pointer", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, background: on ? theme.accent : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"), color: on ? "#fff" : theme.textDim, transition: "all 0.2s ease" }}>{s.label}</div>;
-                          })}
-                        </div>
-                      )}
                       <div>
                         <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{subLabel}</div>
                       </div>
