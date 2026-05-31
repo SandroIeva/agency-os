@@ -10971,9 +10971,6 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
           {/* Header */}
           <div style={{ padding: "18px 26px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <motion.div whileTap={{ scale: 0.92 }} onClick={onBack} style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
-              </motion.div>
               <div style={{ width: 38, height: 38, borderRadius: 11, background: "#1a1a2e", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>
               </div>
