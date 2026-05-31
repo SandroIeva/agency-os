@@ -11216,7 +11216,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
 // user uploads). Filter by media type; upload your own via the button.
 function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, pickRef, onUploadingChange }) {
   const [files, setFiles] = useState(null); // null = loading
-  const [filter, setFilter] = useState("all"); // all | image | video
+  const [filter, setFilter] = useState("image"); // image | video
   const [uploading, setUploading] = useState(false);
   const [zoom, setZoom] = useState(null); // the file object being previewed
   const inputRef = useRef(null);
@@ -11228,7 +11228,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   const load = useCallback(async () => {
     if (!userOrg?.id) { setFiles([]); return; }
     const { data } = await supabase.from("user_files")
-      .select("id,name,public_url,mime_type,created_at")
+      .select("id,name,public_url,mime_type,size_bytes,created_at")
       .eq("org_id", userOrg.id)
       .or("mime_type.ilike.image/%,mime_type.ilike.video/%")
       .order("created_at", { ascending: false }).limit(160);
@@ -11241,6 +11241,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     if (!arr.length || !userOrg?.id || !session?.user?.id) return;
     setUploading(true);
     const added = [];
+    let firstType = null;
     for (const file of arr) {
       const ext = (file.name.split(".").pop() || "bin").toLowerCase();
       const path = `${session.user.id}/creations/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
@@ -11251,20 +11252,27 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
         user_id: session.user.id, org_id: userOrg.id, name: file.name,
         mime_type: file.type, size_bytes: file.size, storage_path: path,
         storage_provider: "supabase", public_url: signed?.signedUrl || null,
-      }).select("id,name,public_url,mime_type,created_at").single();
-      if (!error && data) added.push(data);
+      }).select("id,name,public_url,mime_type,size_bytes,created_at").single();
+      if (!error && data) { added.push(data); if (!firstType) firstType = file.type.startsWith("video/") ? "video" : "image"; }
     }
     setFiles(prev => [...added, ...(prev || [])]);
+    if (firstType) setFilter(firstType); // jump to the type we just added so it's visible
     setUploading(false);
   };
 
   const isVideo = (f) => (f.mime_type || "").startsWith("video/");
-  const visible = (files || []).filter(f => filter === "all" ? true : filter === "video" ? isVideo(f) : !isVideo(f));
+  const visible = (files || []).filter(f => filter === "video" ? isVideo(f) : !isVideo(f));
+  const fmtMeta = (f) => {
+    const ext = ((f.name || "").split(".").pop() || (f.mime_type || "").split("/")[1] || "").toUpperCase();
+    const mb = f.size_bytes ? `${Math.max(1, Math.round(f.size_bytes / 1e6))}MB` : null;
+    return [mb, ext].filter(Boolean).join(" · ");
+  };
 
-  const filterBar = (
-    <div style={{ display: "inline-flex", padding: 3, borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}` }}>
-      {[["all", t("assets.all") || "Alle"], ["image", t("assets.images") || "Bilder"], ["video", t("assets.videos") || "Videos"]].map(([m, label]) => (
-        <div key={m} onClick={() => setFilter(m)} style={{ padding: "6px 14px", borderRadius: 999, cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 500, color: filter === m ? "#fff" : theme.textDim, background: filter === m ? accent : "transparent", transition: "all 0.2s ease" }}>{label}</div>
+  // Binary Images / Videos switch, styled for the dark glassy list.
+  const toggle = (
+    <div style={{ display: "inline-flex", padding: 3, borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.045)", border: `1px solid ${theme.borderFaint}` }}>
+      {[["image", t("assets.images") || "Bilder"], ["video", t("assets.videos") || "Videos"]].map(([m, label]) => (
+        <div key={m} onClick={() => setFilter(m)} style={{ padding: "6px 16px", borderRadius: 999, cursor: "pointer", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, color: filter === m ? "#fff" : theme.textDim, background: filter === m ? accent : "transparent", transition: "all 0.2s ease" }}>{label}</div>
       ))}
     </div>
   );
@@ -11272,9 +11280,10 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <input ref={inputRef} type="file" accept="image/*,video/*" multiple style={{ display: "none" }} onChange={e => { upload(e.target.files); e.target.value = ""; }} />
-      {/* Toolbar — filter only (upload lives in the header, like Moodboards) */}
+      {/* Toolbar — Images/Videos switch (upload lives in the header, like Moodboards) */}
       <div style={{ padding: "14px 26px", display: "flex", alignItems: "center", gap: 12 }}>
-        {filterBar}
+        {toggle}
+        {files && <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{visible.length} {filter === "video" ? (t("assets.videos") || "Videos") : (t("assets.images") || "Bilder")}</span>}
       </div>
 
       {files === null ? (
@@ -11293,25 +11302,31 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
           </motion.div>
         </div>
       ) : (
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 26px 26px" }}>
-          <div style={{ columnCount: 4, columnGap: 14 }}>
-            {visible.map((f, i) => (
-              <motion.div key={f.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.02, 0.35), duration: 0.3 }}
-                onClick={() => setZoom(f)}
-                style={{ breakInside: "avoid", marginBottom: 14, borderRadius: 14, overflow: "hidden", cursor: "pointer", border: `1px solid ${theme.borderFaint}`, position: "relative", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
+        // Dark glassy LIST view: row = thumbnail + name + "size · TYPE"
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 22px 22px", display: "flex", flexDirection: "column", gap: 7 }}>
+          {visible.map((f, i) => (
+            <motion.div key={f.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.28 }}
+              onClick={() => setZoom(f)} className="hover-row"
+              style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 14, cursor: "pointer",
+                background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)", border: `1px solid ${theme.borderFaint}` }}>
+              <div style={{ width: 46, height: 46, borderRadius: 11, overflow: "hidden", flexShrink: 0, position: "relative", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
                 {isVideo(f) ? (
                   <>
-                    <video src={f.public_url} muted playsInline preload="metadata" style={{ width: "100%", display: "block" }} />
-                    <div style={{ position: "absolute", top: 8, right: 8, width: 24, height: 24, borderRadius: 7, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
+                    <video src={f.public_url} muted playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.25)" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
                     </div>
                   </>
                 ) : (
-                  <img src={f.public_url} alt={f.name} style={{ width: "100%", display: "block" }} loading="lazy" />
+                  <img src={f.public_url} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
                 )}
-              </motion.div>
-            ))}
-          </div>
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name || "—"}</div>
+                <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{fmtMeta(f)}</div>
+              </div>
+            </motion.div>
+          ))}
         </div>
       )}
 
