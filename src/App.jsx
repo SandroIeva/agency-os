@@ -11616,6 +11616,75 @@ function RichTextEditor({ initialHTML, theme, darkMode, onSave, onCancel }) {
   );
 }
 
+// Voice & Tone — Cash-App-style "moments" cards (content side only). Placeholder
+// data for now; a quiz to configure these will plug in later.
+const VOICE_TONE_MOMENTS = [
+  {
+    title: "First impressions",
+    desc: "Hier wollen wir Interesse wecken und Neugier entfachen — durch mutige, clevere Sprache, die zum genaueren Hinsehen einlädt.",
+    traits: [{ label: "To-the-point", value: 40 }, { label: "Approachable", value: 90 }, { label: "Upfront", value: 12 }],
+    channels: ["In-app Product Flows", "Transactional Email", "Push Notifications"],
+  },
+  {
+    title: "Consideration",
+    desc: "Wir haben die Aufmerksamkeit — jetzt geht es um Verständnis und Vertrauen. Wir erklären Produkte, wie sie funktionieren und welche Ergebnisse sie bringen.",
+    traits: [{ label: "To-the-point", value: 88 }, { label: "Approachable", value: 30 }, { label: "Upfront", value: 70 }],
+    channels: ["Product Pages", "Campaign Lander", "App Store"],
+  },
+  {
+    title: "Education",
+    desc: "Wir geben Nutzer:innen die Infos, die sie für Entscheidungen brauchen. Jede Interaktion vermittelt Kontrolle, Sicherheit und Vertrauen — angereichert mit Social Proof, Metaphern und Daten.",
+    traits: [{ label: "To-the-point", value: 80 }, { label: "Approachable", value: 95 }, { label: "Upfront", value: 45 }],
+    channels: ["Announcement Emails", "Tooltips", "New-User States", "Half Sheets"],
+  },
+];
+
+function VoiceToneSection({ theme, darkMode, t }) {
+  const GREEN = "#1FD05A";
+  const cardBg = darkMode ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.025)";
+  const track = darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)";
+  const divider = darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)";
+  return (
+    <div>
+      <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 18, maxWidth: 560 }}>
+        {t("voice.intro") || "So klingt die Marke in den verschiedenen Momenten der Customer Journey. (Platzhalter — bald per Quiz konfigurierbar.)"}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
+        {VOICE_TONE_MOMENTS.map((m, i) => (
+          <motion.div key={i} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 + i * 0.06, duration: 0.35 }}
+            style={{ borderRadius: 18, background: cardBg, border: `1px solid ${theme.borderFaint}`, padding: 22, display: "flex", flexDirection: "column" }}>
+            <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3, marginBottom: 10 }}>{m.title}</div>
+            <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, minHeight: 116 }}>{m.desc}</div>
+
+            <div style={{ height: 1, background: divider, margin: "8px 0 18px" }} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+              {m.traits.map((tr, j) => (
+                <div key={j} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ width: 96, flexShrink: 0, fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>{tr.label}</span>
+                  <div style={{ flex: 1, height: 10, borderRadius: 999, background: track, overflow: "hidden" }}>
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${tr.value}%` }} transition={{ delay: 0.2 + j * 0.08, duration: 0.5, ease: [0.22, 0.68, 0.35, 1] }}
+                      style={{ height: "100%", borderRadius: 999, background: GREEN }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ height: 1, background: divider, margin: "18px 0 14px" }} />
+            <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>Touchpoints & Channels</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              {m.channels.map((c, j) => (
+                <div key={j} style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, display: "flex", gap: 8 }}>
+                  <span style={{ color: theme.textFaint }}>•</span>{c}
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab }) {
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
   const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
@@ -13140,9 +13209,7 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
                   } else if (k === "identity/values") {
                     body = Empty("Brand Values — bald verfügbar. Hier kommen die Kernwerte der Marke hin.");
                   } else if (k === "identity/voice") {
-                    body = voice.length ? (
-                      <div>{SL("Voice & Tone")}<div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{voice.map((v, i) => <span key={i} style={{ padding: "7px 13px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 12.5, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{v}</span>)}</div></div>
-                    ) : Empty("Noch kein Voice & Tone definiert.");
+                    body = <VoiceToneSection theme={theme} darkMode={darkMode} t={t} />;
                   } else if (k === "design/logo") {
                     body = (profile.logos?.length) ? (
                       <div>{SL(t("brand.recap.logoVariants") || "Logo-Varianten")}<div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>{profile.logos.map(l => (
