@@ -10547,7 +10547,7 @@ function touchpointGlyph(key) {
     case "instagram": return <g fill="none" stroke="#fff" strokeWidth="1.7"><rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.8"/><circle cx="17" cy="7" r="0.9" fill="#fff" stroke="none"/></g>;
     case "youtube":   return <g><rect x="3" y="6" width="18" height="12" rx="3.5" fill="#fff"/><path d="M10.5 9.2l4.2 2.8-4.2 2.8z" fill="#FF0000"/></g>;
     case "tiktok":    return <g fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 9.5a3.5 3.5 0 103.5 3.5V4.5c.6 1.8 2 3 4 3.2"/></g>;
-    case "x":         return <g fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round"><path d="M5.5 5.5l13 13M18.5 5.5l-13 13"/></g>;
+    case "x":         return <path fill="#fff" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>;
     case "linkedin":  return L("in");
     case "facebook":  return L("f", 15);
     case "pinterest": return L("P", 14);
@@ -10648,21 +10648,16 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
                               whileHover={editing ? {} : { y: -4 }} onClick={() => !editing && open()}
                               style={{ position: "relative", overflow: "hidden", borderRadius: 18, padding: 18, minHeight: 148, cursor: editing ? "default" : "pointer",
                                 display: "flex", flexDirection: "column",
-                                background: `linear-gradient(145deg, ${p.color} 0%, ${p.color}d9 100%)`,
+                                background: p.color,
                                 boxShadow: `0 10px 30px ${p.color}3d` }}>
-                              {/* glossy highlight + big watermark glyph */}
-                              <div style={{ position: "absolute", top: -40, right: -30, width: 150, height: 150, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,0.22), transparent 70%)" }} />
-                              <div style={{ position: "absolute", right: -14, bottom: -22, opacity: 0.16 }}>
-                                <svg width="120" height="120" viewBox="0 0 24 24">{touchpointGlyph(p.key)}</svg>
-                              </div>
                               {/* top row */}
                               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative", zIndex: 1 }}>
-                                <div style={{ width: 42, height: 42, borderRadius: 12, background: "rgba(255,255,255,0.22)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <div style={{ width: 42, height: 42, borderRadius: 12, background: "rgba(255,255,255,0.20)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                   <svg width="22" height="22" viewBox="0 0 24 24">{touchpointGlyph(p.key)}</svg>
                                 </div>
                                 <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); setEditKey(editing ? null : p.key); setDraft(url || ""); }}
                                   style={{ width: 30, height: 30, borderRadius: 9, background: "rgba(255,255,255,0.18)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff" }}>
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
+                                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
                                 </motion.div>
                               </div>
                               <div style={{ flex: 1 }} />
