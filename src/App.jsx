@@ -10614,9 +10614,6 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
       <div style={card}>
         {/* Header */}
         <div style={{ padding: "20px 26px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${theme.borderFaint}` }}>
-          <motion.div whileTap={{ scale: 0.92 }} onClick={onBack} style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
-          </motion.div>
           <div style={{ width: 38, height: 38, borderRadius: 11, background: "#1a1a2e", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="2.4"/><circle cx="5" cy="18" r="2.4"/><circle cx="19" cy="18" r="2.4"/><path d="M12 7.4v3.6M10.2 16.4L6.6 12.8M13.8 16.4l3.6-3.6"/></svg>
           </div>
