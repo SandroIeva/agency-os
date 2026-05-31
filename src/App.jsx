@@ -10540,6 +10540,11 @@ const TOUCHPOINT_PLATFORMS = [
   { key: "newsletter", label: "Newsletter",  color: "#00B894", hint: "https://…" },
 ];
 // Compact white glyph per platform (letters via <text> where a logo would be fiddly).
+// Per-platform optical-size correction — each glyph fills its 24×24 box
+// differently, so we nudge the rendered size to make them look balanced.
+const TP_GLYPH_SCALE = { x: 0.84, tiktok: 1.15, facebook: 1.22, youtube: 1.12, instagram: 1.0, website: 1.0 };
+const tpGlyphSize = (key, base) => Math.round(base * (TP_GLYPH_SCALE[key] || 1));
+
 function touchpointGlyph(key) {
   const L = (s, size = 13) => <text x="12" y="16.5" textAnchor="middle" fontSize={size} fontWeight="700" fill="#fff" fontFamily="sans-serif">{s}</text>;
   switch (key) {
@@ -10653,11 +10658,11 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
                               {/* top row */}
                               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative", zIndex: 1 }}>
                                 <div style={{ width: 42, height: 42, borderRadius: 12, background: "rgba(255,255,255,0.20)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                  <svg width="22" height="22" viewBox="0 0 24 24">{touchpointGlyph(p.key)}</svg>
+                                  <svg width={tpGlyphSize(p.key, 22)} height={tpGlyphSize(p.key, 22)} viewBox="0 0 24 24">{touchpointGlyph(p.key)}</svg>
                                 </div>
                                 <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); setEditKey(editing ? null : p.key); setDraft(url || ""); }}
                                   style={{ width: 30, height: 30, borderRadius: 9, background: "rgba(255,255,255,0.18)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff" }}>
-                                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>
                                 </motion.div>
                               </div>
                               <div style={{ flex: 1 }} />
@@ -10695,7 +10700,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
                               return (
                                 <div key={p.key} style={{ display: "flex", gap: 7, alignItems: "center", padding: 5, borderRadius: 999, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
                                   <div style={{ width: 28, height: 28, borderRadius: 999, background: p.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                    <svg width="16" height="16" viewBox="0 0 24 24">{touchpointGlyph(p.key)}</svg>
+                                    <svg width={tpGlyphSize(p.key, 16)} height={tpGlyphSize(p.key, 16)} viewBox="0 0 24 24">{touchpointGlyph(p.key)}</svg>
                                   </div>
                                   <input autoFocus value={draft} onChange={e => setDraft(e.target.value)}
                                     onKeyDown={e => { if (e.key === "Enter") saveChannel(p.key, draft); if (e.key === "Escape") { setEditKey(null); setDraft(""); } }}
@@ -10709,7 +10714,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
                               <motion.div key={p.key} whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }} onClick={() => { setEditKey(p.key); setDraft(""); }}
                                 style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 14px 8px 8px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.015)" }}>
                                 <div style={{ width: 26, height: 26, borderRadius: 999, background: p.color, opacity: 0.92, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                  <svg width="15" height="15" viewBox="0 0 24 24">{touchpointGlyph(p.key)}</svg>
+                                  <svg width={tpGlyphSize(p.key, 15)} height={tpGlyphSize(p.key, 15)} viewBox="0 0 24 24">{touchpointGlyph(p.key)}</svg>
                                 </div>
                                 <span style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{p.label}</span>
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
