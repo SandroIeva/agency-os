@@ -13178,7 +13178,7 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
                   let seed = savedHtml || "";
                   if (!seed) {
                     if (k === "strategy/core") {
-                      seed = (claimT ? `<h3>Claim</h3><p>${esc(claimT)}</p>` : "")
+                      seed = (claimT ? `<h3>Claim</h3><h2>${esc(claimT)}</h2>` : "")
                         + (profile.description ? `<h3>Beschreibung</h3><p>${p2(profile.description)}</p>` : "")
                         + (vProps.length ? `<h3>Value Props</h3><ul>${vProps.map(v => `<li>${esc(v)}</li>`).join("")}</ul>` : "")
                         + (kMsgs.length ? `<h3>Kern-Botschaften</h3><ul>${kMsgs.map(m => `<li>${esc(m)}</li>`).join("")}</ul>` : "");
@@ -19515,8 +19515,9 @@ export default function CircularMenu() {
         /* Brand section rich-text (editor + rendered output) */
         .brand-rich { font-family: ${FONT}; }
         .brand-rich h1 { font-size: 24px; font-weight: 700; margin: 18px 0 8px; letter-spacing: -0.3px; }
-        .brand-rich h2 { font-size: 19px; font-weight: 700; margin: 16px 0 6px; letter-spacing: -0.2px; }
-        .brand-rich h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.6; margin: 16px 0 6px; }
+        .brand-rich h2 { font-size: 18px; font-weight: 600; margin: 4px 0 14px; letter-spacing: -0.2px; line-height: 1.4; }
+        .brand-rich h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.55; margin: 18px 0 8px; }
+        .brand-rich h3:first-child { margin-top: 0; }
         .brand-rich p { font-size: 14px; line-height: 1.7; margin: 0 0 10px; }
         .brand-rich ul { margin: 0 0 10px; padding-left: 20px; }
         .brand-rich li { font-size: 14px; line-height: 1.6; margin: 0 0 4px; }
