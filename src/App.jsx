@@ -13362,9 +13362,9 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
               ) : (
                 <div style={{ width: 32, height: 32, borderRadius: 8, background: theme.accent + "22", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{(profile.name || "?")[0]}</div>
               )}
-              <div>
-                <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{profile.name}</div>
-                {profile.claim && <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>{profile.claim}</div>}
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+                <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{profile.name}</span>
+                <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{BRAND_SUBVIEW_LABELS[brandTab] || ""}</span>
               </div>
               <div style={{ flex: 1 }} />
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => setEditingText(v => !v)}
