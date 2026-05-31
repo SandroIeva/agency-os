@@ -11764,7 +11764,7 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
       {(d.moments || DEFAULT_VOICE_TONE.moments).length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
           {(d.moments || DEFAULT_VOICE_TONE.moments).map((m, mi) => (
-            <div key={mi} style={{ borderRadius: 18, background: darkMode ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.025)", border: `1px solid ${theme.borderFaint}`, padding: 22, display: "flex", flexDirection: "column" }}>
+            <div key={mi} style={{ borderRadius: 18, background: darkMode ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.025)", padding: 22, display: "flex", flexDirection: "column" }}>
               <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3, marginBottom: 10 }}>{m.title}</div>
               <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, minHeight: 110 }}>{m.desc}</div>
               <div style={{ height: 1, background: divider, margin: "8px 0 16px" }} />
@@ -11794,7 +11794,7 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
       {/* One section per attribute */}
       {(d.attributes || []).map((a, ai) => (
         <div key={ai}>
-          <div style={{ fontSize: "clamp(44px, 7vw, 76px)", fontFamily: FONT, fontWeight: 700, color: theme.text, letterSpacing: -1.5, lineHeight: 1.0, marginBottom: 44 }}>{a.name}</div>
+          <div style={{ fontSize: "clamp(40px, 6vw, 65px)", fontFamily: FONT, fontWeight: 700, color: theme.text, letterSpacing: -1.5, lineHeight: 1.0, marginBottom: 44 }}>{a.name}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 48 }}>
             {/* Left: Overview + should/shouldn't */}
             <div>
