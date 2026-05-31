@@ -11578,13 +11578,60 @@ function MoodboardItemDetail({ item, theme, darkMode, accent, t, onClose, onDele
   );
 }
 
+// Lightweight rich-text editor (no deps) for editing Brand section text. Uses a
+// contentEditable surface + execCommand toolbar: H1/H2/H3, paragraph, bold,
+// italic, bullet list and links. Saves the resulting HTML back to the section.
+function RichTextEditor({ initialHTML, theme, darkMode, onSave, onCancel }) {
+  const ref = useRef(null);
+  useEffect(() => { if (ref.current) ref.current.innerHTML = initialHTML || "<p></p>"; }, []);
+  const exec = (cmd, val) => { document.execCommand(cmd, false, val); ref.current?.focus(); };
+  const addLink = () => {
+    const url = prompt("Link-URL:");
+    if (url) exec("createLink", /^https?:\/\//i.test(url) ? url : "https://" + url);
+  };
+  const Btn = ({ onClick, title, children }) => (
+    <button type="button" title={title} onMouseDown={(e) => e.preventDefault()} onClick={onClick}
+      style={{ minWidth: 32, padding: "6px 9px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>{children}</button>
+  );
+  return (
+    <div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+        <Btn title="Überschrift 1" onClick={() => exec("formatBlock", "H1")}>H1</Btn>
+        <Btn title="Überschrift 2" onClick={() => exec("formatBlock", "H2")}>H2</Btn>
+        <Btn title="Überschrift 3" onClick={() => exec("formatBlock", "H3")}>H3</Btn>
+        <Btn title="Absatz" onClick={() => exec("formatBlock", "P")}>¶</Btn>
+        <Btn title="Fett" onClick={() => exec("bold")}><b>B</b></Btn>
+        <Btn title="Kursiv" onClick={() => exec("italic")}><i>I</i></Btn>
+        <Btn title="Liste" onClick={() => exec("insertUnorderedList")}>• Liste</Btn>
+        <Btn title="Link einfügen" onClick={addLink}>🔗 Link</Btn>
+        <div style={{ flex: 1 }} />
+        <button type="button" onClick={() => onSave(ref.current?.innerHTML || "")}
+          style={{ padding: "6px 16px", borderRadius: 8, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Speichern</button>
+        <button type="button" onClick={onCancel}
+          style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>Abbrechen</button>
+      </div>
+      <div ref={ref} contentEditable suppressContentEditableWarning className="brand-rich"
+        style={{ outline: "none", minHeight: 200, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, padding: "14px 16px", background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.012)", color: theme.text, fontSize: 14, fontFamily: FONT, lineHeight: 1.7 }} />
+    </div>
+  );
+}
+
 function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab }) {
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
   const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
   // Second-level sub-tab within the active pillar; resets to the first when the pillar changes.
   const pillarSubs = BRAND_PILLAR_SUBTABS[brandTab] || [];
   const [brandSub, setBrandSub] = useState(pillarSubs[0]?.key);
-  useEffect(() => { const s = BRAND_PILLAR_SUBTABS[brandTab] || []; setBrandSub(s[0]?.key); }, [brandTab]);
+  // Inline rich-text editing of the current section (Bearbeiten button toggles it).
+  const [editingText, setEditingText] = useState(false);
+  useEffect(() => { const s = BRAND_PILLAR_SUBTABS[brandTab] || []; setBrandSub(s[0]?.key); setEditingText(false); }, [brandTab]);
+  useEffect(() => { setEditingText(false); }, [brandSub]);
+
+  const saveSection = async (key, html) => {
+    setProfile(p => ({ ...p, section_content: { ...(p?.section_content || {}), [key]: html } }));
+    setEditingText(false);
+    try { if (profile?.id) await supabase.from("brand_profile").update({ section_content: { ...(profile.section_content || {}), [key]: html } }).eq("id", profile.id); } catch (e) {}
+  };
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
@@ -12985,14 +13032,14 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
                 {profile.claim && <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>{profile.claim}</div>}
               </div>
               <div style={{ flex: 1 }} />
-              <motion.button whileTap={{ scale: 0.97 }} onClick={() => { setEditMode(true); setStep(0); }}
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setEditingText(v => !v)}
                 style={{
                   padding: "8px 16px", borderRadius: 10, cursor: "pointer",
-                  background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                  border: `1px solid ${theme.borderFaint}`,
-                  color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT,
+                  background: editingText ? theme.accent : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"),
+                  border: `1px solid ${editingText ? "transparent" : theme.borderFaint}`,
+                  color: editingText ? "#fff" : theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT,
                 }}
-              >Bearbeiten</motion.button>
+              >{editingText ? "Fertig" : "Bearbeiten"}</motion.button>
             </div>
 
             {/* This view IS one pillar (Strategie / Identität / Brand Design — set from
@@ -13036,6 +13083,14 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
                       <span style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.3 }}>{(c || "").toUpperCase()}</span>
                     </div>
                   );
+
+                  // Shared fields (also used to seed the editor when no saved override exists).
+                  const claimT = ana.claim_summary || profile.claim;
+                  const vProps = intel.value_props || [];
+                  const kMsgs = ana.key_messages || intel.headlines || [];
+                  const posT = ana.market_positioning;
+                  const esc = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                  const p2 = (s) => esc(s).replace(/\n/g, "<br>");
 
                   let body = null;
                   const k = brandTab + "/" + brandSub;
@@ -13117,12 +13172,32 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
                     body = Empty("Bald verfügbar.");
                   }
 
+                  // Saved rich-text override for this section (set via the editor).
+                  const savedHtml = profile.section_content?.[k];
+                  // Seed the editor from the saved HTML, else from the existing fields.
+                  let seed = savedHtml || "";
+                  if (!seed) {
+                    if (k === "strategy/core") {
+                      seed = (claimT ? `<h3>Claim</h3><p>${esc(claimT)}</p>` : "")
+                        + (profile.description ? `<h3>Beschreibung</h3><p>${p2(profile.description)}</p>` : "")
+                        + (vProps.length ? `<h3>Value Props</h3><ul>${vProps.map(v => `<li>${esc(v)}</li>`).join("")}</ul>` : "")
+                        + (kMsgs.length ? `<h3>Kern-Botschaften</h3><ul>${kMsgs.map(m => `<li>${esc(m)}</li>`).join("")}</ul>` : "");
+                    } else if (k === "strategy/positioning") seed = posT ? `<p>${p2(posT)}</p>` : "";
+                    else if (k === "identity/story") seed = profile.description ? `<p>${p2(profile.description)}</p>` : "";
+                    else if (k === "identity/voice") seed = voice.length ? `<p>${voice.map(esc).join(", ")}</p>` : "";
+                  }
+
                   return (
                     <>
                       <div>
                         <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{subLabel}</div>
                       </div>
-                      {body}
+                      {editingText ? (
+                        <RichTextEditor key={k} initialHTML={seed || "<p></p>"} theme={theme} darkMode={darkMode}
+                          onSave={(html) => saveSection(k, html)} onCancel={() => setEditingText(false)} />
+                      ) : savedHtml ? (
+                        <div className="brand-rich" dangerouslySetInnerHTML={{ __html: savedHtml }} />
+                      ) : body}
                     </>
                   );
                 })()}
@@ -19437,6 +19512,16 @@ export default function CircularMenu() {
       </div>
 
       <style>{`
+        /* Brand section rich-text (editor + rendered output) */
+        .brand-rich { font-family: ${FONT}; }
+        .brand-rich h1 { font-size: 24px; font-weight: 700; margin: 18px 0 8px; letter-spacing: -0.3px; }
+        .brand-rich h2 { font-size: 19px; font-weight: 700; margin: 16px 0 6px; letter-spacing: -0.2px; }
+        .brand-rich h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.6; margin: 16px 0 6px; }
+        .brand-rich p { font-size: 14px; line-height: 1.7; margin: 0 0 10px; }
+        .brand-rich ul { margin: 0 0 10px; padding-left: 20px; }
+        .brand-rich li { font-size: 14px; line-height: 1.6; margin: 0 0 4px; }
+        .brand-rich a { color: ${theme.accent}; text-decoration: underline; }
+        .brand-rich a:hover { opacity: 0.8; }
         .hover-row {
           transition: background 0.6s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
