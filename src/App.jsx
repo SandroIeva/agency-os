@@ -11690,6 +11690,86 @@ const DEFAULT_VOICE_TONE = {
   ],
 };
 
+// Brand Story timeline — a vertical history rail under the story text.
+// Display: dots on a line, each with year · quarter + title + description.
+// Editing: edit each entry's fields, remove, or add new ones (auto-saved).
+const DEFAULT_STORY_TIMELINE = [
+  { year: "2018", quarter: "Q1", title: "Gründung", desc: "Die Idee zu APPICS entsteht — Social Media, das Creator fair belohnt." },
+  { year: "2019", quarter: "Q2", title: "Token-Launch", desc: "Der APX-Token und die erste App-Version gehen live." },
+  { year: "2022", quarter: "Q3", title: "Relaunch", desc: "Neue App-Generation mit überarbeitetem Reward-System." },
+];
+
+function BrandStoryTimeline({ timeline, editing, theme, darkMode, t, onChange }) {
+  const rail = darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)";
+  const label = { fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 16 };
+  const fieldStyle = { padding: "7px 10px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13.5, fontFamily: FONT, outline: "none", lineHeight: 1.5, resize: "vertical" };
+  const QUARTERS = ["", "Q1", "Q2", "Q3", "Q4"];
+
+  // Edit works on a live local copy that's pushed up (debounce-saved) on change.
+  const [entries, setEntries] = useState(timeline && timeline.length ? timeline : DEFAULT_STORY_TIMELINE);
+  useEffect(() => { if (editing) setEntries((timeline && timeline.length) ? JSON.parse(JSON.stringify(timeline)) : JSON.parse(JSON.stringify(DEFAULT_STORY_TIMELINE))); }, [editing]);
+
+  const display = (timeline && timeline.length) ? timeline : DEFAULT_STORY_TIMELINE;
+  const sortKey = (e) => `${e.year || "9999"}-${e.quarter || "Z"}`;
+  const sorted = [...display].sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+
+  const commit = (next) => { setEntries(next); onChange(next); };
+  const setField = (i, f, v) => commit(entries.map((e, j) => j === i ? { ...e, [f]: v } : e));
+  const addEntry = () => commit([...entries, { year: new Date().getFullYear().toString(), quarter: "Q1", title: "", desc: "" }]);
+  const removeEntry = (i) => commit(entries.filter((_, j) => j !== i));
+
+  if (editing) {
+    return (
+      <div style={{ marginTop: 32, paddingTop: 24, borderTop: `1px solid ${rail}` }}>
+        <div style={label}>{t("brandStory.history") || "Historie"}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {entries.map((e, i) => (
+            <div key={i} style={{ padding: 14, borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input value={e.year} onChange={ev => setField(i, "year", ev.target.value)} placeholder="Jahr" style={{ ...fieldStyle, width: 80 }} />
+                <select value={e.quarter || ""} onChange={ev => setField(i, "quarter", ev.target.value)} style={{ ...fieldStyle, width: 90 }}>
+                  {QUARTERS.map(q => <option key={q} value={q}>{q || "—"}</option>)}
+                </select>
+                <input value={e.title} onChange={ev => setField(i, "title", ev.target.value)} placeholder="Titel" style={{ ...fieldStyle, flex: 1, fontWeight: 600 }} />
+                <div onClick={() => removeEntry(i)} title={t("common.delete") || "Löschen"} style={{ cursor: "pointer", color: theme.textDim, padding: 6, flexShrink: 0 }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                </div>
+              </div>
+              <textarea rows={2} value={e.desc} onChange={ev => setField(i, "desc", ev.target.value)} placeholder="Was ist passiert?" style={fieldStyle} />
+            </div>
+          ))}
+        </div>
+        <motion.div whileTap={{ scale: 0.97 }} onClick={addEntry}
+          style={{ marginTop: 12, display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, border: `1px dashed ${theme.borderFaint}`, color: theme.text, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          {t("brandStory.add") || "Eintrag hinzufügen"}
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 32, paddingTop: 24, borderTop: `1px solid ${rail}` }}>
+      <div style={label}>{t("brandStory.history") || "Historie"}</div>
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {sorted.map((e, i) => (
+          <div key={i} style={{ display: "flex", gap: 16 }}>
+            <div style={{ position: "relative", width: 14, flexShrink: 0, display: "flex", justifyContent: "center" }}>
+              <div style={{ position: "absolute", top: 0, bottom: i === sorted.length - 1 ? "auto" : 0, height: i === sorted.length - 1 ? 14 : "auto", width: 2, background: rail }} />
+              <div style={{ position: "relative", marginTop: 4, width: 12, height: 12, borderRadius: "50%", background: theme.accent, boxShadow: `0 0 0 3px ${theme.cardBg}` }} />
+            </div>
+            <div style={{ flex: 1, paddingBottom: 26, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.accent, fontWeight: 600, letterSpacing: 0.2 }}>{e.year}{e.quarter ? ` · ${e.quarter}` : ""}</div>
+              <div style={{ fontSize: 15.5, fontFamily: FONT, fontWeight: 600, color: theme.text, marginTop: 3 }}>{e.title}</div>
+              {e.desc && <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginTop: 4 }}>{e.desc}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel }) {
   const base = (value && Array.isArray(value.attributes) && value.attributes.length) ? value : DEFAULT_VOICE_TONE;
   const [draft, setDraft] = useState(base);
@@ -11878,6 +11958,13 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
     setProfile(p => ({ ...p, voice_tone: vt }));
     setEditingText(false);
     try { if (profile?.id) await supabase.from("brand_profile").update({ voice_tone: vt }).eq("id", profile.id); } catch (e) {}
+  };
+  // Brand Story timeline — live in-memory update + debounced DB write.
+  const storyTlTimer = useRef(null);
+  const saveTimeline = (tl) => {
+    setProfile(p => ({ ...p, story_timeline: tl }));
+    clearTimeout(storyTlTimer.current);
+    storyTlTimer.current = setTimeout(() => { if (profile?.id) supabase.from("brand_profile").update({ story_timeline: tl }).eq("id", profile.id); }, 700);
   };
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -13448,6 +13535,10 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
                       ) : savedHtml ? (
                         <div className="brand-rich" dangerouslySetInnerHTML={{ __html: savedHtml }} />
                       ) : body}
+                      {/* Brand Story gets a history timeline under the text */}
+                      {k === "identity/story" && (
+                        <BrandStoryTimeline timeline={profile.story_timeline || []} editing={editingText} theme={theme} darkMode={darkMode} t={t} onChange={saveTimeline} />
+                      )}
                     </>
                   );
                 })()}
