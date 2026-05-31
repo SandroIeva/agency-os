@@ -11616,71 +11616,159 @@ function RichTextEditor({ initialHTML, theme, darkMode, onSave, onCancel }) {
   );
 }
 
-// Voice & Tone — Cash-App-style "moments" cards (content side only). Placeholder
-// data for now; a quiz to configure these will plug in later.
-const VOICE_TONE_MOMENTS = [
-  {
-    title: "First impressions",
-    desc: "Hier wollen wir Interesse wecken und Neugier entfachen — durch mutige, clevere Sprache, die zum genaueren Hinsehen einlädt.",
-    traits: [{ label: "To-the-point", value: 40 }, { label: "Approachable", value: 90 }, { label: "Upfront", value: 12 }],
-    channels: ["In-app Product Flows", "Transactional Email", "Push Notifications"],
+// Voice & Tone — Cash-App-style layout: an "Our tone" intro plus one section per
+// tone attribute (big title, Overview, We should/shouldn't be, Tactics grid).
+// Theme-aware, neutral colours. Editable in place when `editing` is on.
+const DEFAULT_VOICE_TONE = {
+  intro: {
+    body: "Unsere Stimme bleibt immer gleich — der Ton ist, wie wir sie situativ ausdrücken. Über Wortwahl, Schreibstil, Typografie, Satzbau und Phrasierung passen wir die Stimme an den Kontext an. Der richtige Ton schafft emotionale Verbindung und Vertrauen durch Anpassungsfähigkeit.",
+    questions: ["Was soll dieser Text bewirken?", "Für welches Szenario schreiben wir?", "Mit wem sprichst du?"],
+    closing: "Wir nutzen die Customer Journey, um Momente und Ton-Leitlinien zu mappen — als Erinnerung, dass jede Interaktion einen kundenzentrierten Zweck hat.",
   },
-  {
-    title: "Consideration",
-    desc: "Wir haben die Aufmerksamkeit — jetzt geht es um Verständnis und Vertrauen. Wir erklären Produkte, wie sie funktionieren und welche Ergebnisse sie bringen.",
-    traits: [{ label: "To-the-point", value: 88 }, { label: "Approachable", value: 30 }, { label: "Upfront", value: 70 }],
-    channels: ["Product Pages", "Campaign Lander", "App Store"],
-  },
-  {
-    title: "Education",
-    desc: "Wir geben Nutzer:innen die Infos, die sie für Entscheidungen brauchen. Jede Interaktion vermittelt Kontrolle, Sicherheit und Vertrauen — angereichert mit Social Proof, Metaphern und Daten.",
-    traits: [{ label: "To-the-point", value: 80 }, { label: "Approachable", value: 95 }, { label: "Upfront", value: 45 }],
-    channels: ["Announcement Emails", "Tooltips", "New-User States", "Half Sheets"],
-  },
-];
+  attributes: [
+    {
+      name: "To-the-point",
+      overview: "Wir sind klar in dem, was wir sagen, und bleiben dabei. Wir reißen Barrieren ein, indem wir Fachjargon übersetzen, und geben unseren Kunden Sicherheit auf ihrer Reise.",
+      shouldBe: ["Klar", "Fokussiert", "Organisiert", "Kuratiert", "Selbstbewusst", "Befähigend"],
+      shouldntBe: ["Spärlich", "Kalt", "Langweilig", "Leblos", "Stumpf", "Vage"],
+      tactics: [
+        { title: "Never bury the lead", desc: "Wir beginnen immer mit der wichtigsten Information zuerst und respektieren die begrenzte Zeit und Aufmerksamkeit unseres Publikums." },
+        { title: "Clarity first (style second)", desc: "Wir fokussieren die Botschaft und strukturieren Inhalte so, dass Punkt, Zweck und Absicht unmissverständlich sind. Stil überlagert nie die Botschaft." },
+        { title: "Guide with confidence", desc: "Wir erklären, wie Dinge funktionieren und was zu erwarten ist — klar und prägnant, damit Kunden befähigt sind, den nächsten Schritt zu gehen." },
+        { title: "Build familiarity", desc: "Durch Konsistenz und Wiederholung schaffen wir Vertrautheit, die die Beziehung zu unseren Kunden vertieft." },
+      ],
+    },
+    {
+      name: "Approachable",
+      overview: "Unser einladender, fantasievoller Stil macht uns nahbar und mühelos verständlich. Wir verstecken uns nicht hinter Jargon, Ego oder billigen Emotionen.",
+      shouldBe: ["Selbstbewusst", "Gesprächig", "Reaktionsschnell", "Verlässlich", "Unterstützend", "Optimistisch"],
+      shouldntBe: ["Übergriffig", "Geschwätzig", "Kindisch", "Distanziert", "Reißerisch", "Exklusiv"],
+      tactics: [
+        { title: "Read the room", desc: "Wir berücksichtigen den Kontext, bevor wir schreiben — was Kunden wollen, brauchen und fühlen." },
+        { title: "Act as a translator", desc: "Wir machen Komplexes einfach und entmystifizieren Fachsprache, ohne überkonstruiert zu klingen." },
+        { title: "Be inventive", desc: "Wir fordern Konventionen heraus, wenn es unseren Kunden besser dient." },
+        { title: "Write inclusively", desc: "Unsere Inhalte sind für alle zugänglich — keine ausschließende oder herabsetzende Sprache." },
+      ],
+    },
+    {
+      name: "Upfront",
+      overview: "Wir sagen, wie es ist, und stellen uns zugleich vor, wie es sein könnte. Wir vermeiden Schönfärberei und setzen klare Erwartungen — Vertrauen entsteht durch Ehrlichkeit und Transparenz.",
+      shouldBe: ["Offen", "Aufrichtig", "Verantwortungsvoll", "Echt", "Empathisch"],
+      shouldntBe: ["Technokratisch", "Angstmachend", "Akademisch"],
+      tactics: [
+        { title: "Tell the whole truth", desc: "Wir sind ehrlich über Produkte, Prozesse und Richtlinien — der einzige Weg, echtes Vertrauen aufzubauen." },
+        { title: "Balance humility & confidence", desc: "Wir lassen Begeisterung und Stärken strahlen und erkennen zugleich Grenzen offen an." },
+        { title: "Use friction", desc: "Wenn viel auf dem Spiel steht, verlangsamen wir und sorgen dafür, dass Kunden die Kontrolle behalten." },
+      ],
+    },
+  ],
+};
 
-function VoiceToneSection({ theme, darkMode, t }) {
-  const GREEN = "#1FD05A";
-  const cardBg = darkMode ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.025)";
-  const track = darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)";
-  const divider = darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)";
-  return (
-    <div>
-      <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 18, maxWidth: 560 }}>
-        {t("voice.intro") || "So klingt die Marke in den verschiedenen Momenten der Customer Journey. (Platzhalter — bald per Quiz konfigurierbar.)"}
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
-        {VOICE_TONE_MOMENTS.map((m, i) => (
-          <motion.div key={i} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 + i * 0.06, duration: 0.35 }}
-            style={{ borderRadius: 18, background: cardBg, border: `1px solid ${theme.borderFaint}`, padding: 22, display: "flex", flexDirection: "column" }}>
-            <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3, marginBottom: 10 }}>{m.title}</div>
-            <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, minHeight: 116 }}>{m.desc}</div>
+function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel }) {
+  const base = (value && Array.isArray(value.attributes) && value.attributes.length) ? value : DEFAULT_VOICE_TONE;
+  const [draft, setDraft] = useState(base);
+  useEffect(() => { if (editing) setDraft((value && Array.isArray(value.attributes) && value.attributes.length) ? JSON.parse(JSON.stringify(value)) : JSON.parse(JSON.stringify(DEFAULT_VOICE_TONE))); }, [editing]);
 
-            <div style={{ height: 1, background: divider, margin: "8px 0 18px" }} />
-            <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
-              {m.traits.map((tr, j) => (
-                <div key={j} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span style={{ width: 96, flexShrink: 0, fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>{tr.label}</span>
-                  <div style={{ flex: 1, height: 10, borderRadius: 999, background: track, overflow: "hidden" }}>
-                    <motion.div initial={{ width: 0 }} animate={{ width: `${tr.value}%` }} transition={{ delay: 0.2 + j * 0.08, duration: 0.5, ease: [0.22, 0.68, 0.35, 1] }}
-                      style={{ height: "100%", borderRadius: 999, background: GREEN }} />
-                  </div>
-                </div>
-              ))}
+  const divider = darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)";
+  const label = { fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 10 };
+  const fieldStyle = { width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none", lineHeight: 1.5, resize: "vertical" };
+
+  // ── EDIT MODE ──
+  if (editing) {
+    const setIntro = (f, v) => setDraft(d => ({ ...d, intro: { ...d.intro, [f]: v } }));
+    const setAttr = (i, f, v) => setDraft(d => ({ ...d, attributes: d.attributes.map((a, j) => j === i ? { ...a, [f]: v } : a) }));
+    const setTactic = (ai, ti, f, v) => setDraft(d => ({ ...d, attributes: d.attributes.map((a, j) => j === ai ? { ...a, tactics: a.tactics.map((tc, k) => k === ti ? { ...tc, [f]: v } : tc) } : a) }));
+    const lines = (arr) => (arr || []).join("\n");
+    const toArr = (s) => s.split("\n").map(x => x.trim()).filter(Boolean);
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+        <div style={{ position: "sticky", top: 0, zIndex: 2, display: "flex", gap: 8, padding: "4px 0 10px", background: theme.cardBg }}>
+          <button type="button" onClick={() => onSave(draft)} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Speichern</button>
+          <button type="button" onClick={onCancel} style={{ padding: "8px 12px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>Abbrechen</button>
+        </div>
+        {/* Intro */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={label}>Our tone — Einleitung</div>
+          <textarea rows={4} value={draft.intro.body} onChange={e => setIntro("body", e.target.value)} style={fieldStyle} />
+          <div style={label}>Leitfragen (eine pro Zeile)</div>
+          <textarea rows={3} value={lines(draft.intro.questions)} onChange={e => setIntro("questions", toArr(e.target.value))} style={fieldStyle} />
+          <div style={label}>Abschluss</div>
+          <textarea rows={3} value={draft.intro.closing} onChange={e => setIntro("closing", e.target.value)} style={fieldStyle} />
+        </div>
+        {/* Attributes */}
+        {draft.attributes.map((a, ai) => (
+          <div key={ai} style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 18, borderTop: `1px solid ${divider}` }}>
+            <input value={a.name} onChange={e => setAttr(ai, "name", e.target.value)} style={{ ...fieldStyle, fontSize: 20, fontWeight: 700 }} />
+            <div style={label}>Overview</div>
+            <textarea rows={3} value={a.overview} onChange={e => setAttr(ai, "overview", e.target.value)} style={fieldStyle} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div><div style={label}>We should be (eine pro Zeile)</div><textarea rows={6} value={lines(a.shouldBe)} onChange={e => setAttr(ai, "shouldBe", toArr(e.target.value))} style={fieldStyle} /></div>
+              <div><div style={label}>We shouldn't be (eine pro Zeile)</div><textarea rows={6} value={lines(a.shouldntBe)} onChange={e => setAttr(ai, "shouldntBe", toArr(e.target.value))} style={fieldStyle} /></div>
             </div>
-
-            <div style={{ height: 1, background: divider, margin: "18px 0 14px" }} />
-            <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>Touchpoints & Channels</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              {m.channels.map((c, j) => (
-                <div key={j} style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, display: "flex", gap: 8 }}>
-                  <span style={{ color: theme.textFaint }}>•</span>{c}
-                </div>
-              ))}
-            </div>
-          </motion.div>
+            <div style={label}>Tactics</div>
+            {a.tactics.map((tc, ti) => (
+              <div key={ti} style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 4 }}>
+                <input value={tc.title} onChange={e => setTactic(ai, ti, "title", e.target.value)} style={{ ...fieldStyle, fontWeight: 600 }} />
+                <textarea rows={2} value={tc.desc} onChange={e => setTactic(ai, ti, "desc", e.target.value)} style={fieldStyle} />
+              </div>
+            ))}
+          </div>
         ))}
       </div>
+    );
+  }
+
+  // ── DISPLAY MODE ──
+  const d = base;
+  const listItem = { fontSize: 19, fontFamily: FONT, color: theme.text, lineHeight: 1.55 };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 72 }}>
+      {/* Our tone intro */}
+      <div style={{ maxWidth: 640 }}>
+        <div style={{ fontSize: 32, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 18 }}>Our tone</div>
+        <p style={{ fontSize: 16, fontFamily: FONT, lineHeight: 1.6, color: theme.textSub, margin: "0 0 18px" }}>{d.intro.body}</p>
+        <p style={{ fontSize: 16, fontFamily: FONT, color: theme.text, margin: "0 0 12px" }}>Beim Hoch- oder Runterregeln der Stimme frag dich:</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
+          {(d.intro.questions || []).map((q, i) => <div key={i} style={{ fontSize: 16, fontFamily: FONT, color: theme.text }}>{i + 1}—{q}</div>)}
+        </div>
+        <p style={{ fontSize: 16, fontFamily: FONT, lineHeight: 1.6, color: theme.textSub, margin: 0 }}>{d.intro.closing}</p>
+      </div>
+
+      {/* One section per attribute */}
+      {(d.attributes || []).map((a, ai) => (
+        <div key={ai}>
+          <div style={{ fontSize: "clamp(44px, 7vw, 76px)", fontFamily: FONT, fontWeight: 700, color: theme.text, letterSpacing: -1.5, lineHeight: 1.0, textAlign: "center", marginBottom: 44 }}>{a.name}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 48 }}>
+            {/* Left: Overview + should/shouldn't */}
+            <div>
+              <div style={label}>Overview</div>
+              <p style={{ fontSize: 18, fontFamily: FONT, lineHeight: 1.5, color: theme.text, margin: "0 0 32px" }}>{a.overview}</p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+                <div>
+                  <div style={label}>We should be</div>
+                  {(a.shouldBe || []).map((w, i) => <div key={i} style={listItem}>{w}</div>)}
+                </div>
+                <div>
+                  <div style={label}>We shouldn't be</div>
+                  {(a.shouldntBe || []).map((w, i) => <div key={i} style={listItem}>{w}</div>)}
+                </div>
+              </div>
+            </div>
+            {/* Right: Tactics */}
+            <div>
+              <div style={label}>Tactics</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "30px 28px", marginTop: 6 }}>
+                {(a.tactics || []).map((tc, i) => (
+                  <div key={i} style={{ borderTop: `1px solid ${divider}`, paddingTop: 14 }}>
+                    <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>{tc.title}</div>
+                    <div style={{ fontSize: 13.5, fontFamily: FONT, lineHeight: 1.6, color: theme.textDim }}>{tc.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -11700,6 +11788,11 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
     setProfile(p => ({ ...p, section_content: { ...(p?.section_content || {}), [key]: html } }));
     setEditingText(false);
     try { if (profile?.id) await supabase.from("brand_profile").update({ section_content: { ...(profile.section_content || {}), [key]: html } }).eq("id", profile.id); } catch (e) {}
+  };
+  const saveVoiceTone = async (vt) => {
+    setProfile(p => ({ ...p, voice_tone: vt }));
+    setEditingText(false);
+    try { if (profile?.id) await supabase.from("brand_profile").update({ voice_tone: vt }).eq("id", profile.id); } catch (e) {}
   };
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -13259,7 +13352,10 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
                       <div>
                         <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{subLabel}</div>
                       </div>
-                      {editingText ? (
+                      {k === "identity/voice" ? (
+                        <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
+                          onSave={saveVoiceTone} onCancel={() => setEditingText(false)} />
+                      ) : editingText ? (
                         <RichTextEditor key={k} initialHTML={seed || "<p></p>"} theme={theme} darkMode={darkMode}
                           onSave={(html) => saveSection(k, html)} onCancel={() => setEditingText(false)} />
                       ) : savedHtml ? (
