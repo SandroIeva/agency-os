@@ -10542,7 +10542,7 @@ const TOUCHPOINT_PLATFORMS = [
 // Compact white glyph per platform (letters via <text> where a logo would be fiddly).
 // Per-platform optical-size correction — each glyph fills its 24×24 box
 // differently, so we nudge the rendered size to make them look balanced.
-const TP_GLYPH_SCALE = { x: 0.72, tiktok: 1.3, facebook: 1.34, youtube: 1.12, instagram: 1.0, website: 1.0 };
+const TP_GLYPH_SCALE = { x: 0.72, tiktok: 1.3, facebook: 1.5, youtube: 1.12, instagram: 1.0, website: 1.0 };
 const tpGlyphSize = (key, base) => Math.round(base * (TP_GLYPH_SCALE[key] || 1));
 
 function touchpointGlyph(key) {
