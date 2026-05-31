@@ -7002,7 +7002,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
       }}
     >
       <div style={{
-        width: "100%", maxWidth: 720, height: "100%",
+        width: "100%", maxWidth: 790, height: "100%",
         background: theme.cardBg,
         backdropFilter: "blur(40px)",
         border: `1px solid ${theme.borderFaint}`,
@@ -9897,7 +9897,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
       }}
     >
       <div style={{
-        width: "100%", maxWidth: 720, height: "100%",
+        width: "100%", maxWidth: 790, height: "100%",
         background: theme.cardBg,
         backdropFilter: "blur(40px)",
         border: `1px solid ${theme.borderFaint}`,
@@ -10638,7 +10638,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
   const connectedCount = TOUCHPOINT_PLATFORMS.filter(p => channels[p.key]).length;
 
   const panelWrap = { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 40px 80px" };
-  const card = { width: "100%", maxWidth: 980, height: "100%", background: theme.cardBg, backdropFilter: "blur(40px)", border: `1px solid ${theme.borderFaint}`, borderRadius: 24, overflow: "hidden", display: "flex", flexDirection: "column" };
+  const card = { width: "100%", maxWidth: 1050, height: "100%", background: theme.cardBg, backdropFilter: "blur(40px)", border: `1px solid ${theme.borderFaint}`, borderRadius: 24, overflow: "hidden", display: "flex", flexDirection: "column" };
 
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -10978,7 +10978,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
     alignItems: "center", justifyContent: "center", padding: "20px 40px 80px",
   };
   const card = {
-    width: "100%", maxWidth: 980, height: "100%",
+    width: "100%", maxWidth: 1050, height: "100%",
     background: theme.cardBg, backdropFilter: "blur(40px)",
     border: `1px solid ${theme.borderFaint}`, borderRadius: 24, overflow: "hidden",
     display: "flex", flexDirection: "column",
@@ -13079,7 +13079,7 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
       }}
     >
       <div style={{
-        width: "100%", maxWidth: 760, height: "100%",
+        width: "100%", maxWidth: 830, height: "100%",
         background: theme.cardBg, backdropFilter: "blur(40px)",
         border: `1px solid ${theme.borderFaint}`,
         borderRadius: 26, overflow: "hidden",
