@@ -461,7 +461,7 @@ const translations = {
   "brand.personas.sourceWebsite": { de: "aus Website", en: "from website" },
 
   // Tab-specific titles + empty states (new 5-tab structure)
-  "brand.tab.identity.title": { de: "Identity", en: "Identity" },
+  "brand.tab.identity.title": { de: "Identität", en: "Identity" },
   "brand.tab.identity.subtitle": { de: "Wer ihr seid — Name, Claim, Voice und Beschreibung.", en: "Who you are — name, claim, voice and description." },
   "brand.tab.design.title": { de: "Design System", en: "Design System" },
   "brand.tab.design.subtitle": { de: "Wie ihr aussieht — Logos, Farben, Typografie, Brand Book und Asset-Library.", en: "How you look — logos, colors, typography, brand book and asset library." },
@@ -477,8 +477,8 @@ const translations = {
   "brand.tab.channels.social": { de: "Social Media", en: "Social media" },
   "brand.tab.channels.newsletter": { de: "Newsletter", en: "Newsletter" },
   "brand.tab.channels.add": { de: "Channel hinzufügen", en: "Add channel" },
-  "brand.tab.strategy.title": { de: "Strategy", en: "Strategy" },
-  "brand.tab.strategy.subtitle": { de: "Was euch ausmacht — Positionierung, Value Props, Kern-Botschaften und Competitor-Insights.", en: "What sets you apart — positioning, value props, key messages and competitor insights." },
+  "brand.tab.strategy.title": { de: "Strategie", en: "Strategy" },
+  "brand.tab.strategy.subtitle": { de: "Was euch ausmacht — Positionierung, Personas, Value Props, Kern-Botschaften und Competitor-Insights.", en: "What sets you apart — positioning, personas, value props, key messages and competitor insights." },
   "brand.tab.strategy.positioning": { de: "Positionierung", en: "Positioning" },
   "brand.tab.strategy.claim": { de: "Claim / Tagline", en: "Claim / tagline" },
   "brand.tab.strategy.keyMessages": { de: "Kern-Botschaften", en: "Key messages" },

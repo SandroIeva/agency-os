@@ -10448,21 +10448,32 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
 // ═══════════════════════════════════════════════════════════════
 // BRAND VIEW — Smart multi-step onboarding wizard + sub-views
 // ═══════════════════════════════════════════════════════════════
+// Labels for the inline Brand pillars (the ones BrandView renders content for).
 const BRAND_SUBVIEW_LABELS = {
-  identity: "Identity",
+  strategy: "Strategie",
+  identity: "Identität",
   design: "Design System",
-  audience: "Audience",
-  channels: "Channels",
-  strategy: "Strategy",
 };
 
-// Map legacy tab ids to the new 5-tab structure (for users who had a saved tab)
+// The Brand pillar tab bar. The three content pillars switch inline; Touchpoints
+// and Assets are dedicated views, so their tabs navigate there.
+const BRAND_PILLAR_TABS = [
+  { key: "strategy", label: "Strategie" },
+  { key: "identity", label: "Identität" },
+  { key: "design",   label: "Design System" },
+  { key: "touchpoints", label: "Touchpoints", view: "touchpoints" },
+  { key: "assets",      label: "Assets",      view: "assets" },
+];
+
+// Map legacy / removed tab ids onto the current pillars (for saved values).
 const BRAND_TAB_LEGACY_MAP = {
   assets: "design",
   guidelines: "design",
-  personas: "audience",
+  personas: "strategy",
   knowledge: "strategy",
   competitor: "strategy",
+  audience: "strategy",   // Personas/Zielgruppe now live under Strategie
+  channels: "strategy",   // Channels moved to the dedicated Touchpoints view
 };
 
 const BRAND_ACCENT_PALETTE = [
@@ -11545,7 +11556,7 @@ function MoodboardItemDetail({ item, theme, darkMode, accent, t, onClose, onDele
   );
 }
 
-function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab }) {
+function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab }) {
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
   const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
   const [profile, setProfile] = useState(null);
@@ -12959,10 +12970,10 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab: raw
             </div>
 
             <div style={{ display: "flex", gap: 4, padding: "10px 20px 0", borderBottom: `1px solid ${theme.borderFaint}` }}>
-              {Object.entries(BRAND_SUBVIEW_LABELS).map(([key, label]) => {
-                const active = brandTab === key;
+              {BRAND_PILLAR_TABS.map(({ key, label, view }) => {
+                const active = !view && brandTab === key;
                 return (
-                  <motion.div key={key} whileTap={{ scale: 0.96 }} onClick={() => setBrandTab(key)}
+                  <motion.div key={key} whileTap={{ scale: 0.96 }} onClick={() => view ? onNavigate?.(view) : setBrandTab(key)}
                     style={{
                       padding: "8px 14px", borderRadius: "10px 10px 0 0", cursor: "pointer",
                       fontSize: 12, fontFamily: FONT, fontWeight: active ? 600 : 500,
@@ -13098,7 +13109,7 @@ function BrandView({ onBack, session, userOrg, theme, darkMode, t, brandTab: raw
 
                 {/* Sources (Assets tab) */}
                 {/* PERSONAS TAB */}
-                {brandTab === "audience" && (
+                {brandTab === "strategy" && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     {Array.isArray(profile.personas) && profile.personas.length > 0 ? profile.personas.map((p, idx) => (
                       <div key={p.id || idx} style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
@@ -16908,7 +16919,7 @@ export default function CircularMenu() {
         {/* BRAND VIEW */}
         <AnimatePresence>
           {currentView === "brand" && (
-            <BrandView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} brandTab={brandTab} setBrandTab={setBrandTab} onBack={() => setCurrentView("dashboard")} />
+            <BrandView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} brandTab={brandTab} setBrandTab={setBrandTab} onNavigate={(v) => setCurrentView(v)} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
@@ -17692,6 +17703,8 @@ export default function CircularMenu() {
                 // the other pillars open the Brand view (per-pillar tab routing TBD).
                 if (subId === "assets") { setCurrentView("assets"); return; }
                 if (subId === "touchpoints") { setCurrentView("touchpoints"); return; }
+                // Open BrandView on the matching pillar tab (strategy/identity/design).
+                if (["strategy", "identity", "design"].includes(subId)) setBrandTab(subId);
                 setCurrentView("brand");
                 return;
               }
