@@ -10452,7 +10452,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
 const BRAND_SUBVIEW_LABELS = {
   strategy: "Strategie",
   identity: "Identität",
-  design: "Design System",
+  design: "Brand Design",
 };
 
 // The Brand pillar tab bar. The three content pillars switch inline; Touchpoints
@@ -10460,10 +10460,32 @@ const BRAND_SUBVIEW_LABELS = {
 const BRAND_PILLAR_TABS = [
   { key: "strategy", label: "Strategie" },
   { key: "identity", label: "Identität" },
-  { key: "design",   label: "Design System" },
+  { key: "design",   label: "Brand Design" },
   { key: "touchpoints", label: "Touchpoints", view: "touchpoints" },
   { key: "assets",      label: "Assets",      view: "assets" },
 ];
+
+// Second-level sub-tabs within each content pillar (per the agreed structure).
+const BRAND_PILLAR_SUBTABS = {
+  strategy: [
+    { key: "core",        label: "Brand Core" },
+    { key: "positioning", label: "Positionierung" },
+    { key: "personas",    label: "Personas" },
+    { key: "competitors", label: "Competitors" },
+  ],
+  identity: [
+    { key: "story",  label: "Brand Story" },
+    { key: "soul",   label: "Brand Soul" },
+    { key: "values", label: "Brand Values" },
+    { key: "voice",  label: "Voice & Tone" },
+  ],
+  design: [
+    { key: "logo",       label: "Logo" },
+    { key: "colors",     label: "Farben" },
+    { key: "typography", label: "Typografie" },
+    { key: "imagery",    label: "Bildsprache" },
+  ],
+};
 
 // Map legacy / removed tab ids onto the current pillars (for saved values).
 const BRAND_TAB_LEGACY_MAP = {
@@ -11559,6 +11581,10 @@ function MoodboardItemDetail({ item, theme, darkMode, accent, t, onClose, onDele
 function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab }) {
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
   const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
+  // Second-level sub-tab within the active pillar; resets to the first when the pillar changes.
+  const pillarSubs = BRAND_PILLAR_SUBTABS[brandTab] || [];
+  const [brandSub, setBrandSub] = useState(pillarSubs[0]?.key);
+  useEffect(() => { const s = BRAND_PILLAR_SUBTABS[brandTab] || []; setBrandSub(s[0]?.key); }, [brandTab]);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
@@ -12988,356 +13014,132 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
 
             <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px 32px" }}>
               <div style={{ maxWidth: 540, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
-                <div>
-                  <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 6, letterSpacing: -0.3 }}>
-                    {t(`brand.tab.${brandTab}.title`) || BRAND_SUBVIEW_LABELS[brandTab] || "Brand"}
-                  </div>
-                  <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
-                    {t(`brand.tab.${brandTab}.subtitle`) || ""}
-                  </div>
-                </div>
-
-                <div style={{
-                  padding: 22, borderRadius: 18,
-                  background: profile.colors?.[0] ? `linear-gradient(135deg, ${profile.colors[0]}10, transparent 60%)` : (darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)"),
-                  border: `1px solid ${theme.borderFaint}`,
-                  display: "flex", gap: 18, alignItems: "center",
-                }}>
-                  {(profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url) ? (
-                    <img src={profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url} alt="" style={{ width: 64, height: 64, borderRadius: 14, objectFit: "cover", flexShrink: 0 }} />
-                  ) : (
-                    <div style={{ width: 64, height: 64, borderRadius: 14, background: (profile.colors?.[0] || theme.accent) + "22", color: profile.colors?.[0] || theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{(profile.name || "?")[0]}</div>
-                  )}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{profile.name}</div>
-                    {profile.claim && <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 4 }}>{profile.claim}</div>}
-                  </div>
-                </div>
-
-                {(brandTab === "identity" || brandTab === "design") && profile.logos?.length > 0 && (
-                  <div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.recap.logoVariants")}</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                      {profile.logos.map(l => (
-                        <div key={l.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: 8, borderRadius: 12, background: l.key === "dark" ? "#1a1a2e" : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)"), border: `1px solid ${theme.borderFaint}` }}>
-                          <img src={l.url} alt="" style={{ width: 56, height: 56, objectFit: "contain", borderRadius: 6 }} />
-                          <div style={{ fontSize: 10, fontFamily: FONT, color: l.key === "dark" ? "#ffffff90" : theme.textDim, letterSpacing: 0.3 }}>{l.label}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {(brandTab === "identity" || brandTab === "design") && (() => {
-                  const cp = profile.color_palette || {};
-                  const hasPalette = cp.primary || cp.secondary || (cp.accents && cp.accents.length > 0);
-                  if (hasPalette) {
-                    return (
-                      <div>
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.recap.colors")}</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "flex-start" }}>
-                          {cp.primary && (
-                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                              <div style={{ width: 64, height: 64, borderRadius: 14, background: cp.primary, border: `1px solid ${theme.borderFaint}`, boxShadow: `0 6px 20px ${cp.primary}40` }} />
-                              <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, fontWeight: 600 }}>Primary</span>
-                              <span style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.3 }}>{cp.primary.toUpperCase()}</span>
-                            </div>
-                          )}
-                          {cp.secondary && (
-                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                              <div style={{ width: 64, height: 64, borderRadius: 14, background: cp.secondary, border: `1px solid ${theme.borderFaint}`, boxShadow: `0 6px 20px ${cp.secondary}40` }} />
-                              <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, fontWeight: 600 }}>Secondary</span>
-                              <span style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.3 }}>{cp.secondary.toUpperCase()}</span>
-                            </div>
-                          )}
-                          {(cp.accents || []).map((c, i) => (
-                            <div key={`${c}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                              <div style={{ width: 48, height: 48, borderRadius: 12, background: c, border: `1px solid ${theme.borderFaint}`, boxShadow: `0 4px 14px ${c}33`, marginTop: 8 }} />
-                              <span style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.3 }}>{c.toUpperCase()}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  }
-                  if (profile.colors?.length > 0) {
-                    return (
-                      <div>
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.recap.colors")}</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                          {profile.colors.map(c => (
-                            <div key={c} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                              <div style={{ width: 48, height: 48, borderRadius: 12, background: c, border: `1px solid ${theme.borderFaint}`, boxShadow: `0 4px 14px ${c}33` }} />
-                              <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.3 }}>{c.toUpperCase()}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-
-                {brandTab === "identity" && profile.next_steps && Object.keys(profile.next_steps).length > 0 && (
-                  <div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Next Steps</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      {BRAND_NEXT_STEPS.map(item => {
-                        const state = profile.next_steps?.[item.key];
-                        if (!state) return null;
-                        const meta = state === "have" ? { icon: "✓", color: "#5DB89E", label: t("brand.nextSteps.have") }
-                                  : state === "help" ? { icon: "✦", color: "#8B7AFF", label: t("brand.nextSteps.help") }
-                                  : { icon: "—", color: theme.textFaint, label: t("brand.nextSteps.skip") };
-                        return (
-                          <div key={item.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
-                            <span style={{ width: 22, height: 22, borderRadius: 6, background: meta.color + "22", color: meta.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600 }}>{meta.icon}</span>
-                            <span style={{ flex: 1, fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{t(item.labelKey)}</span>
-                            <span style={{ fontSize: 10, fontFamily: FONT, color: meta.color, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>{meta.label}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {brandTab === "identity" && profile.description && (
-                  <div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.recap.description")}</div>
-                    <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{profile.description}</div>
-                  </div>
-                )}
-
-                {/* Sources (Assets tab) */}
-                {/* PERSONAS TAB */}
-                {brandTab === "strategy" && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                    {Array.isArray(profile.personas) && profile.personas.length > 0 ? profile.personas.map((p, idx) => (
-                      <div key={p.id || idx} style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
-                        <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-                          <div style={{ width: 44, height: 44, borderRadius: 12, background: (profile.color_palette?.primary || theme.accent) + "22", color: profile.color_palette?.primary || theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontFamily: FONT, fontWeight: 700, flexShrink: 0 }}>
-                            {(p.name || "?").charAt(0).toUpperCase()}
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{p.name}</div>
-                            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{p.role}</div>
-                            {p.source === "website" && (
-                              <div style={{ display: "inline-block", marginTop: 8, padding: "3px 10px", borderRadius: 999, background: theme.accent + "15", color: theme.accent, fontSize: 10, fontFamily: FONT, fontWeight: 600, letterSpacing: 0.3 }}>
-                                {t("brand.personas.sourceWebsite")}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        {p.description && (
-                          <div style={{ marginTop: 12, fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.65 }}>{p.description}</div>
-                        )}
-                        {Array.isArray(p.goals) && p.goals.length > 0 && (
-                          <div style={{ marginTop: 14 }}>
-                            <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600, marginBottom: 6 }}>{t("brand.personas.goals")}</div>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                              {p.goals.map((g, i) => (
-                                <div key={i} style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub, paddingLeft: 12, position: "relative" }}>
-                                  <span style={{ position: "absolute", left: 0, color: theme.textFaint }}>·</span>
-                                  {g}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )) : (
-                      <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>
-                        {t("brand.personas.empty")}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* DESIGN SYSTEM TAB — Guidelines + Asset sources */}
-                {brandTab === "design" && (() => {
-                  const pdfs = (profile.sources || []).filter(s => s.type === "brandbook" || s.type?.toLowerCase().includes("pdf"));
-                  const otherSources = (profile.sources || []).filter(s => s.type !== "brandbook" && !s.type?.toLowerCase().includes("pdf"));
-                  const hasAnything = pdfs.length > 0 || otherSources.length > 0 || profile.figma_url;
-                  if (!hasAnything && !(profile.logos?.length)) {
-                    return (
-                      <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>
-                        {t("brand.tab.design.empty")}
-                      </div>
-                    );
-                  }
-                  return (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-                      {pdfs.length > 0 && (
-                        <div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.tab.design.guidelines")}</div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                            {pdfs.map(s => (
-                              <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 12, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
-                                <div style={{ width: 36, height: 36, borderRadius: 9, background: theme.accent + "20", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                                </div>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{s.name}</div>
-                                  {s.analysis?.pages && <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{s.analysis.pages} Seiten</div>}
-                                </div>
-                              </a>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {(otherSources.length > 0 || profile.figma_url) && (
-                        <div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.tab.design.assets")}</div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                            {profile.figma_url && (
-                              <a href={profile.figma_url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
-                                <svg width="16" height="16" viewBox="-3 -3 44 63" fill="none" stroke={theme.accent} strokeWidth="4" strokeLinejoin="round"><path d="M0 9.5C0 4.25 4.25 0 9.5 0H19V19H9.5C4.25 19 0 14.75 0 9.5Z"/><path d="M19 0H28.5C33.75 0 38 4.25 38 9.5C38 14.75 33.75 19 28.5 19H19V0Z"/><path d="M0 28.5C0 23.25 4.25 19 9.5 19H19V38H9.5C4.25 38 0 33.75 0 28.5Z"/><circle cx="28.5" cy="28.5" r="9.5"/><path d="M0 47.5C0 42.25 4.25 38 9.5 38H19V47.5C19 52.75 14.75 57 9.5 57C4.25 57 0 52.75 0 47.5Z"/></svg>
-                                <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Figma-Datei</span>
-                              </a>
-                            )}
-                            {otherSources.map(s => (
-                              <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
-                                <div style={{ width: 28, height: 28, borderRadius: 7, background: "rgba(139,122,255,0.15)", color: "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                                </div>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</div>
-                                  <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.4 }}>{s.type}</div>
-                                </div>
-                              </a>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* CHANNELS TAB — website + social profiles */}
-                {brandTab === "channels" && (() => {
-                  const ch = profile.channels || {};
-                  const SOCIALS = [
-                    { key: "instagram", label: "Instagram" },
-                    { key: "linkedin",  label: "LinkedIn" },
-                    { key: "tiktok",    label: "TikTok" },
-                    { key: "youtube",   label: "YouTube" },
-                    { key: "x",         label: "X / Twitter" },
-                    { key: "facebook",  label: "Facebook" },
-                    { key: "pinterest", label: "Pinterest" },
-                    { key: "threads",   label: "Threads" },
-                  ];
-                  const activeSocials = SOCIALS.filter(s => ch[s.key]);
-                  const hasWebsite = profile.website_url || ch.website;
-                  const hasNewsletter = ch.newsletter;
-                  if (!hasWebsite && activeSocials.length === 0 && !hasNewsletter) {
-                    return (
-                      <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>
-                        {t("brand.tab.channels.empty")}
-                      </div>
-                    );
-                  }
-                  return (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-                      {hasWebsite && (
-                        <div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.tab.channels.website")}</div>
-                          <a href={profile.website_url || ch.website} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg>
-                            <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{profile.website_url || ch.website}</span>
-                          </a>
-                        </div>
-                      )}
-                      {activeSocials.length > 0 && (
-                        <div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.tab.channels.social")}</div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            {activeSocials.map(s => (
-                              <a key={s.key} href={ch[s.key]} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
-                                <div style={{ width: 28, height: 28, borderRadius: 7, background: theme.accent + "15", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{s.label[0]}</div>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{s.label}</div>
-                                  <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ch[s.key]}</div>
-                                </div>
-                              </a>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {hasNewsletter && (
-                        <div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.tab.channels.newsletter")}</div>
-                          <a href={ch.newsletter} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, textDecoration: "none", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4l8 8 8-8"/></svg>
-                            <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{ch.newsletter}</span>
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* STRATEGY TAB — merged Intelligence + Analysis */}
-                {brandTab === "strategy" && (() => {
+                {(() => {
+                  const subs = BRAND_PILLAR_SUBTABS[brandTab] || [];
+                  const subLabel = subs.find(s => s.key === brandSub)?.label || BRAND_SUBVIEW_LABELS[brandTab] || "Brand";
                   const intel = profile.intelligence || {};
                   const ana = profile.analysis || {};
-                  const claim = ana.claim_summary || profile.claim;
-                  const positioning = ana.market_positioning;
-                  const keyMessages = ana.key_messages || intel.headlines || [];
-                  const valueProps = intel.value_props || [];
-                  const context = intel.context;
-                  const hasAny = claim || positioning || context || keyMessages.length || valueProps.length;
-                  if (!hasAny) {
-                    return (
-                      <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>
-                        {t("brand.tab.strategy.empty")}
-                      </div>
-                    );
-                  }
-                  return (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-                      {claim && (
-                        <div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.tab.strategy.claim")}</div>
-                          <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 500, color: theme.text, lineHeight: 1.4 }}>{claim}</div>
-                        </div>
-                      )}
-                      {positioning && (
-                        <div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.tab.strategy.positioning")}</div>
-                          <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7 }}>{positioning}</div>
-                        </div>
-                      )}
-                      {keyMessages.length > 0 && (
-                        <div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.tab.strategy.keyMessages")}</div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            {keyMessages.map((m, i) => (
-                              <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.5 }}>{m}</div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {valueProps.length > 0 && (
-                        <div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{t("brand.tab.strategy.valueProps")}</div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            {valueProps.map((v, i) => (
-                              <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.015)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5 }}>
-                                <span style={{ color: theme.accent, marginRight: 8, fontWeight: 600 }}>·</span>{v}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {context && (
-                        <div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>{t("brand.tab.strategy.context")}</div>
-                          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{context}</div>
-                        </div>
-                      )}
-                      {(intel.source_url || ana.source_url) && (
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>{t("brand.tab.fetchedFrom")}: <a href={intel.source_url || ana.source_url} target="_blank" rel="noopener noreferrer" style={{ color: theme.accent }}>{intel.source_url || ana.source_url}</a></div>
-                      )}
+                  const cp = profile.color_palette || {};
+                  const fonts = intel.fonts || {};
+                  const voice = (profile.tone_of_voice || []).map(v => typeof v === "string" ? v : (v?.label || v?.name || "")).filter(Boolean);
+                  const primaryLogo = profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url;
+                  const SL = (s) => <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{s}</div>;
+                  const Empty = (s) => <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>{s}</div>;
+                  const Para = (s) => <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{s}</div>;
+                  const Sw = (c, label) => (
+                    <div key={(c || "") + (label || "")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                      <div style={{ width: 56, height: 56, borderRadius: 14, background: c, border: `1px solid ${theme.borderFaint}`, boxShadow: `0 6px 20px ${c}40` }} />
+                      {label && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, fontWeight: 600 }}>{label}</span>}
+                      <span style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.3 }}>{(c || "").toUpperCase()}</span>
                     </div>
+                  );
+
+                  let body = null;
+                  const k = brandTab + "/" + brandSub;
+                  if (k === "strategy/core") {
+                    const claim = ana.claim_summary || profile.claim;
+                    const valueProps = intel.value_props || [];
+                    const keyMessages = ana.key_messages || intel.headlines || [];
+                    body = (claim || profile.description || valueProps.length || keyMessages.length) ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+                        {claim && <div>{SL("Claim")}<div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 500, color: theme.text, lineHeight: 1.4 }}>{claim}</div></div>}
+                        {profile.description && <div>{SL("Beschreibung")}{Para(profile.description)}</div>}
+                        {valueProps.length > 0 && <div>{SL("Value Props")}<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{valueProps.map((v, i) => <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.015)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5 }}><span style={{ color: theme.accent, marginRight: 8, fontWeight: 600 }}>·</span>{v}</div>)}</div></div>}
+                        {keyMessages.length > 0 && <div>{SL("Kern-Botschaften")}<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{keyMessages.map((m, i) => <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.5 }}>{m}</div>)}</div></div>}
+                      </div>
+                    ) : Empty("Noch kein Brand Core hinterlegt. Ergänze Claim, Beschreibung und Value Props im Onboarding.");
+                  } else if (k === "strategy/positioning") {
+                    const positioning = ana.market_positioning;
+                    body = positioning ? <div>{SL("Positionierung")}{Para(positioning)}</div> : Empty("Noch keine Positionierung hinterlegt.");
+                  } else if (k === "strategy/personas") {
+                    body = (Array.isArray(profile.personas) && profile.personas.length) ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                        {profile.personas.map((p, idx) => (
+                          <div key={p.id || idx} style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                              <div style={{ width: 42, height: 42, borderRadius: 12, background: (cp.primary || theme.accent) + "22", color: cp.primary || theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontFamily: FONT, fontWeight: 700, flexShrink: 0 }}>{(p.name || "?").charAt(0).toUpperCase()}</div>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{p.name || p.role}</div>
+                                {p.role && p.name && <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{p.role}</div>}
+                              </div>
+                            </div>
+                            {p.description && <div style={{ marginTop: 10, fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6 }}>{p.description}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    ) : Empty("Noch keine Personas definiert.");
+                  } else if (k === "strategy/competitors") {
+                    const comps = ana.competitors || intel.competitors || [];
+                    body = (Array.isArray(comps) && comps.length) ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {comps.map((c, i) => <div key={i} style={{ padding: "12px 14px", borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.5 }}>{typeof c === "string" ? c : (c.name || c.title || JSON.stringify(c))}</div>)}
+                      </div>
+                    ) : Empty("Noch keine Competitor-Analyse vorhanden.");
+                  } else if (k === "identity/story") {
+                    body = profile.description ? <div>{SL("Brand Story")}{Para(profile.description)}</div> : Empty("Noch keine Brand Story hinterlegt.");
+                  } else if (k === "identity/soul") {
+                    body = Empty("Brand Soul — bald verfügbar. Hier beschreiben wir Mission, Vision und das Warum hinter der Marke.");
+                  } else if (k === "identity/values") {
+                    body = Empty("Brand Values — bald verfügbar. Hier kommen die Kernwerte der Marke hin.");
+                  } else if (k === "identity/voice") {
+                    body = voice.length ? (
+                      <div>{SL("Voice & Tone")}<div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{voice.map((v, i) => <span key={i} style={{ padding: "7px 13px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 12.5, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{v}</span>)}</div></div>
+                    ) : Empty("Noch kein Voice & Tone definiert.");
+                  } else if (k === "design/logo") {
+                    body = (profile.logos?.length) ? (
+                      <div>{SL(t("brand.recap.logoVariants") || "Logo-Varianten")}<div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>{profile.logos.map(l => (
+                        <div key={l.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: 8, borderRadius: 12, background: l.key === "dark" ? "#1a1a2e" : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)"), border: `1px solid ${theme.borderFaint}` }}>
+                          <img src={l.url} alt="" style={{ width: 64, height: 64, objectFit: "contain", borderRadius: 6 }} />
+                          <div style={{ fontSize: 10, fontFamily: FONT, color: l.key === "dark" ? "#ffffff90" : theme.textDim }}>{l.label}</div>
+                        </div>
+                      ))}</div></div>
+                    ) : Empty("Noch kein Logo hochgeladen.");
+                  } else if (k === "design/colors") {
+                    const hasPalette = cp.primary || cp.secondary || (cp.accents && cp.accents.length);
+                    body = hasPalette ? (
+                      <div>{SL(t("brand.recap.colors") || "Farben")}<div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "flex-start" }}>{cp.primary && Sw(cp.primary, "Primary")}{cp.secondary && Sw(cp.secondary, "Secondary")}{(cp.accents || []).map((c) => Sw(c))}</div></div>
+                    ) : (profile.colors?.length ? (
+                      <div>{SL(t("brand.recap.colors") || "Farben")}<div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>{profile.colors.map((c) => Sw(c))}</div></div>
+                    ) : Empty("Noch keine Farben hinterlegt."));
+                  } else if (k === "design/typography") {
+                    body = (fonts.heading || fonts.body) ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                        {fonts.heading && <div>{SL("Headline")}<div style={{ fontSize: 26, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{fonts.heading}</div></div>}
+                        {fonts.body && <div>{SL("Body")}<div style={{ fontSize: 16, fontFamily: FONT, color: theme.textSub }}>{fonts.body}</div></div>}
+                      </div>
+                    ) : Empty("Noch keine Typografie erkannt.");
+                  } else if (k === "design/imagery") {
+                    body = Empty("Bildsprache — hier kommen Brand-Bildbeispiele mit ihren Prompts hin. Bald verfügbar.");
+                  } else {
+                    body = Empty("Bald verfügbar.");
+                  }
+
+                  return (
+                    <>
+                      {subs.length > 0 && (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {subs.map(s => {
+                            const on = brandSub === s.key;
+                            return <div key={s.key} onClick={() => setBrandSub(s.key)} style={{ padding: "7px 14px", borderRadius: 999, cursor: "pointer", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, background: on ? theme.accent : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"), color: on ? "#fff" : theme.textDim, transition: "all 0.2s ease" }}>{s.label}</div>;
+                          })}
+                        </div>
+                      )}
+                      <div>
+                        <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{subLabel}</div>
+                      </div>
+                      <div style={{ padding: 22, borderRadius: 18, background: profile.colors?.[0] ? `linear-gradient(135deg, ${profile.colors[0]}10, transparent 60%)` : (darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)"), border: `1px solid ${theme.borderFaint}`, display: "flex", gap: 18, alignItems: "center" }}>
+                        {primaryLogo ? (
+                          <img src={primaryLogo} alt="" style={{ width: 64, height: 64, borderRadius: 14, objectFit: "cover", flexShrink: 0 }} />
+                        ) : (
+                          <div style={{ width: 64, height: 64, borderRadius: 14, background: (profile.colors?.[0] || theme.accent) + "22", color: profile.colors?.[0] || theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{(profile.name || "?")[0]}</div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{profile.name}</div>
+                          {profile.claim && <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 4 }}>{profile.claim}</div>}
+                        </div>
+                      </div>
+                      {body}
+                    </>
                   );
                 })()}
 
