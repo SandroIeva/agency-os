@@ -11693,7 +11693,12 @@ const DEFAULT_VOICE_TONE = {
 function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel }) {
   const base = (value && Array.isArray(value.attributes) && value.attributes.length) ? value : DEFAULT_VOICE_TONE;
   const [draft, setDraft] = useState(base);
-  useEffect(() => { if (editing) setDraft((value && Array.isArray(value.attributes) && value.attributes.length) ? JSON.parse(JSON.stringify(value)) : JSON.parse(JSON.stringify(DEFAULT_VOICE_TONE))); }, [editing]);
+  useEffect(() => {
+    if (!editing) return;
+    const v = (value && Array.isArray(value.attributes) && value.attributes.length) ? JSON.parse(JSON.stringify(value)) : JSON.parse(JSON.stringify(DEFAULT_VOICE_TONE));
+    if (!Array.isArray(v.moments) || !v.moments.length) v.moments = JSON.parse(JSON.stringify(DEFAULT_VOICE_TONE.moments));
+    setDraft(v);
+  }, [editing]);
 
   const divider = darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)";
   const label = { fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 10 };
@@ -11704,6 +11709,8 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
     const setIntro = (f, v) => setDraft(d => ({ ...d, intro: { ...d.intro, [f]: v } }));
     const setAttr = (i, f, v) => setDraft(d => ({ ...d, attributes: d.attributes.map((a, j) => j === i ? { ...a, [f]: v } : a) }));
     const setTactic = (ai, ti, f, v) => setDraft(d => ({ ...d, attributes: d.attributes.map((a, j) => j === ai ? { ...a, tactics: a.tactics.map((tc, k) => k === ti ? { ...tc, [f]: v } : tc) } : a) }));
+    const setMoment = (mi, f, v) => setDraft(d => ({ ...d, moments: (d.moments || []).map((m, j) => j === mi ? { ...m, [f]: v } : m) }));
+    const setMomentTrait = (mi, ti, v) => setDraft(d => ({ ...d, moments: (d.moments || []).map((m, j) => j === mi ? { ...m, traits: m.traits.map((tr, k) => k === ti ? { ...tr, value: v } : tr) } : m) }));
     const lines = (arr) => (arr || []).join("\n");
     const toArr = (s) => s.split("\n").map(x => x.trim()).filter(Boolean);
     return (
@@ -11720,6 +11727,27 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
           <textarea rows={3} value={lines(draft.intro.questions)} onChange={e => setIntro("questions", toArr(e.target.value))} style={fieldStyle} />
           <div style={label}>Abschluss</div>
           <textarea rows={3} value={draft.intro.closing} onChange={e => setIntro("closing", e.target.value)} style={fieldStyle} />
+        </div>
+        {/* Moments — title, desc, tone sliders, channels */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 18, borderTop: `1px solid ${divider}` }}>
+          <div style={{ ...label, fontWeight: 600, fontSize: 14, color: theme.text }}>Momente (Customer Journey)</div>
+          {(draft.moments || []).map((m, mi) => (
+            <div key={mi} style={{ padding: 16, borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", display: "flex", flexDirection: "column", gap: 10 }}>
+              <input value={m.title} onChange={e => setMoment(mi, "title", e.target.value)} style={{ ...fieldStyle, fontWeight: 600, fontSize: 16 }} />
+              <textarea rows={2} value={m.desc} onChange={e => setMoment(mi, "desc", e.target.value)} style={fieldStyle} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 2 }}>
+                {(m.traits || []).map((tr, ti) => (
+                  <div key={ti} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <span style={{ width: 100, flexShrink: 0, fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>{tr.label}</span>
+                    <input type="range" min="0" max="100" value={tr.value} onChange={e => setMomentTrait(mi, ti, Number(e.target.value))} style={{ flex: 1, accentColor: theme.accent, cursor: "pointer" }} />
+                    <span style={{ width: 34, textAlign: "right", fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{tr.value}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ ...label, marginBottom: 0, marginTop: 4 }}>Touchpoints & Channels (eine pro Zeile)</div>
+              <textarea rows={3} value={lines(m.channels)} onChange={e => setMoment(mi, "channels", toArr(e.target.value))} style={fieldStyle} />
+            </div>
+          ))}
         </div>
         {/* Attributes */}
         {draft.attributes.map((a, ai) => (
