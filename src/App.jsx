@@ -11644,6 +11644,12 @@ const DEFAULT_VOICE_TONE = {
       traits: [{ label: "To-the-point", value: 80 }, { label: "Approachable", value: 95 }, { label: "Upfront", value: 45 }],
       channels: ["Announcement Emails", "Tooltips", "New-User States", "Half Sheets"],
     },
+    {
+      title: "Support",
+      desc: "Wenn etwas hakt, sind wir ruhig, klar und lösungsorientiert. Wir nehmen Sorgen ernst und führen Schritt für Schritt zur Lösung.",
+      traits: [{ label: "To-the-point", value: 72 }, { label: "Approachable", value: 82 }, { label: "Upfront", value: 88 }],
+      channels: ["Help Center", "Support Chat", "Status Updates", "FAQ"],
+    },
   ],
   attributes: [
     {
