@@ -10551,7 +10551,7 @@ function touchpointGlyph(key) {
     case "website":   return <g fill="none" stroke="#fff" strokeWidth="1.7"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5a13 13 0 010 17M12 3.5a13 13 0 000 17"/></g>;
     case "instagram": return <g fill="none" stroke="#fff" strokeWidth="1.7"><rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.8"/><circle cx="17" cy="7" r="0.9" fill="#fff" stroke="none"/></g>;
     case "youtube":   return <g><rect x="3" y="6" width="18" height="12" rx="3.5" fill="#fff"/><path d="M10.5 9.2l4.2 2.8-4.2 2.8z" fill="#FF0000"/></g>;
-    case "tiktok":    return <g fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" transform="translate(-0.5, 1.1)"><path d="M9 9.5a3.5 3.5 0 103.5 3.5V4.5c.6 1.8 2 3 4 3.2"/></g>;
+    case "tiktok":    return <g fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" transform="translate(1.8, 1.1)"><path d="M9 9.5a3.5 3.5 0 103.5 3.5V4.5c.6 1.8 2 3 4 3.2"/></g>;
     case "x":         return <path fill="#fff" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>;
     case "linkedin":  return L("in");
     case "facebook":  return L("f", 15);
