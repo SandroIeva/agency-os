@@ -10542,7 +10542,7 @@ const TOUCHPOINT_PLATFORMS = [
 // Compact white glyph per platform (letters via <text> where a logo would be fiddly).
 // Per-platform optical-size correction — each glyph fills its 24×24 box
 // differently, so we nudge the rendered size to make them look balanced.
-const TP_GLYPH_SCALE = { x: 0.72, tiktok: 1.3, facebook: 1.5, youtube: 1.12, instagram: 1.0, website: 1.0 };
+const TP_GLYPH_SCALE = { x: 0.72, tiktok: 1.3, facebook: 1.65, youtube: 1.12, instagram: 1.0, website: 1.0 };
 const tpGlyphSize = (key, base) => Math.round(base * (TP_GLYPH_SCALE[key] || 1));
 
 function touchpointGlyph(key) {
@@ -10554,7 +10554,7 @@ function touchpointGlyph(key) {
     case "tiktok":    return <g fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" transform="translate(1.8, 1.1)"><path d="M9 9.5a3.5 3.5 0 103.5 3.5V4.5c.6 1.8 2 3 4 3.2"/></g>;
     case "x":         return <path fill="#fff" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>;
     case "linkedin":  return L("in");
-    case "facebook":  return L("f", 15);
+    case "facebook":  return <text x="12" y="17.7" textAnchor="middle" fontSize="15" fontWeight="700" fill="#fff" fontFamily="sans-serif">f</text>;
     case "pinterest": return L("P", 14);
     case "threads":   return L("@", 15);
     case "newsletter":return <g fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M4 7l8 6 8-6"/></g>;
