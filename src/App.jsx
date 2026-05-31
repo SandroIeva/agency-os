@@ -11737,7 +11737,7 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
       {/* One section per attribute */}
       {(d.attributes || []).map((a, ai) => (
         <div key={ai}>
-          <div style={{ fontSize: "clamp(44px, 7vw, 76px)", fontFamily: FONT, fontWeight: 700, color: theme.text, letterSpacing: -1.5, lineHeight: 1.0, textAlign: "center", marginBottom: 44 }}>{a.name}</div>
+          <div style={{ fontSize: "clamp(44px, 7vw, 76px)", fontFamily: FONT, fontWeight: 700, color: theme.text, letterSpacing: -1.5, lineHeight: 1.0, marginBottom: 44 }}>{a.name}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 48 }}>
             {/* Left: Overview + should/shouldn't */}
             <div>
@@ -13349,9 +13349,11 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
 
                   return (
                     <>
-                      <div>
-                        <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{subLabel}</div>
-                      </div>
+                      {k !== "identity/voice" && (
+                        <div>
+                          <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{subLabel}</div>
+                        </div>
+                      )}
                       {k === "identity/voice" ? (
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
                           onSave={saveVoiceTone} onCancel={() => setEditingText(false)} />
