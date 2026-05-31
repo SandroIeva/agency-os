@@ -13122,20 +13122,6 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
                       <div>
                         <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{subLabel}</div>
                       </div>
-                      {/* Brand recap card — hidden on the Identität pillar (Brand Story / Soul / Values / Voice & Tone) */}
-                      {brandTab !== "identity" && (
-                      <div style={{ padding: 22, borderRadius: 18, background: profile.colors?.[0] ? `linear-gradient(135deg, ${profile.colors[0]}10, transparent 60%)` : (darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)"), border: `1px solid ${theme.borderFaint}`, display: "flex", gap: 18, alignItems: "center" }}>
-                        {primaryLogo ? (
-                          <img src={primaryLogo} alt="" style={{ width: 64, height: 64, borderRadius: 14, objectFit: "cover", flexShrink: 0 }} />
-                        ) : (
-                          <div style={{ width: 64, height: 64, borderRadius: 14, background: (profile.colors?.[0] || theme.accent) + "22", color: profile.colors?.[0] || theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{(profile.name || "?")[0]}</div>
-                        )}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{profile.name}</div>
-                          {profile.claim && <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 4 }}>{profile.claim}</div>}
-                        </div>
-                      </div>
-                      )}
                       {body}
                     </>
                   );
