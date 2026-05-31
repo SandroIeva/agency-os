@@ -11794,7 +11794,7 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
       {/* One section per attribute */}
       {(d.attributes || []).map((a, ai) => (
         <div key={ai}>
-          <div style={{ fontSize: "clamp(40px, 6vw, 65px)", fontFamily: FONT, fontWeight: 700, color: theme.text, letterSpacing: -1.5, lineHeight: 1.0, marginBottom: 44 }}>{a.name}</div>
+          <div style={{ fontSize: "clamp(38px, 6vw, 60px)", fontFamily: FONT, fontWeight: 700, color: theme.text, letterSpacing: -1.5, lineHeight: 1.0, marginBottom: 44 }}>{a.name}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 48 }}>
             {/* Left: Overview + should/shouldn't */}
             <div>
