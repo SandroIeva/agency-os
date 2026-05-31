@@ -10645,14 +10645,16 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
       exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
       style={panelWrap}>
       <div style={card}>
-        {/* Header */}
-        <div style={{ padding: "20px 26px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${theme.borderFaint}` }}>
-          <div style={{ width: 38, height: 38, borderRadius: 11, background: "#1a1a2e", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="2.4"/><circle cx="5" cy="18" r="2.4"/><circle cx="19" cy="18" r="2.4"/><path d="M12 7.4v3.6M10.2 16.4L6.6 12.8M13.8 16.4l3.6-3.6"/></svg>
-          </div>
-          <div>
-            <div style={{ fontSize: 19, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{t("touchpoints.title") || "Touchpoints"}</div>
-            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{connectedCount} {connectedCount === 1 ? (t("touchpoints.connectedOne") || "Kanal verbunden") : (t("touchpoints.connectedMany") || "Kanäle verbunden")}</div>
+        {/* Header — brand logo + "<Brand> Touchpoints" (consistent with Brand views) */}
+        <div style={{ padding: "16px 24px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${theme.borderFaint}` }}>
+          {(profile?.logos?.find(l => l.key === "primary")?.url || profile?.logo_url) ? (
+            <img src={profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+          ) : (
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: theme.accent + "22", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{((profile?.name || userOrg?.name || "?"))[0]}</div>
+          )}
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+            <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{profile?.name || userOrg?.name || ""}</span>
+            <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim }}>{t("touchpoints.title") || "Touchpoints"}</span>
           </div>
         </div>
 
@@ -10799,6 +10801,16 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
   // Assets has three tabs: Moodboards (curated boards), Creations (your generated
   // outputs) and Inspirations (saved references).
   const [tab, setTab] = useState("moodboards");
+  // Brand identity for the header (logo + name), to stay consistent with the
+  // Brand views: "<Brand> Assets".
+  const [brand, setBrand] = useState(null);
+  useEffect(() => {
+    if (!userOrg?.id) return;
+    (async () => {
+      const { data } = await supabase.from("brand_profile").select("name,logo_url,logos").eq("org_id", userOrg.id).maybeSingle();
+      setBrand(data || null);
+    })();
+  }, [userOrg?.id]);
   // Creations upload is triggered from the header (same slot as the "New board"
   // button), but the file input + logic live in CreationsTab — so it registers a
   // picker fn here and reports its uploading state up.
@@ -11004,10 +11016,15 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
           {/* Header */}
           <div style={{ padding: "18px 26px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 38, height: 38, borderRadius: 11, background: "#1a1a2e", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>
+              {(brand?.logos?.find(l => l.key === "primary")?.url || brand?.logo_url) ? (
+                <img src={brand.logos?.find(l => l.key === "primary")?.url || brand.logo_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+              ) : (
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: accent + "22", color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{((brand?.name || userOrg?.name || "?"))[0]}</div>
+              )}
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+                <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{brand?.name || userOrg?.name || ""}</span>
+                <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim }}>{t("assets.title") || "Assets"}</span>
               </div>
-              <div style={{ fontSize: 19, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{t("assets.title") || "Assets"}</div>
             </div>
             {tab === "moodboards" && (
               <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setCreating(true)}
