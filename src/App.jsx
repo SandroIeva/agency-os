@@ -11625,6 +11625,26 @@ const DEFAULT_VOICE_TONE = {
     questions: ["Was soll dieser Text bewirken?", "Für welches Szenario schreiben wir?", "Mit wem sprichst du?"],
     closing: "Wir nutzen die Customer Journey, um Momente und Ton-Leitlinien zu mappen — als Erinnerung, dass jede Interaktion einen kundenzentrierten Zweck hat.",
   },
+  moments: [
+    {
+      title: "First impressions",
+      desc: "Hier wollen wir Interesse wecken und Neugier entfachen — durch mutige, clevere Sprache, die zum genaueren Hinsehen einlädt.",
+      traits: [{ label: "To-the-point", value: 40 }, { label: "Approachable", value: 90 }, { label: "Upfront", value: 12 }],
+      channels: ["In-app Product Flows", "Transactional Email", "Push Notifications"],
+    },
+    {
+      title: "Consideration",
+      desc: "Wir haben die Aufmerksamkeit — jetzt geht es um Verständnis und Vertrauen. Wir erklären Produkte, wie sie funktionieren und welche Ergebnisse sie bringen.",
+      traits: [{ label: "To-the-point", value: 88 }, { label: "Approachable", value: 30 }, { label: "Upfront", value: 70 }],
+      channels: ["Product Pages", "Campaign Lander", "App Store"],
+    },
+    {
+      title: "Education",
+      desc: "Wir geben Nutzer:innen die Infos, die sie für Entscheidungen brauchen. Jede Interaktion vermittelt Kontrolle, Sicherheit und Vertrauen — mit Social Proof, Metaphern und Daten.",
+      traits: [{ label: "To-the-point", value: 80 }, { label: "Approachable", value: 95 }, { label: "Upfront", value: 45 }],
+      channels: ["Announcement Emails", "Tooltips", "New-User States", "Half Sheets"],
+    },
+  ],
   attributes: [
     {
       name: "To-the-point",
@@ -11733,6 +11753,37 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
         </div>
         <p style={{ fontSize: 16, fontFamily: FONT, lineHeight: 1.6, color: theme.textSub, margin: 0 }}>{d.intro.closing}</p>
       </div>
+
+      {/* Journey moments — cards with tone-level bars + touchpoints */}
+      {(d.moments || DEFAULT_VOICE_TONE.moments).length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+          {(d.moments || DEFAULT_VOICE_TONE.moments).map((m, mi) => (
+            <div key={mi} style={{ borderRadius: 18, background: darkMode ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.025)", border: `1px solid ${theme.borderFaint}`, padding: 22, display: "flex", flexDirection: "column" }}>
+              <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3, marginBottom: 10 }}>{m.title}</div>
+              <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, minHeight: 110 }}>{m.desc}</div>
+              <div style={{ height: 1, background: divider, margin: "8px 0 16px" }} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {(m.traits || []).map((tr, j) => (
+                  <div key={j} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <span style={{ width: 96, flexShrink: 0, fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>{tr.label}</span>
+                    <div style={{ flex: 1, height: 10, borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)", overflow: "hidden" }}>
+                      <motion.div initial={{ width: 0 }} animate={{ width: `${tr.value}%` }} transition={{ delay: 0.15 + j * 0.07, duration: 0.5, ease: [0.22, 0.68, 0.35, 1] }}
+                        style={{ height: "100%", borderRadius: 999, background: theme.accent }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ height: 1, background: divider, margin: "16px 0 14px" }} />
+              <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>Touchpoints & Channels</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                {(m.channels || []).map((c, j) => (
+                  <div key={j} style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, display: "flex", gap: 8 }}><span style={{ color: theme.textFaint }}>•</span>{c}</div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* One section per attribute */}
       {(d.attributes || []).map((a, ai) => (
