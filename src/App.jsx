@@ -10606,7 +10606,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
   useEffect(() => {
     if (!userOrg?.id) { setLoading(false); return; }
     (async () => {
-      const { data } = await supabase.from("brand_profile").select("id, channels, website_url, name").eq("org_id", userOrg.id).maybeSingle();
+      const { data } = await supabase.from("brand_profile").select("id, channels, website_url, name, logo_url, logos").eq("org_id", userOrg.id).maybeSingle();
       setProfile(data || null);
       const ch = { ...(data?.channels && typeof data.channels === "object" ? data.channels : {}) };
       if (data?.website_url && !ch.website) ch.website = data.website_url;
