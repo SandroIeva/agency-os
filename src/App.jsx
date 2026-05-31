@@ -10523,6 +10523,192 @@ async function extractColors(url, count = 5) {
   });
 }
 
+// ── Touchpoints (Brand → Touchpoints) ───────────────────────────────────────
+// Where the brand lives in the world. v1 focuses on social-media channels (read
+// from brand_profile.channels), shown as a grid of brand-coloured channel cards
+// you can connect/edit inline. Teases the upcoming Strategy/Analysis layer.
+const TOUCHPOINT_PLATFORMS = [
+  { key: "website",    label: "Website",     color: "#6C5CE7", hint: "https://…" },
+  { key: "instagram",  label: "Instagram",   color: "#E1306C", hint: "instagram.com/…" },
+  { key: "linkedin",   label: "LinkedIn",    color: "#0A66C2", hint: "linkedin.com/company/…" },
+  { key: "tiktok",     label: "TikTok",      color: "#111111", hint: "tiktok.com/@…" },
+  { key: "youtube",    label: "YouTube",     color: "#FF0000", hint: "youtube.com/@…" },
+  { key: "x",          label: "X",           color: "#111111", hint: "x.com/…" },
+  { key: "facebook",   label: "Facebook",    color: "#1877F2", hint: "facebook.com/…" },
+  { key: "pinterest",  label: "Pinterest",   color: "#E60023", hint: "pinterest.com/…" },
+  { key: "threads",    label: "Threads",     color: "#111111", hint: "threads.net/@…" },
+  { key: "newsletter", label: "Newsletter",  color: "#00B894", hint: "https://…" },
+];
+// Compact white glyph per platform (letters via <text> where a logo would be fiddly).
+function touchpointGlyph(key) {
+  const L = (s, size = 13) => <text x="12" y="16.5" textAnchor="middle" fontSize={size} fontWeight="700" fill="#fff" fontFamily="sans-serif">{s}</text>;
+  switch (key) {
+    case "website":   return <g fill="none" stroke="#fff" strokeWidth="1.7"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5a13 13 0 010 17M12 3.5a13 13 0 000 17"/></g>;
+    case "instagram": return <g fill="none" stroke="#fff" strokeWidth="1.7"><rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.8"/><circle cx="17" cy="7" r="0.9" fill="#fff" stroke="none"/></g>;
+    case "youtube":   return <g><rect x="3" y="6" width="18" height="12" rx="3.5" fill="#fff"/><path d="M10.5 9.2l4.2 2.8-4.2 2.8z" fill="#FF0000"/></g>;
+    case "tiktok":    return <g fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 9.5a3.5 3.5 0 103.5 3.5V4.5c.6 1.8 2 3 4 3.2"/></g>;
+    case "x":         return <g fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round"><path d="M5.5 5.5l13 13M18.5 5.5l-13 13"/></g>;
+    case "linkedin":  return L("in");
+    case "facebook":  return L("f", 15);
+    case "pinterest": return L("P", 14);
+    case "threads":   return L("@", 15);
+    case "newsletter":return <g fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M4 7l8 6 8-6"/></g>;
+    default:          return L((key[0] || "?").toUpperCase());
+  }
+}
+
+function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
+  const [profile, setProfile] = useState(null);
+  const [channels, setChannels] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [editKey, setEditKey] = useState(null);
+  const [draft, setDraft] = useState("");
+  const accent = theme.accent || "#8B7AFF";
+
+  useEffect(() => {
+    if (!userOrg?.id) { setLoading(false); return; }
+    (async () => {
+      const { data } = await supabase.from("brand_profile").select("id, channels, website_url, name").eq("org_id", userOrg.id).maybeSingle();
+      setProfile(data || null);
+      const ch = { ...(data?.channels && typeof data.channels === "object" ? data.channels : {}) };
+      if (data?.website_url && !ch.website) ch.website = data.website_url;
+      setChannels(ch);
+      setLoading(false);
+    })();
+  }, [userOrg?.id]);
+
+  const saveChannel = async (key, value) => {
+    const next = { ...channels };
+    if (value && value.trim()) next[key] = value.trim(); else delete next[key];
+    setChannels(next);
+    setEditKey(null); setDraft("");
+    if (!userOrg?.id) return;
+    // Upsert the brand_profile row (it may not exist yet for a fresh workspace).
+    if (profile?.id) {
+      await supabase.from("brand_profile").update({ channels: next, updated_at: new Date().toISOString() }).eq("id", profile.id);
+    } else {
+      const { data } = await supabase.from("brand_profile").insert({ org_id: userOrg.id, created_by: session?.user?.id, channels: next, name: userOrg?.name || "" }).select("id").single();
+      if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
+    }
+  };
+
+  const prettyHandle = (url) => {
+    if (!url) return "";
+    try { const u = new URL(/^https?:\/\//.test(url) ? url : "https://" + url); return (u.hostname.replace(/^www\./, "") + u.pathname).replace(/\/$/, ""); }
+    catch { return url; }
+  };
+  const connectedCount = TOUCHPOINT_PLATFORMS.filter(p => channels[p.key]).length;
+
+  const panelWrap = { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 40px 80px" };
+  const card = { width: "100%", maxWidth: 980, height: "100%", background: theme.cardBg, backdropFilter: "blur(40px)", border: `1px solid ${theme.borderFaint}`, borderRadius: 24, overflow: "hidden", display: "flex", flexDirection: "column" };
+
+  return (
+    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
+      style={panelWrap}>
+      <div style={card}>
+        {/* Header */}
+        <div style={{ padding: "20px 26px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${theme.borderFaint}` }}>
+          <motion.div whileTap={{ scale: 0.92 }} onClick={onBack} style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </motion.div>
+          <div style={{ width: 38, height: 38, borderRadius: 11, background: "#1a1a2e", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="2.4"/><circle cx="5" cy="18" r="2.4"/><circle cx="19" cy="18" r="2.4"/><path d="M12 7.4v3.6M10.2 16.4L6.6 12.8M13.8 16.4l3.6-3.6"/></svg>
+          </div>
+          <div>
+            <div style={{ fontSize: 19, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{t("touchpoints.title") || "Touchpoints"}</div>
+            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{connectedCount} {connectedCount === 1 ? (t("touchpoints.connectedOne") || "Kanal verbunden") : (t("touchpoints.connectedMany") || "Kanäle verbunden")}</div>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
+          {loading ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
+          ) : (
+            <>
+              <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 14 }}>{t("touchpoints.social") || "Social-Media-Kanäle"}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 14 }}>
+                {TOUCHPOINT_PLATFORMS.map((p, i) => {
+                  const url = channels[p.key];
+                  const connected = !!url;
+                  const editing = editKey === p.key;
+                  return (
+                    <motion.div key={p.key} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.02 + i * 0.03, duration: 0.32 }}
+                      style={{ borderRadius: 16, border: `1px solid ${theme.borderFaint}`, padding: 14, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.015)",
+                        opacity: connected || editing ? 1 : 0.72, transition: "opacity 0.2s ease" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 11, background: connected || editing ? p.color : (darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <svg width="22" height="22" viewBox="0 0 24 24">{touchpointGlyph(p.key)}</svg>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{p.label}</div>
+                          {connected
+                            ? <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{prettyHandle(url)}</div>
+                            : <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>{t("touchpoints.notConnected") || "Nicht verbunden"}</div>}
+                        </div>
+                        {connected && !editing && (
+                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22C55E", flexShrink: 0 }} title={t("touchpoints.connected") || "Verbunden"} />
+                        )}
+                      </div>
+
+                      {editing ? (
+                        <div style={{ marginTop: 11, display: "flex", gap: 8 }}>
+                          <input autoFocus value={draft} onChange={e => setDraft(e.target.value)}
+                            onKeyDown={e => { if (e.key === "Enter") saveChannel(p.key, draft); if (e.key === "Escape") { setEditKey(null); setDraft(""); } }}
+                            placeholder={p.hint}
+                            style={{ flex: 1, minWidth: 0, padding: "8px 10px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 12.5, fontFamily: FONT, outline: "none" }} />
+                          <motion.div whileTap={{ scale: 0.95 }} onClick={() => saveChannel(p.key, draft)} style={{ padding: "8px 12px", borderRadius: 9, background: accent, color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>{t("common.save") || "Speichern"}</motion.div>
+                        </div>
+                      ) : (
+                        <div style={{ marginTop: 11, display: "flex", gap: 8 }}>
+                          {connected && (
+                            <a href={/^https?:\/\//.test(url) ? url : "https://" + url} target="_blank" rel="noopener noreferrer"
+                              style={{ flex: 1, textAlign: "center", padding: "7px 0", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, color: theme.text, fontSize: 12, fontFamily: FONT, fontWeight: 500, textDecoration: "none" }}>{t("touchpoints.open") || "Öffnen"}</a>
+                          )}
+                          <motion.div whileTap={{ scale: 0.95 }} onClick={() => { setEditKey(p.key); setDraft(url || ""); }}
+                            style={{ flex: connected ? "0 0 auto" : 1, textAlign: "center", padding: "7px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 500,
+                              background: connected ? "transparent" : accent, color: connected ? theme.textDim : "#fff", border: connected ? `1px solid ${theme.borderFaint}` : "none" }}>
+                            {connected ? (t("touchpoints.edit") || "Bearbeiten") : (t("touchpoints.connect") || "Verbinden")}
+                          </motion.div>
+                        </div>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </div>
+
+              {/* Strategy / Analysis teaser */}
+              <div style={{ marginTop: 30 }}>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 14 }}>{t("touchpoints.next") || "Demnächst"}</div>
+                <div style={{ position: "relative", borderRadius: 18, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, padding: 22, background: darkMode ? "rgba(124,122,255,0.07)" : "rgba(124,122,255,0.06)" }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 13, background: "#1a1a2e", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-3 3 3 5-6"/></svg>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("touchpoints.strategyTitle") || "Strategie-Analyse"}</div>
+                        <span style={{ fontSize: 10, fontFamily: FONT, fontWeight: 600, color: accent, background: accent + "1f", padding: "2px 8px", borderRadius: 999, letterSpacing: 0.5 }}>{t("common.soon") || "BALD"}</span>
+                      </div>
+                      <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55, marginTop: 6, maxWidth: 560 }}>
+                        {t("touchpoints.strategyHint") || "Der Assistent analysiert deine Kanäle und Inhalte, leitet Stärken, Lücken und Empfehlungen ab — und heftet die wichtigsten Insights direkt auf dein Dashboard."}
+                      </div>
+                      <div style={{ marginTop: 12, display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, border: `1px dashed ${theme.borderFaint}`, color: theme.textDim, fontSize: 12, fontFamily: FONT, fontWeight: 500, cursor: "not-allowed" }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                        {t("touchpoints.startAnalysis") || "Analyse starten"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 // ── Moodboards ──────────────────────────────────────────────────────────────
 // Org-scoped collections of visual references (under Brand → Assets). Two views:
 // a Grid (overview of everything) and a freeform Canvas (drag images around).
@@ -15799,7 +15985,7 @@ export default function CircularMenu() {
     }
 
     // Let views with their own scrolling handle scroll natively
-    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "timeline" || currentView === "settings" || currentView === "notes" || currentView === "projects" || currentView === "brand" || currentView === "assets") {
+    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "timeline" || currentView === "settings" || currentView === "notes" || currentView === "projects" || currentView === "brand" || currentView === "assets" || currentView === "touchpoints") {
       return;
     }
 
@@ -16627,6 +16813,13 @@ export default function CircularMenu() {
           )}
         </AnimatePresence>
 
+        {/* TOUCHPOINTS VIEW (Brand → Touchpoints): social channels + strategy teaser */}
+        <AnimatePresence>
+          {currentView === "touchpoints" && (
+            <TouchpointsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} />
+          )}
+        </AnimatePresence>
+
         {/* FILES VIEW */}
         <AnimatePresence>
           {currentView === "files" && (
@@ -17392,6 +17585,7 @@ export default function CircularMenu() {
                 // "Assets" opens the Assets surface (Moodboards / Creations / Inspirations);
                 // the other pillars open the Brand view (per-pillar tab routing TBD).
                 if (subId === "assets") { setCurrentView("assets"); return; }
+                if (subId === "touchpoints") { setCurrentView("touchpoints"); return; }
                 setCurrentView("brand");
                 return;
               }

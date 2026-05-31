@@ -55,6 +55,22 @@ const translations = {
   "assets.inspirationsTitle":  { de: "Inspirationen",             en: "Inspirations" },
   "assets.inspirationsHint":   { de: "Speichere Referenzen und Fundstücke aus dem Web hier. Bald verfügbar.", en: "Save references and finds from the web here. Coming soon." },
 
+  // ── Touchpoints (Brand → Touchpoints) ───────
+  "touchpoints.title":         { de: "Touchpoints",               en: "Touchpoints" },
+  "touchpoints.connectedOne":  { de: "Kanal verbunden",           en: "channel connected" },
+  "touchpoints.connectedMany": { de: "Kanäle verbunden",          en: "channels connected" },
+  "touchpoints.social":        { de: "Social-Media-Kanäle",       en: "Social media channels" },
+  "touchpoints.notConnected":  { de: "Nicht verbunden",           en: "Not connected" },
+  "touchpoints.connected":     { de: "Verbunden",                 en: "Connected" },
+  "touchpoints.open":          { de: "Öffnen",                    en: "Open" },
+  "touchpoints.edit":          { de: "Bearbeiten",                en: "Edit" },
+  "touchpoints.connect":       { de: "Verbinden",                 en: "Connect" },
+  "touchpoints.next":          { de: "Demnächst",                 en: "Coming up" },
+  "touchpoints.strategyTitle": { de: "Strategie-Analyse",         en: "Strategy analysis" },
+  "touchpoints.strategyHint":  { de: "Der Assistent analysiert deine Kanäle und Inhalte, leitet Stärken, Lücken und Empfehlungen ab — und heftet die wichtigsten Insights direkt auf dein Dashboard.", en: "The assistant analyses your channels and content, surfaces strengths, gaps and recommendations — and pins the key insights straight to your dashboard." },
+  "touchpoints.startAnalysis": { de: "Analyse starten",           en: "Start analysis" },
+  "common.soon":               { de: "BALD",                      en: "SOON" },
+
   // ── Moodboards (Brand → Assets) ─────────────
   "moodboard.title":           { de: "Moodboards",                en: "Moodboards" },
   "moodboard.untitled":        { de: "Neues Moodboard",           en: "New moodboard" },
