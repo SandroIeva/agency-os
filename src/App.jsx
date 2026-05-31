@@ -10626,56 +10626,107 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
           ) : (
             <>
-              <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 14 }}>{t("touchpoints.social") || "Social-Media-Kanäle"}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 14 }}>
-                {TOUCHPOINT_PLATFORMS.map((p, i) => {
-                  const url = channels[p.key];
-                  const connected = !!url;
-                  const editing = editKey === p.key;
-                  return (
-                    <motion.div key={p.key} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.02 + i * 0.03, duration: 0.32 }}
-                      style={{ borderRadius: 16, border: `1px solid ${theme.borderFaint}`, padding: 14, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.015)",
-                        opacity: connected || editing ? 1 : 0.72, transition: "opacity 0.2s ease" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 11, background: connected || editing ? p.color : (darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          <svg width="22" height="22" viewBox="0 0 24 24">{touchpointGlyph(p.key)}</svg>
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{p.label}</div>
-                          {connected
-                            ? <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{prettyHandle(url)}</div>
-                            : <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>{t("touchpoints.notConnected") || "Nicht verbunden"}</div>}
-                        </div>
-                        {connected && !editing && (
-                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22C55E", flexShrink: 0 }} title={t("touchpoints.connected") || "Verbunden"} />
-                        )}
+              {(() => {
+                const connected = TOUCHPOINT_PLATFORMS.filter(p => channels[p.key]);
+                const unconnected = TOUCHPOINT_PLATFORMS.filter(p => !channels[p.key]);
+                return (
+                  <>
+                    {/* Connected channels — vibrant brand-coloured cards */}
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 14 }}>{t("touchpoints.social") || "Social-Media-Kanäle"}</div>
+                    {connected.length === 0 ? (
+                      <div style={{ padding: "26px 18px", borderRadius: 16, border: `1px dashed ${theme.borderFaint}`, textAlign: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT, lineHeight: 1.6 }}>
+                        {t("touchpoints.noneConnected") || "Noch keine Kanäle verbunden — wähle unten eine Plattform aus."}
                       </div>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(252px, 1fr))", gap: 14 }}>
+                        {connected.map((p, i) => {
+                          const url = channels[p.key];
+                          const editing = editKey === p.key;
+                          const open = () => window.open(/^https?:\/\//.test(url) ? url : "https://" + url, "_blank", "noopener");
+                          return (
+                            <motion.div key={p.key} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.02 + i * 0.04, duration: 0.34 }}
+                              whileHover={editing ? {} : { y: -4 }} onClick={() => !editing && open()}
+                              style={{ position: "relative", overflow: "hidden", borderRadius: 18, padding: 18, minHeight: 148, cursor: editing ? "default" : "pointer",
+                                display: "flex", flexDirection: "column",
+                                background: `linear-gradient(145deg, ${p.color} 0%, ${p.color}d9 100%)`,
+                                boxShadow: `0 10px 30px ${p.color}3d` }}>
+                              {/* glossy highlight + big watermark glyph */}
+                              <div style={{ position: "absolute", top: -40, right: -30, width: 150, height: 150, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,0.22), transparent 70%)" }} />
+                              <div style={{ position: "absolute", right: -14, bottom: -22, opacity: 0.16 }}>
+                                <svg width="120" height="120" viewBox="0 0 24 24">{touchpointGlyph(p.key)}</svg>
+                              </div>
+                              {/* top row */}
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative", zIndex: 1 }}>
+                                <div style={{ width: 42, height: 42, borderRadius: 12, background: "rgba(255,255,255,0.22)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  <svg width="22" height="22" viewBox="0 0 24 24">{touchpointGlyph(p.key)}</svg>
+                                </div>
+                                <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); setEditKey(editing ? null : p.key); setDraft(url || ""); }}
+                                  style={{ width: 30, height: 30, borderRadius: 9, background: "rgba(255,255,255,0.18)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff" }}>
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
+                                </motion.div>
+                              </div>
+                              <div style={{ flex: 1 }} />
+                              {editing ? (
+                                <div style={{ position: "relative", zIndex: 1, display: "flex", gap: 7 }} onClick={e => e.stopPropagation()}>
+                                  <input autoFocus value={draft} onChange={e => setDraft(e.target.value)}
+                                    onKeyDown={e => { if (e.key === "Enter") saveChannel(p.key, draft); if (e.key === "Escape") { setEditKey(null); setDraft(""); } }}
+                                    placeholder={p.hint}
+                                    style={{ flex: 1, minWidth: 0, padding: "8px 10px", borderRadius: 9, border: "none", background: "rgba(255,255,255,0.92)", color: "#1a1a2e", fontSize: 12.5, fontFamily: FONT, outline: "none" }} />
+                                  <motion.div whileTap={{ scale: 0.95 }} onClick={() => saveChannel(p.key, draft)} style={{ padding: "8px 11px", borderRadius: 9, background: "rgba(0,0,0,0.35)", color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>✓</motion.div>
+                                  <motion.div whileTap={{ scale: 0.95 }} onClick={() => saveChannel(p.key, "")} title={t("common.delete") || "Entfernen"} style={{ padding: "8px 11px", borderRadius: 9, background: "rgba(0,0,0,0.35)", color: "#fff", fontSize: 12, fontFamily: FONT, cursor: "pointer", display: "flex", alignItems: "center" }}>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                                  </motion.div>
+                                </div>
+                              ) : (
+                                <div style={{ position: "relative", zIndex: 1 }}>
+                                  <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 700, color: "#fff", letterSpacing: -0.2 }}>{p.label}</div>
+                                  <div style={{ fontSize: 12, fontFamily: FONT, color: "rgba(255,255,255,0.88)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>{prettyHandle(url)}</div>
+                                </div>
+                              )}
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    )}
 
-                      {editing ? (
-                        <div style={{ marginTop: 11, display: "flex", gap: 8 }}>
-                          <input autoFocus value={draft} onChange={e => setDraft(e.target.value)}
-                            onKeyDown={e => { if (e.key === "Enter") saveChannel(p.key, draft); if (e.key === "Escape") { setEditKey(null); setDraft(""); } }}
-                            placeholder={p.hint}
-                            style={{ flex: 1, minWidth: 0, padding: "8px 10px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 12.5, fontFamily: FONT, outline: "none" }} />
-                          <motion.div whileTap={{ scale: 0.95 }} onClick={() => saveChannel(p.key, draft)} style={{ padding: "8px 12px", borderRadius: 9, background: accent, color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>{t("common.save") || "Speichern"}</motion.div>
+                    {/* Unconnected — quiet ghost chips */}
+                    {unconnected.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, margin: "26px 0 12px" }}>{t("touchpoints.addMore") || "Kanal verbinden"}</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 9 }}>
+                          {unconnected.map(p => {
+                            const editing = editKey === p.key;
+                            if (editing) {
+                              return (
+                                <div key={p.key} style={{ display: "flex", gap: 7, alignItems: "center", padding: 5, borderRadius: 999, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+                                  <div style={{ width: 28, height: 28, borderRadius: 999, background: p.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24">{touchpointGlyph(p.key)}</svg>
+                                  </div>
+                                  <input autoFocus value={draft} onChange={e => setDraft(e.target.value)}
+                                    onKeyDown={e => { if (e.key === "Enter") saveChannel(p.key, draft); if (e.key === "Escape") { setEditKey(null); setDraft(""); } }}
+                                    placeholder={p.hint}
+                                    style={{ width: 200, padding: "6px 8px", borderRadius: 8, border: "none", background: "transparent", color: theme.text, fontSize: 12.5, fontFamily: FONT, outline: "none" }} />
+                                  <motion.div whileTap={{ scale: 0.95 }} onClick={() => saveChannel(p.key, draft)} style={{ padding: "6px 12px", borderRadius: 999, background: accent, color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>{t("common.save") || "Speichern"}</motion.div>
+                                </div>
+                              );
+                            }
+                            return (
+                              <motion.div key={p.key} whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }} onClick={() => { setEditKey(p.key); setDraft(""); }}
+                                style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 14px 8px 8px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.015)" }}>
+                                <div style={{ width: 26, height: 26, borderRadius: 999, background: p.color, opacity: 0.92, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                  <svg width="15" height="15" viewBox="0 0 24 24">{touchpointGlyph(p.key)}</svg>
+                                </div>
+                                <span style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{p.label}</span>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                              </motion.div>
+                            );
+                          })}
                         </div>
-                      ) : (
-                        <div style={{ marginTop: 11, display: "flex", gap: 8 }}>
-                          {connected && (
-                            <a href={/^https?:\/\//.test(url) ? url : "https://" + url} target="_blank" rel="noopener noreferrer"
-                              style={{ flex: 1, textAlign: "center", padding: "7px 0", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, color: theme.text, fontSize: 12, fontFamily: FONT, fontWeight: 500, textDecoration: "none" }}>{t("touchpoints.open") || "Öffnen"}</a>
-                          )}
-                          <motion.div whileTap={{ scale: 0.95 }} onClick={() => { setEditKey(p.key); setDraft(url || ""); }}
-                            style={{ flex: connected ? "0 0 auto" : 1, textAlign: "center", padding: "7px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 500,
-                              background: connected ? "transparent" : accent, color: connected ? theme.textDim : "#fff", border: connected ? `1px solid ${theme.borderFaint}` : "none" }}>
-                            {connected ? (t("touchpoints.edit") || "Bearbeiten") : (t("touchpoints.connect") || "Verbinden")}
-                          </motion.div>
-                        </div>
-                      )}
-                    </motion.div>
-                  );
-                })}
-              </div>
+                      </>
+                    )}
+                  </>
+                );
+              })()}
 
               {/* Strategy / Analysis teaser */}
               <div style={{ marginTop: 30 }}>

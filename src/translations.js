@@ -65,6 +65,8 @@ const translations = {
   "touchpoints.open":          { de: "Öffnen",                    en: "Open" },
   "touchpoints.edit":          { de: "Bearbeiten",                en: "Edit" },
   "touchpoints.connect":       { de: "Verbinden",                 en: "Connect" },
+  "touchpoints.addMore":       { de: "Kanal verbinden",           en: "Connect a channel" },
+  "touchpoints.noneConnected": { de: "Noch keine Kanäle verbunden — wähle unten eine Plattform aus.", en: "No channels connected yet — pick a platform below." },
   "touchpoints.next":          { de: "Demnächst",                 en: "Coming up" },
   "touchpoints.strategyTitle": { de: "Strategie-Analyse",         en: "Strategy analysis" },
   "touchpoints.strategyHint":  { de: "Der Assistent analysiert deine Kanäle und Inhalte, leitet Stärken, Lücken und Empfehlungen ab — und heftet die wichtigsten Insights direkt auf dein Dashboard.", en: "The assistant analyses your channels and content, surfaces strengths, gaps and recommendations — and pins the key insights straight to your dashboard." },
