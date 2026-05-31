@@ -13282,7 +13282,7 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
             </div>
 
             <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px 32px 30px" }}>
-              <div style={{ maxWidth: 660, display: "flex", flexDirection: "column", gap: 20 }}>
+              <div style={{ maxWidth: 770, display: "flex", flexDirection: "column", gap: 20 }}>
                 {(() => {
                   const subs = BRAND_PILLAR_SUBTABS[brandTab] || [];
                   const subLabel = subs.find(s => s.key === brandSub)?.label || BRAND_SUBVIEW_LABELS[brandTab] || "Brand";
