@@ -11710,8 +11710,9 @@ function BrandStoryTimeline({ timeline, editing, theme, darkMode, t, onChange })
   useEffect(() => { if (editing) setEntries((timeline && timeline.length) ? JSON.parse(JSON.stringify(timeline)) : JSON.parse(JSON.stringify(DEFAULT_STORY_TIMELINE))); }, [editing]);
 
   const display = (timeline && timeline.length) ? timeline : DEFAULT_STORY_TIMELINE;
-  const sortKey = (e) => `${e.year || "9999"}-${e.quarter || "Z"}`;
-  const sorted = [...display].sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+  const sortKey = (e) => `${e.year || "0000"}-${e.quarter || "Q0"}`;
+  // Newest first — scroll down to go back in time.
+  const sorted = [...display].sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
 
   const commit = (next) => { setEntries(next); onChange(next); };
   const setField = (i, f, v) => commit(entries.map((e, j) => j === i ? { ...e, [f]: v } : e));
@@ -11721,7 +11722,7 @@ function BrandStoryTimeline({ timeline, editing, theme, darkMode, t, onChange })
   if (editing) {
     return (
       <div style={{ marginTop: 32, paddingTop: 24, borderTop: `1px solid ${rail}` }}>
-        <div style={label}>{t("brandStory.history") || "Historie"}</div>
+        <div style={label}>{"Brand History"}</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {entries.map((e, i) => (
             <div key={i} style={{ padding: 14, borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", display: "flex", flexDirection: "column", gap: 8 }}>
@@ -11742,7 +11743,7 @@ function BrandStoryTimeline({ timeline, editing, theme, darkMode, t, onChange })
         <motion.div whileTap={{ scale: 0.97 }} onClick={addEntry}
           style={{ marginTop: 12, display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, border: `1px dashed ${theme.borderFaint}`, color: theme.text, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          {t("brandStory.add") || "Eintrag hinzufügen"}
+          {"Eintrag hinzufügen"}
         </motion.div>
       </div>
     );
@@ -11750,7 +11751,7 @@ function BrandStoryTimeline({ timeline, editing, theme, darkMode, t, onChange })
 
   return (
     <div style={{ marginTop: 32, paddingTop: 24, borderTop: `1px solid ${rail}` }}>
-      <div style={label}>{t("brandStory.history") || "Historie"}</div>
+      <div style={label}>{"Brand History"}</div>
       <div style={{ display: "flex", flexDirection: "column" }}>
         {sorted.map((e, i) => (
           <div key={i} style={{ display: "flex", gap: 16 }}>
