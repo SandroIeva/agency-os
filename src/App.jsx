@@ -13455,7 +13455,7 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
                         {claim && <div>{SL("Claim")}<div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 500, color: theme.text, lineHeight: 1.4 }}>{claim}</div></div>}
                         {profile.description && <div>{SL("Beschreibung")}{Para(profile.description)}</div>}
                         {valueProps.length > 0 && <div>{SL("Value Props")}<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{valueProps.map((v, i) => <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.015)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5 }}><span style={{ color: theme.accent, marginRight: 8, fontWeight: 600 }}>·</span>{v}</div>)}</div></div>}
-                        {keyMessages.length > 0 && <div>{SL("Kern-Botschaften")}<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{keyMessages.map((m, i) => <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.5 }}>{m}</div>)}</div></div>}
+                        {keyMessages.length > 0 && <div>{SL("Kern-Botschaften")}<div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{keyMessages.map((m, i) => <div key={i} style={{ display: "flex", gap: 10, fontSize: 14, fontFamily: FONT, color: theme.text, lineHeight: 1.5 }}><span style={{ color: theme.accent, fontWeight: 600, flexShrink: 0 }}>→</span>{m}</div>)}</div></div>}
                       </div>
                     ) : Empty("Noch kein Brand Core hinterlegt. Ergänze Claim, Beschreibung und Value Props im Onboarding.");
                   } else if (k === "strategy/positioning") {
@@ -13539,11 +13539,6 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
 
                   return (
                     <>
-                      {k !== "identity/voice" && (
-                        <div>
-                          <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{subLabel}</div>
-                        </div>
-                      )}
                       {k === "identity/voice" ? (
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
                           onSave={saveVoiceTone} onCancel={() => setEditingText(false)} />
