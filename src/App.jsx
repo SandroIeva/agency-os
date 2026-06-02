@@ -11776,6 +11776,41 @@ function BrandTaglines({ value, editing, theme, darkMode, t, onChange }) {
   );
 }
 
+// Purpose / Vision / Mission — 3-column block (top divider, title, description).
+// Lives under Brand Core. Editable descriptions with auto-save.
+const DEFAULT_PVM = {
+  purpose: "Definiere hier den fundamentalen Daseinsgrund deiner Marke jenseits von Profit. Beschreibe die Wirkung, die du erzielen willst — und für wen.",
+  vision: "Beschreibe die Zukunft, die du erschaffen willst. Das ist dein höchstes Ziel, die langfristige Wirkung oder die ideale Welt, die du dir vorstellst.",
+  mission: "Formuliere prägnant, was deine Marke tut, für wen und wie sie Wert schafft — dein praktischer Leitfaden für tägliche Entscheidungen, verknüpft mit deiner Vision.",
+};
+
+function BrandPVM({ value, editing, theme, darkMode, t, onChange }) {
+  const divider = darkMode ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.16)";
+  const fieldStyle = { padding: "8px 10px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none", lineHeight: 1.55, resize: "vertical", width: "100%" };
+  const ITEMS = [["purpose", "Purpose"], ["vision", "Vision"], ["mission", "Mission"]];
+  const base = (value && (value.purpose || value.vision || value.mission)) ? { ...DEFAULT_PVM, ...value } : DEFAULT_PVM;
+  const [draft, setDraft] = useState(base);
+  useEffect(() => { if (editing) setDraft((value && (value.purpose || value.vision || value.mission)) ? { ...DEFAULT_PVM, ...value } : { ...DEFAULT_PVM }); }, [editing]);
+  const setField = (k, v) => { const next = { ...draft, [k]: v }; setDraft(next); onChange(next); };
+
+  return (
+    <div style={{ marginTop: 36, paddingTop: 28, borderTop: `1px solid ${divider}` }}>
+      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 20 }}>Purpose · Vision · Mission</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "28px 36px" }}>
+        {ITEMS.map(([key, title]) => (
+          <div key={key}>
+            <div style={{ height: 1, background: divider, marginBottom: 14 }} />
+            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 10 }}>{title}</div>
+            {editing
+              ? <textarea rows={5} value={draft[key] || ""} onChange={e => setField(key, e.target.value)} style={fieldStyle} />
+              : <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>{base[key]}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function BrandStoryTimeline({ timeline, editing, theme, darkMode, t, onChange }) {
   const rail = darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)";
   const label = { fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 16 };
@@ -12049,6 +12084,12 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
     setProfile(p => ({ ...p, taglines: tg }));
     clearTimeout(taglinesTimer.current);
     taglinesTimer.current = setTimeout(() => { if (profile?.id) supabase.from("brand_profile").update({ taglines: tg }).eq("id", profile.id); }, 700);
+  };
+  const pvmTimer = useRef(null);
+  const savePvm = (pvm) => {
+    setProfile(p => ({ ...p, pvm }));
+    clearTimeout(pvmTimer.current);
+    pvmTimer.current = setTimeout(() => { if (profile?.id) supabase.from("brand_profile").update({ pvm }).eq("id", profile.id); }, 700);
   };
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -13619,6 +13660,10 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
                       {/* Brand Story gets a history timeline under the text */}
                       {k === "identity/story" && (
                         <BrandStoryTimeline timeline={profile.story_timeline || []} editing={editingText} theme={theme} darkMode={darkMode} t={t} onChange={saveTimeline} />
+                      )}
+                      {/* Brand Core gets a Purpose / Vision / Mission block under the text */}
+                      {k === "strategy/core" && (
+                        <BrandPVM value={profile.pvm} editing={editingText} theme={theme} darkMode={darkMode} t={t} onChange={savePvm} />
                       )}
                     </>
                   );
