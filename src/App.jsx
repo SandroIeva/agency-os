@@ -11794,8 +11794,7 @@ function BrandPVM({ value, editing, theme, darkMode, t, onChange }) {
   const setField = (k, v) => { const next = { ...draft, [k]: v }; setDraft(next); onChange(next); };
 
   return (
-    <div style={{ marginTop: 36, paddingTop: 28, borderTop: `1px solid ${divider}` }}>
-      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 20 }}>Purpose · Vision · Mission</div>
+    <div style={{ marginTop: 36 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "28px 36px" }}>
         {ITEMS.map(([key, title]) => (
           <div key={key}>
