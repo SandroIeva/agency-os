@@ -11717,6 +11717,65 @@ const DEFAULT_STORY_TIMELINE = [
   { year: "2022", quarter: "Q3", title: "Relaunch", desc: "Neue App-Generation mit überarbeitetem Reward-System." },
 ];
 
+// Taglines — numbered (01/02/03) grid: big number, divider, tagline headline,
+// short description. Editable (add/remove/edit) with auto-save.
+const DEFAULT_TAGLINES = [
+  { tagline: "Hier steht deine Tagline", desc: "Beschreibe die Tagline und gib etwas Kontext. Sie sollte die Essenz der Marke in wenigen, prägnanten Worten einfangen — kurz, einprägsam und unverwechselbar." },
+  { tagline: "Hier steht deine Tagline", desc: "Beschreibe die Tagline und gib etwas Kontext. Sie sollte die Essenz der Marke in wenigen, prägnanten Worten einfangen — kurz, einprägsam und unverwechselbar." },
+  { tagline: "Hier steht deine Tagline", desc: "Beschreibe die Tagline und gib etwas Kontext. Sie sollte die Essenz der Marke in wenigen, prägnanten Worten einfangen — kurz, einprägsam und unverwechselbar." },
+];
+
+function BrandTaglines({ value, editing, theme, darkMode, t, onChange }) {
+  const divider = darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)";
+  const fieldStyle = { padding: "8px 10px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none", lineHeight: 1.5, resize: "vertical", width: "100%" };
+  const [entries, setEntries] = useState(value && value.length ? value : DEFAULT_TAGLINES);
+  useEffect(() => { if (editing) setEntries((value && value.length) ? JSON.parse(JSON.stringify(value)) : JSON.parse(JSON.stringify(DEFAULT_TAGLINES))); }, [editing]);
+  const display = (value && value.length) ? value : DEFAULT_TAGLINES;
+
+  const commit = (next) => { setEntries(next); onChange(next); };
+  const setField = (i, f, v) => commit(entries.map((e, j) => j === i ? { ...e, [f]: v } : e));
+  const addEntry = () => commit([...entries, { tagline: "", desc: "" }]);
+  const removeEntry = (i) => commit(entries.filter((_, j) => j !== i));
+  const num = (i) => String(i + 1).padStart(2, "0");
+
+  if (editing) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {entries.map((e, i) => (
+          <div key={i} style={{ padding: 16, borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 22, fontFamily: FONT, fontWeight: 800, color: theme.textDim, letterSpacing: -0.5, flexShrink: 0 }}>{num(i)}</span>
+              <input value={e.tagline} onChange={ev => setField(i, "tagline", ev.target.value)} placeholder="Tagline" style={{ ...fieldStyle, fontWeight: 600 }} />
+              <div onClick={() => removeEntry(i)} title={t("common.delete") || "Löschen"} style={{ cursor: "pointer", color: theme.textDim, padding: 6, flexShrink: 0 }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+              </div>
+            </div>
+            <textarea rows={3} value={e.desc} onChange={ev => setField(i, "desc", ev.target.value)} placeholder="Beschreibung" style={fieldStyle} />
+          </div>
+        ))}
+        <motion.div whileTap={{ scale: 0.97 }} onClick={addEntry}
+          style={{ marginTop: 4, display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, border: `1px dashed ${theme.borderFaint}`, color: theme.text, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Tagline hinzufügen
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "32px 40px" }}>
+      {display.map((e, i) => (
+        <div key={i}>
+          <div style={{ fontSize: 44, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -1.5, lineHeight: 1 }}>{num(i)}</div>
+          <div style={{ height: 1, background: divider, margin: "14px 0 16px" }} />
+          <div style={{ fontSize: 21, fontFamily: FONT, fontWeight: 700, color: theme.text, lineHeight: 1.2, marginBottom: 12, letterSpacing: -0.3 }}>{e.tagline}</div>
+          <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>{e.desc}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function BrandStoryTimeline({ timeline, editing, theme, darkMode, t, onChange }) {
   const rail = darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)";
   const label = { fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 16 };
@@ -11984,6 +12043,12 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
     setProfile(p => ({ ...p, story_timeline: tl }));
     clearTimeout(storyTlTimer.current);
     storyTlTimer.current = setTimeout(() => { if (profile?.id) supabase.from("brand_profile").update({ story_timeline: tl }).eq("id", profile.id); }, 700);
+  };
+  const taglinesTimer = useRef(null);
+  const saveTaglines = (tg) => {
+    setProfile(p => ({ ...p, taglines: tg }));
+    clearTimeout(taglinesTimer.current);
+    taglinesTimer.current = setTimeout(() => { if (profile?.id) supabase.from("brand_profile").update({ taglines: tg }).eq("id", profile.id); }, 700);
   };
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -13462,15 +13527,6 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
                   } else if (k === "strategy/positioning") {
                     const positioning = ana.market_positioning;
                     body = positioning ? <div>{SL("Positionierung")}{Para(positioning)}</div> : Empty("Noch keine Positionierung hinterlegt.");
-                  } else if (k === "strategy/taglines") {
-                    const taglines = [profile.claim, ...(intel.headlines || [])].filter(Boolean);
-                    body = taglines.length ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                        {taglines.map((tg, i) => (
-                          <div key={i} style={{ padding: "16px 18px", borderRadius: 14, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", borderLeft: `3px solid ${theme.accent}`, fontSize: 18, fontFamily: FONT, fontWeight: 500, color: theme.text, lineHeight: 1.4 }}>{tg}</div>
-                        ))}
-                      </div>
-                    ) : Empty("Noch keine Taglines hinterlegt. Im Bearbeiten-Modus hinzufügen.");
                   } else if (k === "strategy/personas") {
                     body = (Array.isArray(profile.personas) && profile.personas.length) ? (
                       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -13543,7 +13599,6 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
                         + (vProps.length ? `<h3>Value Props</h3><ul>${vProps.map(v => `<li>${esc(v)}</li>`).join("")}</ul>` : "")
                         + (kMsgs.length ? `<h3>Kern-Botschaften</h3><ul>${kMsgs.map(m => `<li>${esc(m)}</li>`).join("")}</ul>` : "");
                     } else if (k === "strategy/positioning") seed = posT ? `<p>${p2(posT)}</p>` : "";
-                    else if (k === "strategy/taglines") { const tg = [profile.claim, ...(intel.headlines || [])].filter(Boolean); seed = tg.length ? `<ul>${tg.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""; }
                     else if (k === "identity/story") seed = profile.description ? `<p>${p2(profile.description)}</p>` : "";
                     else if (k === "identity/voice") seed = voice.length ? `<p>${voice.map(esc).join(", ")}</p>` : "";
                   }
@@ -13553,6 +13608,8 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
                       {k === "identity/voice" ? (
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
                           onSave={saveVoiceTone} onCancel={() => setEditingText(false)} />
+                      ) : k === "strategy/taglines" ? (
+                        <BrandTaglines value={profile.taglines} editing={editingText} theme={theme} darkMode={darkMode} t={t} onChange={saveTaglines} />
                       ) : editingText ? (
                         <RichTextEditor key={k} initialHTML={seed || "<p></p>"} theme={theme} darkMode={darkMode}
                           onSave={(html) => saveSection(k, html)} onCancel={() => setEditingText(false)} />
