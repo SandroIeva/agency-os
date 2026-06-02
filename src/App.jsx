@@ -11720,9 +11720,9 @@ const DEFAULT_STORY_TIMELINE = [
 // Taglines — numbered (01/02/03) grid: big number, divider, tagline headline,
 // short description. Editable (add/remove/edit) with auto-save.
 const DEFAULT_TAGLINES = [
-  { tagline: "Deine Tagline mit klarem USP — was dich einzigartig macht", desc: "Kurzer Kontext zur Tagline." },
-  { tagline: "Ein einprägsamer Claim, der dein Versprechen auf den Punkt bringt", desc: "Kurzer Kontext zur Tagline." },
-  { tagline: "Dein Alleinstellungsmerkmal in einem Satz", desc: "Kurzer Kontext zur Tagline." },
+  { tagline: "Deine Tagline mit klarem USP — was dich einzigartig macht", desc: "Beschreibe kurz, worum es bei dieser Tagline geht und welche Botschaft sie transportiert." },
+  { tagline: "Ein einprägsamer Claim, der dein Versprechen auf den Punkt bringt", desc: "Beschreibe kurz, worum es bei dieser Tagline geht und welche Botschaft sie transportiert." },
+  { tagline: "Dein Alleinstellungsmerkmal in einem Satz", desc: "Beschreibe kurz, worum es bei dieser Tagline geht und welche Botschaft sie transportiert." },
 ];
 
 function BrandTaglines({ value, editing, theme, darkMode, t, onChange }) {
