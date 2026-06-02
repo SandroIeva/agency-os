@@ -10470,6 +10470,7 @@ const BRAND_PILLAR_SUBTABS = {
   strategy: [
     { key: "core",        label: "Brand Core" },
     { key: "positioning", label: "Positionierung" },
+    { key: "taglines",    label: "Taglines" },
     { key: "personas",    label: "Personas" },
     { key: "competitors", label: "Competitors" },
   ],
@@ -13461,6 +13462,15 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
                   } else if (k === "strategy/positioning") {
                     const positioning = ana.market_positioning;
                     body = positioning ? <div>{SL("Positionierung")}{Para(positioning)}</div> : Empty("Noch keine Positionierung hinterlegt.");
+                  } else if (k === "strategy/taglines") {
+                    const taglines = [profile.claim, ...(intel.headlines || [])].filter(Boolean);
+                    body = taglines.length ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                        {taglines.map((tg, i) => (
+                          <div key={i} style={{ padding: "16px 18px", borderRadius: 14, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", borderLeft: `3px solid ${theme.accent}`, fontSize: 18, fontFamily: FONT, fontWeight: 500, color: theme.text, lineHeight: 1.4 }}>{tg}</div>
+                        ))}
+                      </div>
+                    ) : Empty("Noch keine Taglines hinterlegt. Im Bearbeiten-Modus hinzufügen.");
                   } else if (k === "strategy/personas") {
                     body = (Array.isArray(profile.personas) && profile.personas.length) ? (
                       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -13533,6 +13543,7 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
                         + (vProps.length ? `<h3>Value Props</h3><ul>${vProps.map(v => `<li>${esc(v)}</li>`).join("")}</ul>` : "")
                         + (kMsgs.length ? `<h3>Kern-Botschaften</h3><ul>${kMsgs.map(m => `<li>${esc(m)}</li>`).join("")}</ul>` : "");
                     } else if (k === "strategy/positioning") seed = posT ? `<p>${p2(posT)}</p>` : "";
+                    else if (k === "strategy/taglines") { const tg = [profile.claim, ...(intel.headlines || [])].filter(Boolean); seed = tg.length ? `<ul>${tg.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""; }
                     else if (k === "identity/story") seed = profile.description ? `<p>${p2(profile.description)}</p>` : "";
                     else if (k === "identity/voice") seed = voice.length ? `<p>${voice.map(esc).join(", ")}</p>` : "";
                   }
