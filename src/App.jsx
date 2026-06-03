@@ -12382,8 +12382,6 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
     );
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 40 }}>
-        <BackLink theme={theme} onClick={() => { setDraft(null); setScreen(personas.length ? "overview" : "auto"); }} label="Abbrechen" />
-
         {/* Row 1: Photo (left) | identity fields (right) — mirrors the detail layout */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, alignItems: "start" }}>
           <div onClick={() => fileRef.current?.click()}
@@ -12452,14 +12450,19 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
         {/* Product Expectation */}
         <div>{Lbl("Product Expectation")}<textarea value={draft.product_expectation} onChange={e => setF({ product_expectation: e.target.value })} rows={3} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} placeholder="Was erwartet die Persona von einem Produkt?" /></div>
 
-        {/* Actions */}
-        <div style={{ display: "flex", gap: 10, alignItems: "center", paddingTop: 4 }}>
-          <motion.button whileTap={{ scale: 0.97 }} onClick={saveDraft}
-            style={{ padding: "11px 24px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Speichern</motion.button>
-          {!draftIsNew && (
+        {/* Actions: Löschen far left · Abbrechen + Speichern right */}
+        <div style={{ display: "flex", alignItems: "center", paddingTop: 4 }}>
+          {!draftIsNew ? (
             <button onClick={() => deletePersona(selIdx)}
               style={{ padding: "11px 16px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: "#e5484d", fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>Löschen</button>
-          )}
+          ) : <div />}
+          <div style={{ flex: 1 }} />
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <button onClick={() => { setDraft(null); setScreen(personas.length ? "overview" : "auto"); }}
+              style={{ padding: "11px 18px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>Abbrechen</button>
+            <motion.button whileTap={{ scale: 0.97 }} onClick={saveDraft}
+              style={{ padding: "11px 24px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Speichern</motion.button>
+          </div>
         </div>
       </div>
     );
