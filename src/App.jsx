@@ -12597,26 +12597,9 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
     clearTimeout(pvmTimer.current);
     pvmTimer.current = setTimeout(() => { if (profile?.id) supabase.from("brand_profile").update({ pvm }).eq("id", profile.id); }, 700);
   };
-  // Personas — live update + debounced DB write (creates the brand_profile row if missing).
-  // Use a ref to always have the latest profile.id, avoiding stale closures in the timeout.
-  const profileRef = useRef(null);
-  useEffect(() => { profileRef.current = profile; }, [profile]);
+  // Personas — defined below after profile state is declared.
   const personasTimer = useRef(null);
-  const savePersonas = (list) => {
-    setProfile(p => ({ ...(p || {}), personas: list }));
-    clearTimeout(personasTimer.current);
-    personasTimer.current = setTimeout(async () => {
-      const cur = profileRef.current;
-      if (cur?.id) {
-        await supabase.from("brand_profile").update({ personas: list }).eq("id", cur.id);
-      } else if (userOrg?.id) {
-        const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", personas: list })
-          .select("id").single();
-        if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
-      }
-    }, 500);
-  };
+  const profileRef = useRef(null);
   // Generate a structured persona from a free-text description via the LLM.
   const generatePersona = async (description) => {
     const system = `You create ONE detailed marketing buyer persona from a short description. Respond with ONLY valid minified JSON (no markdown, no commentary) matching exactly this shape:
@@ -12653,6 +12636,23 @@ Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals
     };
   };
   const [profile, setProfile] = useState(null);
+  // Keep profileRef in sync so debounced callbacks always see latest profile.id
+  useEffect(() => { profileRef.current = profile; }, [profile]);
+  const savePersonas = (list) => {
+    setProfile(p => ({ ...(p || {}), personas: list }));
+    clearTimeout(personasTimer.current);
+    personasTimer.current = setTimeout(async () => {
+      const cur = profileRef.current;
+      if (cur?.id) {
+        await supabase.from("brand_profile").update({ personas: list }).eq("id", cur.id);
+      } else if (userOrg?.id) {
+        const { data } = await supabase.from("brand_profile")
+          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", personas: list })
+          .select("id").single();
+        if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
+      }
+    }, 500);
+  };
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
   // Wizard
