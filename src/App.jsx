@@ -12707,6 +12707,20 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
   // ── DESCRIBE / DIRECT (AI input) ────────────────────────────────────────────
   if (view === "describe" || view === "direct") {
     const isDirect = view === "direct";
+    // Only the "direct" field accepts a name OR a URL. Flag obviously broken URLs:
+    // input that clearly looks like a URL attempt (has a dot / protocol, no spaces)
+    // but doesn't parse to a valid domain. A plain name like "Instagram" is fine.
+    const trimmed = inputText.trim();
+    const urlish = trimmed.length > 0 && !/\s/.test(trimmed) && (/^https?:/i.test(trimmed) || /\./.test(trimmed));
+    const validUrl = (() => {
+      if (!urlish) return true;
+      try {
+        const u = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+        return /^[\w-]+(\.[\w-]+)+$/.test(u.hostname); // hostname must have at least one real dot-segment
+      } catch { return false; }
+    })();
+    const urlError = isDirect && urlish && !validUrl;
+    const canSubmit = !!trimmed && !generating && !urlError;
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 620 }}>
         <BackLink theme={theme} onClick={() => setScreen(competitors.length ? "choice" : "auto")} label="Zurück" />
@@ -12715,8 +12729,12 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
           {isDirect ? "Gib den Firmennamen oder die Website ein — die KI erstellt daraus ein Wettbewerber-Profil." : "Beschreibe den Wettbewerber so genau wie möglich — Produkt, Zielgruppe, Stärken, Schwächen."}
         </div>
         {isDirect ? (
-          <input value={inputText} onChange={e => setInputText(e.target.value)} onKeyDown={e => { if (e.key === "Enter") doGenerate(); }}
-            placeholder="z.B. Instagram oder instagram.com" style={inputStyle} />
+          <div>
+            <input value={inputText} onChange={e => setInputText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && canSubmit) doGenerate(); }}
+              placeholder="z.B. Instagram oder instagram.com"
+              style={{ ...inputStyle, border: `1px solid ${urlError ? "#e5484d" : theme.borderFaint}` }} />
+            {urlError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT, marginTop: 6 }}>Ungültige URL — prüfe die Schreibweise (z.B. instagram.com).</div>}
+          </div>
         ) : (
           <textarea value={inputText} onChange={e => setInputText(e.target.value)} rows={6}
             placeholder="z.B. Eine Social-Media-Plattform für Foto- und Video-Sharing mit Fokus auf Stories und Reels…"
@@ -12724,9 +12742,9 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
         )}
         {genError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT }}>{genError}</div>}
         <div>
-          <motion.button whileTap={{ scale: 0.97 }} onClick={doGenerate} disabled={!inputText.trim() || generating}
-            style={{ padding: "11px 20px", borderRadius: 12, border: "none", cursor: inputText.trim() && !generating ? "pointer" : "default",
-              background: acc, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: inputText.trim() && !generating ? 1 : 0.5 }}>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={doGenerate} disabled={!canSubmit}
+            style={{ padding: "11px 20px", borderRadius: 12, border: "none", cursor: canSubmit ? "pointer" : "default",
+              background: acc, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: canSubmit ? 1 : 0.5 }}>
             {generating ? "Analysiere…" : "Profil erstellen"}
           </motion.button>
         </div>
