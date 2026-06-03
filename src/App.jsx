@@ -10745,7 +10745,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
   useEffect(() => {
     if (!userOrg?.id) { setLoading(false); return; }
     (async () => {
-      const { data } = await supabase.from("brand_profile").select("id, channels, website_url, name, logo_url, logos").eq("org_id", userOrg.id).maybeSingle();
+      const { data } = await supabase.from("brand_profile").select("id, channels, website_url, name, logo_url, logos").eq("org_id", userOrg.id).is("project_id", null).maybeSingle();
       setProfile(data || null);
       const ch = { ...(data?.channels && typeof data.channels === "object" ? data.channels : {}) };
       if (data?.website_url && !ch.website) ch.website = data.website_url;
@@ -10946,7 +10946,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
   useEffect(() => {
     if (!userOrg?.id) return;
     (async () => {
-      const { data } = await supabase.from("brand_profile").select("name,logo_url,logos").eq("org_id", userOrg.id).maybeSingle();
+      const { data } = await supabase.from("brand_profile").select("name,logo_url,logos").eq("org_id", userOrg.id).is("project_id", null).maybeSingle();
       setBrand(data || null);
     })();
   }, [userOrg?.id]);
@@ -12598,13 +12598,17 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
     pvmTimer.current = setTimeout(() => { if (profile?.id) supabase.from("brand_profile").update({ pvm }).eq("id", profile.id); }, 700);
   };
   // Personas — live update + debounced DB write (creates the brand_profile row if missing).
+  // Use a ref to always have the latest profile.id, avoiding stale closures in the timeout.
+  const profileRef = useRef(null);
+  useEffect(() => { profileRef.current = profile; }, [profile]);
   const personasTimer = useRef(null);
   const savePersonas = (list) => {
     setProfile(p => ({ ...(p || {}), personas: list }));
     clearTimeout(personasTimer.current);
     personasTimer.current = setTimeout(async () => {
-      if (profile?.id) {
-        supabase.from("brand_profile").update({ personas: list }).eq("id", profile.id);
+      const cur = profileRef.current;
+      if (cur?.id) {
+        await supabase.from("brand_profile").update({ personas: list }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
           .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", personas: list })
@@ -12688,7 +12692,7 @@ Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals
   useEffect(() => {
     if (!userOrg?.id) { setLoading(false); return; }
     (async () => {
-      const { data } = await supabase.from("brand_profile").select("*").eq("org_id", userOrg.id).maybeSingle();
+      const { data } = await supabase.from("brand_profile").select("*").eq("org_id", userOrg.id).is("project_id", null).maybeSingle();
       setProfile(data);
       setForm({
         name: data?.name || userOrg?.name || "",
@@ -12721,7 +12725,7 @@ Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals
     const ch = supabase
       .channel("brand-profile-" + userOrg.id)
       .on("postgres_changes", { event: "*", schema: "public", table: "brand_profile", filter: `org_id=eq.${userOrg.id}` }, async () => {
-        const { data } = await supabase.from("brand_profile").select("*").eq("org_id", userOrg.id).maybeSingle();
+        const { data } = await supabase.from("brand_profile").select("*").eq("org_id", userOrg.id).is("project_id", null).maybeSingle();
         if (data) setProfile(data);
       })
       .subscribe();
@@ -14687,7 +14691,7 @@ export default function CircularMenu() {
           (async () => {
             try {
               const [bRes, pRes] = await Promise.all([
-                supabase.from("brand_profile").select("*").eq("org_id", org.id).maybeSingle(),
+                supabase.from("brand_profile").select("*").eq("org_id", org.id).is("project_id", null).maybeSingle(),
                 supabase.from("projects").select("name").eq("org_id", org.id).order("name"),
               ]);
               setBrandProfile(bRes?.data || null);
