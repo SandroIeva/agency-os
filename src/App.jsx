@@ -12678,6 +12678,15 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
   const [inputText, setInputText] = useState("");
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
+  const [genStatus, setGenStatus] = useState("");
+  const rotateRef = useRef(null);
+  const startRotating = (msgs) => {
+    let i = 0; setGenStatus(msgs[0]);
+    clearInterval(rotateRef.current);
+    rotateRef.current = setInterval(() => { i = (i + 1) % msgs.length; setGenStatus(msgs[i]); }, 2000);
+  };
+  const stopRotating = () => { clearInterval(rotateRef.current); rotateRef.current = null; };
+  useEffect(() => () => clearInterval(rotateRef.current), []);
 
   const firstRender = useRef(true);
   useEffect(() => { if (firstRender.current) { firstRender.current = false; } else { setScreen("auto"); } }, []);
@@ -12699,21 +12708,35 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
   const startEdit = (idx) => { setDraft(JSON.parse(JSON.stringify(competitors[idx]))); setSelIdx(idx); setDraftIsNew(false); setScreen("edit"); };
   const doGenerate = async () => {
     if (!inputText.trim() || generating) return;
-    setGenerating(true); setGenError("");
+    setGenerating(true); setGenError(""); setGenStatus("Wird vorbereitet …");
     try {
+      // Progress callback → live status so the user can follow what's happening.
+      const onProgress = (p) => {
+        if (p.stage === "fetch") setGenStatus(`Website „${p.label}" wird geladen …`);
+        else if (p.stage === "fetched") setGenStatus(`„${p.name || "Seite"}" gefunden — Inhalt wird analysiert …`);
+        else if (p.stage === "analyze") {
+          startRotating([
+            "Ähnliche Wettbewerber werden recherchiert …",
+            "Profile werden erstellt …",
+            "Stärken & Schwächen werden ausgewertet …",
+            "Strategische Empfehlungen werden formuliert …",
+          ]);
+        }
+      };
       // Returns an array: [mainCompetitor, ...similarCompetitors]
-      const list = await generateCompetitor(inputText.trim());
+      const list = await generateCompetitor(inputText.trim(), onProgress);
+      stopRotating();
       const arr = Array.isArray(list) ? list : [list];
       if (!arr.length) throw new Error("empty");
+      setGenStatus(`${arr.length} Wettbewerber gefunden`);
       const next = [...competitors, ...arr];
       commit(next); setInputText("");
-      // If we found similar companies too, show the overview (all new cards);
-      // otherwise jump straight into the single profile.
-      if (arr.length > 1) { setScreen("overview"); }
-      else { setSelIdx(next.length - 1); setScreen("detail"); }
+      // Always land on the overview so all new cards are visible; user clicks one for detail.
+      setScreen("overview");
     } catch (e) {
+      stopRotating();
       setGenError("Analyse fehlgeschlagen. Versuch es nochmal oder prüfe deinen AI-Provider in den Einstellungen.");
-    } finally { setGenerating(false); }
+    } finally { setGenerating(false); setGenStatus(""); }
   };
   const saveDraft = () => {
     if (!draft) return;
@@ -12794,12 +12817,25 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
             style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }} />
         )}
         {genError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT }}>{genError}</div>}
-        <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
           <motion.button whileTap={{ scale: 0.97 }} onClick={doGenerate} disabled={!canSubmit}
             style={{ padding: "11px 20px", borderRadius: 12, border: "none", cursor: canSubmit ? "pointer" : "default",
               background: acc, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: canSubmit ? 1 : 0.5 }}>
             {generating ? "Analysiere…" : "Profil erstellen"}
           </motion.button>
+          {generating && genStatus && (
+            <div style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, fontFamily: FONT, color: theme.textSub }}>
+              <motion.svg animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.9, ease: "linear" }}
+                width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={acc} strokeWidth="2.5" strokeLinecap="round">
+                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+              </motion.svg>
+              <AnimatePresence mode="wait">
+                <motion.span key={genStatus} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2 }}>
+                  {genStatus}
+                </motion.span>
+              </AnimatePresence>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -13041,10 +13077,12 @@ Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals
   // Generate a structured competitor profile from a name, website URL or description.
   // If the input looks like a URL, we first fetch the site (via /api/fetch-brand) and
   // feed the real page content to the LLM so the summary + similar brands are grounded.
-  const generateCompetitor = async (input) => {
+  const generateCompetitor = async (input, onProgress) => {
+    const report = (p) => { try { onProgress?.(p); } catch {} };
     const looksLikeUrl = /^https?:\/\//i.test(input) || /^[\w-]+(\.[\w-]+)+(\/.*)?$/i.test(input.trim());
     let fetched = null;
     if (looksLikeUrl) {
+      report({ stage: "fetch", label: input.trim().replace(/^https?:\/\//, "").replace(/\/$/, "") });
       try {
         const r = await fetch("/api/fetch-brand", {
           method: "POST", headers: { "Content-Type": "application/json" },
@@ -13052,7 +13090,9 @@ Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals
         });
         if (r.ok) fetched = await r.json();
       } catch (e) { /* best-effort: fall through to plain LLM */ }
+      report({ stage: "fetched", name: fetched?.name });
     }
+    report({ stage: "analyze" });
 
     // Build the message for the LLM — enrich with fetched page content when available.
     let message = input;
@@ -13073,7 +13113,7 @@ Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals
 where COMP = {"name":"","website":"","founded":"","team_size":"","location":"","summary":"","products":"","core_focus":"","direct_competitors":"","audience":"","strengths":"","weaknesses":"","recommendations":["","",""]}
 Rules:
 - "main" is the company described by the input.
-- "similar" is an array of BETWEEN 5 AND 8 OTHER real companies that offer similar products/services (direct competitors of the main company) — each a FULL profile with the same fields. Include as many genuinely relevant competitors as you can within that range. Do NOT repeat the main company and do NOT invent fake companies.
+- "similar" is an array of EXACTLY 5 OTHER real companies that offer similar products/services (direct competitors of the main company) — each a FULL profile with the same fields. Pick the 5 most relevant real competitors. Do NOT repeat the main company and do NOT invent fake companies.
 - For every COMP: "website" is its primary domain (e.g. "instagram.com") without protocol; "founded" is the founding year; "team_size" is an approximate headcount (e.g. "300+"); "location" is the HQ city/country; "summary" is 1-2 sentences; "products"/"core_focus"/"audience"/"strengths"/"weaknesses" are each 1-3 concise sentences; "direct_competitors" is a comma-separated list of similar brands; "recommendations" is exactly 3 short strategic recommendations for how OUR brand could compete against that company.
 If you don't know a field, infer a plausible value. Write all text values in the SAME language as the input.`;
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
