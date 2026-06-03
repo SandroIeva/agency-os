@@ -85,7 +85,7 @@ const LINEAR_MENU_ITEMS_DEF = [
     { id: "brief",    labelKey: "linearMenu.brief" },
     { id: "document", labelKey: "linearMenu.document" },
   ]},
-  { id: "agents",    labelKey: "linearMenu.agents",    sub: [] },
+  { id: "projects",  labelKey: "linearMenu.projects",  sub: [] },
   { id: "messenger", labelKey: "linearMenu.messenger", sub: [] },
   { id: "plan",      labelKey: "linearMenu.plan",      sub: [
     { id: "kanban",   labelKey: "linearMenu.kanban" },
@@ -18042,7 +18042,12 @@ export default function CircularMenu() {
                 setCurrentView("chat");
                 return;
               }
-              if (catId === "create" || catId === "agents") {
+              if (catId === "projects") {
+                setMenuOpen(false);
+                setCurrentView("projects");
+                return;
+              }
+              if (catId === "create") {
                 // Sub-routes not wired up yet — close menu, stay on dashboard
                 setMenuOpen(false);
                 return;

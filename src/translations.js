@@ -17,6 +17,7 @@ const translations = {
   "linearMenu.brand":         { de: "Marke",        en: "Brand" },
   "linearMenu.create":        { de: "Erstellen",    en: "Create" },
   "linearMenu.agents":        { de: "Agenten",      en: "Agents" },
+  "linearMenu.projects":      { de: "Projekte",     en: "Projects" },
   "linearMenu.messenger":     { de: "Messenger",    en: "Messenger" },
   "linearMenu.plan":          { de: "Plan",         en: "Plan" },
   // Brand pillars (5 top-level areas; detail lives in tabs inside each page)
