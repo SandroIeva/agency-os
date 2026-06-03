@@ -12471,14 +12471,14 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
         </div>
 
         {/* Row 1: Motivations | Quote (quote aligns with bars, not the title) */}
-        <div style={{ display: “grid”, gridTemplateColumns: “repeat(auto-fit, minmax(280px, 1fr))”, gap: “34px 40px”, alignItems: “start” }}>
-          <Col title=”Motivations”>
-            <div style={{ display: “flex”, flexDirection: “column”, gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "34px 40px", alignItems: "start" }}>
+          <Col title="Motivations">
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {(p.motivations || []).filter(m => m.label).map((m, i) => (
                 <div key={i}>
                   <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 7 }}>{m.label}</div>
-                  <div style={{ height: 6, borderRadius: 4, background: darkMode ? “rgba(255,255,255,0.1)” : “rgba(0,0,0,0.08)”, overflow: “hidden” }}>
-                    <div style={{ width: `${m.value}%`, height: “100%”, borderRadius: 4, background: theme.accent }} />
+                  <div style={{ height: 6, borderRadius: 4, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", overflow: "hidden" }}>
+                    <div style={{ width: `${m.value}%`, height: "100%", borderRadius: 4, background: theme.accent }} />
                   </div>
                 </div>
               ))}
@@ -12486,21 +12486,21 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
             </div>
           </Col>
           {p.quote && (
-            <div style={{ display: “flex”, flexDirection: “column” }}>
-              {/* spacer matching the “Motivations” title height so quote starts at bar level */}
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {/* spacer matching the Motivations title height so quote starts at bar level */}
               <div style={{ height: 38, flexShrink: 0 }} />
-              <div style={{ fontSize: 20, fontFamily: FONT, fontStyle: “italic”, color: theme.textDim, lineHeight: 1.5, paddingLeft: 16, borderLeft: `3px solid ${theme.accent}66` }}>”{p.quote}”</div>
+              <div style={{ fontSize: 20, fontFamily: FONT, fontStyle: "italic", color: theme.textDim, lineHeight: 1.5, paddingLeft: 16, borderLeft: `3px solid ${theme.accent}66` }}>"{p.quote}"</div>
             </div>
           )}
         </div>
 
         {/* Row 2: Goals | Pains */}
-        <div style={{ display: “grid”, gridTemplateColumns: “repeat(auto-fit, minmax(280px, 1fr))”, gap: “34px 40px”, alignItems: “start” }}>
-          <Col title=”Goals”>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "34px 40px", alignItems: "start" }}>
+          <Col title="Goals">
             {(p.goals || []).filter(Boolean).map((g, i) => <Arrow key={i}>{g}</Arrow>)}
             {!(p.goals || []).some(Boolean) && <span style={{ fontSize: 13, color: theme.textDim, fontFamily: FONT }}>—</span>}
           </Col>
-          <Col title=”Pains”>
+          <Col title="Pains">
             {(p.pains || []).filter(Boolean).map((g, i) => <Arrow key={i}>{g}</Arrow>)}
             {!(p.pains || []).some(Boolean) && <span style={{ fontSize: 13, color: theme.textDim, fontFamily: FONT }}>—</span>}
           </Col>
@@ -12508,9 +12508,9 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
 
         {/* Row 3: Product Expectation — boxed */}
         {p.product_expectation && (
-          <div style={{ padding: “20px 24px”, borderRadius: 16, background: darkMode ? “rgba(255,255,255,0.03)” : “rgba(0,0,0,0.02)”, border: `1px solid ${theme.borderFaint}` }}>
-            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text, textDecoration: “underline”, textUnderlineOffset: 4, marginBottom: 12 }}>Product Expectation</div>
-            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7, whiteSpace: “pre-wrap” }}>{p.product_expectation}</div>
+          <div style={{ padding: "20px 24px", borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
+            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text, textDecoration: "underline", textUnderlineOffset: 4, marginBottom: 12 }}>Product Expectation</div>
+            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{p.product_expectation}</div>
           </div>
         )}
       </div>
