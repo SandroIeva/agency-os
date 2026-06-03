@@ -12202,7 +12202,9 @@ const PERSONA_TEMPLATE = () => ({
 });
 
 function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, darkMode, t }) {
-  const personas = Array.isArray(value) ? value : [];
+  // Ignore legacy auto-generated website stubs — they shouldn't show an overview
+  // before the user has actually created a persona. They get dropped on next save.
+  const personas = (Array.isArray(value) ? value : []).filter(p => p && p.source !== "website");
   const [screen, setScreen] = useState("auto"); // auto | choice | manual | detail | edit
   const [selIdx, setSelIdx] = useState(0);
   const [draft, setDraft] = useState(null);
@@ -12288,7 +12290,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
           <OptCard
             icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg>}
-            title="Mit KI erstellen" desc="Beschreibe die Persona in ein paar Sätzen. Die KI füllt Name, Beruf, Motivations, Goals und Pains automatisch aus."
+            title="Persona beschreiben" desc="Beschreibe die Persona in ein paar Sätzen. Die KI füllt Name, Beruf, Motivations, Goals und Pains automatisch aus."
             onClick={() => { setManualText(""); setGenError(""); setScreen("manual"); }} />
           <OptCard
             icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>}
@@ -12304,7 +12306,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 620 }}>
         <BackLink theme={theme} onClick={() => setScreen(personas.length ? "choice" : "auto")} label="Zurück" />
-        <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 700, color: theme.text }}>Persona mit KI erstellen</div>
+        <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 700, color: theme.text }}>Persona beschreiben</div>
         <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
           Beschreibe die Persona so genau wie möglich — z.B. Alter, Beruf, Lebensstil, Ziele und Frustrationen.
         </div>
@@ -12895,21 +12897,6 @@ Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals
           }
         }
         next.channels = channels;
-
-        // ── Auto-create a draft persona if none exists yet ──
-        if (!Array.isArray(next.personas) || next.personas.length === 0) {
-          const draftDesc = data.description || data.about?.split("\n")[0] || "";
-          next.personas = [{
-            id: `persona_${Date.now()}`,
-            name: t("brand.personas.draftName"),
-            role: t("brand.personas.draftRole"),
-            description: draftDesc.slice(0, 400),
-            traits: [],
-            goals: Array.isArray(data.value_props) ? data.value_props.slice(0, 4) : [],
-            source: "website",
-            created_at: new Date().toISOString(),
-          }];
-        }
         return next;
       });
     } catch (err) {
