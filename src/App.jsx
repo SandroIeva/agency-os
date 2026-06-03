@@ -9648,12 +9648,138 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
 // PROJECTS VIEW — Files-style grid backed by the projects table
 // (same data source as the Kanban brand chips)
 // ═══════════════════════════════════════════════════════════════
+// Single-project view — opened by clicking a project card. Shows the project's
+// files (documents + images) with upload + empty state. Settings stay behind
+// the card's edit button.
+function ProjectDetail({ project, onBack, onEdit, session, userOrg, theme, darkMode, t }) {
+  const [files, setFiles] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [zoom, setZoom] = useState(null);
+  const inputRef = useRef(null);
+  const color = project.color || theme.accent;
+  const isImg = (f) => (f.mime_type || "").startsWith("image/");
+
+  const load = useCallback(async () => {
+    const { data } = await supabase.from("project_files").select("*").eq("project_id", project.id).order("created_at", { ascending: false });
+    setFiles(data || []);
+  }, [project.id]);
+  useEffect(() => { load(); }, [load]);
+
+  const upload = async (list) => {
+    const arr = Array.from(list || []);
+    if (!arr.length || !session?.user?.id) return;
+    setUploading(true);
+    const added = [];
+    for (const file of arr) {
+      const ext = (file.name.split(".").pop() || "bin").toLowerCase();
+      const path = `projects/${project.id}/${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type, upsert: true });
+      if (upErr) continue;
+      const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
+      const { data, error } = await supabase.from("project_files").insert({
+        project_id: project.id, org_id: userOrg?.id, user_id: session.user.id,
+        name: file.name, mime_type: file.type, size_bytes: file.size, url: pub?.publicUrl || null,
+      }).select().single();
+      if (!error && data) added.push(data);
+    }
+    setFiles(prev => [...added, ...(prev || [])]);
+    setUploading(false);
+  };
+
+  const removeFile = async (f) => {
+    await supabase.from("project_files").delete().eq("id", f.id);
+    setFiles(prev => prev.filter(x => x.id !== f.id));
+  };
+
+  const fmt = (f) => {
+    const ext = ((f.name || "").split(".").pop() || "").toUpperCase();
+    const mb = f.size_bytes ? `${Math.max(1, Math.round(f.size_bytes / 1e6))}MB` : null;
+    return [mb, ext].filter(Boolean).join(" · ");
+  };
+
+  const uploadBtn = (
+    <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => inputRef.current?.click()}
+      style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, background: theme.accent, color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer", opacity: uploading ? 0.6 : 1 }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      {uploading ? (t("common.loading") || "Lädt…") : "Hochladen"}
+    </motion.div>
+  );
+
+  return (
+    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
+      style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 40px 80px" }}>
+      <div style={{ width: "100%", maxWidth: 790, height: "100%", background: theme.cardBg, backdropFilter: "blur(40px)", border: `1px solid ${theme.borderFaint}`, borderRadius: 24, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        <input ref={inputRef} type="file" multiple style={{ display: "none" }} onChange={e => { upload(e.target.files); e.target.value = ""; }} />
+        {/* Header */}
+        <div style={{ padding: "16px 24px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${theme.borderFaint}` }}>
+          <motion.div whileTap={{ scale: 0.92 }} onClick={onBack} style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </motion.div>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: project.logo_url ? "transparent" : `linear-gradient(135deg, ${color}40, ${color}15)`, border: `1px solid ${color}30`, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
+            {project.logo_url ? <img src={project.logo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color }}>{(project.name || "?")[0]}</span>}
+          </div>
+          <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{project.name}</div>
+          {uploadBtn}
+          <motion.div whileTap={{ scale: 0.92 }} onClick={onEdit} title="Einstellungen" style={{ cursor: "pointer", color: theme.textDim, padding: 6, display: "flex" }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          </motion.div>
+        </div>
+        {/* Body */}
+        <div style={{ padding: "14px 24px 8px", fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 600 }}>Dateien</div>
+        {files === null ? (
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
+        ) : files.length === 0 ? (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: theme.textDim, textAlign: "center", gap: 14, padding: 20 }}>
+            <div style={{ width: 76, height: 76, borderRadius: 22, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim }}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Noch keine Dokumente vorhanden</div>
+            <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 320, lineHeight: 1.55 }}>Lade Dokumente, Bilder oder andere Dateien zu diesem Projekt hoch.</div>
+            <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }} onClick={() => inputRef.current?.click()}
+              style={{ marginTop: 4, padding: "11px 22px", borderRadius: 999, background: theme.accent, color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Dokument hochladen</motion.div>
+          </div>
+        ) : (
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 22px 22px", display: "flex", flexDirection: "column", gap: 7 }}>
+            {files.map((f, i) => (
+              <motion.div key={f.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.28 }}
+                onClick={() => isImg(f) ? setZoom(f.url) : window.open(f.url, "_blank", "noopener")} className="hover-row"
+                style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 14, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)", border: `1px solid ${theme.borderFaint}` }}>
+                <div style={{ width: 46, height: 46, borderRadius: 11, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.textDim }}>
+                  {isImg(f) ? <img src={f.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
+                    : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>}
+                </div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 14.5, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</div>
+                  <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{fmt(f)}</div>
+                </div>
+                <div onClick={e => { e.stopPropagation(); removeFile(f); }} title={t("common.delete") || "Löschen"} style={{ color: theme.textDim, opacity: 0.55, cursor: "pointer", padding: 6, flexShrink: 0 }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
+      <AnimatePresence>
+        {zoom && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setZoom(null)}
+            style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 30 }}>
+            <motion.img initial={{ scale: 0.94 }} animate={{ scale: 1 }} src={zoom} alt="" style={{ maxWidth: "92%", maxHeight: "88vh", borderRadius: 14, objectFit: "contain" }} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
 function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKanban, orgMembers = [], myProjectIds = [] }) {
   const [projects, setProjects] = useState([]);
   const [taskCounts, setTaskCounts] = useState({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState(null); // null = closed, {} = new, {id, name, ...} = existing
+  const [openProject, setOpenProject] = useState(null); // a project opened in detail view
   const [form, setForm] = useState({ name: "", logo_url: "", color: "#8B7AFF" });
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoPreview, setLogoPreview] = useState(null);
@@ -9884,6 +10010,12 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
     .filter(p => myIdSet.has(p.id))
     .filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
 
+  // A project opened in detail view (its files). Settings still reachable via the edit icon.
+  if (openProject) {
+    return <ProjectDetail project={openProject} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t}
+      onBack={() => setOpenProject(null)} onEdit={() => openEdit(openProject)} />;
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -9999,7 +10131,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
                     initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.04 + i * 0.025, duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
                     className="hover-row"
-                    onClick={() => openEdit(proj)}
+                    onClick={() => setOpenProject(proj)}
                     style={{
                       display: "flex", alignItems: "center", gap: 14,
                       padding: "12px 14px", borderRadius: 14,
@@ -10031,6 +10163,12 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
                     </div>
                     {/* Color indicator */}
                     <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                    {/* Edit button — opens settings without entering the project */}
+                    <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); openEdit(proj); }}
+                      title={t("common.edit") || "Bearbeiten"}
+                      style={{ width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, flexShrink: 0, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                    </motion.div>
                   </motion.div>
                 );
               })}
