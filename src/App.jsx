@@ -12235,6 +12235,12 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
 
+  // When the component first renders (user navigates to Personas tab), always
+  // start at "auto" so we show overview if personas exist, choice if empty.
+  const firstRender = useRef(true);
+  useEffect(() => { if (firstRender.current) { firstRender.current = false; } else { setScreen("auto"); } }, []);
+  // Also reset to auto when personas are loaded/changed externally
+  useEffect(() => { if (screen !== "detail" && screen !== "edit" && screen !== "manual") setScreen("auto"); }, [personas.length]);
   const view = screen === "auto" ? (personas.length ? "overview" : "choice") : screen;
   const acc = cp?.primary || accent;
   const cardBg = darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)";
