@@ -12598,6 +12598,52 @@ function BackLink({ theme, onClick, label }) {
   );
 }
 
+// Return the substring of the balanced {...} starting at `start`, or null if it is
+// truncated (never closes). Quote/escape aware. COMP objects have no nested objects.
+function balancedObjectAt(str, start) {
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < str.length; i++) {
+    const ch = str[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+    } else if (ch === '"') inStr = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") { depth--; if (depth === 0) return str.slice(start, i + 1); }
+  }
+  return null;
+}
+
+// Salvage main + similar competitor objects from a possibly-truncated LLM response
+// shaped like {"main":{...},"similar":[{...},{...}, ...]}. Drops only the trailing
+// incomplete object instead of discarding everything.
+function salvageCompetitorJson(txt) {
+  const out = [];
+  const mainIdx = txt.indexOf('"main"');
+  if (mainIdx >= 0) {
+    const st = txt.indexOf("{", mainIdx + 6);
+    if (st >= 0) { const body = balancedObjectAt(txt, st); if (body) { try { out.push(JSON.parse(body)); } catch {} } }
+  }
+  const simIdx = txt.indexOf('"similar"');
+  if (simIdx >= 0) {
+    let cursor = txt.indexOf("[", simIdx);
+    if (cursor >= 0) {
+      cursor++;
+      while (cursor < txt.length) {
+        const st = txt.indexOf("{", cursor);
+        const close = txt.indexOf("]", cursor);
+        if (st < 0 || (close >= 0 && close < st)) break; // end of array
+        const body = balancedObjectAt(txt, st);
+        if (!body) break; // truncated tail
+        try { out.push(JSON.parse(body)); } catch {}
+        cursor = st + body.length;
+      }
+    }
+  }
+  return out;
+}
+
 // ── Competitors ──────────────────────────────────────────────────────────────
 // Empty → choose "describe" (free-text, AI builds a profile) or "direct" (enter a
 // name or website URL, AI builds a profile). Overview = 2-col cards. Detail = the
@@ -13053,13 +13099,22 @@ If you don't know a field, infer a plausible value. Write all text values in the
       const resp = await fetch("/api/chat-multi", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, systemPrompt: system, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined }),
+        // Several full competitor profiles in one response need a high token ceiling,
+        // otherwise the JSON gets truncated and only the main profile survives (fallback).
+        body: JSON.stringify({ message, systemPrompt: system, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 8000 }),
       });
       const data = await resp.json();
       let txt = (data?.content?.[0]?.text || "").replace(/```json|```/g, "").trim();
       const s = txt.indexOf("{"), e = txt.lastIndexOf("}");
-      if (s >= 0 && e > s) txt = txt.slice(s, e + 1);
-      parsed = JSON.parse(txt);
+      const sliced = (s >= 0 && e > s) ? txt.slice(s, e + 1) : txt;
+      try {
+        parsed = JSON.parse(sliced);
+      } catch {
+        // JSON likely truncated → salvage every complete competitor object we can.
+        const objs = salvageCompetitorJson(txt);
+        if (objs.length) parsed = { main: objs[0], similar: objs.slice(1) };
+        else throw new Error("unparseable");
+      }
     } catch (e) {
       // Fall back to a single profile built from the fetched page when the LLM is unavailable.
       if (!fetched) throw e;
