@@ -12518,14 +12518,14 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
         {personas.map((p, i) => (
           <motion.div key={p.id || i} whileHover={{ y: -3 }} whileTap={{ scale: 0.98 }} onClick={() => openDetail(i)}
             style={{ cursor: "pointer", borderRadius: 16, overflow: "hidden", background: cardBg, border: `1px solid ${theme.borderFaint}` }}>
-            <div style={{ height: 130, background: acc + "1a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ height: 220, background: acc + "1a", display: "flex", alignItems: "center", justifyContent: "center" }}>
               {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 : <span style={{ fontSize: 40, fontFamily: FONT, fontWeight: 700, color: acc }}>{(p.name || "?").charAt(0).toUpperCase()}</span>}
             </div>
             <div style={{ padding: "12px 14px" }}>
               <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{p.name || "Persona"}{p.age ? <span style={{ fontWeight: 500, color: theme.textDim, fontSize: 13 }}>  ·  {p.age}</span> : null}</div>
               {p.role && <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{p.role}</div>}
-              {p.consumer_behavior && <div style={{ marginTop: 8, display: "inline-block", padding: "3px 9px", borderRadius: 7, background: acc + "1f", color: acc, fontSize: 11, fontFamily: FONT, fontWeight: 600 }}>{p.consumer_behavior}</div>}
+              {p.consumer_behavior && <div style={{ marginTop: 8, display: "inline-block", padding: "3px 9px", borderRadius: 7, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.accent, fontSize: 11, fontFamily: FONT, fontWeight: 600 }}>{p.consumer_behavior}</div>}
             </div>
           </motion.div>
         ))}
