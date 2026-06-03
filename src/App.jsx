@@ -12444,7 +12444,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
       </div>
     ) : null;
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 30 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 44 }}>
         {/* Top bar: back + edit */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <BackLink theme={theme} onClick={() => setScreen("overview")} label="Alle Personas" />
@@ -12452,14 +12452,14 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
             style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>Bearbeiten</motion.button>
         </div>
 
-        {/* Row 1: Photo (left) | Name + Info (right) */}
-        <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 28, alignItems: "start" }}>
+        {/* Row 1: Photo (left 50%) | Name + Info (right 50%) */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, alignItems: "start" }}>
           <div style={{ width: "100%", aspectRatio: "4/5", borderRadius: 18, overflow: "hidden", background: acc + "1a", display: "flex", alignItems: "center", justifyContent: "center" }}>
             {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               : <span style={{ fontSize: 56, fontFamily: FONT, fontWeight: 700, color: acc }}>{(p.name || "?").charAt(0).toUpperCase()}</span>}
           </div>
           <div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 22 }}>
               <span style={{ fontSize: 32, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.5 }}>{p.name || "Persona"}</span>
               {p.age && <span style={{ fontSize: 16, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}>{p.age}</span>}
             </div>
@@ -12484,7 +12484,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
             </div>
           </Col>
           {p.quote ? (
-            <div style={{ paddingTop: 38, fontSize: 17, fontFamily: FONT, fontStyle: "italic", color: theme.textDim, lineHeight: 1.55, paddingLeft: 16, borderLeft: `3px solid ${theme.accent}55` }}>
+            <div style={{ paddingTop: 38, fontSize: 17, fontFamily: FONT, fontStyle: "italic", color: theme.textDim, lineHeight: 1.55 }}>
               &ldquo;{p.quote}&rdquo;
             </div>
           ) : <div />}
@@ -12503,7 +12503,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
         {/* Row 4: Product Expectation (full width, boxed) */}
         {p.product_expectation && (
           <div style={{ padding: "22px 26px", borderRadius: 18, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
-            <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 700, color: theme.text, textDecoration: "underline", textUnderlineOffset: 4, marginBottom: 14 }}>Product Expectation</div>
+            <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 14 }}>Product Expectation</div>
             <div style={{ fontSize: 15, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{p.product_expectation}</div>
           </div>
         )}
