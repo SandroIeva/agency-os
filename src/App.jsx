@@ -12437,41 +12437,46 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
         <span style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5 }}>{children}</span>
       </div>
     );
+    const Stat = (label, val) => (
+      <div><div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 3 }}>{label}</div><div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{val}</div></div>
+    );
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 30 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <BackLink theme={theme} onClick={() => setScreen("overview")} label="Alle Personas" />
-          <div style={{ display: "flex", gap: 8 }}>
-            <motion.button whileTap={{ scale: 0.96 }} onClick={() => startEdit(selIdx)}
-              style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>Bearbeiten</motion.button>
-          </div>
+          <motion.button whileTap={{ scale: 0.96 }} onClick={() => startEdit(selIdx)}
+            style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>Bearbeiten</motion.button>
         </div>
-        {/* Header: photo + identity + quote */}
-        <div style={{ display: "flex", gap: 28, flexWrap: "wrap", alignItems: "flex-start" }}>
-          <div style={{ width: 190, height: 190, borderRadius: 18, flexShrink: 0, overflow: "hidden", background: acc + "1a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+
+        {/* Header: photo + identity + stats in one roomy row */}
+        <div style={{ display: "flex", gap: 26, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ width: 150, height: 150, borderRadius: 18, flexShrink: 0, overflow: "hidden", background: acc + "1a", display: "flex", alignItems: "center", justifyContent: "center" }}>
             {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              : <span style={{ fontSize: 56, fontFamily: FONT, fontWeight: 700, color: acc }}>{(p.name || "?").charAt(0).toUpperCase()}</span>}
+              : <span style={{ fontSize: 48, fontFamily: FONT, fontWeight: 700, color: acc }}>{(p.name || "?").charAt(0).toUpperCase()}</span>}
           </div>
-          <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ flex: 1, minWidth: 260 }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-              <span style={{ fontSize: 34, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.5 }}>{p.name || "Persona"}</span>
+              <span style={{ fontSize: 32, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.5 }}>{p.name || "Persona"}</span>
               {p.age && <span style={{ fontSize: 16, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}>{p.age}</span>}
             </div>
-            {p.role && <div style={{ fontSize: 18, fontFamily: FONT, color: theme.textSub, marginTop: 4 }}>{p.role}</div>}
-            <div style={{ display: "flex", gap: 22, marginTop: 22, flexWrap: "wrap" }}>
-              {p.consumer_behavior && <div><div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 3 }}>Consumer behavior</div><div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{p.consumer_behavior}</div></div>}
-              {p.consumer_behavior && p.location && <div style={{ width: 1, alignSelf: "stretch", background: theme.borderFaint }} />}
-              {p.location && <div><div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 3 }}>Location</div><div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{p.location}</div></div>}
-            </div>
+            {p.role && <div style={{ fontSize: 17, fontFamily: FONT, color: theme.textSub, marginTop: 4 }}>{p.role}</div>}
+            {(p.consumer_behavior || p.location) && (
+              <div style={{ display: "flex", gap: 26, marginTop: 18, flexWrap: "wrap", alignItems: "stretch" }}>
+                {p.consumer_behavior && Stat("Consumer behavior", p.consumer_behavior)}
+                {p.consumer_behavior && p.location && <div style={{ width: 1, background: theme.borderFaint }} />}
+                {p.location && Stat("Location", p.location)}
+              </div>
+            )}
           </div>
-          {p.quote && (
-            <div style={{ flex: 1, minWidth: 220 }}>
-              <div style={{ fontSize: 20, fontFamily: FONT, fontStyle: "italic", color: theme.textDim, lineHeight: 1.45 }}>“{p.quote}”</div>
-            </div>
-          )}
         </div>
-        {/* Motivations / Goals / Pains */}
-        <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
+
+        {/* Quote — full width, moved out of the cramped header */}
+        {p.quote && (
+          <div style={{ fontSize: 20, fontFamily: FONT, fontStyle: "italic", color: theme.textDim, lineHeight: 1.5, paddingLeft: 16, borderLeft: `3px solid ${acc}66` }}>“{p.quote}”</div>
+        )}
+
+        {/* Two-column body: Motivations | Goals, then Pains | Product Expectation */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "34px 40px" }}>
           <Col title="Motivations">
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {(p.motivations || []).filter(m => m.label).map((m, i) => (
@@ -12493,13 +12498,12 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
             {(p.pains || []).filter(Boolean).map((g, i) => <Arrow key={i}>{g}</Arrow>)}
             {!(p.pains || []).some(Boolean) && <span style={{ fontSize: 13, color: theme.textDim, fontFamily: FONT }}>—</span>}
           </Col>
+          {p.product_expectation && (
+            <Col title="Product Expectation">
+              <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{p.product_expectation}</div>
+            </Col>
+          )}
         </div>
-        {p.product_expectation && (
-          <div>
-            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text, textDecoration: "underline", textUnderlineOffset: 4, marginBottom: 12 }}>Product Expectation</div>
-            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{p.product_expectation}</div>
-          </div>
-        )}
       </div>
     );
   }
