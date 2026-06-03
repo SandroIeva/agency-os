@@ -12438,13 +12438,13 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
       </div>
     );
     const Field = (label, val) => val ? (
-      <div style={{ marginBottom: 18 }}>
-        <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 700, color: theme.text, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 4 }}>{label}</div>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 11, fontFamily: FONT, fontWeight: 700, color: theme.text, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }}>{label}</div>
         <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5 }}>{val}</div>
       </div>
     ) : null;
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 30 }}>
         {/* Top bar: back + edit */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <BackLink theme={theme} onClick={() => setScreen("overview")} label="Alle Personas" />
@@ -12452,61 +12452,61 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
             style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>Bearbeiten</motion.button>
         </div>
 
-        {/* Two-column card layout: left = photo + info + quote, right = content sections */}
-        <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 32, alignItems: "start" }}>
-          {/* Left column */}
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            {/* Photo */}
-            <div style={{ width: "100%", aspectRatio: "1", borderRadius: 18, overflow: "hidden", background: acc + "1a", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 22 }}>
-              {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                : <span style={{ fontSize: 64, fontFamily: FONT, fontWeight: 700, color: acc }}>{(p.name || "?").charAt(0).toUpperCase()}</span>}
+        {/* Row 1: Photo (left) | Name + Info (right) */}
+        <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 28, alignItems: "start" }}>
+          <div style={{ width: "100%", aspectRatio: "4/5", borderRadius: 18, overflow: "hidden", background: acc + "1a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              : <span style={{ fontSize: 56, fontFamily: FONT, fontWeight: 700, color: acc }}>{(p.name || "?").charAt(0).toUpperCase()}</span>}
+          </div>
+          <div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 20 }}>
+              <span style={{ fontSize: 32, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.5 }}>{p.name || "Persona"}</span>
+              {p.age && <span style={{ fontSize: 16, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}>{p.age}</span>}
             </div>
-            {/* Identity fields */}
-            {Field("Name", p.name)}
-            {Field("Alter", p.age)}
             {Field("Beruf", p.role)}
             {Field("Consumer Behavior", p.consumer_behavior)}
             {Field("Location", p.location)}
-            {/* Quote */}
-            {p.quote && (
-              <div style={{ marginTop: 8, fontSize: 15, fontFamily: FONT, fontStyle: "italic", color: theme.textDim, lineHeight: 1.55, paddingLeft: 14, borderLeft: `3px solid ${theme.accent}66` }}>
-                &ldquo;{p.quote}&rdquo;
-              </div>
-            )}
-          </div>
-
-          {/* Right column */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
-            {/* Motivations */}
-            <Col title="Motivations">
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                {(p.motivations || []).filter(m => m.label).map((m, i) => (
-                  <div key={i}>
-                    <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 7 }}>{m.label}</div>
-                    <div style={{ height: 6, borderRadius: 4, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", overflow: "hidden" }}>
-                      <div style={{ width: `${m.value}%`, height: "100%", borderRadius: 4, background: theme.accent }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Col>
-            {/* Goals */}
-            <Col title="Goals">
-              {(p.goals || []).filter(Boolean).map((g, i) => <Arrow key={i}>{g}</Arrow>)}
-            </Col>
-            {/* Pains */}
-            <Col title="Pains">
-              {(p.pains || []).filter(Boolean).map((g, i) => <Arrow key={i}>{g}</Arrow>)}
-            </Col>
-            {/* Product Expectation boxed */}
-            {p.product_expectation && (
-              <div style={{ padding: "20px 24px", borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
-                <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text, textDecoration: "underline", textUnderlineOffset: 4, marginBottom: 12 }}>Product Expectation</div>
-                <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{p.product_expectation}</div>
-              </div>
-            )}
           </div>
         </div>
+
+        {/* Row 2: Motivations (left) | Quote (right) */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, alignItems: "start" }}>
+          <Col title="Motivations">
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {(p.motivations || []).filter(m => m.label).map((m, i) => (
+                <div key={i}>
+                  <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 7 }}>{m.label}</div>
+                  <div style={{ height: 6, borderRadius: 4, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", overflow: "hidden" }}>
+                    <div style={{ width: `${m.value}%`, height: "100%", borderRadius: 4, background: theme.accent }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Col>
+          {p.quote ? (
+            <div style={{ paddingTop: 38, fontSize: 17, fontFamily: FONT, fontStyle: "italic", color: theme.textDim, lineHeight: 1.55, paddingLeft: 16, borderLeft: `3px solid ${theme.accent}55` }}>
+              &ldquo;{p.quote}&rdquo;
+            </div>
+          ) : <div />}
+        </div>
+
+        {/* Row 3: Goals | Pains */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, alignItems: "start" }}>
+          <Col title="Goals">
+            {(p.goals || []).filter(Boolean).map((g, i) => <Arrow key={i}>{g}</Arrow>)}
+          </Col>
+          <Col title="Pains">
+            {(p.pains || []).filter(Boolean).map((g, i) => <Arrow key={i}>{g}</Arrow>)}
+          </Col>
+        </div>
+
+        {/* Row 4: Product Expectation (full width, boxed) */}
+        {p.product_expectation && (
+          <div style={{ padding: "22px 26px", borderRadius: 18, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}` }}>
+            <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 700, color: theme.text, textDecoration: "underline", textUnderlineOffset: 4, marginBottom: 14 }}>Product Expectation</div>
+            <div style={{ fontSize: 15, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{p.product_expectation}</div>
+          </div>
+        )}
       </div>
     );
   }
