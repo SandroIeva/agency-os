@@ -14,7 +14,7 @@ const translations = {
   "menu.agents": { de: "AGENTEN", en: "AGENTS" },
 
   // ── Linear Menu (new two-column flyout, TitleCase variants) ──
-  "linearMenu.brand":         { de: "Marke",        en: "Brand" },
+  "linearMenu.brand":         { de: "Brand",        en: "Brand" },
   "linearMenu.create":        { de: "Erstellen",    en: "Create" },
   "linearMenu.agents":        { de: "Agenten",      en: "Agents" },
   "linearMenu.projects":      { de: "Projekte",     en: "Projects" },
