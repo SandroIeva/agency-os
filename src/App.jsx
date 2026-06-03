@@ -12598,6 +12598,296 @@ function BackLink({ theme, onClick, label }) {
   );
 }
 
+// ── Competitors ──────────────────────────────────────────────────────────────
+// Empty → choose "describe" (free-text, AI builds a profile) or "direct" (enter a
+// name or website URL, AI builds a profile). Overview = 2-col cards. Detail = the
+// summary layout: company + clickable website, stats, accordions, recommendations.
+function CompAccordion({ label, children, theme, darkMode, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const empty = !children || (typeof children === "string" && !children.trim());
+  return (
+    <div style={{ borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", overflow: "hidden" }}>
+      <div onClick={() => !empty && setOpen(o => !o)}
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 16px", cursor: empty ? "default" : "pointer" }}>
+        <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: empty ? theme.textDim : theme.text }}>{label}</span>
+        <motion.svg animate={{ rotate: open ? 180 : 0 }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: empty ? 0.3 : 1 }}><polyline points="6 9 12 15 18 9"/></motion.svg>
+      </div>
+      <AnimatePresence initial={false}>
+        {open && !empty && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} style={{ overflow: "hidden" }}>
+            <div style={{ padding: "0 16px 15px", fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, theme, darkMode, t }) {
+  const competitors = Array.isArray(value) ? value : [];
+  const [screen, setScreen] = useState("auto"); // auto | choice | describe | direct | detail | edit
+  const [selIdx, setSelIdx] = useState(0);
+  const [draft, setDraft] = useState(null);
+  const [draftIsNew, setDraftIsNew] = useState(false);
+  const [inputText, setInputText] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState("");
+
+  const firstRender = useRef(true);
+  useEffect(() => { if (firstRender.current) { firstRender.current = false; } else { setScreen("auto"); } }, []);
+  useEffect(() => { if (screen !== "detail" && screen !== "edit" && screen !== "describe" && screen !== "direct") setScreen("auto"); }, [competitors.length]);
+
+  const view = screen === "auto" ? (competitors.length ? "overview" : "choice") : screen;
+  const acc = cp?.primary || accent;
+  const cardBg = darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)";
+  const inputStyle = {
+    width: "100%", padding: "11px 13px", borderRadius: 10, fontFamily: FONT, fontSize: 13,
+    background: darkMode ? "rgba(255,255,255,0.04)" : "#fff",
+    border: `1px solid ${theme.borderFaint}`, color: theme.text, outline: "none", boxSizing: "border-box",
+  };
+  const Lbl = (s) => <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 600, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.4 }}>{s}</div>;
+  const commit = (list) => onChange(list);
+  const websiteHref = (w) => { const u = (w || "").trim(); if (!u) return ""; return /^https?:\/\//.test(u) ? u : `https://${u}`; };
+
+  const openDetail = (idx) => { setSelIdx(idx); setScreen("detail"); };
+  const startEdit = (idx) => { setDraft(JSON.parse(JSON.stringify(competitors[idx]))); setSelIdx(idx); setDraftIsNew(false); setScreen("edit"); };
+  const doGenerate = async () => {
+    if (!inputText.trim() || generating) return;
+    setGenerating(true); setGenError("");
+    try {
+      const c = await generateCompetitor(inputText.trim());
+      const next = [...competitors, c];
+      commit(next); setSelIdx(next.length - 1); setInputText(""); setScreen("detail");
+    } catch (e) {
+      setGenError("Analyse fehlgeschlagen. Versuch es nochmal oder prüfe deinen AI-Provider in den Einstellungen.");
+    } finally { setGenerating(false); }
+  };
+  const saveDraft = () => {
+    if (!draft) return;
+    let next, idx;
+    if (draftIsNew) { next = [...competitors, draft]; idx = next.length - 1; }
+    else { next = competitors.map((c, i) => i === selIdx ? draft : c); idx = selIdx; }
+    commit(next); setSelIdx(idx); setDraft(null); setScreen("detail");
+  };
+  const deleteCompetitor = (idx) => {
+    const next = competitors.filter((_, i) => i !== idx);
+    commit(next); setDraft(null); setScreen(next.length ? "overview" : "auto");
+  };
+
+  // ── CHOICE (empty state) ────────────────────────────────────────────────────
+  if (view === "choice") {
+    const OptCard = ({ icon, title, desc, onClick }) => (
+      <motion.div whileHover={{ y: -3 }} whileTap={{ scale: 0.98 }} onClick={onClick}
+        style={{ flex: 1, minWidth: 220, cursor: "pointer", padding: 24, borderRadius: 18, background: cardBg, border: `1px solid ${theme.borderFaint}`, display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 13, background: acc + "1f", color: acc, display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</div>
+        <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{title}</div>
+        <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>{desc}</div>
+      </motion.div>
+    );
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        {competitors.length > 0 && <div style={{ alignSelf: "flex-start" }}><BackLink theme={theme} onClick={() => setScreen("overview")} label="Zurück" /></div>}
+        <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, maxWidth: 560 }}>
+          Füge einen Wettbewerber hinzu — beschreibe ihn kurz, oder gib direkt einen Namen bzw. eine Website ein. Die KI erstellt daraus ein Profil.
+        </div>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <OptCard
+            icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>}
+            title="Competitor beschreiben" desc="Beschreibe den Wettbewerber in ein paar Sätzen. Die KI füllt Summary, Stärken, Schwächen und Empfehlungen automatisch aus."
+            onClick={() => { setInputText(""); setGenError(""); setScreen("describe"); }} />
+          <OptCard
+            icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>}
+            title="Direkter Competitor" desc="Gib einen Firmennamen oder eine Website-URL ein (z.B. instagram.com). Die KI recherchiert das Profil."
+            onClick={() => { setInputText(""); setGenError(""); setScreen("direct"); }} />
+        </div>
+      </div>
+    );
+  }
+
+  // ── DESCRIBE / DIRECT (AI input) ────────────────────────────────────────────
+  if (view === "describe" || view === "direct") {
+    const isDirect = view === "direct";
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 620 }}>
+        <BackLink theme={theme} onClick={() => setScreen(competitors.length ? "choice" : "auto")} label="Zurück" />
+        <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{isDirect ? "Direkter Competitor" : "Competitor beschreiben"}</div>
+        <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+          {isDirect ? "Gib den Firmennamen oder die Website ein — die KI erstellt daraus ein Wettbewerber-Profil." : "Beschreibe den Wettbewerber so genau wie möglich — Produkt, Zielgruppe, Stärken, Schwächen."}
+        </div>
+        {isDirect ? (
+          <input value={inputText} onChange={e => setInputText(e.target.value)} onKeyDown={e => { if (e.key === "Enter") doGenerate(); }}
+            placeholder="z.B. Instagram oder instagram.com" style={inputStyle} />
+        ) : (
+          <textarea value={inputText} onChange={e => setInputText(e.target.value)} rows={6}
+            placeholder="z.B. Eine Social-Media-Plattform für Foto- und Video-Sharing mit Fokus auf Stories und Reels…"
+            style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }} />
+        )}
+        {genError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT }}>{genError}</div>}
+        <div>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={doGenerate} disabled={!inputText.trim() || generating}
+            style={{ padding: "11px 20px", borderRadius: 12, border: "none", cursor: inputText.trim() && !generating ? "pointer" : "default",
+              background: acc, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: inputText.trim() && !generating ? 1 : 0.5 }}>
+            {generating ? "Analysiere…" : "Profil erstellen"}
+          </motion.button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── EDIT (form) ─────────────────────────────────────────────────────────────
+  if (view === "edit" && draft) {
+    const setF = (patch) => setDraft(d => ({ ...d, ...patch }));
+    const Area = (label, field, rows = 2) => (
+      <div>{Lbl(label)}<textarea value={draft[field] || ""} onChange={e => setF({ [field]: e.target.value })} rows={rows} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} /></div>
+    );
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div>{Lbl("Name")}<input value={draft.name} onChange={e => setF({ name: e.target.value })} style={inputStyle} placeholder="Instagram" /></div>
+          <div>{Lbl("Website")}<input value={draft.website} onChange={e => setF({ website: e.target.value })} style={inputStyle} placeholder="instagram.com" /></div>
+          <div>{Lbl("Gegründet")}<input value={draft.founded} onChange={e => setF({ founded: e.target.value })} style={inputStyle} placeholder="2008" /></div>
+          <div>{Lbl("Team-Größe")}<input value={draft.team_size} onChange={e => setF({ team_size: e.target.value })} style={inputStyle} placeholder="300+" /></div>
+          <div style={{ gridColumn: "1 / -1" }}>{Lbl("Standort")}<input value={draft.location} onChange={e => setF({ location: e.target.value })} style={inputStyle} placeholder="Menlo Park, CA" /></div>
+        </div>
+        {Area("Summary", "summary", 3)}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+          {Area("Produkte & Services", "products")}
+          {Area("Audience", "audience")}
+          {Area("Core Focus", "core_focus")}
+          {Area("Stärken", "strengths")}
+          {Area("Direkte Wettbewerber", "direct_competitors")}
+          {Area("Schwächen", "weaknesses")}
+        </div>
+        <div>
+          {Lbl("Strategic Recommendations")}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {(draft.recommendations || []).map((r, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input value={r} onChange={e => setDraft(d => ({ ...d, recommendations: d.recommendations.map((x, j) => j === i ? e.target.value : x) }))} style={inputStyle} />
+                <button onClick={() => setDraft(d => ({ ...d, recommendations: d.recommendations.filter((_, j) => j !== i) }))}
+                  style={{ width: 30, height: 30, flexShrink: 0, borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, cursor: "pointer" }}>×</button>
+              </div>
+            ))}
+            <button onClick={() => setDraft(d => ({ ...d, recommendations: [...(d.recommendations || []), ""] }))}
+              style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>+ Empfehlung</button>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", paddingTop: 4 }}>
+          {!draftIsNew ? (
+            <button onClick={() => deleteCompetitor(selIdx)}
+              style={{ padding: "11px 16px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: "#e5484d", fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>Löschen</button>
+          ) : <div />}
+          <div style={{ flex: 1 }} />
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => { setDraft(null); setScreen(competitors.length ? "overview" : "auto"); }}
+              style={{ padding: "11px 18px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>Abbrechen</button>
+            <motion.button whileTap={{ scale: 0.97 }} onClick={saveDraft}
+              style={{ padding: "11px 24px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Speichern</motion.button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── DETAIL ──────────────────────────────────────────────────────────────────
+  if (view === "detail" && competitors[selIdx]) {
+    const c = competitors[selIdx];
+    const Stat = (emoji, label, val) => val ? (
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontSize: 22 }}>{emoji}</span>
+        <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{label}</span>
+        <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{val}</span>
+      </div>
+    ) : null;
+    const Arrow = ({ children }) => (
+      <div style={{ display: "flex", gap: 10, marginBottom: 12, alignItems: "flex-start" }}>
+        <span style={{ color: theme.textDim, marginTop: 2, flexShrink: 0 }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+        <span style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5 }}>{children}</span>
+      </div>
+    );
+    const hasStats = c.founded || c.team_size || c.location;
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 36 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <BackLink theme={theme} onClick={() => setScreen("overview")} label="Alle Competitors" />
+          <motion.button whileTap={{ scale: 0.96 }} onClick={() => startEdit(selIdx)}
+            style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>Bearbeiten</motion.button>
+        </div>
+
+        {/* Header: company + website + stats (left) | summary (right) */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, alignItems: "start" }}>
+          <div>
+            <div style={{ fontSize: 34, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.5 }}>{c.name || "Competitor"}</div>
+            {c.website && <a href={websiteHref(c.website)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 15, fontFamily: FONT, color: theme.accent, textDecoration: "none", marginTop: 4, display: "inline-block" }}>{c.website}</a>}
+            {hasStats && (
+              <div style={{ display: "flex", gap: 22, marginTop: 26, flexWrap: "wrap", alignItems: "stretch" }}>
+                {Stat("🚀", "Founded", c.founded)}
+                {(c.founded && c.team_size) && <div style={{ width: 1, background: theme.borderFaint }} />}
+                {Stat("🧑‍💼", "Team Size", c.team_size)}
+                {((c.founded || c.team_size) && c.location) && <div style={{ width: 1, background: theme.borderFaint }} />}
+                {Stat("📍", "Location", c.location)}
+              </div>
+            )}
+          </div>
+          <div>
+            <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 14 }}>Summary</div>
+            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7 }}>{c.summary || "—"}</div>
+          </div>
+        </div>
+
+        {/* Accordions: 2 columns */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 40px", alignItems: "start" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <CompAccordion label="Produkte & Services" theme={theme} darkMode={darkMode}>{c.products}</CompAccordion>
+            <CompAccordion label="Core Focus" theme={theme} darkMode={darkMode}>{c.core_focus}</CompAccordion>
+            <CompAccordion label="Direkte Wettbewerber" theme={theme} darkMode={darkMode}>{c.direct_competitors}</CompAccordion>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <CompAccordion label="Audience" theme={theme} darkMode={darkMode}>{c.audience}</CompAccordion>
+            <CompAccordion label="Stärken" theme={theme} darkMode={darkMode}>{c.strengths}</CompAccordion>
+            <CompAccordion label="Schwächen" theme={theme} darkMode={darkMode}>{c.weaknesses}</CompAccordion>
+          </div>
+        </div>
+
+        {/* Strategic Recommendations: heading (left) | list (right) */}
+        {(c.recommendations || []).filter(Boolean).length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, alignItems: "start" }}>
+            <div style={{ fontSize: 28, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.5, lineHeight: 1.15 }}>Strategic Recommendations</div>
+            <div>{(c.recommendations || []).filter(Boolean).map((r, i) => <Arrow key={i}>{r}</Arrow>)}</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── OVERVIEW (2-col cards) ──────────────────────────────────────────────────
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+      {competitors.map((c, i) => (
+        <motion.div key={c.id || i} whileHover={{ y: -3 }} whileTap={{ scale: 0.98 }} onClick={() => openDetail(i)}
+          style={{ cursor: "pointer", borderRadius: 16, padding: "18px 20px", background: cardBg, border: `1px solid ${theme.borderFaint}`, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+            <span style={{ fontSize: 18, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{c.name || "Competitor"}</span>
+            {c.founded && <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>est. {c.founded}</span>}
+          </div>
+          {c.website && <span style={{ fontSize: 12, fontFamily: FONT, color: theme.accent }}>{c.website}</span>}
+          {c.summary && <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{c.summary}</span>}
+          <div style={{ display: "flex", gap: 14, marginTop: 2, flexWrap: "wrap" }}>
+            {c.team_size && <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>👥 {c.team_size}</span>}
+            {c.location && <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>📍 {c.location}</span>}
+          </div>
+        </motion.div>
+      ))}
+      {/* Add card */}
+      <motion.div whileHover={{ y: -3 }} whileTap={{ scale: 0.98 }} onClick={() => setScreen("choice")}
+        style={{ cursor: "pointer", borderRadius: 16, minHeight: 130, border: `1px dashed ${theme.borderFaint}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: theme.textDim }}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span style={{ fontSize: 12, fontFamily: FONT }}>Competitor hinzufügen</span>
+      </motion.div>
+    </div>
+  );
+}
+
 function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken }) {
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
   const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
@@ -12638,8 +12928,9 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
     clearTimeout(pvmTimer.current);
     pvmTimer.current = setTimeout(() => { if (profile?.id) supabase.from("brand_profile").update({ pvm }).eq("id", profile.id); }, 700);
   };
-  // Personas — defined below after profile state is declared.
+  // Personas / Competitors — defined below after profile state is declared.
   const personasTimer = useRef(null);
+  const competitorsTimer = useRef(null);
   const profileRef = useRef(null);
   // Generate a structured persona from a free-text description via the LLM.
   const generatePersona = async (description) => {
@@ -12676,6 +12967,34 @@ Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals
       created_at: new Date().toISOString(),
     };
   };
+  // Generate a structured competitor profile from a name, website URL or description.
+  const generateCompetitor = async (input) => {
+    const system = `You are a competitive-analysis assistant. Given a competitor's name, website URL, or a short description, produce a structured competitor profile from your knowledge. Respond with ONLY valid minified JSON (no markdown, no commentary) matching exactly this shape:
+{"name":"","website":"","founded":"","team_size":"","location":"","summary":"","products":"","core_focus":"","direct_competitors":"","audience":"","strengths":"","weaknesses":"","recommendations":["","",""]}
+Rules: "name" is the company name; "website" is its primary domain (e.g. "instagram.com") without protocol; "founded" is the founding year; "team_size" is an approximate headcount (e.g. "300+"); "location" is the HQ city/country; "summary" is 1-2 sentences; "products", "core_focus", "audience", "strengths", "weaknesses" are each 1-3 concise sentences; "direct_competitors" is a comma-separated list; "recommendations" is exactly 3 short strategic recommendations for how OUR brand could compete. If you don't know a field, infer a plausible value. Write all text values in the SAME language as the input.`;
+    const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
+    const oauthToken = (llmProvider === "gemini" && !apiKey && ensureValidToken) ? await ensureValidToken() : null;
+    const resp = await fetch("/api/chat-multi", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: input, systemPrompt: system, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined }),
+    });
+    const data = await resp.json();
+    let txt = (data?.content?.[0]?.text || "").replace(/```json|```/g, "").trim();
+    const s = txt.indexOf("{"), e = txt.lastIndexOf("}");
+    if (s >= 0 && e > s) txt = txt.slice(s, e + 1);
+    const obj = JSON.parse(txt);
+    return {
+      id: `competitor_${Date.now()}`,
+      name: obj.name || "", website: (obj.website || "").replace(/^https?:\/\//, "").replace(/\/$/, ""),
+      founded: obj.founded || "", team_size: obj.team_size || "", location: obj.location || "",
+      summary: obj.summary || "", products: obj.products || "", core_focus: obj.core_focus || "",
+      direct_competitors: obj.direct_competitors || "", audience: obj.audience || "",
+      strengths: obj.strengths || "", weaknesses: obj.weaknesses || "",
+      recommendations: Array.isArray(obj.recommendations) ? obj.recommendations.filter(Boolean) : [],
+      created_at: new Date().toISOString(),
+    };
+  };
   const [profile, setProfile] = useState(null);
   // Keep profileRef in sync so debounced callbacks always see latest profile.id
   useEffect(() => { profileRef.current = profile; }, [profile]);
@@ -12689,6 +13008,21 @@ Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
           .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", personas: list })
+          .select("id").single();
+        if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
+      }
+    }, 500);
+  };
+  const saveCompetitors = (list) => {
+    setProfile(p => ({ ...(p || {}), competitors: list }));
+    clearTimeout(competitorsTimer.current);
+    competitorsTimer.current = setTimeout(async () => {
+      const cur = profileRef.current;
+      if (cur?.id) {
+        await supabase.from("brand_profile").update({ competitors: list }).eq("id", cur.id);
+      } else if (userOrg?.id) {
+        const { data } = await supabase.from("brand_profile")
+          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", competitors: list })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -14078,7 +14412,7 @@ Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{BRAND_SUBVIEW_LABELS[brandTab] || ""}</span>
               </div>
               <div style={{ flex: 1 }} />
-              {!(brandTab === "strategy" && brandSub === "personas") && (
+              {!(brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors")) && (
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => setEditingText(v => !v)}
                 style={{
                   padding: "8px 16px", borderRadius: 10, cursor: "pointer",
@@ -14236,6 +14570,9 @@ Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals
                     <>
                       {k === "strategy/personas" ? (
                         <BrandPersonas value={profile.personas} onChange={savePersonas} generatePersona={generatePersona}
+                          cp={cp} accent={theme.accent} theme={theme} darkMode={darkMode} t={t} />
+                      ) : k === "strategy/competitors" ? (
+                        <BrandCompetitors value={profile.competitors} onChange={saveCompetitors} generateCompetitor={generateCompetitor}
                           cp={cp} accent={theme.accent} theme={theme} darkMode={darkMode} t={t} />
                       ) : k === "identity/voice" ? (
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
