@@ -12198,7 +12198,7 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
 const SAMPLE_PERSONA = () => ({
   id: `persona_${Date.now()}`,
   photo_url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=480&q=80",
-  name: "Lily Ng", age: "24", role: "German Teacher",
+  name: "Lily Ng", age: "24", role: "German Teacher", gender: "Weiblich",
   location: "Queens, NY", consumer_behavior: "Fast Pace-Buyer",
   quote: "Love trying new products out all the time. Hate the hassle. The city is fast and non-stop so my lifestyle has to keep up with it, too.",
   motivations: [
@@ -12389,6 +12389,14 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
             <div>{Lbl("Name")}<input value={draft.name} onChange={e => setF({ name: e.target.value })} style={inputStyle} placeholder="Lily Ng" /></div>
             <div>{Lbl("Alter")}<input value={draft.age} onChange={e => setF({ age: e.target.value })} style={inputStyle} placeholder="24" /></div>
             <div style={{ gridColumn: "1 / -1" }}>{Lbl("Beruf / Rolle")}<input value={draft.role} onChange={e => setF({ role: e.target.value })} style={inputStyle} placeholder="German Teacher" /></div>
+            <div style={{ gridColumn: "1 / -1" }}>{Lbl("Geschlecht")}
+              <select value={draft.gender || ""} onChange={e => setF({ gender: e.target.value })} style={{ ...inputStyle, cursor: "pointer" }}>
+                <option value="">– auswählen –</option>
+                <option value="Weiblich">Weiblich</option>
+                <option value="Männlich">Männlich</option>
+                <option value="Divers">Divers</option>
+              </select>
+            </div>
             <div>{Lbl("Consumer Behavior")}<input value={draft.consumer_behavior} onChange={e => setF({ consumer_behavior: e.target.value })} style={inputStyle} placeholder="Fast Pace-Buyer" /></div>
             <div>{Lbl("Standort")}<input value={draft.location} onChange={e => setF({ location: e.target.value })} style={inputStyle} placeholder="Queens, NY" /></div>
           </div>
@@ -12470,6 +12478,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
               {p.age && <span style={{ fontSize: 17, fontFamily: FONT, color: theme.textDim, fontWeight: 500, marginTop: 2 }}>{p.age}</span>}
             </div>
             {Field("Beruf", p.role)}
+            {Field("Geschlecht", p.gender)}
             {Field("Consumer Behavior", p.consumer_behavior)}
             {Field("Location", p.location)}
           </div>
@@ -12603,8 +12612,8 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
   // Generate a structured persona from a free-text description via the LLM.
   const generatePersona = async (description) => {
     const system = `You create ONE detailed marketing buyer persona from a short description. Respond with ONLY valid minified JSON (no markdown, no commentary) matching exactly this shape:
-{"name":"","age":"","role":"","location":"","consumer_behavior":"","quote":"","motivations":[{"label":"","value":70}],"goals":[""],"pains":[""],"product_expectation":""}
-Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals; exactly 3 pains; a realistic first-person quote; "role" is a short job/role title; "consumer_behavior" is 1-3 words (e.g. "Fast Pace-Buyer"). Infer realistic content from the description. Write all values in the SAME language as the description.`;
+{"name":"","age":"","role":"","gender":"","location":"","consumer_behavior":"","quote":"","motivations":[{"label":"","value":70}],"goals":[""],"pains":[""],"product_expectation":""}
+Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals; exactly 3 pains; a realistic first-person quote; "role" is a short job/role title; "gender" is one of "Weiblich", "Männlich" or "Divers" (in German) inferred from the name/description; "consumer_behavior" is 1-3 words (e.g. "Fast Pace-Buyer"). Infer realistic content from the description. Write all values in the SAME language as the description.`;
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
     const oauthToken = (llmProvider === "gemini" && !apiKey && ensureValidToken) ? await ensureValidToken() : null;
     const resp = await fetch("/api/chat-multi", {
@@ -12625,7 +12634,7 @@ Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals
     const obj = JSON.parse(txt);
     return {
       id: `persona_${Date.now()}`, photo_url: "",
-      name: obj.name || "", age: obj.age || "", role: obj.role || "",
+      name: obj.name || "", age: obj.age || "", role: obj.role || "", gender: obj.gender || "",
       location: obj.location || "", consumer_behavior: obj.consumer_behavior || "",
       quote: obj.quote || "",
       motivations: Array.isArray(obj.motivations) ? obj.motivations.map(m => ({ label: m.label || "", value: Math.max(0, Math.min(100, Number(m.value) || 50)) })) : [],
