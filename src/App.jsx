@@ -12655,9 +12655,16 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
     if (!inputText.trim() || generating) return;
     setGenerating(true); setGenError("");
     try {
-      const c = await generateCompetitor(inputText.trim());
-      const next = [...competitors, c];
-      commit(next); setSelIdx(next.length - 1); setInputText(""); setScreen("detail");
+      // Returns an array: [mainCompetitor, ...similarCompetitors]
+      const list = await generateCompetitor(inputText.trim());
+      const arr = Array.isArray(list) ? list : [list];
+      if (!arr.length) throw new Error("empty");
+      const next = [...competitors, ...arr];
+      commit(next); setInputText("");
+      // If we found similar companies too, show the overview (all new cards);
+      // otherwise jump straight into the single profile.
+      if (arr.length > 1) { setScreen("overview"); }
+      else { setSelIdx(next.length - 1); setScreen("detail"); }
     } catch (e) {
       setGenError("Analyse fehlgeschlagen. Versuch es nochmal oder prüfe deinen AI-Provider in den Einstellungen.");
     } finally { setGenerating(false); }
@@ -13015,9 +13022,14 @@ Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals
       message = `Build a competitor profile for this company based on its website content:\n${bits.join("\n")}`;
     }
 
-    const system = `You are a competitive-analysis assistant. Given a competitor's name, website URL, scraped website content, or a short description, produce a structured competitor profile. Respond with ONLY valid minified JSON (no markdown, no commentary) matching exactly this shape:
-{"name":"","website":"","founded":"","team_size":"","location":"","summary":"","products":"","core_focus":"","direct_competitors":"","audience":"","strengths":"","weaknesses":"","recommendations":["","",""]}
-Rules: "name" is the company name; "website" is its primary domain (e.g. "instagram.com") without protocol; "founded" is the founding year; "team_size" is an approximate headcount (e.g. "300+"); "location" is the HQ city/country; "summary" is 1-2 sentences; "products", "core_focus", "audience", "strengths", "weaknesses" are each 1-3 concise sentences; "direct_competitors" is a comma-separated list of SIMILAR competing brands/companies; "recommendations" is exactly 3 short strategic recommendations for how OUR brand could compete. If you don't know a field, infer a plausible value. Write all text values in the SAME language as the input.`;
+    const system = `You are a competitive-analysis assistant. Given a competitor's name, website URL, scraped website content, or a short description, produce a competitor profile AND find similar competing companies. Respond with ONLY valid minified JSON (no markdown, no commentary) matching exactly this shape:
+{"main":{COMP},"similar":[{COMP},{COMP},{COMP}]}
+where COMP = {"name":"","website":"","founded":"","team_size":"","location":"","summary":"","products":"","core_focus":"","direct_competitors":"","audience":"","strengths":"","weaknesses":"","recommendations":["","",""]}
+Rules:
+- "main" is the company described by the input.
+- "similar" is an array of EXACTLY 3 OTHER real companies that offer similar products/services (direct competitors of the main company) — each a FULL profile with the same fields. Do NOT repeat the main company.
+- For every COMP: "website" is its primary domain (e.g. "instagram.com") without protocol; "founded" is the founding year; "team_size" is an approximate headcount (e.g. "300+"); "location" is the HQ city/country; "summary" is 1-2 sentences; "products"/"core_focus"/"audience"/"strengths"/"weaknesses" are each 1-3 concise sentences; "direct_competitors" is a comma-separated list of similar brands; "recommendations" is exactly 3 short strategic recommendations for how OUR brand could compete against that company.
+If you don't know a field, infer a plausible value. Write all text values in the SAME language as the input.`;
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
     const oauthToken = (llmProvider === "gemini" && !apiKey && ensureValidToken) ? await ensureValidToken() : null;
 
@@ -13025,8 +13037,18 @@ Rules: "name" is the company name; "website" is its primary domain (e.g. "instag
       try { return new URL(/^https?:\/\//i.test(input) ? input : `https://${input}`).hostname.replace(/^www\./, ""); }
       catch { return ""; }
     })();
+    const normalize = (o) => ({
+      id: `competitor_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      name: o?.name || "", website: (o?.website || "").replace(/^https?:\/\//, "").replace(/\/$/, ""),
+      founded: o?.founded || "", team_size: o?.team_size || "", location: o?.location || "",
+      summary: o?.summary || "", products: o?.products || "", core_focus: o?.core_focus || "",
+      direct_competitors: o?.direct_competitors || "", audience: o?.audience || "",
+      strengths: o?.strengths || "", weaknesses: o?.weaknesses || "",
+      recommendations: Array.isArray(o?.recommendations) ? o.recommendations.filter(Boolean) : [],
+      created_at: new Date().toISOString(),
+    });
 
-    let obj = null;
+    let parsed = null;
     try {
       const resp = await fetch("/api/chat-multi", {
         method: "POST",
@@ -13037,30 +13059,27 @@ Rules: "name" is the company name; "website" is its primary domain (e.g. "instag
       let txt = (data?.content?.[0]?.text || "").replace(/```json|```/g, "").trim();
       const s = txt.indexOf("{"), e = txt.lastIndexOf("}");
       if (s >= 0 && e > s) txt = txt.slice(s, e + 1);
-      obj = JSON.parse(txt);
+      parsed = JSON.parse(txt);
     } catch (e) {
-      // Fall back to a profile built from the fetched page when the LLM is unavailable.
+      // Fall back to a single profile built from the fetched page when the LLM is unavailable.
       if (!fetched) throw e;
-      obj = {
+      return [normalize({
         name: fetched.name || domainFromInput || input,
         website: fetched.url || domainFromInput,
         summary: fetched.about || fetched.description || fetched.claim || "",
         products: Array.isArray(fetched.value_props) ? fetched.value_props.join(", ") : "",
         core_focus: fetched.claim || "",
-        recommendations: [],
-      };
+      })];
     }
 
-    return {
-      id: `competitor_${Date.now()}`,
-      name: obj.name || domainFromInput || "", website: (obj.website || fetched?.url || domainFromInput || "").replace(/^https?:\/\//, "").replace(/\/$/, ""),
-      founded: obj.founded || "", team_size: obj.team_size || "", location: obj.location || "",
-      summary: obj.summary || "", products: obj.products || "", core_focus: obj.core_focus || "",
-      direct_competitors: obj.direct_competitors || "", audience: obj.audience || "",
-      strengths: obj.strengths || "", weaknesses: obj.weaknesses || "",
-      recommendations: Array.isArray(obj.recommendations) ? obj.recommendations.filter(Boolean) : [],
-      created_at: new Date().toISOString(),
-    };
+    // Support both the new {main, similar} shape and a bare single object.
+    const mainObj = parsed.main || parsed;
+    const main = normalize(mainObj);
+    // Prefer the fetched domain/name for the main entry when we actually scraped a site.
+    if (fetched?.url && !main.website) main.website = fetched.url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    if (!main.name) main.name = domainFromInput || input;
+    const similar = Array.isArray(parsed.similar) ? parsed.similar.map(normalize).filter(c => c.name) : [];
+    return [main, ...similar];
   };
   const [profile, setProfile] = useState(null);
   // Keep profileRef in sync so debounced callbacks always see latest profile.id
