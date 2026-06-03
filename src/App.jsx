@@ -12470,13 +12470,8 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
           </div>
         </div>
 
-        {/* Quote — full width, moved out of the cramped header */}
-        {p.quote && (
-          <div style={{ fontSize: 20, fontFamily: FONT, fontStyle: "italic", color: theme.textDim, lineHeight: 1.5, paddingLeft: 16, borderLeft: `3px solid ${acc}66` }}>“{p.quote}”</div>
-        )}
-
-        {/* Two-column body: Motivations | Goals, then Pains | Product Expectation */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "34px 40px" }}>
+        {/* Row 1: Motivations | Quote */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "34px 40px", alignItems: "start" }}>
           <Col title="Motivations">
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {(p.motivations || []).filter(m => m.label).map((m, i) => (
@@ -12490,6 +12485,13 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
               {!(p.motivations || []).some(m => m.label) && <span style={{ fontSize: 13, color: theme.textDim, fontFamily: FONT }}>—</span>}
             </div>
           </Col>
+          {p.quote && (
+            <div style={{ fontSize: 20, fontFamily: FONT, fontStyle: "italic", color: theme.textDim, lineHeight: 1.5, paddingLeft: 16, borderLeft: `3px solid ${acc}66` }}>“{p.quote}”</div>
+          )}
+        </div>
+
+        {/* Row 2: Goals | Pains */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "34px 40px", alignItems: "start" }}>
           <Col title="Goals">
             {(p.goals || []).filter(Boolean).map((g, i) => <Arrow key={i}>{g}</Arrow>)}
             {!(p.goals || []).some(Boolean) && <span style={{ fontSize: 13, color: theme.textDim, fontFamily: FONT }}>—</span>}
@@ -12498,12 +12500,14 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
             {(p.pains || []).filter(Boolean).map((g, i) => <Arrow key={i}>{g}</Arrow>)}
             {!(p.pains || []).some(Boolean) && <span style={{ fontSize: 13, color: theme.textDim, fontFamily: FONT }}>—</span>}
           </Col>
-          {p.product_expectation && (
-            <Col title="Product Expectation">
-              <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{p.product_expectation}</div>
-            </Col>
-          )}
         </div>
+
+        {/* Row 3: Product Expectation */}
+        {p.product_expectation && (
+          <Col title="Product Expectation">
+            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{p.product_expectation}</div>
+          </Col>
+        )}
       </div>
     );
   }
