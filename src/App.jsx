@@ -12188,7 +12188,337 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
   );
 }
 
-function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab }) {
+// ── Personas ────────────────────────────────────────────────────────────────
+// Empty → choose "manual" (AI generates a card from a description) or "template"
+// (blank card you fill in). Overview lists persona cards; clicking opens the big
+// detail card (photo, name/age, role, behaviour, location, quote, motivations as
+// bars, goals, pains, product expectation). Edit mode = full form with sliders.
+const PERSONA_TEMPLATE = () => ({
+  id: `persona_${Date.now()}`, photo_url: "",
+  name: "", age: "", role: "", location: "", consumer_behavior: "", quote: "",
+  motivations: [{ label: "", value: 70 }, { label: "", value: 55 }, { label: "", value: 40 }],
+  goals: ["", "", ""], pains: ["", "", ""], product_expectation: "",
+  created_at: new Date().toISOString(),
+});
+
+function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, darkMode, t }) {
+  const personas = Array.isArray(value) ? value : [];
+  const [screen, setScreen] = useState("auto"); // auto | choice | manual | detail | edit
+  const [selIdx, setSelIdx] = useState(0);
+  const [draft, setDraft] = useState(null);
+  const [draftIsNew, setDraftIsNew] = useState(false);
+  const [manualText, setManualText] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef(null);
+
+  const view = screen === "auto" ? (personas.length ? "overview" : "choice") : screen;
+  const acc = cp?.primary || accent;
+  const cardBg = darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)";
+  const inputStyle = {
+    width: "100%", padding: "10px 12px", borderRadius: 10, fontFamily: FONT, fontSize: 13,
+    background: darkMode ? "rgba(255,255,255,0.04)" : "#fff",
+    border: `1px solid ${theme.borderFaint}`, color: theme.text, outline: "none", boxSizing: "border-box",
+  };
+  const Lbl = (s) => <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 600, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.4 }}>{s}</div>;
+
+  const commit = (list) => onChange(list);
+
+  const uploadPhoto = async (file) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const path = `personas/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage.from("brand-assets").upload(path, file, { upsert: true, contentType: file.type });
+      if (!error) {
+        const { data } = supabase.storage.from("brand-assets").getPublicUrl(path);
+        setDraft(d => ({ ...d, photo_url: data.publicUrl }));
+      }
+    } finally { setUploading(false); }
+  };
+
+  const openDetail = (idx) => { setSelIdx(idx); setScreen("detail"); };
+  const startTemplate = () => { setDraft(PERSONA_TEMPLATE()); setDraftIsNew(true); setScreen("edit"); };
+  const startEdit = (idx) => { setDraft(JSON.parse(JSON.stringify(personas[idx]))); setSelIdx(idx); setDraftIsNew(false); setScreen("edit"); };
+  const doGenerate = async () => {
+    if (!manualText.trim() || generating) return;
+    setGenerating(true); setGenError("");
+    try {
+      const p = await generatePersona(manualText.trim());
+      const next = [...personas, p];
+      commit(next); setSelIdx(next.length - 1); setManualText(""); setScreen("detail");
+    } catch (e) {
+      setGenError("Generierung fehlgeschlagen. Versuch es nochmal oder prüfe deinen AI-Provider in den Einstellungen.");
+    } finally { setGenerating(false); }
+  };
+  const saveDraft = () => {
+    if (!draft) return;
+    let next, idx;
+    if (draftIsNew) { next = [...personas, draft]; idx = next.length - 1; }
+    else { next = personas.map((p, i) => i === selIdx ? draft : p); idx = selIdx; }
+    commit(next); setSelIdx(idx); setDraft(null); setScreen("detail");
+  };
+  const deletePersona = (idx) => {
+    const next = personas.filter((_, i) => i !== idx);
+    commit(next); setDraft(null); setScreen(next.length ? "overview" : "choice");
+  };
+
+  // ── CHOICE (empty state) ───────────────────────────────────────────────────
+  if (view === "choice") {
+    const OptCard = ({ icon, title, desc, onClick }) => (
+      <motion.div whileHover={{ y: -3 }} whileTap={{ scale: 0.98 }} onClick={onClick}
+        style={{ flex: 1, minWidth: 220, cursor: "pointer", padding: 24, borderRadius: 18, background: cardBg, border: `1px solid ${theme.borderFaint}`, display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 13, background: acc + "1f", color: acc, display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</div>
+        <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{title}</div>
+        <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>{desc}</div>
+      </motion.div>
+    );
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        {personas.length > 0 && (
+          <div style={{ alignSelf: "flex-start" }}>
+            <BackLink theme={theme} onClick={() => setScreen("overview")} label="Zurück" />
+          </div>
+        )}
+        <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, maxWidth: 560 }}>
+          Lege eine Persona an — beschreibe sie kurz und lass sie von der KI ausarbeiten, oder fülle die Vorlage selbst aus.
+        </div>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <OptCard
+            icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg>}
+            title="Mit KI erstellen" desc="Beschreibe die Persona in ein paar Sätzen. Die KI füllt Name, Beruf, Motivations, Goals und Pains automatisch aus."
+            onClick={() => { setManualText(""); setGenError(""); setScreen("manual"); }} />
+          <OptCard
+            icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>}
+            title="Vorlage nutzen" desc="Starte mit einer leeren Persona-Karte und trage alle Felder selbst ein."
+            onClick={startTemplate} />
+        </div>
+      </div>
+    );
+  }
+
+  // ── MANUAL (AI prompt) ──────────────────────────────────────────────────────
+  if (view === "manual") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 620 }}>
+        <BackLink theme={theme} onClick={() => setScreen(personas.length ? "choice" : "auto")} label="Zurück" />
+        <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 700, color: theme.text }}>Persona mit KI erstellen</div>
+        <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+          Beschreibe die Persona so genau wie möglich — z.B. Alter, Beruf, Lebensstil, Ziele und Frustrationen.
+        </div>
+        <textarea value={manualText} onChange={e => setManualText(e.target.value)} rows={6}
+          placeholder="z.B. Lily, 24, Deutschlehrerin in Queens. Probiert ständig neue Skincare-Produkte, hat aber wenig Zeit für Recherche und ärgert sich über Fehlkäufe…"
+          style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }} />
+        {genError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT }}>{genError}</div>}
+        <div>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={doGenerate} disabled={!manualText.trim() || generating}
+            style={{ padding: "11px 20px", borderRadius: 12, border: "none", cursor: manualText.trim() && !generating ? "pointer" : "default",
+              background: acc, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: manualText.trim() && !generating ? 1 : 0.5, display: "inline-flex", alignItems: "center", gap: 8 }}>
+            {generating ? "Generiere…" : "Persona generieren"}
+            {!generating && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg>}
+          </motion.button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── EDIT (full form) ────────────────────────────────────────────────────────
+  if (view === "edit" && draft) {
+    const setF = (patch) => setDraft(d => ({ ...d, ...patch }));
+    const setMot = (i, patch) => setDraft(d => ({ ...d, motivations: d.motivations.map((m, j) => j === i ? { ...m, ...patch } : m) }));
+    const listEdit = (field) => (
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {(draft[field] || []).map((item, i) => (
+          <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input value={item} onChange={e => setDraft(d => ({ ...d, [field]: d[field].map((x, j) => j === i ? e.target.value : x) }))} style={inputStyle} />
+            <button onClick={() => setDraft(d => ({ ...d, [field]: d[field].filter((_, j) => j !== i) }))}
+              style={{ width: 30, height: 30, flexShrink: 0, borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, cursor: "pointer" }}>×</button>
+          </div>
+        ))}
+        <button onClick={() => setDraft(d => ({ ...d, [field]: [...(d[field] || []), ""] }))}
+          style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>+ Hinzufügen</button>
+      </div>
+    );
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 22, maxWidth: 680 }}>
+        <BackLink theme={theme} onClick={() => { setDraft(null); setScreen(personas.length ? "overview" : "auto"); }} label="Abbrechen" />
+        {/* Photo + basics */}
+        <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+          <div onClick={() => fileRef.current?.click()}
+            style={{ width: 120, height: 120, borderRadius: 16, flexShrink: 0, cursor: "pointer", overflow: "hidden", border: `1px solid ${theme.borderFaint}`, background: draft.photo_url ? "transparent" : (acc + "1a"), display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+            {draft.photo_url
+              ? <img src={draft.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              : <div style={{ textAlign: "center", color: acc }}><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="9" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg><div style={{ fontSize: 10, fontFamily: FONT, marginTop: 4 }}>{uploading ? "Lädt…" : "Foto"}</div></div>}
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => { uploadPhoto(e.target.files?.[0]); e.target.value = ""; }} />
+          <div style={{ flex: 1, minWidth: 220, display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
+            <div>{Lbl("Name")}<input value={draft.name} onChange={e => setF({ name: e.target.value })} style={inputStyle} placeholder="Lily Ng" /></div>
+            <div>{Lbl("Alter")}<input value={draft.age} onChange={e => setF({ age: e.target.value })} style={inputStyle} placeholder="24" /></div>
+            <div style={{ gridColumn: "1 / -1" }}>{Lbl("Beruf / Rolle")}<input value={draft.role} onChange={e => setF({ role: e.target.value })} style={inputStyle} placeholder="German Teacher" /></div>
+            <div>{Lbl("Consumer Behavior")}<input value={draft.consumer_behavior} onChange={e => setF({ consumer_behavior: e.target.value })} style={inputStyle} placeholder="Fast Pace-Buyer" /></div>
+            <div>{Lbl("Standort")}<input value={draft.location} onChange={e => setF({ location: e.target.value })} style={inputStyle} placeholder="Queens, NY" /></div>
+          </div>
+        </div>
+        <div>{Lbl("Zitat")}<textarea value={draft.quote} onChange={e => setF({ quote: e.target.value })} rows={2} style={{ ...inputStyle, resize: "vertical" }} placeholder="Love trying new products out all the time…" /></div>
+        {/* Motivations with sliders */}
+        <div>
+          {Lbl("Motivations")}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {(draft.motivations || []).map((m, i) => (
+              <div key={i} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <input value={m.label} onChange={e => setMot(i, { label: e.target.value })} style={{ ...inputStyle, flex: 1 }} placeholder="Read Reviews" />
+                <input type="range" min="0" max="100" value={m.value} onChange={e => setMot(i, { value: Number(e.target.value) })} style={{ flex: 1, accentColor: acc }} />
+                <span style={{ width: 34, textAlign: "right", fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{m.value}</span>
+                <button onClick={() => setDraft(d => ({ ...d, motivations: d.motivations.filter((_, j) => j !== i) }))}
+                  style={{ width: 30, height: 30, flexShrink: 0, borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, cursor: "pointer" }}>×</button>
+              </div>
+            ))}
+            <button onClick={() => setDraft(d => ({ ...d, motivations: [...(d.motivations || []), { label: "", value: 50 }] }))}
+              style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>+ Motivation</button>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+          <div>{Lbl("Goals")}{listEdit("goals")}</div>
+          <div>{Lbl("Pains")}{listEdit("pains")}</div>
+        </div>
+        <div>{Lbl("Product Expectation")}<textarea value={draft.product_expectation} onChange={e => setF({ product_expectation: e.target.value })} rows={3} style={{ ...inputStyle, resize: "vertical" }} placeholder="Was erwartet die Persona von einem Produkt?" /></div>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={saveDraft}
+            style={{ padding: "11px 22px", borderRadius: 12, border: "none", background: acc, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Speichern</motion.button>
+          {!draftIsNew && (
+            <button onClick={() => deletePersona(selIdx)}
+              style={{ padding: "11px 16px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: "#e5484d", fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>Löschen</button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── DETAIL (big card) ───────────────────────────────────────────────────────
+  if (view === "detail" && personas[selIdx]) {
+    const p = personas[selIdx];
+    const Col = ({ title, children }) => (
+      <div style={{ flex: 1, minWidth: 200 }}>
+        <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 16 }}>{title}</div>
+        {children}
+      </div>
+    );
+    const Arrow = ({ children }) => (
+      <div style={{ display: "flex", gap: 10, marginBottom: 12, alignItems: "flex-start" }}>
+        <span style={{ color: theme.textDim, marginTop: 2, flexShrink: 0 }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+        <span style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5 }}>{children}</span>
+      </div>
+    );
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <BackLink theme={theme} onClick={() => setScreen("overview")} label="Alle Personas" />
+          <div style={{ display: "flex", gap: 8 }}>
+            <motion.button whileTap={{ scale: 0.96 }} onClick={() => startEdit(selIdx)}
+              style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>Bearbeiten</motion.button>
+          </div>
+        </div>
+        {/* Header: photo + identity + quote */}
+        <div style={{ display: "flex", gap: 28, flexWrap: "wrap", alignItems: "flex-start" }}>
+          <div style={{ width: 190, height: 190, borderRadius: 18, flexShrink: 0, overflow: "hidden", background: acc + "1a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              : <span style={{ fontSize: 56, fontFamily: FONT, fontWeight: 700, color: acc }}>{(p.name || "?").charAt(0).toUpperCase()}</span>}
+          </div>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+              <span style={{ fontSize: 34, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.5 }}>{p.name || "Persona"}</span>
+              {p.age && <span style={{ fontSize: 16, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}>{p.age}</span>}
+            </div>
+            {p.role && <div style={{ fontSize: 18, fontFamily: FONT, color: theme.textSub, marginTop: 4 }}>{p.role}</div>}
+            <div style={{ display: "flex", gap: 22, marginTop: 22, flexWrap: "wrap" }}>
+              {p.consumer_behavior && <div><div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 3 }}>Consumer behavior</div><div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{p.consumer_behavior}</div></div>}
+              {p.consumer_behavior && p.location && <div style={{ width: 1, alignSelf: "stretch", background: theme.borderFaint }} />}
+              {p.location && <div><div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 3 }}>Location</div><div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{p.location}</div></div>}
+            </div>
+          </div>
+          {p.quote && (
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <div style={{ fontSize: 20, fontFamily: FONT, fontStyle: "italic", color: theme.textDim, lineHeight: 1.45 }}>“{p.quote}”</div>
+            </div>
+          )}
+        </div>
+        {/* Motivations / Goals / Pains */}
+        <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
+          <Col title="Motivations">
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {(p.motivations || []).filter(m => m.label).map((m, i) => (
+                <div key={i}>
+                  <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 7 }}>{m.label}</div>
+                  <div style={{ height: 6, borderRadius: 4, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", overflow: "hidden" }}>
+                    <div style={{ width: `${m.value}%`, height: "100%", borderRadius: 4, background: acc }} />
+                  </div>
+                </div>
+              ))}
+              {!(p.motivations || []).some(m => m.label) && <span style={{ fontSize: 13, color: theme.textDim, fontFamily: FONT }}>—</span>}
+            </div>
+          </Col>
+          <Col title="Goals">
+            {(p.goals || []).filter(Boolean).map((g, i) => <Arrow key={i}>{g}</Arrow>)}
+            {!(p.goals || []).some(Boolean) && <span style={{ fontSize: 13, color: theme.textDim, fontFamily: FONT }}>—</span>}
+          </Col>
+          <Col title="Pains">
+            {(p.pains || []).filter(Boolean).map((g, i) => <Arrow key={i}>{g}</Arrow>)}
+            {!(p.pains || []).some(Boolean) && <span style={{ fontSize: 13, color: theme.textDim, fontFamily: FONT }}>—</span>}
+          </Col>
+        </div>
+        {p.product_expectation && (
+          <div>
+            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text, textDecoration: "underline", textUnderlineOffset: 4, marginBottom: 12 }}>Product Expectation</div>
+            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{p.product_expectation}</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── OVERVIEW (list) ─────────────────────────────────────────────────────────
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
+        {personas.map((p, i) => (
+          <motion.div key={p.id || i} whileHover={{ y: -3 }} whileTap={{ scale: 0.98 }} onClick={() => openDetail(i)}
+            style={{ cursor: "pointer", borderRadius: 16, overflow: "hidden", background: cardBg, border: `1px solid ${theme.borderFaint}` }}>
+            <div style={{ height: 130, background: acc + "1a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : <span style={{ fontSize: 40, fontFamily: FONT, fontWeight: 700, color: acc }}>{(p.name || "?").charAt(0).toUpperCase()}</span>}
+            </div>
+            <div style={{ padding: "12px 14px" }}>
+              <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{p.name || "Persona"}{p.age ? <span style={{ fontWeight: 500, color: theme.textDim, fontSize: 13 }}>  ·  {p.age}</span> : null}</div>
+              {p.role && <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{p.role}</div>}
+              {p.consumer_behavior && <div style={{ marginTop: 8, display: "inline-block", padding: "3px 9px", borderRadius: 7, background: acc + "1f", color: acc, fontSize: 11, fontFamily: FONT, fontWeight: 600 }}>{p.consumer_behavior}</div>}
+            </div>
+          </motion.div>
+        ))}
+        {/* Add card */}
+        <motion.div whileHover={{ y: -3 }} whileTap={{ scale: 0.98 }} onClick={() => setScreen("choice")}
+          style={{ cursor: "pointer", borderRadius: 16, minHeight: 130, border: `1px dashed ${theme.borderFaint}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: theme.textDim }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span style={{ fontSize: 12, fontFamily: FONT }}>Persona hinzufügen</span>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
+
+// Small back link used across persona sub-screens.
+function BackLink({ theme, onClick, label }) {
+  return (
+    <motion.div whileTap={{ scale: 0.97 }} onClick={onClick}
+      style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", color: theme.textDim, fontSize: 13, fontFamily: FONT, fontWeight: 500 }}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      {label}
+    </motion.div>
+  );
+}
+
+function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken }) {
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
   const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
   // Second-level sub-tab within the active pillar; resets to the first when the pillar changes.
@@ -12227,6 +12557,57 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
     setProfile(p => ({ ...p, pvm }));
     clearTimeout(pvmTimer.current);
     pvmTimer.current = setTimeout(() => { if (profile?.id) supabase.from("brand_profile").update({ pvm }).eq("id", profile.id); }, 700);
+  };
+  // Personas — live update + debounced DB write (creates the brand_profile row if missing).
+  const personasTimer = useRef(null);
+  const savePersonas = (list) => {
+    setProfile(p => ({ ...(p || {}), personas: list }));
+    clearTimeout(personasTimer.current);
+    personasTimer.current = setTimeout(async () => {
+      if (profile?.id) {
+        supabase.from("brand_profile").update({ personas: list }).eq("id", profile.id);
+      } else if (userOrg?.id) {
+        const { data } = await supabase.from("brand_profile")
+          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", personas: list })
+          .select("id").single();
+        if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
+      }
+    }, 500);
+  };
+  // Generate a structured persona from a free-text description via the LLM.
+  const generatePersona = async (description) => {
+    const system = `You create ONE detailed marketing buyer persona from a short description. Respond with ONLY valid minified JSON (no markdown, no commentary) matching exactly this shape:
+{"name":"","age":"","role":"","location":"","consumer_behavior":"","quote":"","motivations":[{"label":"","value":70}],"goals":[""],"pains":[""],"product_expectation":""}
+Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals; exactly 3 pains; a realistic first-person quote; "role" is a short job/role title; "consumer_behavior" is 1-3 words (e.g. "Fast Pace-Buyer"). Infer realistic content from the description. Write all values in the SAME language as the description.`;
+    const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
+    const oauthToken = (llmProvider === "gemini" && !apiKey && ensureValidToken) ? await ensureValidToken() : null;
+    const resp = await fetch("/api/chat-multi", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: description,
+        systemPrompt: system,
+        provider: llmProvider || "gemini",
+        apiKey: apiKey || undefined,
+        oauthToken: oauthToken || undefined,
+      }),
+    });
+    const data = await resp.json();
+    let txt = (data?.content?.[0]?.text || "").replace(/```json|```/g, "").trim();
+    const s = txt.indexOf("{"), e = txt.lastIndexOf("}");
+    if (s >= 0 && e > s) txt = txt.slice(s, e + 1);
+    const obj = JSON.parse(txt);
+    return {
+      id: `persona_${Date.now()}`, photo_url: "",
+      name: obj.name || "", age: obj.age || "", role: obj.role || "",
+      location: obj.location || "", consumer_behavior: obj.consumer_behavior || "",
+      quote: obj.quote || "",
+      motivations: Array.isArray(obj.motivations) ? obj.motivations.map(m => ({ label: m.label || "", value: Math.max(0, Math.min(100, Number(m.value) || 50)) })) : [],
+      goals: Array.isArray(obj.goals) ? obj.goals.filter(Boolean) : [],
+      pains: Array.isArray(obj.pains) ? obj.pains.filter(Boolean) : [],
+      product_expectation: obj.product_expectation || "",
+      created_at: new Date().toISOString(),
+    };
   };
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -13628,6 +14009,7 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{BRAND_SUBVIEW_LABELS[brandTab] || ""}</span>
               </div>
               <div style={{ flex: 1 }} />
+              {!(brandTab === "strategy" && brandSub === "personas") && (
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => setEditingText(v => !v)}
                 style={{
                   padding: "8px 16px", borderRadius: 10, cursor: "pointer",
@@ -13636,6 +14018,7 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
                   color: editingText ? "#fff" : theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT,
                 }}
               >{editingText ? "Fertig" : "Bearbeiten"}</motion.button>
+              )}
             </div>
 
             {/* This view IS one pillar (Strategie / Identität / Brand Design — set from
@@ -13782,7 +14165,10 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
 
                   return (
                     <>
-                      {k === "identity/voice" ? (
+                      {k === "strategy/personas" ? (
+                        <BrandPersonas value={profile.personas} onChange={savePersonas} generatePersona={generatePersona}
+                          cp={cp} accent={theme.accent} theme={theme} darkMode={darkMode} t={t} />
+                      ) : k === "identity/voice" ? (
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
                           onSave={saveVoiceTone} onCancel={() => setEditingText(false)} />
                       ) : k === "strategy/taglines" ? (
@@ -17386,7 +17772,7 @@ export default function CircularMenu() {
         {/* BRAND VIEW */}
         <AnimatePresence>
           {currentView === "brand" && (
-            <BrandView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} brandTab={brandTab} setBrandTab={setBrandTab} onNavigate={(v) => setCurrentView(v)} onBack={() => setCurrentView("dashboard")} />
+            <BrandView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} brandTab={brandTab} setBrandTab={setBrandTab} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} onNavigate={(v) => setCurrentView(v)} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
