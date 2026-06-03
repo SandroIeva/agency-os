@@ -13023,11 +13023,11 @@ Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals
     }
 
     const system = `You are a competitive-analysis assistant. Given a competitor's name, website URL, scraped website content, or a short description, produce a competitor profile AND find similar competing companies. Respond with ONLY valid minified JSON (no markdown, no commentary) matching exactly this shape:
-{"main":{COMP},"similar":[{COMP},{COMP},{COMP}]}
+{"main":{COMP},"similar":[{COMP},{COMP}, ...]}
 where COMP = {"name":"","website":"","founded":"","team_size":"","location":"","summary":"","products":"","core_focus":"","direct_competitors":"","audience":"","strengths":"","weaknesses":"","recommendations":["","",""]}
 Rules:
 - "main" is the company described by the input.
-- "similar" is an array of EXACTLY 3 OTHER real companies that offer similar products/services (direct competitors of the main company) — each a FULL profile with the same fields. Do NOT repeat the main company.
+- "similar" is an array of BETWEEN 5 AND 8 OTHER real companies that offer similar products/services (direct competitors of the main company) — each a FULL profile with the same fields. Include as many genuinely relevant competitors as you can within that range. Do NOT repeat the main company and do NOT invent fake companies.
 - For every COMP: "website" is its primary domain (e.g. "instagram.com") without protocol; "founded" is the founding year; "team_size" is an approximate headcount (e.g. "300+"); "location" is the HQ city/country; "summary" is 1-2 sentences; "products"/"core_focus"/"audience"/"strengths"/"weaknesses" are each 1-3 concise sentences; "direct_competitors" is a comma-separated list of similar brands; "recommendations" is exactly 3 short strategic recommendations for how OUR brand could compete against that company.
 If you don't know a field, infer a plausible value. Write all text values in the SAME language as the input.`;
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
