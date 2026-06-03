@@ -12233,6 +12233,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [photoHover, setPhotoHover] = useState(false);
   const fileRef = useRef(null);
 
   // When the component first renders (user navigates to Personas tab), always
@@ -12245,9 +12246,15 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
   const acc = cp?.primary || accent;
   const cardBg = darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)";
   const inputStyle = {
-    width: "100%", padding: "10px 12px", borderRadius: 10, fontFamily: FONT, fontSize: 13,
+    width: "100%", padding: "11px 13px", borderRadius: 10, fontFamily: FONT, fontSize: 13,
     background: darkMode ? "rgba(255,255,255,0.04)" : "#fff",
     border: `1px solid ${theme.borderFaint}`, color: theme.text, outline: "none", boxSizing: "border-box",
+  };
+  // Custom select with a padded chevron (native arrow sits flush to the edge otherwise)
+  const chevronSvg = "data:image/svg+xml;utf8," + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  const selectStyle = {
+    ...inputStyle, cursor: "pointer", appearance: "none", WebkitAppearance: "none", MozAppearance: "none",
+    backgroundImage: `url("${chevronSvg}")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center", paddingRight: 40,
   };
   const Lbl = (s) => <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 600, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.4 }}>{s}</div>;
 
@@ -12374,23 +12381,36 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
       </div>
     );
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 22, maxWidth: 680 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 40 }}>
         <BackLink theme={theme} onClick={() => { setDraft(null); setScreen(personas.length ? "overview" : "auto"); }} label="Abbrechen" />
-        {/* Photo + basics */}
-        <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+
+        {/* Row 1: Photo (left) | identity fields (right) — mirrors the detail layout */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, alignItems: "start" }}>
           <div onClick={() => fileRef.current?.click()}
-            style={{ width: 120, height: 120, borderRadius: 16, flexShrink: 0, cursor: "pointer", overflow: "hidden", border: `1px solid ${theme.borderFaint}`, background: draft.photo_url ? "transparent" : (acc + "1a"), display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+            onMouseEnter={() => setPhotoHover(true)} onMouseLeave={() => setPhotoHover(false)}
+            style={{ width: "100%", aspectRatio: "4/5", borderRadius: 18, cursor: "pointer", overflow: "hidden", border: `1px solid ${theme.borderFaint}`, background: draft.photo_url ? "transparent" : (acc + "1a"), display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
             {draft.photo_url
               ? <img src={draft.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              : <div style={{ textAlign: "center", color: acc }}><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="9" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg><div style={{ fontSize: 10, fontFamily: FONT, marginTop: 4 }}>{uploading ? "Lädt…" : "Foto"}</div></div>}
+              : <div style={{ textAlign: "center", color: acc }}><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="9" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg><div style={{ fontSize: 12, fontFamily: FONT, marginTop: 8, fontWeight: 600 }}>{uploading ? "Lädt…" : "Foto hochladen"}</div></div>}
+            {/* Hover / always-on overlay button to change photo */}
+            {(draft.photo_url) && (
+              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 14, background: photoHover ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0)", transition: "background 0.18s", pointerEvents: "none" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 10, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600, opacity: photoHover ? 1 : 0, transition: "opacity 0.18s" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                  {uploading ? "Lädt…" : "Foto ändern"}
+                </div>
+              </div>
+            )}
           </div>
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => { uploadPhoto(e.target.files?.[0]); e.target.value = ""; }} />
-          <div style={{ flex: 1, minWidth: 220, display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
-            <div>{Lbl("Name")}<input value={draft.name} onChange={e => setF({ name: e.target.value })} style={inputStyle} placeholder="Lily Ng" /></div>
-            <div>{Lbl("Alter")}<input value={draft.age} onChange={e => setF({ age: e.target.value })} style={inputStyle} placeholder="24" /></div>
-            <div style={{ gridColumn: "1 / -1" }}>{Lbl("Beruf / Rolle")}<input value={draft.role} onChange={e => setF({ role: e.target.value })} style={inputStyle} placeholder="German Teacher" /></div>
-            <div style={{ gridColumn: "1 / -1" }}>{Lbl("Geschlecht")}
-              <select value={draft.gender || ""} onChange={e => setF({ gender: e.target.value })} style={{ ...inputStyle, cursor: "pointer" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
+              <div>{Lbl("Name")}<input value={draft.name} onChange={e => setF({ name: e.target.value })} style={inputStyle} placeholder="Lily Ng" /></div>
+              <div>{Lbl("Alter")}<input value={draft.age} onChange={e => setF({ age: e.target.value })} style={inputStyle} placeholder="24" /></div>
+            </div>
+            <div>{Lbl("Beruf / Rolle")}<input value={draft.role} onChange={e => setF({ role: e.target.value })} style={inputStyle} placeholder="German Teacher" /></div>
+            <div>{Lbl("Geschlecht")}
+              <select value={draft.gender || ""} onChange={e => setF({ gender: e.target.value })} style={selectStyle}>
                 <option value="">– auswählen –</option>
                 <option value="Weiblich">Weiblich</option>
                 <option value="Männlich">Männlich</option>
@@ -12401,7 +12421,10 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
             <div>{Lbl("Standort")}<input value={draft.location} onChange={e => setF({ location: e.target.value })} style={inputStyle} placeholder="Queens, NY" /></div>
           </div>
         </div>
-        <div>{Lbl("Zitat")}<textarea value={draft.quote} onChange={e => setF({ quote: e.target.value })} rows={2} style={{ ...inputStyle, resize: "vertical" }} placeholder="Love trying new products out all the time…" /></div>
+
+        {/* Zitat */}
+        <div>{Lbl("Zitat")}<textarea value={draft.quote} onChange={e => setF({ quote: e.target.value })} rows={2} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} placeholder="Love trying new products out all the time…" /></div>
+
         {/* Motivations with sliders */}
         <div>
           {Lbl("Motivations")}
@@ -12409,7 +12432,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
             {(draft.motivations || []).map((m, i) => (
               <div key={i} style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 <input value={m.label} onChange={e => setMot(i, { label: e.target.value })} style={{ ...inputStyle, flex: 1 }} placeholder="Read Reviews" />
-                <input type="range" min="0" max="100" value={m.value} onChange={e => setMot(i, { value: Number(e.target.value) })} style={{ flex: 1, accentColor: acc }} />
+                <input type="range" min="0" max="100" value={m.value} onChange={e => setMot(i, { value: Number(e.target.value) })} style={{ flex: 1, accentColor: theme.accent }} />
                 <span style={{ width: 34, textAlign: "right", fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{m.value}</span>
                 <button onClick={() => setDraft(d => ({ ...d, motivations: d.motivations.filter((_, j) => j !== i) }))}
                   style={{ width: 30, height: 30, flexShrink: 0, borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, cursor: "pointer" }}>×</button>
@@ -12419,14 +12442,20 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
               style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>+ Motivation</button>
           </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+
+        {/* Goals | Pains */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
           <div>{Lbl("Goals")}{listEdit("goals")}</div>
           <div>{Lbl("Pains")}{listEdit("pains")}</div>
         </div>
-        <div>{Lbl("Product Expectation")}<textarea value={draft.product_expectation} onChange={e => setF({ product_expectation: e.target.value })} rows={3} style={{ ...inputStyle, resize: "vertical" }} placeholder="Was erwartet die Persona von einem Produkt?" /></div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+
+        {/* Product Expectation */}
+        <div>{Lbl("Product Expectation")}<textarea value={draft.product_expectation} onChange={e => setF({ product_expectation: e.target.value })} rows={3} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} placeholder="Was erwartet die Persona von einem Produkt?" /></div>
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: 10, alignItems: "center", paddingTop: 4 }}>
           <motion.button whileTap={{ scale: 0.97 }} onClick={saveDraft}
-            style={{ padding: "11px 22px", borderRadius: 12, border: "none", background: acc, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Speichern</motion.button>
+            style={{ padding: "11px 24px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Speichern</motion.button>
           {!draftIsNew && (
             <button onClick={() => deletePersona(selIdx)}
               style={{ padding: "11px 16px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: "#e5484d", fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>Löschen</button>
