@@ -12193,11 +12193,31 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
 // (blank card you fill in). Overview lists persona cards; clicking opens the big
 // detail card (photo, name/age, role, behaviour, location, quote, motivations as
 // bars, goals, pains, product expectation). Edit mode = full form with sliders.
-const PERSONA_TEMPLATE = () => ({
-  id: `persona_${Date.now()}`, photo_url: "",
-  name: "", age: "", role: "", location: "", consumer_behavior: "", quote: "",
-  motivations: [{ label: "", value: 70 }, { label: "", value: 55 }, { label: "", value: 40 }],
-  goals: ["", "", ""], pains: ["", "", ""], product_expectation: "",
+// A fully filled example persona — "Vorlage nutzen" drops the user straight into
+// the finished detail view (with a photo) so they can see how it looks, then edit.
+const SAMPLE_PERSONA = () => ({
+  id: `persona_${Date.now()}`,
+  photo_url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=480&q=80",
+  name: "Lily Ng", age: "24", role: "German Teacher",
+  location: "Queens, NY", consumer_behavior: "Fast Pace-Buyer",
+  quote: "Love trying new products out all the time. Hate the hassle. The city is fast and non-stop so my lifestyle has to keep up with it, too.",
+  motivations: [
+    { label: "Read Reviews/Testimonials", value: 70 },
+    { label: "See What's Popular", value: 85 },
+    { label: "Get the Best Price", value: 50 },
+    { label: "Check Ingredients", value: 35 },
+  ],
+  goals: [
+    "Try a new product every month or so to switch up her routine",
+    "Find what's most popular and trending in skincare",
+    "Spend as little time as possible researching products she's interested in",
+  ],
+  pains: [
+    "Having to spend too much time doing research on products",
+    "Being disappointed by most of the products she tries",
+    "Wasting money and time when a product doesn't work out for her",
+  ],
+  product_expectation: "Products that are easy to discover, well-reviewed and deliver on their promise without lengthy research.",
   created_at: new Date().toISOString(),
 });
 
@@ -12242,7 +12262,11 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
   };
 
   const openDetail = (idx) => { setSelIdx(idx); setScreen("detail"); };
-  const startTemplate = () => { setDraft(PERSONA_TEMPLATE()); setDraftIsNew(true); setScreen("edit"); };
+  const startTemplate = () => {
+    const sample = SAMPLE_PERSONA();
+    const next = [...personas, sample];
+    commit(next); setSelIdx(next.length - 1); setScreen("detail");
+  };
   const startEdit = (idx) => { setDraft(JSON.parse(JSON.stringify(personas[idx]))); setSelIdx(idx); setDraftIsNew(false); setScreen("edit"); };
   const doGenerate = async () => {
     if (!manualText.trim() || generating) return;
