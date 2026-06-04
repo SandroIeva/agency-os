@@ -12787,7 +12787,6 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
     const urlError = urlish && !validUrl;
     const directOk = !!trimmed && !urlError && !generating;
     const describeOk = !!describeText.trim() && !generating;
-    const Icon = ({ children }) => <div style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, background: acc + "1f", color: acc, display: "flex", alignItems: "center", justifyContent: "center" }}>{children}</div>;
     const SubmitBtn = ({ ok, onClick }) => (
       <motion.button whileTap={{ scale: 0.97 }} onClick={onClick} disabled={!ok}
         style={{ padding: "10px 18px", borderRadius: 11, border: "none", cursor: ok ? "pointer" : "default",
@@ -12803,18 +12802,15 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
         </div>
 
         {/* Card 1: Direkter Competitor (URL / name) */}
-        <div style={{ padding: 22, borderRadius: 18, background: cardBg, border: `1px solid ${theme.borderFaint}`, display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 13 }}>
-            <Icon><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg></Icon>
-            <div>
-              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text }}>Direkter Competitor</div>
-              <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>Firmenname oder Website-URL (z.B. instagram.com) — die KI recherchiert das Profil.</div>
-            </div>
+        <div style={{ padding: 22, borderRadius: 18, background: cardBg, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text }}>Direkter Competitor</div>
+            <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Firmenname oder Website-URL — die KI recherchiert das Profil.</div>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
             <div style={{ flex: 1 }}>
               <input value={inputText} onChange={e => setInputText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && directOk) doGenerate(inputText); }}
-                placeholder="z.B. Instagram oder instagram.com"
+                placeholder="Instagram / instagram.com"
                 style={{ ...inputStyle, border: `1px solid ${urlError ? "#e5484d" : theme.borderFaint}` }} />
               {urlError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT, marginTop: 6 }}>Ungültige URL — prüfe die Schreibweise (z.B. instagram.com).</div>}
             </div>
@@ -12822,28 +12818,32 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
           </div>
         </div>
 
-        {/* Card 2: Competitor beschreiben (free text + dictation) */}
-        <div style={{ padding: 22, borderRadius: 18, background: cardBg, border: `1px solid ${theme.borderFaint}`, display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 13 }}>
-            <Icon><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></Icon>
-            <div>
-              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text }}>Competitor beschreiben</div>
-              <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>Beschreibe den Wettbewerber in ein paar Sätzen — tippen oder per Mikrofon diktieren.</div>
-            </div>
+        {/* Card 2: Competitor beschreiben (free text + dictation above the field) */}
+        <div style={{ padding: 22, borderRadius: 18, background: cardBg, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text }}>Competitor beschreiben</div>
+            <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Beschreibe den Wettbewerber in ein paar Sätzen — tippen oder diktieren.</div>
           </div>
-          <div style={{ position: "relative" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, display: "flex", alignItems: "center", gap: 6 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h10M4 18h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                Beschreibung
+              </span>
+              {dictationSupported && (
+                <motion.div whileTap={{ scale: 0.9 }} onClick={toggleDictation}
+                  style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", color: listening ? "#EF4444" : theme.accent, fontSize: 12, fontFamily: FONT, fontWeight: 500 }}>
+                  {listening ? (
+                    <><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="6" y="6" width="12" height="12" rx="2" fill="#EF4444"/></svg> Stopp</>
+                  ) : (
+                    <><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M5 10a7 7 0 0014 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M12 17v4M8 21h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> Diktieren</>
+                  )}
+                </motion.div>
+              )}
+            </div>
             <textarea value={describeText} onChange={e => setDescribeText(e.target.value)} rows={5}
               placeholder="z.B. Eine Social-Media-Plattform für Foto- und Video-Sharing mit Fokus auf Stories und Reels…"
-              style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6, paddingRight: 50 }} />
-            {dictationSupported && (
-              <motion.button whileTap={{ scale: 0.9 }} onClick={toggleDictation} title={listening ? "Aufnahme stoppen" : "Diktieren"}
-                animate={listening ? { scale: [1, 1.12, 1] } : { scale: 1 }} transition={listening ? { repeat: Infinity, duration: 1.1 } : {}}
-                style={{ position: "absolute", top: 10, right: 10, width: 34, height: 34, borderRadius: 10, cursor: "pointer", border: "none",
-                  background: listening ? "#e5484d" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)"),
-                  color: listening ? "#fff" : theme.textSub, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-              </motion.button>
-            )}
+              style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6, border: `1px solid ${listening ? "#EF444450" : theme.borderFaint}` }} />
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <SubmitBtn ok={describeOk} onClick={() => doGenerate(describeText)} />
@@ -12997,7 +12997,7 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
       {competitors.map((c, i) => (
         <motion.div key={c.id || i} whileHover={{ y: -3 }} whileTap={{ scale: 0.98 }} onClick={() => openDetail(i)}
-          style={{ cursor: "pointer", borderRadius: 16, padding: "18px 20px", background: cardBg, border: `1px solid ${theme.borderFaint}`, display: "flex", flexDirection: "column", gap: 10 }}>
+          style={{ cursor: "pointer", borderRadius: 16, padding: "18px 20px", background: cardBg, display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
             <span style={{ fontSize: 18, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{c.name || "Competitor"}</span>
             {c.founded && <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>est. {c.founded}</span>}
