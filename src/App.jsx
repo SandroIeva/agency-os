@@ -10734,6 +10734,19 @@ function touchpointGlyph(key) {
   }
 }
 
+// Frosted-glass surface matching the bottom Plus menu overlay — soft translucent
+// grey, blur + saturation, a light edge border and a soft drop shadow with inset
+// highlight. Used for the Brand-area panels (Brand / Touchpoints / Assets).
+const frostedPanelStyle = (darkMode) => ({
+  background: "rgba(133,133,133,0.10)",
+  backdropFilter: "blur(40px) saturate(150%)",
+  WebkitBackdropFilter: "blur(40px) saturate(150%)",
+  border: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.55)"}`,
+  boxShadow: darkMode
+    ? "0 28px 80px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)"
+    : "0 28px 80px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.6)",
+});
+
 function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
   const [profile, setProfile] = useState(null);
   const [channels, setChannels] = useState({});
@@ -10777,7 +10790,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
   const connectedCount = TOUCHPOINT_PLATFORMS.filter(p => channels[p.key]).length;
 
   const panelWrap = { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 40px 80px" };
-  const card = { width: "100%", maxWidth: 1050, height: "100%", background: theme.cardBg, backdropFilter: "blur(40px)", border: `1px solid ${theme.borderFaint}`, borderRadius: 24, overflow: "hidden", display: "flex", flexDirection: "column" };
+  const card = { width: "100%", maxWidth: 1050, height: "100%", ...frostedPanelStyle(darkMode), borderRadius: 26, overflow: "hidden", display: "flex", flexDirection: "column" };
 
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -11130,8 +11143,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
   };
   const card = {
     width: "100%", maxWidth: 1050, height: "100%",
-    background: theme.cardBg, backdropFilter: "blur(40px)",
-    border: `1px solid ${theme.borderFaint}`, borderRadius: 24, overflow: "hidden",
+    ...frostedPanelStyle(darkMode), borderRadius: 26, overflow: "hidden",
     display: "flex", flexDirection: "column",
   };
   const iconBtn = {
@@ -14652,8 +14664,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
     >
       <div style={{
         width: "100%", maxWidth: 830, height: "100%",
-        background: theme.cardBg, backdropFilter: "blur(40px)",
-        border: `1px solid ${theme.borderFaint}`,
+        ...frostedPanelStyle(darkMode),
         borderRadius: 26, overflow: "hidden",
         display: "flex", flexDirection: "column",
         position: "relative",
