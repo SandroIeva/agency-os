@@ -13101,11 +13101,35 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
 }
 
 // ── Brand Vision ─────────────────────────────────────────────────────────────
-// Vertical timeline: Now → 3 years → 5 years, each with an editable field, plus an
-// "Aspiration" field below. Saved live (debounced) to brand_profile.vision.
+// A glowing concentric-circle visual built purely with CSS radial gradients —
+// used as the hero for the Vision view (intro + saved states).
+function VisionOrb({ size, label }) {
+  const rings = `
+    radial-gradient(circle at 50% 50%, rgba(56,170,255,0.75) 0%, rgba(56,170,255,0) 15%),
+    radial-gradient(circle at 50% 50%, rgba(255,255,255,0) 18%, rgba(255,255,255,0.95) 22%, rgba(255,255,255,0.95) 30%, rgba(255,255,255,0) 35%),
+    radial-gradient(circle at 50% 50%, rgba(255,255,255,0) 47%, rgba(255,255,255,0.97) 51%, rgba(255,255,255,0.97) 64%, rgba(255,255,255,0) 69%)
+  `;
+  return (
+    <div style={{ position: "relative", width: size, height: size, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <div style={{ position: "absolute", width: size * 1.55, height: size * 1.55, borderRadius: "50%", background: "radial-gradient(circle at 50% 50%, rgba(140,215,255,0.55) 0%, rgba(190,235,255,0.26) 38%, rgba(255,255,255,0) 66%)", filter: "blur(10px)" }} />
+      <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: rings, filter: "blur(2px)" }} />
+      {label && <span style={{ position: "relative", fontSize: Math.max(13, Math.round(size * 0.085)), fontFamily: FONT, fontWeight: 700, letterSpacing: 1, color: "#0f1320" }}>{label}</span>}
+    </div>
+  );
+}
+
+// Vision view with three states: intro (no data) → edit (timeline form) → saved
+// (smaller hero + read-only timeline + Bearbeiten button). Saved to brand_profile.vision.
 function BrandVision({ value, onChange, accent, theme, darkMode }) {
   const v = value && typeof value === "object" ? value : {};
-  const set = (field, val) => onChange({ ...v, [field]: val });
+  const hasData = !!(v.now || v.year3 || v.year5 || v.aspiration);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({});
+  const startEdit = () => { setDraft({ now: v.now || "", year3: v.year3 || "", year5: v.year5 || "", aspiration: v.aspiration || "" }); setEditing(true); };
+  const save = () => { onChange(draft); setEditing(false); };
+  const cancel = () => setEditing(false);
+  const setF = (field, val) => setDraft(d => ({ ...d, [field]: val }));
+
   const fieldBg = darkMode ? "rgba(255,255,255,0.04)" : "#fff";
   const areaStyle = (minH) => ({
     width: "100%", minHeight: minH, background: fieldBg, border: `1px solid ${theme.borderFaint}`,
@@ -13117,35 +13141,78 @@ function BrandVision({ value, onChange, accent, theme, darkMode }) {
     { key: "year3", chip: "3 Jahre", placeholder: "Wo siehst du die Brand in 3 Jahren?" },
     { key: "year5", chip: "5 Jahre", placeholder: "Wo siehst du die Brand in 5 Jahren?" },
   ];
+
+  // Vertical timeline rail (shared by edit + saved). `editable` swaps text for inputs.
+  const Timeline = ({ editable }) => (
+    <div style={{ position: "relative", paddingLeft: 30 }}>
+      <div style={{ position: "absolute", left: 7, top: 12, bottom: 12, width: 2, background: theme.borderFaint }} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        {stages.map((s) => (
+          <div key={s.key} style={{ position: "relative" }}>
+            <div style={{ position: "absolute", left: -30, top: 6, width: 16, height: 16, borderRadius: "50%", boxSizing: "border-box",
+              background: s.filled ? accent : fieldBg, border: `2px solid ${s.filled ? accent : theme.borderFaint}` }} />
+            <div style={{ display: "inline-block", marginBottom: 9, padding: "5px 13px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, background: fieldBg, fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{s.chip}</div>
+            {editable
+              ? <textarea value={draft[s.key] || ""} onChange={(e) => setF(s.key, e.target.value)} placeholder={s.placeholder} style={areaStyle(92)} />
+              : <div style={{ fontSize: 14, fontFamily: FONT, color: v[s.key] ? theme.textSub : theme.textDim, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{v[s.key] || "—"}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // ── EDIT ──
+  if (editing) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
+        <Timeline editable />
+        <div>
+          <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 4 }}>Aspiration</div>
+          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 10 }}>
+            Eine Aspiration ist die ultimative Ambition deiner Brand — Arbeit wird zur Mission, der sich andere anschließen.
+          </div>
+          <textarea value={draft.aspiration || ""} onChange={(e) => setF("aspiration", e.target.value)} placeholder="Wofür steht deine Brand letztlich? Welche größere Ambition treibt euch an?" style={areaStyle(90)} />
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <button onClick={cancel} style={{ padding: "11px 18px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>Abbrechen</button>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={save} style={{ padding: "11px 24px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Speichern</motion.button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── INTRO (no data yet) ──
+  if (!hasData) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", paddingTop: 18, gap: 26 }}>
+        <VisionOrb size={300} label="BRAND VISION" />
+        <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 380, marginTop: -8 }}>
+          A vision is your destination plan. It aligns your team and turns tasks into purpose.
+        </div>
+        <motion.button whileTap={{ scale: 0.97 }} onClick={startEdit}
+          style={{ padding: "13px 26px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 14, fontFamily: FONT, fontWeight: 600,
+            background: darkMode ? "#fff" : "#0f1320", color: darkMode ? "#0f1320" : "#fff" }}>
+          Define Your Vision
+        </motion.button>
+      </div>
+    );
+  }
+
+  // ── SAVED (has data) ──
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
-      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, maxWidth: 580 }}>
-        Eine Brand Vision gibt Richtung, Inspiration und einen starken Grund zu existieren — über den reinen Profit hinaus.
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <VisionOrb size={120} label="VISION" />
+        <motion.button whileTap={{ scale: 0.96 }} onClick={startEdit}
+          style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT, alignSelf: "flex-start" }}>Bearbeiten</motion.button>
       </div>
-
-      {/* Vertical timeline */}
-      <div style={{ position: "relative", paddingLeft: 30 }}>
-        <div style={{ position: "absolute", left: 7, top: 12, bottom: 12, width: 2, background: theme.borderFaint }} />
-        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          {stages.map((s) => (
-            <div key={s.key} style={{ position: "relative" }}>
-              <div style={{ position: "absolute", left: -30, top: 6, width: 16, height: 16, borderRadius: "50%", boxSizing: "border-box",
-                background: s.filled ? accent : fieldBg, border: `2px solid ${s.filled ? accent : theme.borderFaint}` }} />
-              <div style={{ display: "inline-block", marginBottom: 9, padding: "5px 13px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, background: fieldBg, fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{s.chip}</div>
-              <textarea value={v[s.key] || ""} onChange={(e) => set(s.key, e.target.value)} placeholder={s.placeholder} style={areaStyle(92)} />
-            </div>
-          ))}
+      <Timeline editable={false} />
+      {v.aspiration && (
+        <div>
+          <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 8 }}>Aspiration</div>
+          <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{v.aspiration}</div>
         </div>
-      </div>
-
-      {/* Aspiration */}
-      <div>
-        <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 4 }}>Aspiration</div>
-        <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 10 }}>
-          Eine Aspiration ist die ultimative Ambition deiner Brand — Arbeit wird zur Mission, der sich andere anschließen.
-        </div>
-        <textarea value={v.aspiration || ""} onChange={(e) => set("aspiration", e.target.value)} placeholder="Wofür steht deine Brand letztlich? Welche größere Ambition treibt euch an?" style={areaStyle(90)} />
-      </div>
+      )}
     </div>
   );
 }
