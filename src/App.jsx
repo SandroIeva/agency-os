@@ -13601,21 +13601,41 @@ function colorShades(hex, n = 8) {
 // Tall rounded colour bars with the hex inside at the bottom, plus an editable
 // description above (reuses the rich-text editor via section_content["design/colors"]).
 // Clicking a colour animates the others away and reveals its shade ramp.
-function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, onCancel }) {
-  const entries = [];
-  if (cp?.primary) entries.push({ hex: cp.primary, role: "Primary" });
-  if (cp?.secondary) entries.push({ hex: cp.secondary, role: "Secondary" });
-  (cp?.accents || []).forEach(c => c && entries.push({ hex: c, role: "" }));
-  if (!entries.length && Array.isArray(colors)) colors.forEach((c, i) => c && entries.push({ hex: c, role: i === 0 ? "Primary" : i === 1 ? "Secondary" : "" }));
-  const seen = new Set();
-  const list = entries.filter(e => { const kk = String(e.hex).toLowerCase(); if (seen.has(kk)) return false; seen.add(kk); return true; });
+function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, onCancel, onSavePalette }) {
   const lum = (hex) => { try { const h = String(hex).replace("#", ""); const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16); return (0.299 * r + 0.587 * g + 0.114 * b) / 255; } catch { return 0.5; } };
+  const norm = (c) => { if (!c) return ""; let h = String(c).trim(); if (!h.startsWith("#")) h = "#" + h; return /^#[0-9a-fA-F]{6}$/.test(h) ? h.toLowerCase() : ""; };
 
-  // Fetch human-readable colour names from api.color.pizza (order is preserved).
   const [names, setNames] = useState({});
   const [openColor, setOpenColor] = useState(null); // { hex, role } when viewing shades
   const [copied, setCopied] = useState(null);
+  const [draft, setDraft] = useState(null); // editable palette while editing
   const copyHex = (hx) => { try { navigator.clipboard?.writeText(String(hx).toUpperCase()); } catch {} setCopied(hx); setTimeout(() => setCopied(c => c === hx ? null : c), 1200); };
+
+  // Seed the editable palette when edit mode opens (from color_palette, falling back to colors[]).
+  useEffect(() => {
+    if (editing) {
+      setDraft({
+        primary: cp?.primary || (colors || [])[0] || "",
+        secondary: cp?.secondary || (colors || [])[1] || "",
+        accents: (cp?.accents && cp.accents.length) ? [...cp.accents] : (colors || []).slice(2),
+      });
+      setOpenColor(null);
+    } else { setDraft(null); }
+  }, [editing]);
+
+  const effPal = (editing && draft) ? draft : { primary: cp?.primary || "", secondary: cp?.secondary || "", accents: cp?.accents || [] };
+  const update = (next) => { setDraft(next); onSavePalette?.(next); };
+
+  // Build the displayed list from the effective palette (normalised, deduped).
+  const entries = [];
+  if (norm(effPal.primary)) entries.push({ hex: norm(effPal.primary), role: "Primary" });
+  if (norm(effPal.secondary)) entries.push({ hex: norm(effPal.secondary), role: "Secondary" });
+  (effPal.accents || []).forEach(c => norm(c) && entries.push({ hex: norm(c), role: "" }));
+  if (!entries.length && Array.isArray(colors)) colors.forEach((c, i) => norm(c) && entries.push({ hex: norm(c), role: i === 0 ? "Primary" : i === 1 ? "Secondary" : "" }));
+  const seen = new Set();
+  const list = entries.filter(e => { if (seen.has(e.hex)) return false; seen.add(e.hex); return true; });
+
+  // Fetch human-readable colour names from api.color.pizza — refetches whenever the hexes change.
   const listKey = list.map(e => e.hex).join(",");
   useEffect(() => {
     if (!list.length) return;
@@ -13623,7 +13643,7 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
     const vals = list.map(e => String(e.hex).replace("#", "")).join(",");
     fetch(`https://api.color.pizza/v1/?values=${vals}`)
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (!cancelled && Array.isArray(d?.colors)) { const m = {}; d.colors.forEach((co, i) => { if (list[i]) m[list[i].hex] = co.name; }); setNames(m); } })
+      .then(d => { if (!cancelled && Array.isArray(d?.colors)) { setNames(prev => { const m = { ...prev }; d.colors.forEach((co, i) => { if (list[i]) m[list[i].hex] = co.name; }); return m; }); } })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [listKey]);
@@ -13640,6 +13660,34 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
           Beschreibe eure Farbwelt — wofür die Farben stehen und wie sie eingesetzt werden. Über „Bearbeiten" oben rechts kannst du den Text ergänzen.
         </div>
       )}
+
+      {/* Colour editor (only while editing) — change hex, the name re-fetches automatically */}
+      {editing && draft && (() => {
+        const swatchStyle = { width: 40, height: 40, borderRadius: 11, border: `1px solid ${theme.borderFaint}`, padding: 0, background: "transparent", cursor: "pointer", flexShrink: 0 };
+        const hexInput = { width: 130, padding: "10px 12px", borderRadius: 10, fontFamily: FONT, fontSize: 13, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff", border: `1px solid ${theme.borderFaint}`, color: theme.text, outline: "none" };
+        const Row = ({ label, hex, onHex, onRemove }) => (
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <input type="color" value={norm(hex) || "#888888"} onChange={e => onHex(e.target.value)} style={swatchStyle} />
+            <input value={hex || ""} onChange={e => onHex(e.target.value)} placeholder="#000000" style={hexInput} />
+            <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, fontWeight: 500, minWidth: 80 }}>{label}</span>
+            {names[norm(hex)] && <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{names[norm(hex)]}</span>}
+            <div style={{ flex: 1 }} />
+            {onRemove && <button onClick={onRemove} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, cursor: "pointer" }}>×</button>}
+          </div>
+        );
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 16, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.025)" }}>
+            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>Farben bearbeiten</div>
+            <Row label="Primary" hex={draft.primary} onHex={v => update({ ...draft, primary: v })} />
+            <Row label="Secondary" hex={draft.secondary} onHex={v => update({ ...draft, secondary: v })} />
+            {(draft.accents || []).map((a, i) => (
+              <Row key={i} label={`Akzent ${i + 1}`} hex={a} onHex={v => update({ ...draft, accents: draft.accents.map((x, j) => j === i ? v : x) })} onRemove={() => update({ ...draft, accents: draft.accents.filter((_, j) => j !== i) })} />
+            ))}
+            <button onClick={() => update({ ...draft, accents: [...(draft.accents || []), "#888888"] })}
+              style={{ alignSelf: "flex-start", padding: "8px 13px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>+ Akzentfarbe</button>
+          </div>
+        );
+      })()}
 
       {/* Colour bars ↔ shade ramp (animated) */}
       {list.length > 0 ? (
@@ -13972,6 +14020,23 @@ If you don't know a field, infer a plausible value. Write all text values in the
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
     }, 400);
+  };
+  const paletteTimer = useRef(null);
+  const saveColorPalette = (pal) => {
+    const colorsFlat = [pal.primary, pal.secondary, ...(pal.accents || [])].filter(Boolean);
+    setProfile(p => ({ ...(p || {}), color_palette: pal, colors: colorsFlat }));
+    clearTimeout(paletteTimer.current);
+    paletteTimer.current = setTimeout(async () => {
+      const cur = profileRef.current;
+      if (cur?.id) {
+        await supabase.from("brand_profile").update({ color_palette: pal, colors: colorsFlat }).eq("id", cur.id);
+      } else if (userOrg?.id) {
+        const { data } = await supabase.from("brand_profile")
+          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", color_palette: pal, colors: colorsFlat })
+          .select("id").single();
+        if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
+      }
+    }, 500);
   };
   const valuesTimer = useRef(null);
   const saveBrandValues = (list) => {
@@ -15543,7 +15608,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                         <BrandValues value={profile.brand_values} onChange={saveBrandValues} accent={theme.accent} theme={theme} darkMode={darkMode} editing={valuesEditing} onEditingChange={setValuesEditing} />
                       ) : k === "design/colors" ? (
                         <BrandColors cp={cp} colors={profile.colors} editing={editingText} savedHtml={savedHtml} theme={theme} darkMode={darkMode}
-                          onSave={(html) => saveSection(k, html)} onCancel={() => setEditingText(false)} />
+                          onSave={(html) => saveSection(k, html)} onCancel={() => setEditingText(false)} onSavePalette={saveColorPalette} />
                       ) : k === "identity/voice" ? (
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
                           onSave={saveVoiceTone} onCancel={() => setEditingText(false)} />
