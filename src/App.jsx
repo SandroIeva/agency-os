@@ -13520,7 +13520,7 @@ function BrandValues({ value, onChange, accent, theme, darkMode }) {
   // ── DESCRIBE ──
   if (view === "describe") {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 760, paddingBottom: 8 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 760, minHeight: "calc(100vh - 310px)" }}>
         <div>
           <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 800, color: theme.text }}>Warum diese Werte?</div>
           <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginTop: 4 }}>Beschreibe kurz, warum jeder Wert für deine Marke wichtig ist.</div>
@@ -13538,7 +13538,7 @@ function BrandValues({ value, onChange, accent, theme, darkMode }) {
             </div>
           ))}
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto" }}>
           <button onClick={() => setScreen("select")} style={{ width: 150, padding: "12px 0", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer", textAlign: "center" }}>Zurück</button>
           <motion.button whileTap={{ scale: 0.97 }} onClick={finalize}
             style={{ width: 150, padding: "12px 0", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer", textAlign: "center" }}>Finalisieren</motion.button>
