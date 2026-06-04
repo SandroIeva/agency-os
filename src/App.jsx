@@ -12866,53 +12866,79 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
     );
   }
 
-  // ── EDIT (form) ─────────────────────────────────────────────────────────────
+  // ── EDIT (form) — mirrors the detail layout: header (identity | summary),
+  //    then two columns of labelled boxes like the accordions, then recommendations.
   if (view === "edit" && draft) {
     const setF = (patch) => setDraft(d => ({ ...d, ...patch }));
-    const Area = (label, field, rows = 2) => (
-      <div>{Lbl(label)}<textarea value={draft[field] || ""} onChange={e => setF({ [field]: e.target.value })} rows={rows} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} /></div>
+    const boxBg = darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)";
+    const bareArea = { width: "100%", background: "transparent", border: "none", outline: "none", resize: "vertical", fontFamily: FONT, fontSize: 13, lineHeight: 1.6, color: theme.text, padding: 0 };
+    const headInput = { ...inputStyle, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff" };
+    // A labelled grey box (same look as the read-only accordions) wrapping an editable control.
+    const Box = ({ label, children }) => (
+      <div style={{ borderRadius: 12, background: boxBg, padding: "13px 16px" }}>
+        <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 9 }}>{label}</div>
+        {children}
+      </div>
+    );
+    const BoxArea = (label, field, rows = 3, placeholder = "") => (
+      <Box label={label}><textarea value={draft[field] || ""} onChange={e => setF({ [field]: e.target.value })} rows={rows} placeholder={placeholder} style={bareArea} /></Box>
     );
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          <div>{Lbl("Name")}<input value={draft.name} onChange={e => setF({ name: e.target.value })} style={inputStyle} placeholder="Instagram" /></div>
-          <div>{Lbl("Website")}<input value={draft.website} onChange={e => setF({ website: e.target.value })} style={inputStyle} placeholder="instagram.com" /></div>
-          <div>{Lbl("Gegründet")}<input value={draft.founded} onChange={e => setF({ founded: e.target.value })} style={inputStyle} placeholder="2008" /></div>
-          <div>{Lbl("Team-Größe")}<input value={draft.team_size} onChange={e => setF({ team_size: e.target.value })} style={inputStyle} placeholder="300+" /></div>
-          <div style={{ gridColumn: "1 / -1" }}>{Lbl("Standort")}<input value={draft.location} onChange={e => setF({ location: e.target.value })} style={inputStyle} placeholder="Menlo Park, CA" /></div>
-        </div>
-        {Area("Summary", "summary", 3)}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-          {Area("Produkte & Services", "products")}
-          {Area("Audience", "audience")}
-          {Area("Core Focus", "core_focus")}
-          {Area("Stärken", "strengths")}
-          {Area("Direkte Wettbewerber", "direct_competitors")}
-          {Area("Schwächen", "weaknesses")}
-        </div>
-        {/* CEO */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 14 }}>
-          <div>{Lbl("CEO")}<input value={draft.ceo_name || ""} onChange={e => setF({ ceo_name: e.target.value })} style={inputStyle} placeholder="Name" /></div>
-          <div>{Lbl("Info zum CEO")}<input value={draft.ceo_info || ""} onChange={e => setF({ ceo_info: e.target.value })} style={inputStyle} placeholder="Kurze Info" /></div>
-        </div>
-        {/* Social Media */}
-        <div>
-          {Lbl("Social Media")}
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {(draft.socials || []).map((s, i) => (
-              <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input value={s.platform} onChange={e => setDraft(d => ({ ...d, socials: d.socials.map((x, j) => j === i ? { ...x, platform: e.target.value } : x) }))} style={{ ...inputStyle, flex: "0 0 150px" }} placeholder="Instagram" />
-                <input value={s.url} onChange={e => setDraft(d => ({ ...d, socials: d.socials.map((x, j) => j === i ? { ...x, url: e.target.value } : x) }))} style={{ ...inputStyle, flex: 1 }} placeholder="https://instagram.com/…" />
-                <button onClick={() => setDraft(d => ({ ...d, socials: d.socials.filter((_, j) => j !== i) }))}
-                  style={{ width: 30, height: 30, flexShrink: 0, borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, cursor: "pointer" }}>×</button>
-              </div>
-            ))}
-            <button onClick={() => setDraft(d => ({ ...d, socials: [...(d.socials || []), { platform: "", url: "" }] }))}
-              style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>+ Social-Kanal</button>
+        {/* Header: identity (left) | summary (right) */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, alignItems: "start" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div>{Lbl("Name")}<input value={draft.name} onChange={e => setF({ name: e.target.value })} style={{ ...headInput, fontSize: 16, fontWeight: 600 }} placeholder="Instagram" /></div>
+            <div>{Lbl("Website")}<input value={draft.website} onChange={e => setF({ website: e.target.value })} style={headInput} placeholder="instagram.com" /></div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>{Lbl("Gegründet")}<input value={draft.founded} onChange={e => setF({ founded: e.target.value })} style={headInput} placeholder="2008" /></div>
+              <div>{Lbl("Team-Größe")}<input value={draft.team_size} onChange={e => setF({ team_size: e.target.value })} style={headInput} placeholder="300+" /></div>
+            </div>
+            <div>{Lbl("Standort")}<input value={draft.location} onChange={e => setF({ location: e.target.value })} style={headInput} placeholder="Menlo Park, CA" /></div>
+          </div>
+          <div>
+            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 10 }}>Summary</div>
+            <textarea value={draft.summary || ""} onChange={e => setF({ summary: e.target.value })} rows={9} placeholder="Kurze Zusammenfassung des Wettbewerbers…"
+              style={{ ...headInput, resize: "vertical", lineHeight: 1.6 }} />
           </div>
         </div>
-        <div>
-          {Lbl("Strategic Recommendations")}
+
+        {/* Two columns of labelled boxes — same order as the detail accordions */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "start" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {BoxArea("Produkte & Services", "products")}
+            {BoxArea("Core Focus", "core_focus")}
+            {BoxArea("Direkte Wettbewerber", "direct_competitors")}
+            <Box label="CEO">
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <input value={draft.ceo_name || ""} onChange={e => setF({ ceo_name: e.target.value })} style={{ ...inputStyle, fontWeight: 600 }} placeholder="Name" />
+                <textarea value={draft.ceo_info || ""} onChange={e => setF({ ceo_info: e.target.value })} rows={2} placeholder="Kurze Info zur Person…" style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} />
+              </div>
+            </Box>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {BoxArea("Audience", "audience")}
+            {BoxArea("Stärken", "strengths")}
+            {BoxArea("Schwächen", "weaknesses")}
+            <Box label="Social Media">
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {(draft.socials || []).map((s, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input value={s.platform} onChange={e => setDraft(d => ({ ...d, socials: d.socials.map((x, j) => j === i ? { ...x, platform: e.target.value } : x) }))} style={{ ...inputStyle, flex: "0 0 110px" }} placeholder="Instagram" />
+                    <input value={s.url} onChange={e => setDraft(d => ({ ...d, socials: d.socials.map((x, j) => j === i ? { ...x, url: e.target.value } : x) }))} style={{ ...inputStyle, flex: 1 }} placeholder="https://…" />
+                    <button onClick={() => setDraft(d => ({ ...d, socials: d.socials.filter((_, j) => j !== i) }))}
+                      style={{ width: 30, height: 30, flexShrink: 0, borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, cursor: "pointer" }}>×</button>
+                  </div>
+                ))}
+                <button onClick={() => setDraft(d => ({ ...d, socials: [...(d.socials || []), { platform: "", url: "" }] }))}
+                  style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>+ Social-Kanal</button>
+              </div>
+            </Box>
+          </div>
+        </div>
+
+        {/* Strategic Recommendations — full width */}
+        <Box label="Strategic Recommendations">
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {(draft.recommendations || []).map((r, i) => (
               <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -12924,7 +12950,8 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
             <button onClick={() => setDraft(d => ({ ...d, recommendations: [...(d.recommendations || []), ""] }))}
               style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>+ Empfehlung</button>
           </div>
-        </div>
+        </Box>
+
         <div style={{ display: "flex", alignItems: "center", paddingTop: 4 }}>
           {!draftIsNew ? (
             <button onClick={() => deleteCompetitor(selIdx)}
