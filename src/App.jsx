@@ -13114,11 +13114,12 @@ function VisionOrb({ size, label }) {
 
 // Vision view with three states: intro (no data) → edit (timeline form) → saved
 // (smaller hero + read-only timeline + Bearbeiten button). Saved to brand_profile.vision.
-function BrandVision({ value, onChange, accent, theme, darkMode }) {
+function BrandVision({ value, onChange, accent, theme, darkMode, onEditingChange }) {
   const v = value && typeof value === "object" ? value : {};
   const hasData = !!(v.now || v.year3 || v.year5 || v.aspiration);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
+  useEffect(() => { onEditingChange?.(editing); }, [editing]);
   const startEdit = () => { setDraft({ now: v.now || "", year3: v.year3 || "", year5: v.year5 || "", aspiration: v.aspiration || "" }); setEditing(true); };
   const save = () => { onChange(draft); setEditing(false); };
   const cancel = () => setEditing(false);
@@ -13181,9 +13182,8 @@ function BrandVision({ value, onChange, accent, theme, darkMode }) {
   // below the title, then the button.
   if (!hasData) {
     return (
-      <div style={{ width: "100%", display: "flex", justifyContent: "center", marginTop: -10 }}>
-       <div style={{ position: "relative", width: "100%", maxWidth: 760, aspectRatio: "1972 / 1863", maxHeight: "calc(100vh - 300px)" }}>
-        <img src="/vision-bg.png" alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none" }} />
+      <div style={{ position: "relative", width: "100%", marginTop: -74 }}>
+        <img src="/vision-bg.png" alt="" style={{ display: "block", width: "100%", height: "auto", pointerEvents: "none" }} />
         <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
           <span style={{ marginTop: "43%", fontSize: 34, fontFamily: FONT, fontWeight: 400, letterSpacing: 1, color: "#0f1320" }}>BRAND VISION</span>
           <div style={{ marginTop: 100, fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 380 }}>
@@ -13195,7 +13195,6 @@ function BrandVision({ value, onChange, accent, theme, darkMode }) {
             Define Your Vision
           </motion.button>
         </div>
-       </div>
       </div>
     );
   }
@@ -13227,8 +13226,11 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
   const [brandSub, setBrandSub] = useState(pillarSubs[0]?.key);
   // Inline rich-text editing of the current section (Bearbeiten button toggles it).
   const [editingText, setEditingText] = useState(false);
-  useEffect(() => { const s = BRAND_PILLAR_SUBTABS[brandTab] || []; setBrandSub(s[0]?.key); setEditingText(false); }, [brandTab]);
-  useEffect(() => { setEditingText(false); }, [brandSub]);
+  // Whether the Vision sub-view is in edit mode (reported by BrandVision) — controls
+  // whether the content area may scroll on the Vision tab.
+  const [visionEditing, setVisionEditing] = useState(false);
+  useEffect(() => { const s = BRAND_PILLAR_SUBTABS[brandTab] || []; setBrandSub(s[0]?.key); setEditingText(false); setVisionEditing(false); }, [brandTab]);
+  useEffect(() => { setEditingText(false); setVisionEditing(false); }, [brandSub]);
 
   const saveSection = async (key, html) => {
     setProfile(p => ({ ...p, section_content: { ...(p?.section_content || {}), [key]: html } }));
@@ -14879,7 +14881,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
               })}
             </div>
 
-            <div className="no-scrollbar" style={{ flex: 1, overflowY: "auto", padding: "24px 30px 32px 30px" }}>
+            <div className="no-scrollbar" style={{ flex: 1, overflowY: ((brandTab === "strategy" && brandSub === "positioning" && !visionEditing) ? "hidden" : "auto"), padding: "24px 30px 32px 30px" }}>
               <div style={{ maxWidth: 770, display: "flex", flexDirection: "column", gap: 20 }}>
                 {(() => {
                   const subs = BRAND_PILLAR_SUBTABS[brandTab] || [];
@@ -15010,7 +15012,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                         <BrandCompetitors value={profile.competitors} onChange={saveCompetitors} generateCompetitor={generateCompetitor}
                           cp={cp} accent={theme.accent} theme={theme} darkMode={darkMode} t={t} />
                       ) : k === "strategy/positioning" ? (
-                        <BrandVision value={profile.vision} onChange={saveVision} accent={theme.accent} theme={theme} darkMode={darkMode} />
+                        <BrandVision value={profile.vision} onChange={saveVision} accent={theme.accent} theme={theme} darkMode={darkMode} onEditingChange={setVisionEditing} />
                       ) : k === "identity/voice" ? (
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
                           onSave={saveVoiceTone} onCancel={() => setEditingText(false)} />
