@@ -14877,7 +14877,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
               })}
             </div>
 
-            <div style={{ flex: 1, overflowY: "auto", padding: "24px 30px 32px 30px" }}>
+            <div className="no-scrollbar" style={{ flex: 1, overflowY: "auto", padding: "24px 30px 32px 30px" }}>
               <div style={{ maxWidth: 770, display: "flex", flexDirection: "column", gap: 20 }}>
                 {(() => {
                   const subs = BRAND_PILLAR_SUBTABS[brandTab] || [];
@@ -21350,6 +21350,9 @@ export default function CircularMenu() {
       </div>
 
       <style>{`
+        /* Hide scrollbars while keeping scroll behaviour */
+        .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+        .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
         /* Brand section rich-text (editor + rendered output) */
         .brand-rich { font-family: ${FONT}; }
         .brand-rich h1 { font-size: 24px; font-weight: 700; margin: 18px 0 8px; letter-spacing: -0.3px; }
