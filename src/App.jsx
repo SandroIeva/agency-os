@@ -12787,11 +12787,11 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
     const urlError = urlish && !validUrl;
     const directOk = !!trimmed && !urlError && !generating;
     const describeOk = !!describeText.trim() && !generating;
-    const SubmitBtn = ({ ok, onClick }) => (
+    const SubmitBtn = ({ ok, onClick, label = "Analysieren" }) => (
       <motion.button whileTap={{ scale: 0.97 }} onClick={onClick} disabled={!ok}
         style={{ height: 44, padding: "0 22px", borderRadius: 11, border: "none", cursor: ok ? "pointer" : "default", boxSizing: "border-box",
           background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: ok ? 1 : 0.45, flexShrink: 0 }}>
-        {generating ? "Analysiere…" : "Analysieren"}
+        {generating ? "Analysiere…" : label}
       </motion.button>
     );
     return (
@@ -12825,8 +12825,7 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
             <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Beschreibe den Wettbewerber in ein paar Sätzen — tippen oder diktieren.</div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>Beschreibung</span>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
               {dictationSupported && (
                 <motion.div whileTap={{ scale: 0.9 }} onClick={toggleDictation}
                   style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", color: listening ? "#EF4444" : theme.accent, fontSize: 12, fontFamily: FONT, fontWeight: 500 }}>
@@ -12843,7 +12842,7 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
               style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6, border: `1px solid ${listening ? "#EF444450" : theme.borderFaint}` }} />
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <SubmitBtn ok={describeOk} onClick={() => doGenerate(describeText)} />
+            <SubmitBtn ok={describeOk} onClick={() => doGenerate(describeText)} label="Profil erstellen" />
           </div>
         </div>
 
