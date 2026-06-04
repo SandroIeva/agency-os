@@ -13583,13 +13583,18 @@ function hslToHex(h, s, l) {
   const f = n => { const c = l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1))); return Math.round(255 * c).toString(16).padStart(2, "0"); };
   return `#${f(0)}${f(8)}${f(4)}`;
 }
-function colorShades(hex, n = 10) {
-  const { h, s } = hexToHsl(hex);
-  return Array.from({ length: n }, (_, i) => {
+function colorShades(hex, n = 8) {
+  const { h, s, l: baseL } = hexToHsl(hex);
+  const ramp = Array.from({ length: n }, (_, i) => {
     const l = 12 + (84 * i) / (n - 1);            // 12% (near-black) → 96% (near-white)
     const sat = s * (1 - Math.abs(l - 50) / 50 * 0.25); // slightly soften saturation at extremes
-    return hslToHex(h, sat, l);
+    return { hex: hslToHex(h, sat, l), l, isBase: false };
   });
+  // Make sure the actual base colour appears — replace the closest shade by lightness.
+  let bi = 0, bd = Infinity;
+  ramp.forEach((r, i) => { const d = Math.abs(r.l - baseL); if (d < bd) { bd = d; bi = i; } });
+  ramp[bi] = { hex: String(hex).startsWith("#") ? hex : "#" + hex, l: baseL, isBase: true };
+  return ramp.map(r => ({ hex: r.hex, isBase: r.isBase }));
 }
 
 // ── Brand Colors ─────────────────────────────────────────────────────────────
@@ -13609,6 +13614,8 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
   // Fetch human-readable colour names from api.color.pizza (order is preserved).
   const [names, setNames] = useState({});
   const [openColor, setOpenColor] = useState(null); // { hex, role } when viewing shades
+  const [copied, setCopied] = useState(null);
+  const copyHex = (hx) => { try { navigator.clipboard?.writeText(String(hx).toUpperCase()); } catch {} setCopied(hx); setTimeout(() => setCopied(c => c === hx ? null : c), 1200); };
   const listKey = list.map(e => e.hex).join(",");
   useEffect(() => {
     if (!list.length) return;
@@ -13671,13 +13678,17 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  {colorShades(openColor.hex, 8).map((sh, j) => {
+                  {colorShades(openColor.hex, 8).map(({ hex: sh, isBase }, j) => {
                     const light = lum(sh) > 0.62;
                     const txt = light ? "#1a1a2e" : "#ffffff";
+                    const isCopied = copied === sh;
                     return (
                       <motion.div key={sh + j} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: j * 0.045, duration: 0.32, ease: [0.22, 0.68, 0.35, 1] }}
-                        style={{ flex: 1, minWidth: 0, height: 360, borderRadius: 14, background: sh, position: "relative" }}>
-                        <div style={{ position: "absolute", bottom: 14, left: 0, right: 0, textAlign: "center", fontSize: 11, fontFamily: FONT, fontWeight: 600, color: txt, opacity: 0.85 }}>{sh.toUpperCase()}</div>
+                        whileHover={{ y: -4 }} whileTap={{ scale: 0.97 }} onClick={() => copyHex(sh)} title="Hex kopieren"
+                        style={{ flex: 1, minWidth: 0, height: 360, borderRadius: 14, background: sh, position: "relative", cursor: "pointer",
+                          boxShadow: isBase ? `inset 0 0 0 3px ${light ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.9)"}` : "none" }}>
+                        {isBase && <div style={{ position: "absolute", top: 12, left: 0, right: 0, textAlign: "center", fontSize: 10, fontFamily: FONT, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: txt, opacity: 0.8 }}>Basis</div>}
+                        <div style={{ position: "absolute", bottom: 14, left: 0, right: 0, textAlign: "center", fontSize: 11, fontFamily: FONT, fontWeight: 600, color: txt, opacity: 0.9 }}>{isCopied ? "Kopiert ✓" : sh.toUpperCase()}</div>
                       </motion.div>
                     );
                   })}
