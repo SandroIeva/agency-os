@@ -13873,9 +13873,10 @@ let GWFH_CACHE = null, GWFH_PROMISE = null;
 const loadAllGoogleFonts = () => {
   if (GWFH_CACHE) return Promise.resolve(GWFH_CACHE);
   if (GWFH_PROMISE) return GWFH_PROMISE;
-  GWFH_PROMISE = fetch("https://gwfh.mranftl.com/api/fonts")
-    .then(r => r.ok ? r.json() : [])
-    .then(list => { GWFH_CACHE = (list || []).map(f => ({ name: f.family, cat: GWFH_CAT[f.category] || "Sans", weights: weightsFromVariants(f.variants) })); return GWFH_CACHE; })
+  // Use our own same-origin proxy (the upstream API has no CORS headers).
+  GWFH_PROMISE = fetch("/api/google-fonts")
+    .then(r => r.ok ? r.json() : { fonts: [] })
+    .then(d => { GWFH_CACHE = Array.isArray(d?.fonts) ? d.fonts : []; return GWFH_CACHE; })
     .catch(() => { GWFH_CACHE = []; return GWFH_CACHE; });
   return GWFH_PROMISE;
 };
