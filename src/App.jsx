@@ -13105,7 +13105,7 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
 // label centred on top. Used for the Vision view (intro + saved states).
 function VisionOrb({ size, label }) {
   return (
-    <div style={{ position: "relative", width: size, height: size, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+    <div style={{ position: "relative", width: size, height: size, maxWidth: "100%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
       <img src="/vision-bg-NEW.png" alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none" }} />
       {label && <span style={{ position: "relative", fontSize: Math.min(26, Math.max(12, Math.round(size * 0.045))), fontFamily: FONT, fontWeight: 500, letterSpacing: 1, color: "#0f1320" }}>{label}</span>}
     </div>
@@ -13178,16 +13178,18 @@ function BrandVision({ value, onChange, accent, theme, darkMode }) {
   // ── INTRO (no data yet) ──
   if (!hasData) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", paddingTop: 10, gap: 24 }}>
-        <VisionOrb size={644} label="BRAND VISION" />
-        <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 380, marginTop: -8 }}>
-          A vision is your destination plan. It aligns your team and turns tasks into purpose.
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%", paddingTop: 4 }}>
+        <VisionOrb size={720} label="BRAND VISION" />
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 22, marginTop: -56 }}>
+          <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 380 }}>
+            A vision is your destination plan. It aligns your team and turns tasks into purpose.
+          </div>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={startEdit}
+            style={{ padding: "13px 26px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 14, fontFamily: FONT, fontWeight: 600,
+              background: darkMode ? "#fff" : "#0f1320", color: darkMode ? "#0f1320" : "#fff" }}>
+            Define Your Vision
+          </motion.button>
         </div>
-        <motion.button whileTap={{ scale: 0.97 }} onClick={startEdit}
-          style={{ padding: "13px 26px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 14, fontFamily: FONT, fontWeight: 600,
-            background: darkMode ? "#fff" : "#0f1320", color: darkMode ? "#0f1320" : "#fff" }}>
-          Define Your Vision
-        </motion.button>
       </div>
     );
   }
