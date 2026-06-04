@@ -10748,24 +10748,6 @@ const frostedPanelStyle = (darkMode) => ({
     : "0 28px 80px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.7)",
 });
 
-// Progressive blur fade at the bottom edge of a scrollable panel — the content
-// softly blurs + fades out at the very bottom. Place as the last child of a
-// position:relative, overflow:hidden panel.
-function BottomBlurFade({ darkMode, radius = 26 }) {
-  return (
-    <div aria-hidden style={{
-      position: "absolute", left: 0, right: 0, bottom: 0, height: 60, zIndex: 6, pointerEvents: "none",
-      borderRadius: `0 0 ${radius}px ${radius}px`,
-      backdropFilter: "blur(5px)", WebkitBackdropFilter: "blur(5px)",
-      WebkitMaskImage: "linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.55) 50%, rgba(0,0,0,0) 100%)",
-      maskImage: "linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.55) 50%, rgba(0,0,0,0) 100%)",
-      background: darkMode
-        ? "linear-gradient(to top, rgba(24,24,32,0.55), rgba(24,24,32,0))"
-        : "linear-gradient(to top, rgba(255,255,255,0.55), rgba(255,255,255,0))",
-    }} />
-  );
-}
-
 function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
   const [profile, setProfile] = useState(null);
   const [channels, setChannels] = useState({});
@@ -10958,7 +10940,6 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
             </>
           )}
         </div>
-        <BottomBlurFade darkMode={darkMode} />
       </div>
     </motion.div>
   );
@@ -11297,7 +11278,6 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
           </div>
           )}
         </div>
-        <BottomBlurFade darkMode={darkMode} />
       </motion.div>
     );
   }
@@ -14992,7 +14972,6 @@ If you don't know a field, infer a plausible value. Write all text values in the
             </div>
           </>
         )}
-        {!isOnboarding && !loading && <BottomBlurFade darkMode={darkMode} radius={26} />}
       </div>
     </motion.div>
   );
