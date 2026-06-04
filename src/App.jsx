@@ -10744,8 +10744,8 @@ const frostedPanelStyle = (darkMode) => ({
   WebkitBackdropFilter: "blur(40px) saturate(150%)",
   border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.65)"}`,
   boxShadow: darkMode
-    ? "0 28px 80px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05)"
-    : "0 28px 80px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.7)",
+    ? "0 22px 60px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.05)"
+    : "0 22px 60px rgba(0,0,0,0.09), inset 0 1px 0 rgba(255,255,255,0.7)",
 });
 
 function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
