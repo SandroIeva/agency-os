@@ -13756,6 +13756,146 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
   );
 }
 
+// ── Brand Typography ─────────────────────────────────────────────────────────
+// A type-specimen view (big Aa, weights, alphabet, secondary). In edit mode you
+// can connect a Google Font via its URL or upload a font file. Stored in
+// brand_profile.typography = { primary: {name, family, kind, url}, secondary }.
+const googleFamilyFromUrl = (url) => {
+  try { const m = String(url).match(/[?&]family=([^:&]+)/); return m ? decodeURIComponent(m[1]).replace(/\+/g, " ").split(":")[0].trim() : ""; } catch { return ""; }
+};
+function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, session, userOrg }) {
+  // Seed from saved typography, or fall back to detected intelligence.fonts (name only, system render).
+  const seedFont = (font, fallbackName) => {
+    if (font && (font.family || font.name)) return font;
+    if (fallbackName) return { name: fallbackName, family: fallbackName, kind: "system", url: "" };
+    return null;
+  };
+  const primary = seedFont(value?.primary, fonts?.heading);
+  const secondary = seedFont(value?.secondary, fonts?.body && fonts.body !== fonts?.heading ? fonts.body : null);
+  const familyCss = (f) => f ? `'${f.family || f.name}', system-ui, -apple-system, sans-serif` : "system-ui, -apple-system, sans-serif";
+  const [uploading, setUploading] = useState(false);
+  const fileRefP = useRef(null), fileRefS = useRef(null);
+
+  // Inject @font-face / <link> for google + uploaded fonts.
+  useEffect(() => {
+    const nodes = [];
+    [primary, secondary].forEach((f, i) => {
+      if (!f || !f.url) return;
+      const fam = f.family || f.name;
+      if (f.kind === "google") {
+        const el = document.createElement("link"); el.rel = "stylesheet"; el.href = f.url; el.dataset.brandFont = "1"; document.head.appendChild(el); nodes.push(el);
+      } else if (f.kind === "upload") {
+        const el = document.createElement("style"); el.dataset.brandFont = "1";
+        el.textContent = `@font-face{font-family:'${fam}';src:url('${f.url}');font-display:swap;}`;
+        document.head.appendChild(el); nodes.push(el);
+      }
+    });
+    return () => nodes.forEach(n => n.remove());
+  }, [primary?.url, primary?.kind, primary?.family, secondary?.url, secondary?.kind, secondary?.family]);
+
+  const setFont = (role, font) => onChange({ ...(value || {}), [role]: font });
+  const onGoogle = (role, url) => {
+    const fam = googleFamilyFromUrl(url);
+    if (!url.trim()) { setFont(role, null); return; }
+    setFont(role, { name: fam || "Google Font", family: fam || "", kind: "google", url: url.trim() });
+  };
+  const uploadFontFile = async (role, file) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const ext = (file.name.split(".").pop() || "woff2").toLowerCase();
+      const path = `fonts/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage.from("brand-assets").upload(path, file, { upsert: true, contentType: file.type || "font/woff2" });
+      if (!error) {
+        const { data } = supabase.storage.from("brand-assets").getPublicUrl(path);
+        const fam = file.name.replace(/\.[^.]+$/, "");
+        setFont(role, { name: fam, family: fam, kind: "upload", url: data.publicUrl });
+      }
+    } finally { setUploading(false); }
+  };
+
+  const WEIGHTS = [["Thin", 100], ["Light", 300], ["Regular", 400], ["Medium", 500], ["Semibold", 600], ["Bold", 700]];
+  const divider = `1px solid ${theme.borderFaint}`;
+
+  // ── EDIT ──
+  if (editing) {
+    const inp = { width: "100%", padding: "11px 13px", borderRadius: 10, fontFamily: FONT, fontSize: 13, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff", border: `1px solid ${theme.borderFaint}`, color: theme.text, outline: "none", boxSizing: "border-box" };
+    const Lbl = (s) => <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 600, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.4 }}>{s}</div>;
+    const Section = ({ role, font, fileRef, label }) => (
+      <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.025)", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{label}</div>
+          {font && <span style={{ fontSize: 24, fontFamily: familyCss(font), color: theme.text }}>Aa</span>}
+        </div>
+        <div>{Lbl("Google Fonts URL")}
+          <input defaultValue={font?.kind === "google" ? font.url : ""} onBlur={e => onGoogle(role, e.target.value)} onKeyDown={e => { if (e.key === "Enter") onGoogle(role, e.target.value); }}
+            placeholder="https://fonts.googleapis.com/css2?family=Inter:wght@100..900" style={inp} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <input ref={fileRef} type="file" accept=".woff2,.woff,.ttf,.otf,font/*" hidden onChange={e => { uploadFontFile(role, e.target.files?.[0]); e.target.value = ""; }} />
+          <button onClick={() => fileRef.current?.click()} style={{ padding: "9px 14px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
+            {uploading ? "Lädt…" : "Schrift hochladen"}
+          </button>
+          {font && <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{font.name}{font.kind === "upload" ? " (Upload)" : font.kind === "google" ? " (Google)" : ""}</span>}
+          {font && <button onClick={() => setFont(role, null)} style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>Entfernen</button>}
+        </div>
+      </div>
+    );
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 680 }}>
+        <Section role="primary" font={primary} fileRef={fileRefP} label="Primärschrift" />
+        <Section role="secondary" font={secondary} fileRef={fileRefS} label="Sekundärschrift (optional)" />
+      </div>
+    );
+  }
+
+  // ── DISPLAY (specimen) ──
+  if (!primary) {
+    return <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, textAlign: "center" }}>
+      Noch keine Schrift hinterlegt. Über „Bearbeiten" kannst du eine Google-Schrift verbinden oder eine Schrift hochladen.
+    </div>;
+  }
+  const fam = familyCss(primary);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 40 }}>
+      {/* Top: big Aa + name (left) | weights (right) */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "start" }}>
+        <div>
+          <div style={{ fontFamily: fam, fontSize: 120, fontWeight: 700, color: theme.text, lineHeight: 1, letterSpacing: -2 }}>Aa</div>
+          <div style={{ borderTop: divider, marginTop: 18, paddingTop: 14 }}>
+            <div style={{ fontFamily: fam, fontSize: 34, fontWeight: 500, color: theme.text }}>{primary.name}</div>
+            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 4 }}>Typografie für Texte.</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {WEIGHTS.map(([label, w], i) => (
+            <div key={w} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 4px", borderTop: i === 0 ? "none" : divider }}>
+              <div>
+                <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{label}</div>
+                <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{w}</div>
+              </div>
+              <span style={{ fontFamily: fam, fontWeight: w, fontSize: 30, color: theme.text }}>Aa</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Alphabet */}
+      <div style={{ fontFamily: fam, fontSize: 26, color: theme.text, lineHeight: 1.5, fontWeight: 500, wordSpacing: 2 }}>
+        <div>ABCDEFGHIJKLMNOPQRSTUVWXYZ</div>
+        <div>abcdefghijklmnopqrstuvwxyz</div>
+        <div>0123456789</div>
+      </div>
+
+      {/* Secondary */}
+      <div style={{ borderTop: divider, paddingTop: 14, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>Sekundärschrift</span>
+        <span style={{ fontSize: 15, fontFamily: secondary ? familyCss(secondary) : FONT, fontWeight: 500, color: secondary ? theme.text : theme.textDim }}>{secondary ? secondary.name : "None"}</span>
+      </div>
+    </div>
+  );
+}
+
 function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken }) {
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
   const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
@@ -14033,6 +14173,22 @@ If you don't know a field, infer a plausible value. Write all text values in the
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
           .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", color_palette: pal, colors: colorsFlat })
+          .select("id").single();
+        if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
+      }
+    }, 500);
+  };
+  const typographyTimer = useRef(null);
+  const saveTypography = (typo) => {
+    setProfile(p => ({ ...(p || {}), typography: typo }));
+    clearTimeout(typographyTimer.current);
+    typographyTimer.current = setTimeout(async () => {
+      const cur = profileRef.current;
+      if (cur?.id) {
+        await supabase.from("brand_profile").update({ typography: typo }).eq("id", cur.id);
+      } else if (userOrg?.id) {
+        const { data } = await supabase.from("brand_profile")
+          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", typography: typo })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -15609,6 +15765,9 @@ If you don't know a field, infer a plausible value. Write all text values in the
                       ) : k === "design/colors" ? (
                         <BrandColors cp={cp} colors={profile.colors} editing={editingText} savedHtml={savedHtml} theme={theme} darkMode={darkMode}
                           onSave={(html) => saveSection(k, html)} onCancel={() => setEditingText(false)} onSavePalette={saveColorPalette} />
+                      ) : k === "design/typography" ? (
+                        <BrandTypography value={profile.typography} fonts={fonts} editing={editingText} theme={theme} darkMode={darkMode}
+                          onChange={saveTypography} session={session} userOrg={userOrg} />
                       ) : k === "identity/voice" ? (
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
                           onSave={saveVoiceTone} onCancel={() => setEditingText(false)} />
