@@ -13671,7 +13671,7 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  {colorShades(openColor.hex, 10).map((sh, j) => {
+                  {colorShades(openColor.hex, 8).map((sh, j) => {
                     const light = lum(sh) > 0.62;
                     const txt = light ? "#1a1a2e" : "#ffffff";
                     return (
