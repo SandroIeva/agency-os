@@ -14689,7 +14689,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         ) : (
           // Post-onboarding: tabs + summary
           <>
-            <div style={{ padding: "16px 24px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${theme.borderFaint}` }}>
+            <div style={{ padding: "16px 24px", minHeight: 34, boxSizing: "content-box", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${theme.borderFaint}` }}>
               {(profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url) ? (
                 <img src={profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
               ) : (
