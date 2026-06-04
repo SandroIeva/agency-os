@@ -13861,7 +13861,7 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
       {/* Top: big Aa + name (left) | weights (right) */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "start" }}>
         <div>
-          <div style={{ fontFamily: fam, fontSize: 210, fontWeight: 700, color: theme.text, lineHeight: 1, letterSpacing: -3 }}>Aa</div>
+          <div style={{ fontFamily: fam, fontSize: 210, fontWeight: 700, color: theme.text, lineHeight: 1, letterSpacing: -10 }}>Aa</div>
           <div style={{ borderTop: divider, marginTop: 18, paddingTop: 14 }}>
             <div style={{ fontFamily: fam, fontSize: 34, fontWeight: 500, color: theme.text }}>{primary.name}</div>
             <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 4 }}>Typografie für Texte.</div>
