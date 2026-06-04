@@ -13460,19 +13460,19 @@ function BrandValues({ value, onChange, accent, theme, darkMode }) {
 
   // ── SELECT ──
   if (view === "select") {
-    const list = (cat === "alpha" ? VALUES_ALPHABETIC : VALUES_INSPIRATIONAL);
+    const list = VALUES_ALPHABETIC;
     const full = picked.length >= 5;
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 8 }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 8, paddingTop: 20 }}>
         <div style={{ fontSize: 28, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.4 }}>Setze deine Top 5 Brand Values</div>
         <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 540, marginBottom: 18 }}>
           Wähle bis zu fünf Werte aus der Liste oder gib eigene ein — sie definieren, wofür deine Marke steht.
         </div>
 
-        <div style={{ width: "100%", maxWidth: 720, borderRadius: 20, background: panelBg, padding: 18, textAlign: "left" }}>
-          {/* Chips + input + action */}
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-            <div style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", minHeight: 46, padding: "8px 12px", borderRadius: 13, background: fieldBg, border: `1px solid ${theme.borderFaint}` }}>
+        <div style={{ width: "100%", maxWidth: 760, borderRadius: 20, background: panelBg, padding: 20, textAlign: "left", boxSizing: "border-box" }}>
+          {/* Chips + input + action — equal height via align-items: stretch */}
+          <div style={{ display: "flex", gap: 10, alignItems: "stretch" }}>
+            <div style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", minHeight: 48, padding: "8px 12px", borderRadius: 13, background: fieldBg, border: `1px solid ${theme.borderFaint}`, boxSizing: "border-box" }}>
               {picked.map(name => (
                 <span key={name} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 6px 5px 11px", borderRadius: 8, background: accent + "1f", color: accent, fontSize: 13, fontFamily: FONT, fontWeight: 600 }}>
                   {name}
@@ -13487,39 +13487,30 @@ function BrandValues({ value, onChange, accent, theme, darkMode }) {
             </div>
             {full ? (
               <motion.button whileTap={{ scale: 0.97 }} onClick={goDescribe}
-                style={{ height: 46, padding: "0 20px", borderRadius: 13, border: "none", cursor: "pointer", background: accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>Speichern</motion.button>
+                style={{ padding: "0 22px", borderRadius: 13, border: "none", cursor: "pointer", background: accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>Speichern</motion.button>
             ) : (
               <motion.button whileTap={{ scale: 0.95 }} onClick={() => { addValue(input); setInput(""); }} disabled={!input.trim()}
                 title="Hinzufügen"
-                style={{ width: 46, height: 46, borderRadius: 13, border: `1px solid ${theme.borderFaint}`, cursor: input.trim() ? "pointer" : "default", background: fieldBg, color: theme.textSub, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, opacity: input.trim() ? 1 : 0.5 }}>
+                style={{ width: 48, borderRadius: 13, border: `1px solid ${theme.borderFaint}`, cursor: input.trim() ? "pointer" : "default", background: fieldBg, color: theme.textSub, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, opacity: input.trim() ? 1 : 0.5 }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></svg>
               </motion.button>
             )}
           </div>
 
-          {/* Category toggle + list */}
-          <div style={{ display: "flex", gap: 22, marginTop: 18 }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
-              {[["alpha", "Alphabetisch"], ["insp", "Inspirierend"]].map(([key, label]) => (
-                <div key={key} onClick={() => setCat(key)}
-                  style={{ padding: "8px 14px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontFamily: FONT, fontWeight: cat === key ? 600 : 500,
-                    color: cat === key ? theme.text : theme.textDim, background: cat === key ? fieldBg : "transparent" }}>{label}</div>
-              ))}
-            </div>
-            <div style={{ flex: 1, columns: "150px 4", columnGap: 18 }}>
-              {list.map(name => {
-                const sel = picked.some(p => p.toLowerCase() === name.toLowerCase());
-                const disabled = full && !sel;
-                return (
-                  <div key={name} onClick={() => sel ? removeValue(name) : addValue(name)}
-                    style={{ breakInside: "avoid", padding: "4px 0", fontSize: 14, fontFamily: FONT, lineHeight: 1.5,
-                      color: sel ? accent : (disabled ? theme.textFaint : theme.textSub), fontWeight: sel ? 600 : 400,
-                      cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.5 : 1 }}>
-                    {name}
-                  </div>
-                );
-              })}
-            </div>
+          {/* Value list — four columns, no side nav */}
+          <div style={{ columnCount: 4, columnGap: 20, marginTop: 18 }}>
+            {list.map(name => {
+              const sel = picked.some(p => p.toLowerCase() === name.toLowerCase());
+              const disabled = full && !sel;
+              return (
+                <div key={name} onClick={() => sel ? removeValue(name) : addValue(name)}
+                  style={{ breakInside: "avoid", padding: "4px 0", fontSize: 14, fontFamily: FONT, lineHeight: 1.5,
+                    color: sel ? accent : (disabled ? theme.textFaint : theme.textSub), fontWeight: sel ? 600 : 400,
+                    cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.5 : 1 }}>
+                  {name}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
