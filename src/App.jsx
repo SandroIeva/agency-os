@@ -13218,6 +13218,200 @@ function BrandVision({ value, onChange, accent, theme, darkMode, onEditingChange
   );
 }
 
+// ── Brand Soul ───────────────────────────────────────────────────────────────
+// A playful card-based onboarding quiz that captures the brand's "soul":
+// archetype (primary + secondary + weighting) and five personality questions.
+const SOUL_ARCHETYPES = ["Explorer", "Creator", "Sage", "Innocent", "Ruler", "Caregiver", "Magician", "Hero", "Outlaw", "Lover", "Jester", "Everyman"];
+const SOUL_QUESTIONS = [
+  { key: "temperament", title: "Wie soll sich deine Brand anfühlen?", options: ["Mutig & energetisch", "Ruhig & vertrauenswürdig", "Verspielt & witzig", "Premium & edel", "Warm & menschlich"] },
+  { key: "driver", title: "Was treibt deine Brand an?", options: ["Innovation", "Community", "Handwerk & Qualität", "Freiheit", "Wirkung & Impact", "Status"] },
+  { key: "voice", title: "Wie spricht deine Brand?", options: ["Direkt & selbstbewusst", "Freundlich & nahbar", "Expertenhaft & fundiert", "Locker & verspielt", "Inspirierend & visionär"] },
+  { key: "against", title: "Wogegen steht deine Brand?", options: ["Komplexität", "Konformität", "Mittelmäßigkeit", "Gier", "Langeweile"] },
+  { key: "emotion", title: "Welches Gefühl sollen Menschen mitnehmen?", options: ["Bestärkt", "Inspiriert", "Beruhigt", "Begeistert", "Verstanden"] },
+];
+const SOUL_TOTAL = 1 + SOUL_QUESTIONS.length; // archetype step + question steps
+
+function BrandSoul({ value, onChange, accent, theme, darkMode }) {
+  const v = value && typeof value === "object" ? value : {};
+  const hasData = !!(v.archetypePrimary || v.temperament || v.driver || v.voice || v.against || v.emotion);
+  const [running, setRunning] = useState(false);
+  const [step, setStep] = useState(0);
+  const [ans, setAns] = useState({});
+
+  const start = () => {
+    setAns({
+      archetypePrimary: v.archetypePrimary || "Explorer",
+      archetypeSecondary: v.archetypeSecondary || "Creator",
+      archetypeWeight: typeof v.archetypeWeight === "number" ? v.archetypeWeight : 60,
+      temperament: v.temperament || "", driver: v.driver || "", voice: v.voice || "", against: v.against || "", emotion: v.emotion || "",
+    });
+    setStep(0); setRunning(true);
+  };
+  const finish = () => { onChange(ans); setRunning(false); };
+  const setA = (k, val) => setAns(a => ({ ...a, [k]: val }));
+
+  const fieldBg = darkMode ? "rgba(255,255,255,0.04)" : "#fff";
+  const chevron = "data:image/svg+xml;utf8," + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  const selectStyle = {
+    width: "100%", padding: "13px 40px 13px 15px", borderRadius: 14, fontFamily: FONT, fontSize: 15, fontWeight: 500,
+    background: `${fieldBg} url("${chevron}") no-repeat right 14px center`, color: theme.text, cursor: "pointer",
+    border: `1px solid ${theme.borderFaint}`, outline: "none", boxSizing: "border-box", appearance: "none", WebkitAppearance: "none", MozAppearance: "none",
+  };
+
+  // ── INTRO ──
+  if (!running && !hasData) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", paddingTop: 30, gap: 22 }}>
+        <div style={{ position: "relative", width: 220, height: 150 }}>
+          {[-6, 3, 0].map((rot, i) => (
+            <div key={i} style={{ position: "absolute", inset: 0, margin: "auto", width: 150, height: 150, borderRadius: 22, transform: `rotate(${rot}deg) translateY(${i * -2}px)`,
+              background: i === 2 ? (darkMode ? "#23232e" : "#fff") : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+              border: `1px solid ${theme.borderFaint}`, boxShadow: i === 2 ? "0 18px 50px rgba(0,0,0,0.12)" : "none",
+              display: i === 2 ? "flex" : "block", alignItems: "center", justifyContent: "center" }}>
+              {i === 2 && <span style={{ fontSize: 44 }}>✦</span>}
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 700, color: theme.text, marginTop: 8 }}>Entdecke deine Brand Soul</div>
+        <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 420 }}>
+          Beantworte ein paar kurze Fragen — wir leiten daraus den Charakter, Archetyp und Ton deiner Marke ab.
+        </div>
+        <motion.button whileTap={{ scale: 0.97 }} onClick={start}
+          style={{ marginTop: 4, padding: "13px 26px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 14, fontFamily: FONT, fontWeight: 600,
+            background: darkMode ? "#fff" : "#0f1320", color: darkMode ? "#0f1320" : "#fff" }}>
+          Quiz starten
+        </motion.button>
+      </div>
+    );
+  }
+
+  // ── RESULT (has data, not running) ──
+  if (!running && hasData) {
+    const Row = (label, val) => val ? (
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 16, padding: "13px 0", borderBottom: `1px solid ${theme.borderFaint}` }}>
+        <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{label}</span>
+        <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, textAlign: "right" }}>{val}</span>
+      </div>
+    ) : null;
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 620 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 800, color: theme.text }}>Brand Soul</div>
+          <motion.button whileTap={{ scale: 0.96 }} onClick={start}
+            style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>Bearbeiten</motion.button>
+        </div>
+        {(v.archetypePrimary || v.archetypeSecondary) && (
+          <div style={{ padding: "16px 18px", borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
+            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 10 }}>Archetyp</div>
+            <div style={{ display: "flex", gap: 16, alignItems: "baseline", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 18, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{v.archetypePrimary}</span>
+              {v.archetypeSecondary && <span style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim }}>+ {v.archetypeSecondary}</span>}
+              {typeof v.archetypeWeight === "number" && <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>· {v.archetypeWeight}% / {100 - v.archetypeWeight}%</span>}
+            </div>
+          </div>
+        )}
+        <div>
+          {Row("Temperament", v.temperament)}
+          {Row("Antrieb", v.driver)}
+          {Row("Voice", v.voice)}
+          {Row("Steht gegen", v.against)}
+          {Row("Gefühl", v.emotion)}
+        </div>
+      </div>
+    );
+  }
+
+  // ── QUIZ (running) ──
+  const isArchetype = step === 0;
+  const q = isArchetype ? null : SOUL_QUESTIONS[step - 1];
+  const canNext = isArchetype ? !!(ans.archetypePrimary && ans.archetypeSecondary) : !!ans[q.key];
+  const back = () => { if (step === 0) setRunning(false); else setStep(s => s - 1); };
+  const next = () => { if (step >= SOUL_TOTAL - 1) finish(); else setStep(s => s + 1); };
+  const w = typeof ans.archetypeWeight === "number" ? ans.archetypeWeight : 60;
+
+  return (
+    <div style={{ display: "flex", justifyContent: "center", paddingTop: 6 }}>
+      {/* Stacked playful card */}
+      <div style={{ position: "relative", width: "100%", maxWidth: 560 }}>
+        <div style={{ position: "absolute", inset: 0, transform: "rotate(-2.5deg)", borderRadius: 24, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.035)" }} />
+        <div style={{ position: "absolute", inset: 0, transform: "rotate(1.5deg)", borderRadius: 24, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }} />
+        <div style={{ position: "relative", borderRadius: 24, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 24px 60px rgba(0,0,0,0.14)", padding: "26px 30px 24px" }}>
+          {/* Progress dashes */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 24 }}>
+            {Array.from({ length: SOUL_TOTAL }).map((_, i) => (
+              <div key={i} style={{ height: 4, flex: 1, borderRadius: 4, background: i <= step ? theme.text : (darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)") }} />
+            ))}
+          </div>
+
+          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>
+            Frage {String(step + 1).padStart(2, "0")} / {SOUL_TOTAL}
+          </div>
+
+          {isArchetype ? (
+            <>
+              <div style={{ fontSize: 24, fontFamily: FONT, fontWeight: 700, color: theme.text, lineHeight: 1.3, marginBottom: 6, letterSpacing: -0.3 }}>Definiere deine Brand-Persönlichkeit</div>
+              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 24 }}>Dein sekundärer Archetyp dient der Differenzierung.</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 28 }}>
+                <div>
+                  <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 7 }}>Primärer Archetyp</div>
+                  <select value={ans.archetypePrimary || ""} onChange={e => setA("archetypePrimary", e.target.value)} style={selectStyle}>
+                    {SOUL_ARCHETYPES.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 7 }}>Sekundärer Archetyp</div>
+                  <select value={ans.archetypeSecondary || ""} onChange={e => setA("archetypeSecondary", e.target.value)} style={selectStyle}>
+                    {SOUL_ARCHETYPES.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </div>
+              </div>
+              {/* Weighting slider */}
+              <div style={{ position: "relative", height: 18, marginBottom: 10 }}>
+                <div style={{ position: "absolute", top: 4, left: 0, right: 0, height: 10, borderRadius: 999, background: `linear-gradient(to right, #a3c644 0%, #a3c644 ${w}%, #4aa3d6 ${w}%, #4aa3d6 100%)` }} />
+                <div style={{ position: "absolute", top: -3, left: `${w}%`, transform: "translateX(-50%)", width: 24, height: 24, borderRadius: "50%", background: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.25)", border: `1px solid ${theme.borderFaint}` }} />
+                <input type="range" min="10" max="90" value={w} onChange={e => setA("archetypeWeight", Number(e.target.value))}
+                  style={{ position: "absolute", top: 0, left: 0, width: "100%", height: 18, margin: 0, opacity: 0, cursor: "pointer" }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.textSub }}>
+                <span>{w}%</span><span>{100 - w}%</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 24, fontFamily: FONT, fontWeight: 700, color: theme.text, lineHeight: 1.3, marginBottom: 22, letterSpacing: -0.3 }}>{q.title}</div>
+              <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>Wähle eine Option</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {q.options.map(opt => {
+                  const sel = ans[q.key] === opt;
+                  return (
+                    <motion.div key={opt} whileTap={{ scale: 0.99 }} onClick={() => setA(q.key, opt)}
+                      style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 10px", borderRadius: 12, cursor: "pointer", background: sel ? (accent + "12") : "transparent" }}>
+                      <span style={{ width: 18, height: 18, borderRadius: "50%", flexShrink: 0, border: `2px solid ${sel ? accent : theme.borderFaint}`, background: sel ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {sel && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }} />}
+                      </span>
+                      <span style={{ fontSize: 15, fontFamily: FONT, fontWeight: sel ? 600 : 500, color: theme.text }}>{opt}</span>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {/* Footer */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, marginTop: 30 }}>
+            <button onClick={back} style={{ padding: "10px 18px", borderRadius: 999, border: "none", background: "transparent", color: theme.textSub, fontSize: 14, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Zurück</button>
+            <motion.button whileTap={{ scale: 0.97 }} onClick={next} disabled={!canNext}
+              style={{ padding: "10px 22px", borderRadius: 999, border: "none", cursor: canNext ? "pointer" : "default", opacity: canNext ? 1 : 0.45,
+                background: accent, color: "#fff", fontSize: 14, fontFamily: FONT, fontWeight: 600 }}>
+              {step >= SOUL_TOTAL - 1 ? "Fertig" : "Weiter"}
+            </motion.button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken }) {
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
   const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
@@ -13465,6 +13659,22 @@ If you don't know a field, infer a plausible value. Write all text values in the
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
     }, 600);
+  };
+  const soulTimer = useRef(null);
+  const saveSoul = (s) => {
+    setProfile(p => ({ ...(p || {}), soul: s }));
+    clearTimeout(soulTimer.current);
+    soulTimer.current = setTimeout(async () => {
+      const cur = profileRef.current;
+      if (cur?.id) {
+        await supabase.from("brand_profile").update({ soul: s }).eq("id", cur.id);
+      } else if (userOrg?.id) {
+        const { data } = await supabase.from("brand_profile")
+          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", soul: s })
+          .select("id").single();
+        if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
+      }
+    }, 400);
   };
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
@@ -14849,7 +15059,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{BRAND_SUBVIEW_LABELS[brandTab] || ""}</span>
               </div>
               <div style={{ flex: 1 }} />
-              {!(brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors" || brandSub === "positioning")) && (
+              {!((brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors" || brandSub === "positioning")) || (brandTab === "identity" && brandSub === "soul")) && (
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => setEditingText(v => !v)}
                 style={{
                   padding: "8px 16px", borderRadius: 10, cursor: "pointer",
@@ -15013,6 +15223,8 @@ If you don't know a field, infer a plausible value. Write all text values in the
                           cp={cp} accent={theme.accent} theme={theme} darkMode={darkMode} t={t} />
                       ) : k === "strategy/positioning" ? (
                         <BrandVision value={profile.vision} onChange={saveVision} accent={theme.accent} theme={theme} darkMode={darkMode} onEditingChange={setVisionEditing} />
+                      ) : k === "identity/soul" ? (
+                        <BrandSoul value={profile.soul} onChange={saveSoul} accent={theme.accent} theme={theme} darkMode={darkMode} />
                       ) : k === "identity/voice" ? (
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
                           onSave={saveVoiceTone} onCancel={() => setEditingText(false)} />
