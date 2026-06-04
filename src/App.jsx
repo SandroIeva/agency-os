@@ -13520,28 +13520,28 @@ function BrandValues({ value, onChange, accent, theme, darkMode }) {
   // ── DESCRIBE ──
   if (view === "describe") {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 22, maxWidth: 760 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 760, paddingBottom: 8 }}>
         <div>
           <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 800, color: theme.text }}>Warum diese Werte?</div>
           <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginTop: 4 }}>Beschreibe kurz, warum jeder Wert für deine Marke wichtig ist.</div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "22px 24px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "26px 24px" }}>
           {picked.map((name, i) => (
             <div key={name}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}>
                 <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 700, color: accent }}>{String(i + 1).padStart(2, "0")}</span>
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{name}</span>
               </div>
-              <textarea value={notes[name] || ""} onChange={e => setNotes(n => ({ ...n, [name]: e.target.value }))} rows={3}
+              <textarea value={notes[name] || ""} onChange={e => setNotes(n => ({ ...n, [name]: e.target.value }))} rows={5}
                 placeholder={`Warum ist „${name}" wichtig für eure Marke?`}
-                style={{ width: "100%", background: fieldBg, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, padding: "11px 13px", fontFamily: FONT, fontSize: 14, lineHeight: 1.6, color: theme.text, outline: "none", resize: "vertical", boxSizing: "border-box" }} />
+                style={{ width: "100%", minHeight: 130, background: fieldBg, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, padding: "13px 15px", fontFamily: FONT, fontSize: 14, lineHeight: 1.6, color: theme.text, outline: "none", resize: "vertical", boxSizing: "border-box" }} />
             </div>
           ))}
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <button onClick={() => setScreen("select")} style={{ padding: "11px 18px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>Zurück</button>
+          <button onClick={() => setScreen("select")} style={{ width: 150, padding: "12px 0", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer", textAlign: "center" }}>Zurück</button>
           <motion.button whileTap={{ scale: 0.97 }} onClick={finalize}
-            style={{ padding: "11px 24px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Finalisieren</motion.button>
+            style={{ width: 150, padding: "12px 0", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer", textAlign: "center" }}>Finalisieren</motion.button>
         </div>
       </div>
     );
