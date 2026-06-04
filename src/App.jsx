@@ -13520,7 +13520,7 @@ function BrandValues({ value, onChange, accent, theme, darkMode }) {
   // ── DESCRIBE ──
   if (view === "describe") {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 760, minHeight: "calc(100vh - 310px)" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 760, flex: 1, minHeight: 0 }}>
         <div>
           <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 800, color: theme.text }}>Warum diese Werte?</div>
           <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginTop: 4 }}>Beschreibe kurz, warum jeder Wert für deine Marke wichtig ist.</div>
@@ -15266,7 +15266,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
             </div>
 
             <div className="no-scrollbar" style={{ flex: 1, overflowY: ((brandTab === "strategy" && brandSub === "positioning" && !visionEditing) ? "hidden" : "auto"), padding: "24px 30px 32px 30px" }}>
-              <div style={{ maxWidth: 770, display: "flex", flexDirection: "column", gap: 20 }}>
+              <div style={{ maxWidth: 770, minHeight: "100%", display: "flex", flexDirection: "column", gap: 20 }}>
                 {(() => {
                   const subs = BRAND_PILLAR_SUBTABS[brandTab] || [];
                   const subLabel = subs.find(s => s.key === brandSub)?.label || BRAND_SUBVIEW_LABELS[brandTab] || "Brand";
