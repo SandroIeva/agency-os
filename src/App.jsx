@@ -13759,17 +13759,52 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
 }
 
 // ── Brand Typography ─────────────────────────────────────────────────────────
-// A type-specimen view (big Aa, weights, alphabet, secondary). In edit mode you
-// can connect a Google Font via its URL or upload a font file. Stored in
-// brand_profile.typography = { primary: {name, family, kind, url}, secondary }.
+// Type-specimen view + edit mode. Each font (primary/secondary) can connect a
+// Google Font (URL) or have MULTIPLE uploaded files (Schriftschnitte), and you
+// choose which weights to display. Stored in brand_profile.typography:
+//   { primary: { name, family, kind, url, files:[{url,weight,label}], weights:[…] }, secondary }
 const googleFamilyFromUrl = (url) => {
   try { const m = String(url).match(/[?&]family=([^:&]+)/); return m ? decodeURIComponent(m[1]).replace(/\+/g, " ").split(":")[0].trim() : ""; } catch { return ""; }
 };
+const TYPO_WEIGHT_LABELS = { 100: "Thin", 200: "ExtraLight", 300: "Light", 400: "Regular", 500: "Medium", 600: "Semibold", 700: "Bold", 800: "ExtraBold", 900: "Black" };
+const deriveFontWeight = (name) => {
+  const n = String(name).toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (n.includes("thin") || n.includes("hairline")) return 100;
+  if (n.includes("extralight") || n.includes("ultralight")) return 200;
+  if (n.includes("semibold") || n.includes("demibold")) return 600;
+  if (n.includes("extrabold") || n.includes("ultrabold")) return 800;
+  if (n.includes("black") || n.includes("heavy")) return 900;
+  if (n.includes("medium")) return 500;
+  if (n.includes("light")) return 300;
+  if (n.includes("bold")) return 700;
+  const num = n.match(/(100|200|300|400|500|600|700|800|900)/); if (num) return parseInt(num[1], 10);
+  return 400;
+};
+const typoAvailableWeights = (font) => {
+  if (!font) return [];
+  if (font.kind === "upload") return [...new Set((font.files || []).map(f => f.weight))].sort((a, b) => a - b);
+  if (font.kind === "google") {
+    const m = (font.url || "").match(/wght@([^&]+)/);
+    if (m) {
+      const seg = m[1];
+      if (seg.includes("..")) { const [a, b] = seg.split("..").map(x => parseInt(x, 10)); const out = []; for (let w = Math.ceil(a / 100) * 100; w <= b; w += 100) out.push(w); return out.length ? out : [400, 700]; }
+      const nums = seg.split(/[;,]/).map(x => parseInt(x.split(",").pop(), 10)).filter(Boolean);
+      return nums.length ? [...new Set(nums)].sort((a, b) => a - b) : [300, 400, 500, 700];
+    }
+    return [300, 400, 500, 700];
+  }
+  return [400, 700];
+};
+const typoDisplayWeights = (font) => {
+  const avail = typoAvailableWeights(font);
+  if (font?.weights?.length) { const sel = font.weights.filter(w => avail.includes(w)); if (sel.length) return sel.sort((a, b) => a - b); }
+  return avail.length ? avail : [400, 700];
+};
+
 function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, session, userOrg }) {
-  // Seed from saved typography, or fall back to detected intelligence.fonts (name only, system render).
   const seedFont = (font, fallbackName) => {
     if (font && (font.family || font.name)) return font;
-    if (fallbackName) return { name: fallbackName, family: fallbackName, kind: "system", url: "" };
+    if (fallbackName) return { name: fallbackName, family: fallbackName, kind: "system" };
     return null;
   };
   const primary = seedFont(value?.primary, fonts?.heading);
@@ -13777,76 +13812,125 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
   const familyCss = (f) => f ? `'${f.family || f.name}', system-ui, -apple-system, sans-serif` : "system-ui, -apple-system, sans-serif";
   const [uploading, setUploading] = useState(false);
   const fileRefP = useRef(null), fileRefS = useRef(null);
+  const divider = `1px solid ${theme.borderFaint}`;
 
-  // Inject @font-face / <link> for google + uploaded fonts.
+  // Inject <link> (google) and per-file @font-face (uploads, one per weight).
   useEffect(() => {
     const nodes = [];
-    [primary, secondary].forEach((f, i) => {
-      if (!f || !f.url) return;
-      const fam = f.family || f.name;
-      if (f.kind === "google") {
+    [primary, secondary].forEach((f) => {
+      if (!f) return;
+      const famName = f.family || f.name;
+      if (f.kind === "google" && f.url) {
         const el = document.createElement("link"); el.rel = "stylesheet"; el.href = f.url; el.dataset.brandFont = "1"; document.head.appendChild(el); nodes.push(el);
-      } else if (f.kind === "upload") {
-        const el = document.createElement("style"); el.dataset.brandFont = "1";
-        el.textContent = `@font-face{font-family:'${fam}';src:url('${f.url}');font-display:swap;}`;
-        document.head.appendChild(el); nodes.push(el);
+      } else if (f.kind === "upload" && Array.isArray(f.files)) {
+        f.files.forEach(file => {
+          if (!file?.url) return;
+          const el = document.createElement("style"); el.dataset.brandFont = "1";
+          el.textContent = `@font-face{font-family:'${famName}';src:url('${file.url}');font-weight:${file.weight || 400};font-style:normal;font-display:swap;}`;
+          document.head.appendChild(el); nodes.push(el);
+        });
       }
     });
     return () => nodes.forEach(n => n.remove());
-  }, [primary?.url, primary?.kind, primary?.family, secondary?.url, secondary?.kind, secondary?.family]);
+  }, [JSON.stringify(primary), JSON.stringify(secondary)]);
 
   const setFont = (role, font) => onChange({ ...(value || {}), [role]: font });
   const onGoogle = (role, url) => {
-    const fam = googleFamilyFromUrl(url);
-    if (!url.trim()) { setFont(role, null); return; }
-    setFont(role, { name: fam || "Google Font", family: fam || "", kind: "google", url: url.trim() });
+    const u = (url || "").trim();
+    const cur = value?.[role] || {};
+    if (!u) { setFont(role, cur.files?.length ? { ...cur, kind: "upload", url: "" } : null); return; }
+    const famName = googleFamilyFromUrl(u);
+    setFont(role, { ...cur, name: famName || cur.name || "Google Font", family: famName || cur.family || "", kind: "google", url: u });
   };
-  const uploadFontFile = async (role, file) => {
-    if (!file) return;
+  const uploadFonts = async (role, fileList) => {
+    const files = Array.from(fileList || []); if (!files.length) return;
     setUploading(true);
     try {
-      const ext = (file.name.split(".").pop() || "woff2").toLowerCase();
-      const path = `fonts/${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage.from("brand-assets").upload(path, file, { upsert: true, contentType: file.type || "font/woff2" });
-      if (!error) {
+      const cur = value?.[role] || {};
+      const added = [];
+      let famGuess = cur.family || cur.name || "";
+      for (const file of files) {
+        const ext = (file.name.split(".").pop() || "woff2").toLowerCase();
+        const path = `fonts/${crypto.randomUUID()}.${ext}`;
+        const { error } = await supabase.storage.from("brand-assets").upload(path, file, { upsert: true, contentType: file.type || "font/woff2" });
+        if (error) continue;
         const { data } = supabase.storage.from("brand-assets").getPublicUrl(path);
-        const fam = file.name.replace(/\.[^.]+$/, "");
-        setFont(role, { name: fam, family: fam, kind: "upload", url: data.publicUrl });
+        added.push({ url: data.publicUrl, weight: deriveFontWeight(file.name), label: file.name });
+        if (!famGuess) famGuess = file.name.replace(/\.[^.]+$/, "").replace(/[-_ ]*(thin|hairline|extralight|ultralight|light|regular|book|medium|semibold|demibold|extrabold|ultrabold|bold|black|heavy|italic)\b/gi, "").replace(/[-_ ]+$/, "").trim();
       }
+      const existing = cur.files || [];
+      setFont(role, { ...cur, name: cur.name || famGuess || "Schrift", family: cur.family || famGuess || "Schrift", kind: "upload", files: [...existing, ...added] });
     } finally { setUploading(false); }
   };
-
-  const WEIGHTS = [["Thin", 100], ["Light", 300], ["Regular", 400], ["Medium", 500], ["Semibold", 600], ["Bold", 700]];
-  const divider = `1px solid ${theme.borderFaint}`;
 
   // ── EDIT ──
   if (editing) {
     const inp = { width: "100%", padding: "11px 13px", borderRadius: 10, fontFamily: FONT, fontSize: 13, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff", border: `1px solid ${theme.borderFaint}`, color: theme.text, outline: "none", boxSizing: "border-box" };
     const Lbl = (s) => <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 600, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.4 }}>{s}</div>;
-    const Section = ({ role, font, fileRef, label }) => (
-      <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.025)", display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{label}</div>
-          {font && <span style={{ fontSize: 24, fontFamily: familyCss(font), color: theme.text }}>Aa</span>}
+    const weightOpts = [100, 200, 300, 400, 500, 600, 700, 800, 900];
+    // Plain function (NOT a nested component) so inputs/selects don't remount on every change.
+    const section = (role, font, fileRef, label) => {
+      const avail = typoAvailableWeights(font);
+      const shown = typoDisplayWeights(font);
+      const toggleWeight = (w) => { const set = new Set(shown); set.has(w) ? set.delete(w) : set.add(w); setFont(role, { ...font, weights: [...set].sort((a, b) => a - b) }); };
+      return (
+        <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.025)", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{label}</div>
+            {font && <span style={{ fontSize: 24, fontFamily: familyCss(font), color: theme.text }}>Aa</span>}
+          </div>
+          <div>{Lbl("Name")}<input value={font?.name || ""} onChange={e => setFont(role, { ...(font || { kind: "system" }), name: e.target.value, family: e.target.value })} placeholder="z.B. Gotham" style={inp} /></div>
+          <div>{Lbl("Google Fonts URL")}
+            <input defaultValue={font?.kind === "google" ? font.url : ""} onBlur={e => onGoogle(role, e.target.value)} onKeyDown={e => { if (e.key === "Enter") onGoogle(role, e.target.value); }}
+              placeholder="https://fonts.googleapis.com/css2?family=Inter:wght@100..900" style={inp} />
+          </div>
+          {/* Uploaded font files (Schriftschnitte) */}
+          <div>
+            {Lbl("Schriftschnitte (Upload)")}
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              {(font?.files || []).map((f, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontFamily: FONT, color: theme.textSub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.label || "Font"}</span>
+                  <select value={f.weight} onChange={e => setFont(role, { ...font, files: font.files.map((x, j) => j === i ? { ...x, weight: Number(e.target.value) } : x) })}
+                    style={{ ...inp, width: 150, cursor: "pointer" }}>
+                    {weightOpts.map(w => <option key={w} value={w}>{TYPO_WEIGHT_LABELS[w]} ({w})</option>)}
+                  </select>
+                  <button onClick={() => setFont(role, { ...font, files: font.files.filter((_, j) => j !== i) })}
+                    style={{ width: 30, height: 30, flexShrink: 0, borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, cursor: "pointer" }}>×</button>
+                </div>
+              ))}
+              <input ref={fileRef} type="file" accept=".woff2,.woff,.ttf,.otf,font/*" multiple hidden onChange={e => { uploadFonts(role, e.target.files); e.target.value = ""; }} />
+              <button onClick={() => fileRef.current?.click()} style={{ alignSelf: "flex-start", padding: "8px 13px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>
+                {uploading ? "Lädt…" : "+ Schriftschnitte hochladen"}
+              </button>
+            </div>
+          </div>
+          {/* Which weights to display */}
+          {avail.length > 0 && (
+            <div>
+              {Lbl("Anzuzeigende Schnitte")}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                {avail.map(w => {
+                  const on = shown.includes(w);
+                  return (
+                    <div key={w} onClick={() => toggleWeight(w)}
+                      style={{ padding: "6px 11px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: on ? 600 : 500,
+                        background: on ? theme.accent + "1f" : "transparent", color: on ? theme.accent : theme.textDim, border: `1px solid ${on ? theme.accent + "55" : theme.borderFaint}` }}>
+                      {TYPO_WEIGHT_LABELS[w]} {w}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {font && <button onClick={() => setFont(role, null)} style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: "#e5484d", fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>Schrift entfernen</button>}
         </div>
-        <div>{Lbl("Google Fonts URL")}
-          <input defaultValue={font?.kind === "google" ? font.url : ""} onBlur={e => onGoogle(role, e.target.value)} onKeyDown={e => { if (e.key === "Enter") onGoogle(role, e.target.value); }}
-            placeholder="https://fonts.googleapis.com/css2?family=Inter:wght@100..900" style={inp} />
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <input ref={fileRef} type="file" accept=".woff2,.woff,.ttf,.otf,font/*" hidden onChange={e => { uploadFontFile(role, e.target.files?.[0]); e.target.value = ""; }} />
-          <button onClick={() => fileRef.current?.click()} style={{ padding: "9px 14px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
-            {uploading ? "Lädt…" : "Schrift hochladen"}
-          </button>
-          {font && <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{font.name}{font.kind === "upload" ? " (Upload)" : font.kind === "google" ? " (Google)" : ""}</span>}
-          {font && <button onClick={() => setFont(role, null)} style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>Entfernen</button>}
-        </div>
-      </div>
-    );
+      );
+    };
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 680 }}>
-        <Section role="primary" font={primary} fileRef={fileRefP} label="Primärschrift" />
-        <Section role="secondary" font={secondary} fileRef={fileRefS} label="Sekundärschrift (optional)" />
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 700 }}>
+        {section("primary", primary, fileRefP, "Primärschrift")}
+        {section("secondary", secondary, fileRefS, "Sekundärschrift (optional)")}
       </div>
     );
   }
@@ -13854,26 +13938,28 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
   // ── DISPLAY (specimen) ──
   if (!primary) {
     return <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, textAlign: "center" }}>
-      Noch keine Schrift hinterlegt. Über „Bearbeiten" kannst du eine Google-Schrift verbinden oder eine Schrift hochladen.
+      Noch keine Schrift hinterlegt. Über „Bearbeiten" kannst du eine Google-Schrift verbinden oder Schriften hochladen.
     </div>;
   }
   const fam = familyCss(primary);
+  const weights = typoDisplayWeights(primary);
+  const heroWeight = weights.includes(700) ? 700 : Math.max(...weights);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 56, padding: "16px 30px 40px" }}>
       {/* Top: big Aa + name (left) | weights (right) */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "start" }}>
         <div>
-          <div style={{ fontFamily: fam, fontSize: 210, fontWeight: 700, color: theme.text, lineHeight: 1, letterSpacing: -10 }}>Aa</div>
+          <div style={{ fontFamily: fam, fontSize: 210, fontWeight: heroWeight, color: theme.text, lineHeight: 1, letterSpacing: -10 }}>Aa</div>
           <div style={{ borderTop: divider, marginTop: 18, paddingTop: 14 }}>
             <div style={{ fontFamily: fam, fontSize: 34, fontWeight: 500, color: theme.text }}>{primary.name}</div>
             <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 4 }}>Typografie für Texte.</div>
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column" }}>
-          {WEIGHTS.map(([label, w], i) => (
+          {weights.map((w, i) => (
             <div key={w} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 4px", borderTop: i === 0 ? "none" : divider }}>
               <div>
-                <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{label}</div>
+                <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{TYPO_WEIGHT_LABELS[w] || w}</div>
                 <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{w}</div>
               </div>
               <span style={{ fontFamily: fam, fontWeight: w, fontSize: 30, color: theme.text }}>Aa</span>
