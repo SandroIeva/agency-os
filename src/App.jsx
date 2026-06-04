@@ -13101,18 +13101,12 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
 }
 
 // ── Brand Vision ─────────────────────────────────────────────────────────────
-// A glowing concentric-circle visual built purely with CSS radial gradients —
-// used as the hero for the Vision view (intro + saved states).
+// Hero visual using the provided background image (public/vision-bg.png) with the
+// label centred on top. Used for the Vision view (intro + saved states).
 function VisionOrb({ size, label }) {
-  const rings = `
-    radial-gradient(circle at 50% 50%, rgba(56,170,255,0.75) 0%, rgba(56,170,255,0) 15%),
-    radial-gradient(circle at 50% 50%, rgba(255,255,255,0) 18%, rgba(255,255,255,0.95) 22%, rgba(255,255,255,0.95) 30%, rgba(255,255,255,0) 35%),
-    radial-gradient(circle at 50% 50%, rgba(255,255,255,0) 47%, rgba(255,255,255,0.97) 51%, rgba(255,255,255,0.97) 64%, rgba(255,255,255,0) 69%)
-  `;
   return (
     <div style={{ position: "relative", width: size, height: size, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-      <div style={{ position: "absolute", width: size * 1.55, height: size * 1.55, borderRadius: "50%", background: "radial-gradient(circle at 50% 50%, rgba(140,215,255,0.55) 0%, rgba(190,235,255,0.26) 38%, rgba(255,255,255,0) 66%)", filter: "blur(10px)" }} />
-      <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: rings, filter: "blur(2px)" }} />
+      <img src="/vision-bg.png" alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none" }} />
       {label && <span style={{ position: "relative", fontSize: Math.max(13, Math.round(size * 0.085)), fontFamily: FONT, fontWeight: 700, letterSpacing: 1, color: "#0f1320" }}>{label}</span>}
     </div>
   );
