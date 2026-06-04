@@ -13674,22 +13674,24 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
                   <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
                     <span style={{ width: 18, height: 18, borderRadius: 6, background: openColor.hex, border: `1px solid ${theme.borderFaint}` }} />
                     <span style={{ fontSize: 15, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{names[openColor.hex] || openColor.role || "Shades"}</span>
-                    <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{String(openColor.hex).toUpperCase()}</span>
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                   {colorShades(openColor.hex, 8).map(({ hex: sh, isBase }, j) => {
                     const light = lum(sh) > 0.62;
                     const txt = light ? "#1a1a2e" : "#ffffff";
                     const isCopied = copied === sh;
                     return (
-                      <motion.div key={sh + j} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: j * 0.045, duration: 0.32, ease: [0.22, 0.68, 0.35, 1] }}
-                        whileHover={{ y: -4 }} whileTap={{ scale: 0.97 }} onClick={() => copyHex(sh)} title="Hex kopieren"
-                        style={{ flex: 1, minWidth: 0, height: 360, borderRadius: 14, background: sh, position: "relative", cursor: "pointer",
-                          boxShadow: isBase ? `inset 0 0 0 3px ${light ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.9)"}` : "none" }}>
-                        {isBase && <div style={{ position: "absolute", top: 12, left: 0, right: 0, textAlign: "center", fontSize: 10, fontFamily: FONT, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: txt, opacity: 0.8 }}>Basis</div>}
-                        <div style={{ position: "absolute", bottom: 14, left: 0, right: 0, textAlign: "center", fontSize: 11, fontFamily: FONT, fontWeight: 600, color: txt, opacity: 0.9 }}>{isCopied ? "Kopiert ✓" : sh.toUpperCase()}</div>
-                      </motion.div>
+                      <div key={sh + j} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: j * 0.045, duration: 0.32, ease: [0.22, 0.68, 0.35, 1] }}
+                          whileHover={{ y: -4 }} whileTap={{ scale: 0.97 }} onClick={() => copyHex(sh)} title="Hex kopieren"
+                          style={{ width: "100%", height: 360, borderRadius: 14, background: sh, position: "relative", cursor: "pointer" }}>
+                          <div style={{ position: "absolute", bottom: 14, left: 0, right: 0, textAlign: "center", fontSize: 11, fontFamily: FONT, fontWeight: 600, color: txt, opacity: 0.9 }}>{isCopied ? "Kopiert ✓" : sh.toUpperCase()}</div>
+                        </motion.div>
+                        <div style={{ height: 8, display: "flex", alignItems: "center" }}>
+                          {isBase && <span style={{ width: 7, height: 7, borderRadius: "50%", background: theme.text }} />}
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
