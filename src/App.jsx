@@ -13665,7 +13665,9 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
       {editing && draft && (() => {
         const swatchStyle = { width: 40, height: 40, borderRadius: 11, border: `1px solid ${theme.borderFaint}`, padding: 0, background: "transparent", cursor: "pointer", flexShrink: 0 };
         const hexInput = { width: 130, padding: "10px 12px", borderRadius: 10, fontFamily: FONT, fontSize: 13, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff", border: `1px solid ${theme.borderFaint}`, color: theme.text, outline: "none" };
-        const Row = ({ label, hex, onHex, onRemove }) => (
+        // Plain function (NOT a nested component) → returns stable element types, so the
+        // native colour picker doesn't get torn down/closed on each onChange re-render.
+        const row = (label, hex, onHex, onRemove) => (
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <input type="color" value={norm(hex) || "#888888"} onChange={e => onHex(e.target.value)} style={swatchStyle} />
             <input value={hex || ""} onChange={e => onHex(e.target.value)} placeholder="#000000" style={hexInput} />
@@ -13678,10 +13680,10 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 16, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.025)" }}>
             <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>Farben bearbeiten</div>
-            <Row label="Primary" hex={draft.primary} onHex={v => update({ ...draft, primary: v })} />
-            <Row label="Secondary" hex={draft.secondary} onHex={v => update({ ...draft, secondary: v })} />
+            {row("Primary", draft.primary, v => update({ ...draft, primary: v }))}
+            {row("Secondary", draft.secondary, v => update({ ...draft, secondary: v }))}
             {(draft.accents || []).map((a, i) => (
-              <Row key={i} label={`Akzent ${i + 1}`} hex={a} onHex={v => update({ ...draft, accents: draft.accents.map((x, j) => j === i ? v : x) })} onRemove={() => update({ ...draft, accents: draft.accents.filter((_, j) => j !== i) })} />
+              <div key={i}>{row(`Akzent ${i + 1}`, a, v => update({ ...draft, accents: draft.accents.map((x, j) => j === i ? v : x) }), () => update({ ...draft, accents: draft.accents.filter((_, j) => j !== i) }))}</div>
             ))}
             <button onClick={() => update({ ...draft, accents: [...(draft.accents || []), "#888888"] })}
               style={{ alignSelf: "flex-start", padding: "8px 13px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>+ Akzentfarbe</button>
