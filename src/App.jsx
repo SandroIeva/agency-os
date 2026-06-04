@@ -10606,15 +10606,14 @@ const BRAND_PILLAR_TABS = [
 // Second-level sub-tabs within each content pillar (per the agreed structure).
 const BRAND_PILLAR_SUBTABS = {
   strategy: [
-    { key: "core",        label: "Brand Core" },
-    { key: "positioning", label: "Vision" },
+    { key: "positioning", label: "Brand Vision" },
     { key: "taglines",    label: "Taglines" },
     { key: "personas",    label: "Personas" },
     { key: "competitors", label: "Competitors" },
   ],
   identity: [
+    { key: "core",   label: "Brand Core" },
     { key: "story",  label: "Brand Story" },
-    { key: "soul",   label: "Brand Soul" },
     { key: "values", label: "Brand Values" },
     { key: "voice",  label: "Voice & Tone" },
   ],
@@ -15059,7 +15058,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{BRAND_SUBVIEW_LABELS[brandTab] || ""}</span>
               </div>
               <div style={{ flex: 1 }} />
-              {!((brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors" || brandSub === "positioning")) || (brandTab === "identity" && brandSub === "soul")) && (
+              {!(brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors" || brandSub === "positioning")) && (
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => setEditingText(v => !v)}
                 style={{
                   padding: "8px 16px", borderRadius: 10, cursor: "pointer",
@@ -15123,7 +15122,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
 
                   let body = null;
                   const k = brandTab + "/" + brandSub;
-                  if (k === "strategy/core") {
+                  if (k === "identity/core") {
                     const claim = ana.claim_summary || profile.claim;
                     const valueProps = intel.value_props || [];
                     const keyMessages = ana.key_messages || intel.headlines || [];
@@ -15163,8 +15162,6 @@ If you don't know a field, infer a plausible value. Write all text values in the
                     ) : Empty("Noch keine Competitor-Analyse vorhanden.");
                   } else if (k === "identity/story") {
                     body = profile.description ? <div>{SL("Brand Story")}{Para(profile.description)}</div> : Empty("Noch keine Brand Story hinterlegt.");
-                  } else if (k === "identity/soul") {
-                    body = Empty("Brand Soul — bald verfügbar. Hier beschreiben wir Mission, Vision und das Warum hinter der Marke.");
                   } else if (k === "identity/values") {
                     body = Empty("Brand Values — bald verfügbar. Hier kommen die Kernwerte der Marke hin.");
                   } else if (k === "identity/voice") {
@@ -15203,7 +15200,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                   // Seed the editor from the saved HTML, else from the existing fields.
                   let seed = savedHtml || "";
                   if (!seed) {
-                    if (k === "strategy/core") {
+                    if (k === "identity/core") {
                       seed = (claimT ? `<h3>Claim</h3><h2>${esc(claimT)}</h2>` : "")
                         + (profile.description ? `<h3>Beschreibung</h3><p>${p2(profile.description)}</p>` : "")
                         + (vProps.length ? `<h3>Value Props</h3><ul>${vProps.map(v => `<li>${esc(v)}</li>`).join("")}</ul>` : "")
@@ -15223,8 +15220,6 @@ If you don't know a field, infer a plausible value. Write all text values in the
                           cp={cp} accent={theme.accent} theme={theme} darkMode={darkMode} t={t} />
                       ) : k === "strategy/positioning" ? (
                         <BrandVision value={profile.vision} onChange={saveVision} accent={theme.accent} theme={theme} darkMode={darkMode} onEditingChange={setVisionEditing} />
-                      ) : k === "identity/soul" ? (
-                        <BrandSoul value={profile.soul} onChange={saveSoul} accent={theme.accent} theme={theme} darkMode={darkMode} />
                       ) : k === "identity/voice" ? (
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
                           onSave={saveVoiceTone} onCancel={() => setEditingText(false)} />
@@ -15241,10 +15236,10 @@ If you don't know a field, infer a plausible value. Write all text values in the
                         <BrandStoryTimeline timeline={profile.story_timeline || []} editing={editingText} theme={theme} darkMode={darkMode} t={t} onChange={saveTimeline} />
                       )}
                       {/* Brand Core: Purpose/Vision/Mission, then Kern-Botschaften below */}
-                      {k === "strategy/core" && (
+                      {k === "identity/core" && (
                         <BrandPVM value={profile.pvm} editing={editingText} theme={theme} darkMode={darkMode} t={t} onChange={savePvm} />
                       )}
-                      {k === "strategy/core" && kMsgs.length > 0 && (
+                      {k === "identity/core" && kMsgs.length > 0 && (
                         <div style={{ marginTop: 36 }}>{SL("Kern-Botschaften")}<div style={{ display: "flex", flexDirection: "column", gap: 11 }}>{kMsgs.map((m, i) => <div key={i} style={{ display: "flex", gap: 11, alignItems: "center", fontSize: 14, fontFamily: FONT, color: theme.text, lineHeight: 1.5 }}><span style={{ width: 22, height: 22, borderRadius: 7, background: theme.accent + "1f", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>{m}</div>)}</div></div>
                       )}
                     </>

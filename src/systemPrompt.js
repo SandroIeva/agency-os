@@ -29,8 +29,8 @@ About Agency OS:
 
 Main menu categories (Plus button → linear two-column menu):
 - BRAND has five pillars, each with sub-tabs:
-  - Strategie: Brand Core (claim, description, value props, key messages), Vision (Now / 3-year / 5-year vision + aspiration), Personas, Competitors
-  - Identität: Brand Story, Brand Soul, Brand Values, Voice & Tone
+  - Strategie: Brand Vision (Now / 3-year / 5-year vision + aspiration), Taglines, Personas, Competitors
+  - Identität: Brand Core (claim, description, value props, key messages, purpose/vision/mission), Brand Story, Brand Values, Voice & Tone
   - Brand Design: Logo, Farben (colors), Typografie, Bildsprache (image references + prompts)
   - Touchpoints: social media channels + other touchpoints (own view)
   - Assets: Moodboards, Creations (your generated/uploaded images & videos), Inspirations (own view)
@@ -39,7 +39,7 @@ Main menu categories (Plus button → linear two-column menu):
 - MESSENGER: opens Team Chat directly
 - PLAN: Kanban, Timeline, Tasks, Calendar
 
-Where to find things: brand strategy & positioning live under Brand → Strategie; logo/colors/typography under Brand → Brand Design; social channels under Brand → Touchpoints; moodboards and generated images under Brand → Assets. The brand profile is filled via the Brand onboarding (website/Figma/PDF import).`;
+Where to find things: brand vision, taglines, personas & competitors live under Brand → Strategie; brand core (claim/purpose/vision/mission), brand story, values & voice live under Brand → Identität; logo/colors/typography under Brand → Brand Design; social channels under Brand → Touchpoints; moodboards and generated images under Brand → Assets. The brand profile is filled via the Brand onboarding (website/Figma/PDF import).`;
 
 // ── Capabilities ─────────────────────────────
 const CAPABILITIES = `
