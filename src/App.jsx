@@ -13559,7 +13559,7 @@ function BrandValues({ value, onChange, accent, theme, darkMode, editing, onEdit
       {saved.map((v, i) => (
         <div key={v.name || i} style={{ padding: "20px 22px", borderRadius: 18, background: panelBg, display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-            <span style={{ fontSize: 26, fontFamily: FONT, fontWeight: 800, color: accent, letterSpacing: -0.5, lineHeight: 1 }}>{String(i + 1).padStart(2, "0")}</span>
+            <span style={{ fontSize: 19, fontFamily: FONT, fontWeight: 800, color: accent, letterSpacing: -0.5 }}>{String(i + 1).padStart(2, "0")}</span>
             <span style={{ fontSize: 19, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{v.name}</span>
           </div>
           {v.reason && <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6 }}>{v.reason}</div>}
