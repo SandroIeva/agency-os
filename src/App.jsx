@@ -13573,24 +13573,25 @@ function BrandValues({ value, onChange, accent, theme, darkMode, editing, onEdit
 // Tall rounded colour bars with the hex inside at the bottom, plus an editable
 // description above (reuses the rich-text editor via section_content["design/colors"]).
 function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, onCancel }) {
-  const palette = [];
-  if (cp?.primary) palette.push(cp.primary);
-  if (cp?.secondary) palette.push(cp.secondary);
-  (cp?.accents || []).forEach(c => c && palette.push(c));
-  if (!palette.length && Array.isArray(colors)) colors.forEach(c => c && palette.push(c));
-  const list = [...new Set(palette.filter(Boolean))];
+  const entries = [];
+  if (cp?.primary) entries.push({ hex: cp.primary, role: "Primary" });
+  if (cp?.secondary) entries.push({ hex: cp.secondary, role: "Secondary" });
+  (cp?.accents || []).forEach(c => c && entries.push({ hex: c, role: "" }));
+  if (!entries.length && Array.isArray(colors)) colors.forEach((c, i) => c && entries.push({ hex: c, role: i === 0 ? "Primary" : i === 1 ? "Secondary" : "" }));
+  const seen = new Set();
+  const list = entries.filter(e => { const kk = String(e.hex).toLowerCase(); if (seen.has(kk)) return false; seen.add(kk); return true; });
   const lum = (hex) => { try { const h = String(hex).replace("#", ""); const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16); return (0.299 * r + 0.587 * g + 0.114 * b) / 255; } catch { return 0.5; } };
 
   // Fetch human-readable colour names from api.color.pizza (order is preserved).
   const [names, setNames] = useState({});
-  const listKey = list.join(",");
+  const listKey = list.map(e => e.hex).join(",");
   useEffect(() => {
     if (!list.length) return;
     let cancelled = false;
-    const vals = list.map(c => String(c).replace("#", "")).join(",");
+    const vals = list.map(e => String(e.hex).replace("#", "")).join(",");
     fetch(`https://api.color.pizza/v1/?values=${vals}`)
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (!cancelled && Array.isArray(d?.colors)) { const m = {}; d.colors.forEach((co, i) => { if (list[i]) m[list[i]] = co.name; }); setNames(m); } })
+      .then(d => { if (!cancelled && Array.isArray(d?.colors)) { const m = {}; d.colors.forEach((co, i) => { if (list[i]) m[list[i].hex] = co.name; }); setNames(m); } })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [listKey]);
@@ -13610,15 +13611,16 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
 
       {/* Colour bars */}
       {list.length > 0 ? (
-        <div style={{ display: "flex", gap: 14 }}>
-          {list.map((c, i) => {
-            const light = lum(c) > 0.62;
+        <div style={{ display: "flex", gap: 16 }}>
+          {list.map(({ hex, role }, i) => {
+            const light = lum(hex) > 0.62;
+            const txt = light ? "#1a1a2e" : "#ffffff";
             return (
-              <div key={c + i} style={{ flex: 1, minWidth: 0, height: 360, borderRadius: 26, background: c, position: "relative", boxShadow: "0 10px 34px rgba(0,0,0,0.07)" }}>
-                <div style={{ position: "absolute", left: "50%", bottom: 18, transform: "translateX(-50%)", maxWidth: "88%", padding: names[c] ? "8px 15px" : "7px 14px", borderRadius: 16, textAlign: "center",
-                  background: light ? "rgba(0,0,0,0.07)" : "rgba(0,0,0,0.22)", color: light ? "#33373d" : "#ffffff", fontFamily: FONT }}>
-                  {names[c] && <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.25 }}>{names[c]}</div>}
-                  <div style={{ fontSize: names[c] ? 11 : 14, fontWeight: 600, opacity: names[c] ? 0.7 : 1, marginTop: names[c] ? 2 : 0 }}>{String(c).toUpperCase()}</div>
+              <div key={hex + i} style={{ flex: 1, minWidth: 0, height: 360, borderRadius: 22, background: hex, position: "relative", boxShadow: "0 10px 34px rgba(0,0,0,0.07)" }}>
+                {role && <div style={{ position: "absolute", top: 18, left: 20, fontSize: 15, fontFamily: FONT, fontWeight: 600, color: txt }}>{role}</div>}
+                <div style={{ position: "absolute", bottom: 18, left: 20, right: 16 }}>
+                  <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: txt, lineHeight: 1.3 }}>{names[hex] || "…"}</div>
+                  <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: txt, opacity: 0.72, marginTop: 2 }}>{String(hex).toUpperCase()}</div>
                 </div>
               </div>
             );
