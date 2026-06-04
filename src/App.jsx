@@ -13445,7 +13445,7 @@ function BrandValues({ value, onChange, accent, theme, darkMode }) {
   };
   const addValue = (name) => {
     const n = (name || "").trim();
-    if (!n || picked.length >= 6 || picked.some(p => p.toLowerCase() === n.toLowerCase())) return;
+    if (!n || picked.length >= 4 || picked.some(p => p.toLowerCase() === n.toLowerCase())) return;
     setPicked(p => [...p, n]);
   };
   const removeValue = (name) => setPicked(p => p.filter(x => x !== name));
@@ -13461,12 +13461,12 @@ function BrandValues({ value, onChange, accent, theme, darkMode }) {
   // ── SELECT ──
   if (view === "select") {
     const list = VALUES_ALPHABETIC;
-    const full = picked.length >= 6;
+    const full = picked.length >= 4;
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 8, paddingTop: 20 }}>
-        <div style={{ fontSize: 28, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.4 }}>Setze deine Top 6 Brand Values</div>
+        <div style={{ fontSize: 28, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.4 }}>Setze deine Top 4 Brand Values</div>
         <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 540, marginBottom: 18 }}>
-          Wähle bis zu sechs Werte aus der Liste oder gib eigene ein — sie definieren, wofür deine Marke steht.
+          Wähle bis zu vier Werte aus der Liste oder gib eigene ein — sie definieren, wofür deine Marke steht.
         </div>
 
         <div style={{ width: "100%", maxWidth: 760, borderRadius: 20, background: panelBg, padding: 20, textAlign: "left", boxSizing: "border-box" }}>
