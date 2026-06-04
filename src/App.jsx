@@ -13181,8 +13181,9 @@ function BrandVision({ value, onChange, accent, theme, darkMode }) {
   // below the title, then the button.
   if (!hasData) {
     return (
-      <div style={{ position: "relative", width: "100%", marginTop: -74 }}>
-        <img src="/vision-bg.png" alt="" style={{ display: "block", width: "100%", height: "auto", pointerEvents: "none" }} />
+      <div style={{ width: "100%", display: "flex", justifyContent: "center", marginTop: -10 }}>
+       <div style={{ position: "relative", width: "100%", maxWidth: 760, aspectRatio: "1972 / 1863", maxHeight: "calc(100vh - 300px)" }}>
+        <img src="/vision-bg.png" alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none" }} />
         <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
           <span style={{ marginTop: "43%", fontSize: 34, fontFamily: FONT, fontWeight: 400, letterSpacing: 1, color: "#0f1320" }}>BRAND VISION</span>
           <div style={{ marginTop: 100, fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 380 }}>
@@ -13194,6 +13195,7 @@ function BrandVision({ value, onChange, accent, theme, darkMode }) {
             Define Your Vision
           </motion.button>
         </div>
+       </div>
       </div>
     );
   }
