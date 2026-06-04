@@ -12890,6 +12890,27 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
           {Area("Direkte Wettbewerber", "direct_competitors")}
           {Area("Schwächen", "weaknesses")}
         </div>
+        {/* CEO */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 14 }}>
+          <div>{Lbl("CEO")}<input value={draft.ceo_name || ""} onChange={e => setF({ ceo_name: e.target.value })} style={inputStyle} placeholder="Name" /></div>
+          <div>{Lbl("Info zum CEO")}<input value={draft.ceo_info || ""} onChange={e => setF({ ceo_info: e.target.value })} style={inputStyle} placeholder="Kurze Info" /></div>
+        </div>
+        {/* Social Media */}
+        <div>
+          {Lbl("Social Media")}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {(draft.socials || []).map((s, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input value={s.platform} onChange={e => setDraft(d => ({ ...d, socials: d.socials.map((x, j) => j === i ? { ...x, platform: e.target.value } : x) }))} style={{ ...inputStyle, flex: "0 0 150px" }} placeholder="Instagram" />
+                <input value={s.url} onChange={e => setDraft(d => ({ ...d, socials: d.socials.map((x, j) => j === i ? { ...x, url: e.target.value } : x) }))} style={{ ...inputStyle, flex: 1 }} placeholder="https://instagram.com/…" />
+                <button onClick={() => setDraft(d => ({ ...d, socials: d.socials.filter((_, j) => j !== i) }))}
+                  style={{ width: 30, height: 30, flexShrink: 0, borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, cursor: "pointer" }}>×</button>
+              </div>
+            ))}
+            <button onClick={() => setDraft(d => ({ ...d, socials: [...(d.socials || []), { platform: "", url: "" }] }))}
+              style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>+ Social-Kanal</button>
+          </div>
+        </div>
         <div>
           {Lbl("Strategic Recommendations")}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -12968,18 +12989,41 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
         </div>
 
         {/* Accordions: 2 columns */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 40px", alignItems: "start" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <CompAccordion label="Produkte & Services" theme={theme} darkMode={darkMode}>{c.products}</CompAccordion>
-            <CompAccordion label="Core Focus" theme={theme} darkMode={darkMode}>{c.core_focus}</CompAccordion>
-            <CompAccordion label="Direkte Wettbewerber" theme={theme} darkMode={darkMode}>{c.direct_competitors}</CompAccordion>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <CompAccordion label="Audience" theme={theme} darkMode={darkMode}>{c.audience}</CompAccordion>
-            <CompAccordion label="Stärken" theme={theme} darkMode={darkMode}>{c.strengths}</CompAccordion>
-            <CompAccordion label="Schwächen" theme={theme} darkMode={darkMode}>{c.weaknesses}</CompAccordion>
-          </div>
-        </div>
+        {(() => {
+          const socialsContent = (c.socials && c.socials.length) ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+              {c.socials.map((sl, i) => (
+                <a key={i} href={websiteHref(sl.url)} target="_blank" rel="noopener noreferrer"
+                  style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, fontFamily: FONT, color: theme.accent, textDecoration: "none" }}>
+                  <span style={{ fontWeight: 600, color: theme.text, minWidth: 92 }}>{sl.platform || "Link"}</span>
+                  <span style={{ wordBreak: "break-all" }}>{(sl.url || "").replace(/^https?:\/\//, "")}</span>
+                </a>
+              ))}
+            </div>
+          ) : null;
+          const ceoContent = (c.ceo_name || c.ceo_info) ? (
+            <div>
+              {c.ceo_name && <div style={{ fontWeight: 700, color: theme.text, marginBottom: c.ceo_info ? 6 : 0 }}>{c.ceo_name}</div>}
+              {c.ceo_info && <div style={{ color: theme.textSub }}>{c.ceo_info}</div>}
+            </div>
+          ) : null;
+          return (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 40px", alignItems: "start" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <CompAccordion label="Produkte & Services" theme={theme} darkMode={darkMode}>{c.products}</CompAccordion>
+                <CompAccordion label="Core Focus" theme={theme} darkMode={darkMode}>{c.core_focus}</CompAccordion>
+                <CompAccordion label="Direkte Wettbewerber" theme={theme} darkMode={darkMode}>{c.direct_competitors}</CompAccordion>
+                <CompAccordion label="CEO" theme={theme} darkMode={darkMode}>{ceoContent}</CompAccordion>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <CompAccordion label="Audience" theme={theme} darkMode={darkMode}>{c.audience}</CompAccordion>
+                <CompAccordion label="Stärken" theme={theme} darkMode={darkMode}>{c.strengths}</CompAccordion>
+                <CompAccordion label="Schwächen" theme={theme} darkMode={darkMode}>{c.weaknesses}</CompAccordion>
+                <CompAccordion label="Social Media" theme={theme} darkMode={darkMode}>{socialsContent}</CompAccordion>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Strategic Recommendations: heading (left) | list (right) */}
         {(c.recommendations || []).filter(Boolean).length > 0 && (
@@ -13130,16 +13174,22 @@ Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals
       if (about) bits.push(`About: ${String(about).slice(0, 1200)}`);
       if (Array.isArray(fetched.headlines) && fetched.headlines.length) bits.push(`Headlines: ${fetched.headlines.slice(0, 6).join(" | ")}`);
       if (Array.isArray(fetched.value_props) && fetched.value_props.length) bits.push(`Value props: ${fetched.value_props.slice(0, 6).join(" | ")}`);
+      if (fetched.socials && typeof fetched.socials === "object") {
+        const sl = Object.entries(fetched.socials).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`);
+        if (sl.length) bits.push(`Social links: ${sl.join(" | ")}`);
+      }
       message = `Build a competitor profile for this company based on its website content:\n${bits.join("\n")}`;
     }
 
     const system = `You are a competitive-analysis assistant. Given a competitor's name, website URL, scraped website content, or a short description, produce a competitor profile AND find similar competing companies. Respond with ONLY valid minified JSON (no markdown, no commentary) matching exactly this shape:
 {"main":{COMP},"similar":[{COMP},{COMP}, ...]}
-where COMP = {"name":"","website":"","founded":"","team_size":"","location":"","summary":"","products":"","core_focus":"","direct_competitors":"","audience":"","strengths":"","weaknesses":"","recommendations":["","",""]}
+where COMP = {"name":"","website":"","founded":"","team_size":"","location":"","summary":"","products":"","core_focus":"","direct_competitors":"","audience":"","strengths":"","weaknesses":"","recommendations":["","",""],"socials":[{"platform":"","url":""}],"ceo":{"name":"","info":""}}
 Rules:
 - "main" is the company described by the input.
 - "similar" is an array of EXACTLY 5 OTHER real companies that offer similar products/services (direct competitors of the main company) — each a FULL profile with the same fields. Pick the 5 most relevant real competitors. Do NOT repeat the main company and do NOT invent fake companies.
 - For every COMP: "website" is its primary domain (e.g. "instagram.com") without protocol; "founded" is the founding year; "team_size" is an approximate headcount (e.g. "300+"); "location" is the HQ city/country; "summary" is 1-2 sentences; "products"/"core_focus"/"audience"/"strengths"/"weaknesses" are each 1-3 concise sentences; "direct_competitors" is a comma-separated list of similar brands; "recommendations" is exactly 3 short strategic recommendations for how OUR brand could compete against that company.
+- "socials" is an array of the company's real social-media profiles with FULL https URLs (e.g. Instagram, LinkedIn, X/Twitter, TikTok, YouTube, Facebook). "platform" is the network name, "url" is the full profile URL. Only include networks the company actually uses; omit unknown ones.
+- "ceo" is the company's current CEO/founder: "name" plus "info" (1-2 sentences about their background). Leave empty if unknown.
 If you don't know a field, infer a plausible value. Write all text values in the SAME language as the input.`;
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
     const oauthToken = (llmProvider === "gemini" && !apiKey && ensureValidToken) ? await ensureValidToken() : null;
@@ -13156,6 +13206,11 @@ If you don't know a field, infer a plausible value. Write all text values in the
       direct_competitors: o?.direct_competitors || "", audience: o?.audience || "",
       strengths: o?.strengths || "", weaknesses: o?.weaknesses || "",
       recommendations: Array.isArray(o?.recommendations) ? o.recommendations.filter(Boolean) : [],
+      socials: Array.isArray(o?.socials)
+        ? o.socials.filter(s => s && (s.url || s.platform)).map(s => ({ platform: s.platform || "", url: (s.url || "").trim() }))
+        : [],
+      ceo_name: o?.ceo?.name || o?.ceo_name || "",
+      ceo_info: o?.ceo?.info || o?.ceo_info || "",
       created_at: new Date().toISOString(),
     });
 
@@ -13183,12 +13238,16 @@ If you don't know a field, infer a plausible value. Write all text values in the
     } catch (e) {
       // Fall back to a single profile built from the fetched page when the LLM is unavailable.
       if (!fetched) throw e;
+      const fallbackSocials = (fetched.socials && typeof fetched.socials === "object")
+        ? Object.entries(fetched.socials).filter(([, v]) => v).map(([k, v]) => ({ platform: k.charAt(0).toUpperCase() + k.slice(1), url: v }))
+        : [];
       return [normalize({
         name: fetched.name || domainFromInput || input,
         website: fetched.url || domainFromInput,
         summary: fetched.about || fetched.description || fetched.claim || "",
         products: Array.isArray(fetched.value_props) ? fetched.value_props.join(", ") : "",
         core_focus: fetched.claim || "",
+        socials: fallbackSocials,
       })];
     }
 
