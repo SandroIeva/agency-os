@@ -13411,6 +13411,174 @@ function BrandSoul({ value, onChange, accent, theme, darkMode }) {
   );
 }
 
+// ── Brand Values ─────────────────────────────────────────────────────────────
+// Pick up to 5 values (from a curated A-Z list or custom), then add a short reason
+// for each, then a final read-only display. Saved to brand_profile.brand_values.
+const VALUES_ALPHABETIC = [
+  "Abundance","Acceptance","Accountability","Accuracy","Achievement","Adaptability","Adventure","Ambition","Appreciation","Authenticity",
+  "Balance","Boldness","Bravery","Calm","Care","Clarity","Collaboration","Commitment","Community","Compassion","Confidence","Connection","Consistency","Courage","Craftsmanship","Creativity","Curiosity",
+  "Dedication","Dependability","Determination","Discipline","Diversity","Drive","Empathy","Empowerment","Excellence","Fairness","Flexibility","Freedom","Friendship","Fun",
+  "Generosity","Gratitude","Growth","Honesty","Hope","Humility","Humor","Impact","Independence","Innovation","Inspiration","Integrity",
+  "Joy","Kindness","Knowledge","Leadership","Learning","Logic","Love","Loyalty","Mastery","Mindfulness","Motivation",
+  "Openness","Optimism","Originality","Ownership","Passion","Patience","Performance","Persistence","Playfulness","Positivity","Precision","Pride","Professionalism","Purpose",
+  "Quality","Reliability","Resilience","Respect","Responsibility","Security","Simplicity","Sincerity","Sustainability","Teamwork","Trust","Vision","Warmth","Wisdom",
+];
+const VALUES_INSPIRATIONAL = [
+  "Adventure","Ambition","Authenticity","Boldness","Courage","Craftsmanship","Creativity","Curiosity","Empowerment","Excellence",
+  "Freedom","Growth","Impact","Innovation","Inspiration","Originality","Passion","Purpose","Resilience","Vision",
+];
+
+function BrandValues({ value, onChange, accent, theme, darkMode }) {
+  const saved = Array.isArray(value) ? value : [];
+  const hasData = saved.length > 0;
+  const [screen, setScreen] = useState(null); // null=auto | select | describe | final
+  const view = screen || (hasData ? "final" : "select");
+  const [picked, setPicked] = useState([]);
+  const [notes, setNotes] = useState({});
+  const [cat, setCat] = useState("alpha");
+  const [input, setInput] = useState("");
+
+  const beginEdit = () => {
+    setPicked(saved.map(v => v.name));
+    setNotes(Object.fromEntries(saved.map(v => [v.name, v.reason || ""])));
+    setScreen("select");
+  };
+  const addValue = (name) => {
+    const n = (name || "").trim();
+    if (!n || picked.length >= 5 || picked.some(p => p.toLowerCase() === n.toLowerCase())) return;
+    setPicked(p => [...p, n]);
+  };
+  const removeValue = (name) => setPicked(p => p.filter(x => x !== name));
+  const goDescribe = () => { setScreen("describe"); };
+  const finalize = () => {
+    onChange(picked.map(name => ({ name, reason: notes[name] || "" })));
+    setScreen("final");
+  };
+
+  const fieldBg = darkMode ? "rgba(255,255,255,0.04)" : "#fff";
+  const panelBg = darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.025)";
+
+  // ── SELECT ──
+  if (view === "select") {
+    const list = (cat === "alpha" ? VALUES_ALPHABETIC : VALUES_INSPIRATIONAL);
+    const full = picked.length >= 5;
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 8 }}>
+        <div style={{ fontSize: 28, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.4 }}>Setze deine Top 5 Brand Values</div>
+        <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 540, marginBottom: 18 }}>
+          Wähle bis zu fünf Werte aus der Liste oder gib eigene ein — sie definieren, wofür deine Marke steht.
+        </div>
+
+        <div style={{ width: "100%", maxWidth: 720, borderRadius: 20, background: panelBg, padding: 18, textAlign: "left" }}>
+          {/* Chips + input + action */}
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <div style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", minHeight: 46, padding: "8px 12px", borderRadius: 13, background: fieldBg, border: `1px solid ${theme.borderFaint}` }}>
+              {picked.map(name => (
+                <span key={name} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 6px 5px 11px", borderRadius: 8, background: accent + "1f", color: accent, fontSize: 13, fontFamily: FONT, fontWeight: 600 }}>
+                  {name}
+                  <span onClick={() => removeValue(name)} style={{ cursor: "pointer", width: 16, height: 16, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, lineHeight: 1 }}>×</span>
+                </span>
+              ))}
+              {!full && (
+                <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { addValue(input); setInput(""); } }}
+                  placeholder={picked.length ? "" : "Wert eingeben oder unten auswählen…"}
+                  style={{ flex: 1, minWidth: 120, border: "none", outline: "none", background: "transparent", fontSize: 14, fontFamily: FONT, color: theme.text }} />
+              )}
+            </div>
+            {full ? (
+              <motion.button whileTap={{ scale: 0.97 }} onClick={goDescribe}
+                style={{ height: 46, padding: "0 20px", borderRadius: 13, border: "none", cursor: "pointer", background: accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>Speichern</motion.button>
+            ) : (
+              <motion.button whileTap={{ scale: 0.95 }} onClick={() => { addValue(input); setInput(""); }} disabled={!input.trim()}
+                title="Hinzufügen"
+                style={{ width: 46, height: 46, borderRadius: 13, border: `1px solid ${theme.borderFaint}`, cursor: input.trim() ? "pointer" : "default", background: fieldBg, color: theme.textSub, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, opacity: input.trim() ? 1 : 0.5 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></svg>
+              </motion.button>
+            )}
+          </div>
+
+          {/* Category toggle + list */}
+          <div style={{ display: "flex", gap: 22, marginTop: 18 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
+              {[["alpha", "Alphabetisch"], ["insp", "Inspirierend"]].map(([key, label]) => (
+                <div key={key} onClick={() => setCat(key)}
+                  style={{ padding: "8px 14px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontFamily: FONT, fontWeight: cat === key ? 600 : 500,
+                    color: cat === key ? theme.text : theme.textDim, background: cat === key ? fieldBg : "transparent" }}>{label}</div>
+              ))}
+            </div>
+            <div style={{ flex: 1, columns: "150px 4", columnGap: 18 }}>
+              {list.map(name => {
+                const sel = picked.some(p => p.toLowerCase() === name.toLowerCase());
+                const disabled = full && !sel;
+                return (
+                  <div key={name} onClick={() => sel ? removeValue(name) : addValue(name)}
+                    style={{ breakInside: "avoid", padding: "4px 0", fontSize: 14, fontFamily: FONT, lineHeight: 1.5,
+                      color: sel ? accent : (disabled ? theme.textFaint : theme.textSub), fontWeight: sel ? 600 : 400,
+                      cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.5 : 1 }}>
+                    {name}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── DESCRIBE ──
+  if (view === "describe") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 22, maxWidth: 680 }}>
+        <div>
+          <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 800, color: theme.text }}>Warum diese Werte?</div>
+          <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginTop: 4 }}>Beschreibe kurz, warum jeder Wert für deine Marke wichtig ist.</div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {picked.map((name, i) => (
+            <div key={name} style={{ padding: "16px 18px", borderRadius: 16, background: panelBg }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 700, color: theme.textDim }}>{String(i + 1).padStart(2, "0")}</span>
+                <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{name}</span>
+              </div>
+              <textarea value={notes[name] || ""} onChange={e => setNotes(n => ({ ...n, [name]: e.target.value }))} rows={2}
+                placeholder={`Warum ist „${name}" wichtig für eure Marke?`}
+                style={{ width: "100%", background: fieldBg, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, padding: "11px 13px", fontFamily: FONT, fontSize: 14, lineHeight: 1.6, color: theme.text, outline: "none", resize: "vertical", boxSizing: "border-box" }} />
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <button onClick={() => setScreen("select")} style={{ padding: "11px 18px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>Zurück</button>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={finalize}
+            style={{ padding: "11px 24px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Finalisieren</motion.button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── FINAL ──
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 720 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 800, color: theme.text }}>Brand Values</div>
+        <motion.button whileTap={{ scale: 0.96 }} onClick={beginEdit}
+          style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>Bearbeiten</motion.button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 }}>
+        {saved.map((v, i) => (
+          <div key={v.name || i} style={{ padding: "20px 22px", borderRadius: 18, background: panelBg, display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+              <span style={{ fontSize: 26, fontFamily: FONT, fontWeight: 800, color: accent, letterSpacing: -0.5, lineHeight: 1 }}>{String(i + 1).padStart(2, "0")}</span>
+              <span style={{ fontSize: 19, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{v.name}</span>
+            </div>
+            {v.reason && <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6 }}>{v.reason}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken }) {
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
   const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
@@ -13670,6 +13838,22 @@ If you don't know a field, infer a plausible value. Write all text values in the
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
           .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", soul: s })
+          .select("id").single();
+        if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
+      }
+    }, 400);
+  };
+  const valuesTimer = useRef(null);
+  const saveBrandValues = (list) => {
+    setProfile(p => ({ ...(p || {}), brand_values: list }));
+    clearTimeout(valuesTimer.current);
+    valuesTimer.current = setTimeout(async () => {
+      const cur = profileRef.current;
+      if (cur?.id) {
+        await supabase.from("brand_profile").update({ brand_values: list }).eq("id", cur.id);
+      } else if (userOrg?.id) {
+        const { data } = await supabase.from("brand_profile")
+          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", brand_values: list })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -15058,7 +15242,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{BRAND_SUBVIEW_LABELS[brandTab] || ""}</span>
               </div>
               <div style={{ flex: 1 }} />
-              {!(brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors" || brandSub === "positioning")) && (
+              {!((brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors" || brandSub === "positioning")) || (brandTab === "identity" && brandSub === "values")) && (
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => setEditingText(v => !v)}
                 style={{
                   padding: "8px 16px", borderRadius: 10, cursor: "pointer",
@@ -15220,6 +15404,8 @@ If you don't know a field, infer a plausible value. Write all text values in the
                           cp={cp} accent={theme.accent} theme={theme} darkMode={darkMode} t={t} />
                       ) : k === "strategy/positioning" ? (
                         <BrandVision value={profile.vision} onChange={saveVision} accent={theme.accent} theme={theme} darkMode={darkMode} onEditingChange={setVisionEditing} />
+                      ) : k === "identity/values" ? (
+                        <BrandValues value={profile.brand_values} onChange={saveBrandValues} accent={theme.accent} theme={theme} darkMode={darkMode} />
                       ) : k === "identity/voice" ? (
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
                           onSave={saveVoiceTone} onCancel={() => setEditingText(false)} />
