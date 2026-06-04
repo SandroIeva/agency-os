@@ -13107,7 +13107,7 @@ function VisionOrb({ size, label }) {
   return (
     <div style={{ position: "relative", width: size, height: size, maxWidth: "100%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
       <img src="/vision-bg-NEW.png" alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none" }} />
-      {label && <span style={{ position: "relative", fontSize: Math.min(26, Math.max(12, Math.round(size * 0.045))), fontFamily: FONT, fontWeight: 500, letterSpacing: 1, color: "#0f1320" }}>{label}</span>}
+      {label && <span style={{ position: "relative", fontSize: Math.min(26, Math.max(12, Math.round(size * 0.045))), fontFamily: FONT, fontWeight: 400, letterSpacing: 1, color: "#0f1320" }}>{label}</span>}
     </div>
   );
 }
@@ -13178,9 +13178,9 @@ function BrandVision({ value, onChange, accent, theme, darkMode }) {
   // ── INTRO (no data yet) ──
   if (!hasData) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%", paddingTop: 4 }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%", marginTop: -56 }}>
         <VisionOrb size={720} label="BRAND VISION" />
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 22, marginTop: -56 }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 22, marginTop: -64 }}>
           <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 380 }}>
             A vision is your destination plan. It aligns your team and turns tasks into purpose.
           </div>
