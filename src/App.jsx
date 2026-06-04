@@ -13569,9 +13569,33 @@ function BrandValues({ value, onChange, accent, theme, darkMode, editing, onEdit
   );
 }
 
+// ── Colour helpers (hex ↔ hsl) + shade ramp from near-black to near-white ──────
+function hexToHsl(hex) {
+  let h = String(hex).replace("#", ""); if (h.length === 3) h = h.split("").map(x => x + x).join("");
+  const r = parseInt(h.slice(0, 2), 16) / 255, g = parseInt(h.slice(2, 4), 16) / 255, b = parseInt(h.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b); let hue = 0, s = 0; const l = (max + min) / 2;
+  if (max !== min) { const d = max - min; s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    hue = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4; hue /= 6; }
+  return { h: hue * 360, s: s * 100, l: l * 100 };
+}
+function hslToHex(h, s, l) {
+  s /= 100; l /= 100; const k = n => (n + h / 30) % 12; const a = s * Math.min(l, 1 - l);
+  const f = n => { const c = l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1))); return Math.round(255 * c).toString(16).padStart(2, "0"); };
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
+function colorShades(hex, n = 10) {
+  const { h, s } = hexToHsl(hex);
+  return Array.from({ length: n }, (_, i) => {
+    const l = 12 + (84 * i) / (n - 1);            // 12% (near-black) → 96% (near-white)
+    const sat = s * (1 - Math.abs(l - 50) / 50 * 0.25); // slightly soften saturation at extremes
+    return hslToHex(h, sat, l);
+  });
+}
+
 // ── Brand Colors ─────────────────────────────────────────────────────────────
 // Tall rounded colour bars with the hex inside at the bottom, plus an editable
 // description above (reuses the rich-text editor via section_content["design/colors"]).
+// Clicking a colour animates the others away and reveals its shade ramp.
 function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, onCancel }) {
   const entries = [];
   if (cp?.primary) entries.push({ hex: cp.primary, role: "Primary" });
@@ -13584,6 +13608,7 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
 
   // Fetch human-readable colour names from api.color.pizza (order is preserved).
   const [names, setNames] = useState({});
+  const [openColor, setOpenColor] = useState(null); // { hex, role } when viewing shades
   const listKey = list.map(e => e.hex).join(",");
   useEffect(() => {
     if (!list.length) return;
@@ -13609,22 +13634,54 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
         </div>
       )}
 
-      {/* Colour bars */}
+      {/* Colour bars ↔ shade ramp (animated) */}
       {list.length > 0 ? (
-        <div style={{ display: "flex", gap: 16 }}>
-          {list.map(({ hex, role }, i) => {
-            const light = lum(hex) > 0.62;
-            const txt = light ? "#1a1a2e" : "#ffffff";
-            return (
-              <div key={hex + i} style={{ flex: 1, minWidth: 0, height: 360, borderRadius: 22, background: hex, position: "relative", boxShadow: "0 10px 34px rgba(0,0,0,0.07)" }}>
-                {role && <div style={{ position: "absolute", top: 18, left: 20, fontSize: 15, fontFamily: FONT, fontWeight: 600, color: txt }}>{role}</div>}
-                <div style={{ position: "absolute", bottom: 18, left: 20, right: 16 }}>
-                  <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: txt, lineHeight: 1.3 }}>{names[hex] || "…"}</div>
-                  <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: txt, opacity: 0.72, marginTop: 2 }}>{String(hex).toUpperCase()}</div>
+        <div style={{ position: "relative" }}>
+          <AnimatePresence mode="wait" initial={false}>
+            {!openColor ? (
+              <motion.div key="palette" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.985 }} transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1] }}
+                style={{ display: "flex", gap: 16 }}>
+                {list.map(({ hex, role }, i) => {
+                  const light = lum(hex) > 0.62;
+                  const txt = light ? "#1a1a2e" : "#ffffff";
+                  return (
+                    <motion.div key={hex + i} whileHover={{ y: -5 }} whileTap={{ scale: 0.985 }} onClick={() => setOpenColor({ hex, role })}
+                      style={{ flex: 1, minWidth: 0, height: 360, borderRadius: 22, background: hex, position: "relative", cursor: "pointer", boxShadow: "0 10px 34px rgba(0,0,0,0.07)" }}>
+                      {role && <div style={{ position: "absolute", top: 18, left: 20, fontSize: 15, fontFamily: FONT, fontWeight: 600, color: txt }}>{role}</div>}
+                      <div style={{ position: "absolute", bottom: 18, left: 20, right: 16 }}>
+                        <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: txt, lineHeight: 1.3 }}>{names[hex] || "…"}</div>
+                        <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: txt, opacity: 0.72, marginTop: 2 }}>{String(hex).toUpperCase()}</div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </motion.div>
+            ) : (
+              <motion.div key="shades" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }}
+                style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <BackLink theme={theme} onClick={() => setOpenColor(null)} label="Alle Farben" />
+                  <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                    <span style={{ width: 18, height: 18, borderRadius: 6, background: openColor.hex, border: `1px solid ${theme.borderFaint}` }} />
+                    <span style={{ fontSize: 15, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{names[openColor.hex] || openColor.role || "Shades"}</span>
+                    <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{String(openColor.hex).toUpperCase()}</span>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+                <div style={{ display: "flex", gap: 8 }}>
+                  {colorShades(openColor.hex, 10).map((sh, j) => {
+                    const light = lum(sh) > 0.62;
+                    const txt = light ? "#1a1a2e" : "#ffffff";
+                    return (
+                      <motion.div key={sh + j} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: j * 0.045, duration: 0.32, ease: [0.22, 0.68, 0.35, 1] }}
+                        style={{ flex: 1, minWidth: 0, height: 360, borderRadius: 14, background: sh, position: "relative" }}>
+                        <div style={{ position: "absolute", bottom: 14, left: 0, right: 0, textAlign: "center", fontSize: 11, fontFamily: FONT, fontWeight: 600, color: txt, opacity: 0.85 }}>{sh.toUpperCase()}</div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       ) : (
         <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, textAlign: "center" }}>
