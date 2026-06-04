@@ -13801,6 +13801,98 @@ const typoDisplayWeights = (font) => {
   return avail.length ? avail : [400, 700];
 };
 
+// Curated popular Google Fonts with their real weights (no API key needed — we
+// build the standard css2 URL directly). { name, cat, weights }
+const POPULAR_GOOGLE_FONTS = [
+  { name: "Inter", cat: "Sans", weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
+  { name: "Roboto", cat: "Sans", weights: [100, 300, 400, 500, 700, 900] },
+  { name: "Open Sans", cat: "Sans", weights: [300, 400, 500, 600, 700, 800] },
+  { name: "Lato", cat: "Sans", weights: [100, 300, 400, 700, 900] },
+  { name: "Montserrat", cat: "Sans", weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
+  { name: "Poppins", cat: "Sans", weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
+  { name: "Raleway", cat: "Sans", weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
+  { name: "Nunito", cat: "Sans", weights: [200, 300, 400, 500, 600, 700, 800, 900] },
+  { name: "Work Sans", cat: "Sans", weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
+  { name: "Rubik", cat: "Sans", weights: [300, 400, 500, 600, 700, 800, 900] },
+  { name: "DM Sans", cat: "Sans", weights: [400, 500, 700] },
+  { name: "Mulish", cat: "Sans", weights: [300, 400, 500, 600, 700, 800, 900] },
+  { name: "Manrope", cat: "Sans", weights: [200, 300, 400, 500, 600, 700, 800] },
+  { name: "Karla", cat: "Sans", weights: [200, 300, 400, 500, 600, 700, 800] },
+  { name: "Quicksand", cat: "Sans", weights: [300, 400, 500, 600, 700] },
+  { name: "Josefin Sans", cat: "Sans", weights: [100, 200, 300, 400, 500, 600, 700] },
+  { name: "Source Sans 3", cat: "Sans", weights: [200, 300, 400, 500, 600, 700, 800, 900] },
+  { name: "PT Sans", cat: "Sans", weights: [400, 700] },
+  { name: "Oswald", cat: "Sans", weights: [200, 300, 400, 500, 600, 700] },
+  { name: "Barlow", cat: "Sans", weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
+  { name: "Kanit", cat: "Sans", weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
+  { name: "Heebo", cat: "Sans", weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
+  { name: "Plus Jakarta Sans", cat: "Sans", weights: [200, 300, 400, 500, 600, 700, 800] },
+  { name: "Figtree", cat: "Sans", weights: [300, 400, 500, 600, 700, 800, 900] },
+  { name: "Outfit", cat: "Sans", weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
+  { name: "Space Grotesk", cat: "Sans", weights: [300, 400, 500, 600, 700] },
+  { name: "Archivo", cat: "Sans", weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
+  { name: "Albert Sans", cat: "Sans", weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
+  { name: "Playfair Display", cat: "Serif", weights: [400, 500, 600, 700, 800, 900] },
+  { name: "Merriweather", cat: "Serif", weights: [300, 400, 700, 900] },
+  { name: "Lora", cat: "Serif", weights: [400, 500, 600, 700] },
+  { name: "PT Serif", cat: "Serif", weights: [400, 700] },
+  { name: "Roboto Slab", cat: "Serif", weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
+  { name: "Source Serif 4", cat: "Serif", weights: [200, 300, 400, 500, 600, 700, 800, 900] },
+  { name: "Libre Baskerville", cat: "Serif", weights: [400, 700] },
+  { name: "EB Garamond", cat: "Serif", weights: [400, 500, 600, 700, 800] },
+  { name: "Cormorant Garamond", cat: "Serif", weights: [300, 400, 500, 600, 700] },
+  { name: "Bitter", cat: "Serif", weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
+  { name: "DM Serif Display", cat: "Serif", weights: [400] },
+  { name: "Bebas Neue", cat: "Display", weights: [400] },
+  { name: "Anton", cat: "Display", weights: [400] },
+  { name: "Pacifico", cat: "Handschrift", weights: [400] },
+  { name: "Caveat", cat: "Handschrift", weights: [400, 500, 600, 700] },
+  { name: "Dancing Script", cat: "Handschrift", weights: [400, 500, 600, 700] },
+  { name: "Lobster", cat: "Display", weights: [400] },
+  { name: "Comfortaa", cat: "Display", weights: [300, 400, 500, 600, 700] },
+  { name: "Fredoka", cat: "Display", weights: [300, 400, 500, 600, 700] },
+  { name: "Roboto Mono", cat: "Mono", weights: [100, 200, 300, 400, 500, 600, 700] },
+  { name: "JetBrains Mono", cat: "Mono", weights: [100, 200, 300, 400, 500, 600, 700, 800] },
+  { name: "Space Mono", cat: "Mono", weights: [400, 700] },
+  { name: "IBM Plex Mono", cat: "Mono", weights: [100, 200, 300, 400, 500, 600, 700] },
+  { name: "Fira Code", cat: "Mono", weights: [300, 400, 500, 600, 700] },
+];
+const buildGoogleFontUrl = (name, weights) =>
+  `https://fonts.googleapis.com/css2?family=${name.replace(/ /g, "+")}:wght@${[...weights].sort((a, b) => a - b).join(";")}&display=swap`;
+
+// Searchable dropdown over the curated Google Fonts list.
+function GoogleFontPicker({ selectedName, onPick, theme, darkMode }) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
+  }, []);
+  const inp = { width: "100%", padding: "11px 13px", borderRadius: 10, fontFamily: FONT, fontSize: 13, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff", border: `1px solid ${theme.borderFaint}`, color: theme.text, outline: "none", boxSizing: "border-box" };
+  const ql = q.trim().toLowerCase();
+  const matches = POPULAR_GOOGLE_FONTS.filter(f => !ql || f.name.toLowerCase().includes(ql));
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <input value={open ? q : (selectedName || "")} onChange={e => { setQ(e.target.value); setOpen(true); }} onFocus={() => { setQ(""); setOpen(true); }}
+        placeholder={selectedName || "Google Font suchen…"} style={inp} />
+      {open && (
+        <div className="no-scrollbar" style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 40, maxHeight: 280, overflowY: "auto", borderRadius: 12, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 16px 44px rgba(0,0,0,0.18)" }}>
+          {matches.map(f => (
+            <div key={f.name} onClick={() => { onPick(f); setOpen(false); setQ(""); }}
+              onMouseEnter={e => e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 13px", cursor: "pointer", fontSize: 14, fontFamily: FONT, color: theme.text }}>
+              <span>{f.name}</span>
+              <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>{f.cat}</span>
+            </div>
+          ))}
+          {matches.length === 0 && <div style={{ padding: "12px 13px", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>Keine Treffer</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, session, userOrg }) {
   const seedFont = (font, fallbackName) => {
     if (font && (font.family || font.name)) return font;
@@ -13880,9 +13972,13 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
             {font && <span style={{ fontSize: 24, fontFamily: familyCss(font), color: theme.text }}>Aa</span>}
           </div>
           <div>{Lbl("Name")}<input value={font?.name || ""} onChange={e => setFont(role, { ...(font || { kind: "system" }), name: e.target.value, family: e.target.value })} placeholder="z.B. Gotham" style={inp} /></div>
-          <div>{Lbl("Google Fonts URL")}
+          <div>{Lbl("Google Font")}
+            <GoogleFontPicker selectedName={font?.kind === "google" ? font.name : ""} theme={theme} darkMode={darkMode}
+              onPick={(f) => setFont(role, { ...(font || {}), name: f.name, family: f.name, kind: "google", url: buildGoogleFontUrl(f.name, f.weights), weights: f.weights })} />
+          </div>
+          <div>{Lbl("oder eigene Google-URL")}
             <input defaultValue={font?.kind === "google" ? font.url : ""} onBlur={e => onGoogle(role, e.target.value)} onKeyDown={e => { if (e.key === "Enter") onGoogle(role, e.target.value); }}
-              placeholder="https://fonts.googleapis.com/css2?family=Inter:wght@100..900" style={inp} />
+              placeholder="https://fonts.googleapis.com/css2?family=…" style={inp} />
           </div>
           {/* Uploaded font files (Schriftschnitte) */}
           <div>
