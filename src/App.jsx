@@ -13445,7 +13445,7 @@ function BrandValues({ value, onChange, accent, theme, darkMode }) {
   };
   const addValue = (name) => {
     const n = (name || "").trim();
-    if (!n || picked.length >= 5 || picked.some(p => p.toLowerCase() === n.toLowerCase())) return;
+    if (!n || picked.length >= 6 || picked.some(p => p.toLowerCase() === n.toLowerCase())) return;
     setPicked(p => [...p, n]);
   };
   const removeValue = (name) => setPicked(p => p.filter(x => x !== name));
@@ -13461,12 +13461,12 @@ function BrandValues({ value, onChange, accent, theme, darkMode }) {
   // ── SELECT ──
   if (view === "select") {
     const list = VALUES_ALPHABETIC;
-    const full = picked.length >= 5;
+    const full = picked.length >= 6;
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 8, paddingTop: 20 }}>
-        <div style={{ fontSize: 28, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.4 }}>Setze deine Top 5 Brand Values</div>
+        <div style={{ fontSize: 28, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.4 }}>Setze deine Top 6 Brand Values</div>
         <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 540, marginBottom: 18 }}>
-          Wähle bis zu fünf Werte aus der Liste oder gib eigene ein — sie definieren, wofür deine Marke steht.
+          Wähle bis zu sechs Werte aus der Liste oder gib eigene ein — sie definieren, wofür deine Marke steht.
         </div>
 
         <div style={{ width: "100%", maxWidth: 760, borderRadius: 20, background: panelBg, padding: 20, textAlign: "left", boxSizing: "border-box" }}>
@@ -13520,19 +13520,19 @@ function BrandValues({ value, onChange, accent, theme, darkMode }) {
   // ── DESCRIBE ──
   if (view === "describe") {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 22, maxWidth: 680 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 22, maxWidth: 760 }}>
         <div>
           <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 800, color: theme.text }}>Warum diese Werte?</div>
           <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginTop: 4 }}>Beschreibe kurz, warum jeder Wert für deine Marke wichtig ist.</div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "22px 24px" }}>
           {picked.map((name, i) => (
-            <div key={name} style={{ padding: "16px 18px", borderRadius: 16, background: panelBg }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 700, color: theme.textDim }}>{String(i + 1).padStart(2, "0")}</span>
+            <div key={name}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}>
+                <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 700, color: accent }}>{String(i + 1).padStart(2, "0")}</span>
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{name}</span>
               </div>
-              <textarea value={notes[name] || ""} onChange={e => setNotes(n => ({ ...n, [name]: e.target.value }))} rows={2}
+              <textarea value={notes[name] || ""} onChange={e => setNotes(n => ({ ...n, [name]: e.target.value }))} rows={3}
                 placeholder={`Warum ist „${name}" wichtig für eure Marke?`}
                 style={{ width: "100%", background: fieldBg, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, padding: "11px 13px", fontFamily: FONT, fontSize: 14, lineHeight: 1.6, color: theme.text, outline: "none", resize: "vertical", boxSizing: "border-box" }} />
             </div>
