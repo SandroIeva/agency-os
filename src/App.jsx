@@ -10607,7 +10607,7 @@ const BRAND_PILLAR_TABS = [
 const BRAND_PILLAR_SUBTABS = {
   strategy: [
     { key: "core",        label: "Brand Core" },
-    { key: "positioning", label: "Positionierung" },
+    { key: "positioning", label: "Vision" },
     { key: "taglines",    label: "Taglines" },
     { key: "personas",    label: "Personas" },
     { key: "competitors", label: "Competitors" },
@@ -13087,6 +13087,56 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
   );
 }
 
+// ── Brand Vision ─────────────────────────────────────────────────────────────
+// Vertical timeline: Now → 3 years → 5 years, each with an editable field, plus an
+// "Aspiration" field below. Saved live (debounced) to brand_profile.vision.
+function BrandVision({ value, onChange, accent, theme, darkMode }) {
+  const v = value && typeof value === "object" ? value : {};
+  const set = (field, val) => onChange({ ...v, [field]: val });
+  const fieldBg = darkMode ? "rgba(255,255,255,0.04)" : "#fff";
+  const areaStyle = (minH) => ({
+    width: "100%", minHeight: minH, background: fieldBg, border: `1px solid ${theme.borderFaint}`,
+    borderRadius: 14, padding: "14px 16px", fontFamily: FONT, fontSize: 14, lineHeight: 1.6,
+    color: theme.text, outline: "none", resize: "vertical", boxSizing: "border-box",
+  });
+  const stages = [
+    { key: "now", chip: "Jetzt", placeholder: "Wo steht die Brand aktuell? Was hast du jetzt?", filled: true },
+    { key: "year3", chip: "3 Jahre", placeholder: "Wo siehst du die Brand in 3 Jahren?" },
+    { key: "year5", chip: "5 Jahre", placeholder: "Wo siehst du die Brand in 5 Jahren?" },
+  ];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
+      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, maxWidth: 580 }}>
+        Eine Brand Vision gibt Richtung, Inspiration und einen starken Grund zu existieren — über den reinen Profit hinaus.
+      </div>
+
+      {/* Vertical timeline */}
+      <div style={{ position: "relative", paddingLeft: 30 }}>
+        <div style={{ position: "absolute", left: 7, top: 12, bottom: 12, width: 2, background: theme.borderFaint }} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          {stages.map((s) => (
+            <div key={s.key} style={{ position: "relative" }}>
+              <div style={{ position: "absolute", left: -30, top: 6, width: 16, height: 16, borderRadius: "50%", boxSizing: "border-box",
+                background: s.filled ? accent : fieldBg, border: `2px solid ${s.filled ? accent : theme.borderFaint}` }} />
+              <div style={{ display: "inline-block", marginBottom: 9, padding: "5px 13px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, background: fieldBg, fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{s.chip}</div>
+              <textarea value={v[s.key] || ""} onChange={(e) => set(s.key, e.target.value)} placeholder={s.placeholder} style={areaStyle(92)} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Aspiration */}
+      <div>
+        <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 4 }}>Aspiration</div>
+        <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 10 }}>
+          Eine Aspiration ist die ultimative Ambition deiner Brand — Arbeit wird zur Mission, der sich andere anschließen.
+        </div>
+        <textarea value={v.aspiration || ""} onChange={(e) => set("aspiration", e.target.value)} placeholder="Wofür steht deine Brand letztlich? Welche größere Ambition treibt euch an?" style={areaStyle(90)} />
+      </div>
+    </div>
+  );
+}
+
 function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken }) {
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
   const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
@@ -13315,6 +13365,22 @@ If you don't know a field, infer a plausible value. Write all text values in the
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
     }, 500);
+  };
+  const visionTimer = useRef(null);
+  const saveVision = (v) => {
+    setProfile(p => ({ ...(p || {}), vision: v }));
+    clearTimeout(visionTimer.current);
+    visionTimer.current = setTimeout(async () => {
+      const cur = profileRef.current;
+      if (cur?.id) {
+        await supabase.from("brand_profile").update({ vision: v }).eq("id", cur.id);
+      } else if (userOrg?.id) {
+        const { data } = await supabase.from("brand_profile")
+          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", vision: v })
+          .select("id").single();
+        if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
+      }
+    }, 600);
   };
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
@@ -14700,7 +14766,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{BRAND_SUBVIEW_LABELS[brandTab] || ""}</span>
               </div>
               <div style={{ flex: 1 }} />
-              {!(brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors")) && (
+              {!(brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors" || brandSub === "positioning")) && (
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => setEditingText(v => !v)}
                 style={{
                   padding: "8px 16px", borderRadius: 10, cursor: "pointer",
@@ -14862,6 +14928,8 @@ If you don't know a field, infer a plausible value. Write all text values in the
                       ) : k === "strategy/competitors" ? (
                         <BrandCompetitors value={profile.competitors} onChange={saveCompetitors} generateCompetitor={generateCompetitor}
                           cp={cp} accent={theme.accent} theme={theme} darkMode={darkMode} t={t} />
+                      ) : k === "strategy/positioning" ? (
+                        <BrandVision value={profile.vision} onChange={saveVision} accent={theme.accent} theme={theme} darkMode={darkMode} />
                       ) : k === "identity/voice" ? (
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
                           onSave={saveVoiceTone} onCancel={() => setEditingText(false)} />

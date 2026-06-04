@@ -29,7 +29,7 @@ About Agency OS:
 
 Main menu categories (Plus button → linear two-column menu):
 - BRAND has five pillars, each with sub-tabs:
-  - Strategie: Brand Core (claim, description, value props, key messages), Positionierung, Personas, Competitors
+  - Strategie: Brand Core (claim, description, value props, key messages), Vision (Now / 3-year / 5-year vision + aspiration), Personas, Competitors
   - Identität: Brand Story, Brand Soul, Brand Values, Voice & Tone
   - Brand Design: Logo, Farben (colors), Typografie, Bildsprache (image references + prompts)
   - Touchpoints: social media channels + other touchpoints (own view)
