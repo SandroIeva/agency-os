@@ -12789,9 +12789,9 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
     const describeOk = !!describeText.trim() && !generating;
     const SubmitBtn = ({ ok, onClick }) => (
       <motion.button whileTap={{ scale: 0.97 }} onClick={onClick} disabled={!ok}
-        style={{ padding: "10px 18px", borderRadius: 11, border: "none", cursor: ok ? "pointer" : "default",
-          background: acc, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: ok ? 1 : 0.45, flexShrink: 0 }}>
-        {generating ? "Analysiere…" : "Profil erstellen"}
+        style={{ height: 44, padding: "0 22px", borderRadius: 11, border: "none", cursor: ok ? "pointer" : "default", boxSizing: "border-box",
+          background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: ok ? 1 : 0.45, flexShrink: 0 }}>
+        {generating ? "Analysiere…" : "Analysieren"}
       </motion.button>
     );
     return (
@@ -12805,13 +12805,13 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
         <div style={{ padding: 22, borderRadius: 18, background: cardBg, display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text }}>Direkter Competitor</div>
-            <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Firmenname oder Website-URL — die KI recherchiert das Profil.</div>
+            <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Firmenname oder Website-URL eingeben.</div>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
             <div style={{ flex: 1 }}>
               <input value={inputText} onChange={e => setInputText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && directOk) doGenerate(inputText); }}
                 placeholder="Instagram / instagram.com"
-                style={{ ...inputStyle, border: `1px solid ${urlError ? "#e5484d" : theme.borderFaint}` }} />
+                style={{ ...inputStyle, height: 44, border: `1px solid ${urlError ? "#e5484d" : theme.borderFaint}` }} />
               {urlError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT, marginTop: 6 }}>Ungültige URL — prüfe die Schreibweise (z.B. instagram.com).</div>}
             </div>
             <SubmitBtn ok={directOk} onClick={() => doGenerate(inputText)} />
@@ -12826,10 +12826,7 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, display: "flex", alignItems: "center", gap: 6 }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h10M4 18h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                Beschreibung
-              </span>
+              <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>Beschreibung</span>
               {dictationSupported && (
                 <motion.div whileTap={{ scale: 0.9 }} onClick={toggleDictation}
                   style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", color: listening ? "#EF4444" : theme.accent, fontSize: 12, fontFamily: FONT, fontWeight: 500 }}>
@@ -12842,7 +12839,7 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
               )}
             </div>
             <textarea value={describeText} onChange={e => setDescribeText(e.target.value)} rows={5}
-              placeholder="z.B. Eine Social-Media-Plattform für Foto- und Video-Sharing mit Fokus auf Stories und Reels…"
+              placeholder="Eine Social-Media-Plattform für Foto- und Video-Sharing mit Fokus auf Stories und Reels…"
               style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6, border: `1px solid ${listening ? "#EF444450" : theme.borderFaint}` }} />
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
