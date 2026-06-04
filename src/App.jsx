@@ -13185,11 +13185,11 @@ function BrandVision({ value, onChange, accent, theme, darkMode, onEditingChange
         <img src="/vision-bg.png" alt="" style={{ display: "block", width: "100%", height: "auto", pointerEvents: "none" }} />
         <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
           <span style={{ marginTop: "43%", fontSize: 34, fontFamily: FONT, fontWeight: 400, letterSpacing: 1, color: "#0f1320" }}>BRAND VISION</span>
-          <div style={{ marginTop: 100, fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 380 }}>
-            A vision is your destination plan. It aligns your team and turns tasks into purpose.
+          <div style={{ marginTop: 100, fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 520 }}>
+            A vision is your destination plan. It aligns your team<br />and turns tasks into purpose.
           </div>
           <motion.button whileTap={{ scale: 0.97 }} onClick={startEdit}
-            style={{ marginTop: 28, padding: "13px 26px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 14, fontFamily: FONT, fontWeight: 600,
+            style={{ marginTop: 28, padding: "13px 26px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 600,
               background: darkMode ? "#fff" : "#0f1320", color: darkMode ? "#0f1320" : "#fff" }}>
             Define Your Vision
           </motion.button>
