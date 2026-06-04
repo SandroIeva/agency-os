@@ -14799,7 +14799,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 return (
                   <motion.div key={key} whileTap={{ scale: 0.96 }} onClick={() => setBrandSub(key)}
                     style={{
-                      padding: "8px 14px", borderRadius: "10px 10px 0 0", cursor: "pointer",
+                      padding: "8px 14px 11px", borderRadius: "10px 10px 0 0", cursor: "pointer",
                       fontSize: 12, fontFamily: FONT, fontWeight: active ? 600 : 500,
                       color: active ? theme.text : theme.textDim,
                       borderBottom: active ? `2px solid ${theme.accent}` : "2px solid transparent",
