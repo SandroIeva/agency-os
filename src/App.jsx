@@ -13581,6 +13581,20 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
   const list = [...new Set(palette.filter(Boolean))];
   const lum = (hex) => { try { const h = String(hex).replace("#", ""); const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16); return (0.299 * r + 0.587 * g + 0.114 * b) / 255; } catch { return 0.5; } };
 
+  // Fetch human-readable colour names from api.color.pizza (order is preserved).
+  const [names, setNames] = useState({});
+  const listKey = list.join(",");
+  useEffect(() => {
+    if (!list.length) return;
+    let cancelled = false;
+    const vals = list.map(c => String(c).replace("#", "")).join(",");
+    fetch(`https://api.color.pizza/v1/?values=${vals}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!cancelled && Array.isArray(d?.colors)) { const m = {}; d.colors.forEach((co, i) => { if (list[i]) m[list[i]] = co.name; }); setNames(m); } })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [listKey]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
       {/* Description */}
@@ -13601,9 +13615,10 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
             const light = lum(c) > 0.62;
             return (
               <div key={c + i} style={{ flex: 1, minWidth: 0, height: 360, borderRadius: 26, background: c, position: "relative", boxShadow: "0 10px 34px rgba(0,0,0,0.07)" }}>
-                <div style={{ position: "absolute", left: "50%", bottom: 18, transform: "translateX(-50%)", padding: "7px 14px", borderRadius: 999, whiteSpace: "nowrap",
-                  background: light ? "rgba(0,0,0,0.07)" : "rgba(0,0,0,0.22)", color: light ? "#33373d" : "#ffffff", fontSize: 14, fontFamily: FONT, fontWeight: 600 }}>
-                  {String(c).toUpperCase()}
+                <div style={{ position: "absolute", left: "50%", bottom: 18, transform: "translateX(-50%)", maxWidth: "88%", padding: names[c] ? "8px 15px" : "7px 14px", borderRadius: 16, textAlign: "center",
+                  background: light ? "rgba(0,0,0,0.07)" : "rgba(0,0,0,0.22)", color: light ? "#33373d" : "#ffffff", fontFamily: FONT }}>
+                  {names[c] && <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.25 }}>{names[c]}</div>}
+                  <div style={{ fontSize: names[c] ? 11 : 14, fontWeight: 600, opacity: names[c] ? 0.7 : 1, marginTop: names[c] ? 2 : 0 }}>{String(c).toUpperCase()}</div>
                 </div>
               </div>
             );
