@@ -13881,7 +13881,7 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
       </div>
 
       {/* Alphabet */}
-      <div style={{ fontFamily: fam, fontSize: 40, color: theme.text, lineHeight: 1.45, fontWeight: 400, wordSpacing: 2 }}>
+      <div style={{ fontFamily: fam, fontSize: 31, color: theme.text, lineHeight: 1.5, fontWeight: 400, wordSpacing: 2 }}>
         <div>ABCDEFGHIJKLMNOPQRSTUVWXYZ</div>
         <div>abcdefghijklmnopqrstuvwxyz</div>
         <div>0123456789</div>
