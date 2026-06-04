@@ -13569,6 +13569,55 @@ function BrandValues({ value, onChange, accent, theme, darkMode, editing, onEdit
   );
 }
 
+// ── Brand Colors ─────────────────────────────────────────────────────────────
+// Tall rounded colour bars with the hex inside at the bottom, plus an editable
+// description above (reuses the rich-text editor via section_content["design/colors"]).
+function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, onCancel }) {
+  const palette = [];
+  if (cp?.primary) palette.push(cp.primary);
+  if (cp?.secondary) palette.push(cp.secondary);
+  (cp?.accents || []).forEach(c => c && palette.push(c));
+  if (!palette.length && Array.isArray(colors)) colors.forEach(c => c && palette.push(c));
+  const list = [...new Set(palette.filter(Boolean))];
+  const lum = (hex) => { try { const h = String(hex).replace("#", ""); const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16); return (0.299 * r + 0.587 * g + 0.114 * b) / 255; } catch { return 0.5; } };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
+      {/* Description */}
+      {editing ? (
+        <RichTextEditor key="colors-desc" initialHTML={savedHtml || "<p></p>"} theme={theme} darkMode={darkMode} onSave={onSave} onCancel={onCancel} />
+      ) : savedHtml ? (
+        <div className="brand-rich" dangerouslySetInnerHTML={{ __html: savedHtml }} />
+      ) : (
+        <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 560 }}>
+          Beschreibe eure Farbwelt — wofür die Farben stehen und wie sie eingesetzt werden. Über „Bearbeiten" oben rechts kannst du den Text ergänzen.
+        </div>
+      )}
+
+      {/* Colour bars */}
+      {list.length > 0 ? (
+        <div style={{ display: "flex", gap: 14 }}>
+          {list.map((c, i) => {
+            const light = lum(c) > 0.62;
+            return (
+              <div key={c + i} style={{ flex: 1, minWidth: 0, height: 360, borderRadius: 26, background: c, position: "relative", boxShadow: "0 10px 34px rgba(0,0,0,0.07)" }}>
+                <div style={{ position: "absolute", left: "50%", bottom: 18, transform: "translateX(-50%)", padding: "7px 14px", borderRadius: 999, whiteSpace: "nowrap",
+                  background: light ? "rgba(0,0,0,0.07)" : "rgba(0,0,0,0.22)", color: light ? "#33373d" : "#ffffff", fontSize: 14, fontFamily: FONT, fontWeight: 600 }}>
+                  {String(c).toUpperCase()}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, textAlign: "center" }}>
+          Noch keine Farben hinterlegt.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken }) {
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
   const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
@@ -15402,6 +15451,9 @@ If you don't know a field, infer a plausible value. Write all text values in the
                         <BrandVision value={profile.vision} onChange={saveVision} accent={theme.accent} theme={theme} darkMode={darkMode} onEditingChange={setVisionEditing} />
                       ) : k === "identity/values" ? (
                         <BrandValues value={profile.brand_values} onChange={saveBrandValues} accent={theme.accent} theme={theme} darkMode={darkMode} editing={valuesEditing} onEditingChange={setValuesEditing} />
+                      ) : k === "design/colors" ? (
+                        <BrandColors cp={cp} colors={profile.colors} editing={editingText} savedHtml={savedHtml} theme={theme} darkMode={darkMode}
+                          onSave={(html) => saveSection(k, html)} onCancel={() => setEditingText(false)} />
                       ) : k === "identity/voice" ? (
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
                           onSave={saveVoiceTone} onCancel={() => setEditingText(false)} />
