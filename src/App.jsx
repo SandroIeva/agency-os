@@ -12679,6 +12679,9 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
   const [genStatus, setGenStatus] = useState("");
+  const [describeText, setDescribeText] = useState("");
+  const [listening, setListening] = useState(false);
+  const recogRef = useRef(null);
   const rotateRef = useRef(null);
   const startRotating = (msgs) => {
     let i = 0; setGenStatus(msgs[0]);
@@ -12686,11 +12689,29 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
     rotateRef.current = setInterval(() => { i = (i + 1) % msgs.length; setGenStatus(msgs[i]); }, 2000);
   };
   const stopRotating = () => { clearInterval(rotateRef.current); rotateRef.current = null; };
-  useEffect(() => () => clearInterval(rotateRef.current), []);
+  const dictationSupported = typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  const toggleDictation = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    if (listening) { try { recogRef.current?.stop(); } catch {} return; }
+    const r = new SR();
+    r.lang = "de-DE"; r.continuous = true; r.interimResults = false;
+    r.onresult = (e) => {
+      let txt = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) txt += e.results[i][0].transcript;
+      txt = txt.trim();
+      if (txt) setDescribeText(prev => (prev ? prev.trim() + " " : "") + txt);
+    };
+    r.onend = () => setListening(false);
+    r.onerror = () => setListening(false);
+    recogRef.current = r;
+    try { r.start(); setListening(true); } catch {}
+  };
+  useEffect(() => () => { clearInterval(rotateRef.current); try { recogRef.current?.stop(); } catch {} }, []);
 
   const firstRender = useRef(true);
   useEffect(() => { if (firstRender.current) { firstRender.current = false; } else { setScreen("auto"); } }, []);
-  useEffect(() => { if (screen !== "detail" && screen !== "edit" && screen !== "describe" && screen !== "direct") setScreen("auto"); }, [competitors.length]);
+  useEffect(() => { if (screen !== "detail" && screen !== "edit" && screen !== "choice") setScreen("auto"); }, [competitors.length]);
 
   const view = screen === "auto" ? (competitors.length ? "overview" : "choice") : screen;
   const acc = cp?.primary || accent;
@@ -12706,8 +12727,10 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
 
   const openDetail = (idx) => { setSelIdx(idx); setScreen("detail"); };
   const startEdit = (idx) => { setDraft(JSON.parse(JSON.stringify(competitors[idx]))); setSelIdx(idx); setDraftIsNew(false); setScreen("edit"); };
-  const doGenerate = async () => {
-    if (!inputText.trim() || generating) return;
+  const doGenerate = async (rawText) => {
+    const val = (rawText || "").trim();
+    if (!val || generating) return;
+    if (listening) { try { recogRef.current?.stop(); } catch {} }
     setGenerating(true); setGenError(""); setGenStatus("Wird vorbereitet …");
     try {
       // Progress callback → live status so the user can follow what's happening.
@@ -12724,13 +12747,13 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
         }
       };
       // Returns an array: [mainCompetitor, ...similarCompetitors]
-      const list = await generateCompetitor(inputText.trim(), onProgress);
+      const list = await generateCompetitor(val, onProgress);
       stopRotating();
       const arr = Array.isArray(list) ? list : [list];
       if (!arr.length) throw new Error("empty");
       setGenStatus(`${arr.length} Wettbewerber gefunden`);
       const next = [...competitors, ...arr];
-      commit(next); setInputText("");
+      commit(next); setInputText(""); setDescribeText("");
       // Always land on the overview so all new cards are visible; user clicks one for detail.
       setScreen("overview");
     } catch (e) {
@@ -12750,93 +12773,95 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
     commit(next); setDraft(null); setScreen(next.length ? "overview" : "auto");
   };
 
-  // ── CHOICE (empty state) ────────────────────────────────────────────────────
+  // ── CHOICE (entry) — two stacked full-width cards, each with its own input ───
   if (view === "choice") {
-    const OptCard = ({ icon, title, desc, onClick }) => (
-      <motion.div whileHover={{ y: -3 }} whileTap={{ scale: 0.98 }} onClick={onClick}
-        style={{ flex: 1, minWidth: 220, cursor: "pointer", padding: 24, borderRadius: 18, background: cardBg, border: `1px solid ${theme.borderFaint}`, display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 13, background: acc + "1f", color: acc, display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</div>
-        <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{title}</div>
-        <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>{desc}</div>
-      </motion.div>
-    );
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        {competitors.length > 0 && <div style={{ alignSelf: "flex-start" }}><BackLink theme={theme} onClick={() => setScreen("overview")} label="Zurück" /></div>}
-        <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, maxWidth: 560 }}>
-          Füge einen Wettbewerber hinzu — beschreibe ihn kurz, oder gib direkt einen Namen bzw. eine Website ein. Die KI erstellt daraus ein Profil.
-        </div>
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <OptCard
-            icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>}
-            title="Competitor beschreiben" desc="Beschreibe den Wettbewerber in ein paar Sätzen. Die KI füllt Summary, Stärken, Schwächen und Empfehlungen automatisch aus."
-            onClick={() => { setInputText(""); setGenError(""); setScreen("describe"); }} />
-          <OptCard
-            icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>}
-            title="Direkter Competitor" desc="Gib einen Firmennamen oder eine Website-URL ein (z.B. instagram.com). Die KI recherchiert das Profil."
-            onClick={() => { setInputText(""); setGenError(""); setScreen("direct"); }} />
-        </div>
-      </div>
-    );
-  }
-
-  // ── DESCRIBE / DIRECT (AI input) ────────────────────────────────────────────
-  if (view === "describe" || view === "direct") {
-    const isDirect = view === "direct";
-    // Only the "direct" field accepts a name OR a URL. Flag obviously broken URLs:
-    // input that clearly looks like a URL attempt (has a dot / protocol, no spaces)
-    // but doesn't parse to a valid domain. A plain name like "Instagram" is fine.
     const trimmed = inputText.trim();
     const urlish = trimmed.length > 0 && !/\s/.test(trimmed) && (/^https?:/i.test(trimmed) || /\./.test(trimmed));
     const validUrl = (() => {
       if (!urlish) return true;
       try {
         const u = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
-        return /^[\w-]+(\.[\w-]+)+$/.test(u.hostname); // hostname must have at least one real dot-segment
+        return /^[\w-]+(\.[\w-]+)+$/.test(u.hostname);
       } catch { return false; }
     })();
-    const urlError = isDirect && urlish && !validUrl;
-    const canSubmit = !!trimmed && !generating && !urlError;
+    const urlError = urlish && !validUrl;
+    const directOk = !!trimmed && !urlError && !generating;
+    const describeOk = !!describeText.trim() && !generating;
+    const Icon = ({ children }) => <div style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, background: acc + "1f", color: acc, display: "flex", alignItems: "center", justifyContent: "center" }}>{children}</div>;
+    const SubmitBtn = ({ ok, onClick }) => (
+      <motion.button whileTap={{ scale: 0.97 }} onClick={onClick} disabled={!ok}
+        style={{ padding: "10px 18px", borderRadius: 11, border: "none", cursor: ok ? "pointer" : "default",
+          background: acc, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: ok ? 1 : 0.45, flexShrink: 0 }}>
+        {generating ? "Analysiere…" : "Profil erstellen"}
+      </motion.button>
+    );
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 620 }}>
-        <BackLink theme={theme} onClick={() => setScreen(competitors.length ? "choice" : "auto")} label="Zurück" />
-        <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{isDirect ? "Direkter Competitor" : "Competitor beschreiben"}</div>
-        <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
-          {isDirect ? "Gib den Firmennamen oder die Website ein — die KI erstellt daraus ein Wettbewerber-Profil." : "Beschreibe den Wettbewerber so genau wie möglich — Produkt, Zielgruppe, Stärken, Schwächen."}
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 760 }}>
+        {competitors.length > 0 && <div style={{ alignSelf: "flex-start" }}><BackLink theme={theme} onClick={() => setScreen("overview")} label="Zurück" /></div>}
+        <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, maxWidth: 600 }}>
+          Füge einen Wettbewerber hinzu — gib direkt einen Namen bzw. eine Website ein, oder beschreibe ihn kurz. Die KI erstellt daraus ein Profil und findet ähnliche Wettbewerber.
         </div>
-        {isDirect ? (
-          <div>
-            <input value={inputText} onChange={e => setInputText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && canSubmit) doGenerate(); }}
-              placeholder="z.B. Instagram oder instagram.com"
-              style={{ ...inputStyle, border: `1px solid ${urlError ? "#e5484d" : theme.borderFaint}` }} />
-            {urlError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT, marginTop: 6 }}>Ungültige URL — prüfe die Schreibweise (z.B. instagram.com).</div>}
-          </div>
-        ) : (
-          <textarea value={inputText} onChange={e => setInputText(e.target.value)} rows={6}
-            placeholder="z.B. Eine Social-Media-Plattform für Foto- und Video-Sharing mit Fokus auf Stories und Reels…"
-            style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }} />
-        )}
-        {genError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT }}>{genError}</div>}
-        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          <motion.button whileTap={{ scale: 0.97 }} onClick={doGenerate} disabled={!canSubmit}
-            style={{ padding: "11px 20px", borderRadius: 12, border: "none", cursor: canSubmit ? "pointer" : "default",
-              background: acc, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: canSubmit ? 1 : 0.5 }}>
-            {generating ? "Analysiere…" : "Profil erstellen"}
-          </motion.button>
-          {generating && genStatus && (
-            <div style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, fontFamily: FONT, color: theme.textSub }}>
-              <motion.svg animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.9, ease: "linear" }}
-                width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={acc} strokeWidth="2.5" strokeLinecap="round">
-                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-              </motion.svg>
-              <AnimatePresence mode="wait">
-                <motion.span key={genStatus} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2 }}>
-                  {genStatus}
-                </motion.span>
-              </AnimatePresence>
+
+        {/* Card 1: Direkter Competitor (URL / name) */}
+        <div style={{ padding: 22, borderRadius: 18, background: cardBg, border: `1px solid ${theme.borderFaint}`, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 13 }}>
+            <Icon><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg></Icon>
+            <div>
+              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text }}>Direkter Competitor</div>
+              <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>Firmenname oder Website-URL (z.B. instagram.com) — die KI recherchiert das Profil.</div>
             </div>
-          )}
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <div style={{ flex: 1 }}>
+              <input value={inputText} onChange={e => setInputText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && directOk) doGenerate(inputText); }}
+                placeholder="z.B. Instagram oder instagram.com"
+                style={{ ...inputStyle, border: `1px solid ${urlError ? "#e5484d" : theme.borderFaint}` }} />
+              {urlError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT, marginTop: 6 }}>Ungültige URL — prüfe die Schreibweise (z.B. instagram.com).</div>}
+            </div>
+            <SubmitBtn ok={directOk} onClick={() => doGenerate(inputText)} />
+          </div>
         </div>
+
+        {/* Card 2: Competitor beschreiben (free text + dictation) */}
+        <div style={{ padding: 22, borderRadius: 18, background: cardBg, border: `1px solid ${theme.borderFaint}`, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 13 }}>
+            <Icon><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></Icon>
+            <div>
+              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text }}>Competitor beschreiben</div>
+              <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>Beschreibe den Wettbewerber in ein paar Sätzen — tippen oder per Mikrofon diktieren.</div>
+            </div>
+          </div>
+          <div style={{ position: "relative" }}>
+            <textarea value={describeText} onChange={e => setDescribeText(e.target.value)} rows={5}
+              placeholder="z.B. Eine Social-Media-Plattform für Foto- und Video-Sharing mit Fokus auf Stories und Reels…"
+              style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6, paddingRight: 50 }} />
+            {dictationSupported && (
+              <motion.button whileTap={{ scale: 0.9 }} onClick={toggleDictation} title={listening ? "Aufnahme stoppen" : "Diktieren"}
+                animate={listening ? { scale: [1, 1.12, 1] } : { scale: 1 }} transition={listening ? { repeat: Infinity, duration: 1.1 } : {}}
+                style={{ position: "absolute", top: 10, right: 10, width: 34, height: 34, borderRadius: 10, cursor: "pointer", border: "none",
+                  background: listening ? "#e5484d" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)"),
+                  color: listening ? "#fff" : theme.textSub, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              </motion.button>
+            )}
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <SubmitBtn ok={describeOk} onClick={() => doGenerate(describeText)} />
+          </div>
+        </div>
+
+        {genError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT }}>{genError}</div>}
+        {generating && genStatus && (
+          <div style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, fontFamily: FONT, color: theme.textSub }}>
+            <motion.svg animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.9, ease: "linear" }}
+              width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={acc} strokeWidth="2.5" strokeLinecap="round">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+            </motion.svg>
+            <AnimatePresence mode="wait">
+              <motion.span key={genStatus} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2 }}>{genStatus}</motion.span>
+            </AnimatePresence>
+          </div>
+        )}
       </div>
     );
   }
