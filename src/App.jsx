@@ -13932,6 +13932,10 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
   const familyCss = (f) => f ? `'${f.family || f.name}', system-ui, -apple-system, sans-serif` : "system-ui, -apple-system, sans-serif";
   const [uploading, setUploading] = useState(false);
   const fileRefP = useRef(null), fileRefS = useRef(null);
+  // Selected input method per role ("google" | "url" | "upload"). Google list is default.
+  const [typoMethod, setTypoMethod] = useState({});
+  const methodFor = (role, font) => typoMethod[role] || (font?.kind === "upload" ? "upload" : "google");
+  const setMethodFor = (role, m) => setTypoMethod(prev => ({ ...prev, [role]: m }));
   const divider = `1px solid ${theme.borderFaint}`;
 
   // Inject <link> (google) and per-file @font-face (uploads, one per weight).
@@ -13989,46 +13993,68 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
     const Lbl = (s) => <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 600, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.4 }}>{s}</div>;
     const weightOpts = [100, 200, 300, 400, 500, 600, 700, 800, 900];
     // Plain function (NOT a nested component) so inputs/selects don't remount on every change.
+    const METHOD_TABS = [{ id: "google", label: "Google Font" }, { id: "url", label: "Google-URL" }, { id: "upload", label: "Hochladen" }];
     const section = (role, font, fileRef, label) => {
       const avail = typoAvailableWeights(font);
       const shown = typoDisplayWeights(font);
+      const method = methodFor(role, font);
       const toggleWeight = (w) => { const set = new Set(shown); set.has(w) ? set.delete(w) : set.add(w); setFont(role, { ...font, weights: [...set].sort((a, b) => a - b) }); };
       return (
-        <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.025)", display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ width: "100%", boxSizing: "border-box", padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.025)", display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{label}</div>
             {font && <span style={{ fontSize: 24, fontFamily: familyCss(font), color: theme.text }}>Aa</span>}
           </div>
           <div>{Lbl("Name")}<input value={font?.name || ""} onChange={e => setFont(role, { ...(font || { kind: "system" }), name: e.target.value, family: e.target.value })} placeholder="z.B. Gotham" style={inp} /></div>
-          <div>{Lbl("Google Font")}
-            <GoogleFontPicker selectedName={font?.kind === "google" ? font.name : ""} theme={theme} darkMode={darkMode}
-              onPick={(f) => setFont(role, { ...(font || {}), name: f.name, family: f.name, kind: "google", url: buildGoogleFontUrl(f.name, f.weights), weights: f.weights })} />
+          {/* Tab selector: choose ONE input method */}
+          <div style={{ display: "flex", gap: 4, padding: 4, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+            {METHOD_TABS.map(t => {
+              const on = method === t.id;
+              return (
+                <button key={t.id} onClick={() => setMethodFor(role, t.id)}
+                  style={{ flex: 1, padding: "8px 6px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: on ? 600 : 500,
+                    background: on ? (darkMode ? "rgba(255,255,255,0.10)" : "#fff") : "transparent",
+                    color: on ? theme.text : theme.textDim,
+                    boxShadow: on ? "0 1px 3px rgba(0,0,0,0.12)" : "none", transition: "background 0.15s, color 0.15s" }}>
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
-          <div>{Lbl("oder eigene Google-URL")}
-            <input defaultValue={font?.kind === "google" ? font.url : ""} onBlur={e => onGoogle(role, e.target.value)} onKeyDown={e => { if (e.key === "Enter") onGoogle(role, e.target.value); }}
-              placeholder="https://fonts.googleapis.com/css2?family=…" style={inp} />
-          </div>
-          {/* Uploaded font files (Schriftschnitte) */}
-          <div>
-            {Lbl("Schriftschnitte (Upload)")}
-            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-              {(font?.files || []).map((f, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontFamily: FONT, color: theme.textSub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.label || "Font"}</span>
-                  <select value={f.weight} onChange={e => setFont(role, { ...font, files: font.files.map((x, j) => j === i ? { ...x, weight: Number(e.target.value) } : x) })}
-                    style={{ ...inp, width: 150, cursor: "pointer" }}>
-                    {weightOpts.map(w => <option key={w} value={w}>{TYPO_WEIGHT_LABELS[w]} ({w})</option>)}
-                  </select>
-                  <button onClick={() => setFont(role, { ...font, files: font.files.filter((_, j) => j !== i) })}
-                    style={{ width: 30, height: 30, flexShrink: 0, borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, cursor: "pointer" }}>×</button>
-                </div>
-              ))}
-              <input ref={fileRef} type="file" accept=".woff2,.woff,.ttf,.otf,font/*" multiple hidden onChange={e => { uploadFonts(role, e.target.files); e.target.value = ""; }} />
-              <button onClick={() => fileRef.current?.click()} style={{ alignSelf: "flex-start", padding: "8px 13px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>
-                {uploading ? "Lädt…" : "+ Schriftschnitte hochladen"}
-              </button>
+          {method === "google" && (
+            <div>{Lbl("Google Font auswählen")}
+              <GoogleFontPicker selectedName={font?.kind === "google" ? font.name : ""} theme={theme} darkMode={darkMode}
+                onPick={(f) => setFont(role, { ...(font || {}), name: f.name, family: f.name, kind: "google", url: buildGoogleFontUrl(f.name, f.weights), weights: f.weights })} />
             </div>
-          </div>
+          )}
+          {method === "url" && (
+            <div>{Lbl("Google-Font-URL")}
+              <input defaultValue={font?.kind === "google" ? font.url : ""} onBlur={e => onGoogle(role, e.target.value)} onKeyDown={e => { if (e.key === "Enter") onGoogle(role, e.target.value); }}
+                placeholder="https://fonts.googleapis.com/css2?family=…" style={inp} />
+            </div>
+          )}
+          {method === "upload" && (
+            <div>
+              {Lbl("Schriftschnitte (Upload)")}
+              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                {(font?.files || []).map((f, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontFamily: FONT, color: theme.textSub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.label || "Font"}</span>
+                    <select value={f.weight} onChange={e => setFont(role, { ...font, files: font.files.map((x, j) => j === i ? { ...x, weight: Number(e.target.value) } : x) })}
+                      style={{ ...inp, width: 150, cursor: "pointer" }}>
+                      {weightOpts.map(w => <option key={w} value={w}>{TYPO_WEIGHT_LABELS[w]} ({w})</option>)}
+                    </select>
+                    <button onClick={() => setFont(role, { ...font, files: font.files.filter((_, j) => j !== i) })}
+                      style={{ width: 30, height: 30, flexShrink: 0, borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, cursor: "pointer" }}>×</button>
+                  </div>
+                ))}
+                <input ref={fileRef} type="file" accept=".woff2,.woff,.ttf,.otf,font/*" multiple hidden onChange={e => { uploadFonts(role, e.target.files); e.target.value = ""; }} />
+                <button onClick={() => fileRef.current?.click()} style={{ alignSelf: "flex-start", padding: "8px 13px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>
+                  {uploading ? "Lädt…" : "+ Schriftschnitte hochladen"}
+                </button>
+              </div>
+            </div>
+          )}
           {/* Which weights to display */}
           {avail.length > 0 && (
             <div>
@@ -14052,7 +14078,7 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
       );
     };
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 700 }}>
+      <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
         {section("primary", primary, fileRefP, "Primärschrift")}
         {section("secondary", secondary, fileRefS, "Sekundärschrift (optional)")}
       </div>
