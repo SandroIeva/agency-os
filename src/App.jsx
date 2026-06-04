@@ -13428,31 +13428,37 @@ const VALUES_INSPIRATIONAL = [
   "Freedom","Growth","Impact","Innovation","Inspiration","Originality","Passion","Purpose","Resilience","Vision",
 ];
 
-function BrandValues({ value, onChange, accent, theme, darkMode }) {
+function BrandValues({ value, onChange, accent, theme, darkMode, editing, onEditingChange }) {
   const saved = Array.isArray(value) ? value : [];
   const hasData = saved.length > 0;
-  const [screen, setScreen] = useState(null); // null=auto | select | describe | final
-  const view = screen || (hasData ? "final" : "select");
+  // We're in the pick/describe flow when the header "Bearbeiten" is active OR there's no data yet (onboarding).
+  const inFlow = editing || !hasData;
+  const [step, setStep] = useState("select"); // select | describe (only while inFlow)
   const [picked, setPicked] = useState([]);
   const [notes, setNotes] = useState({});
-  const [cat, setCat] = useState("alpha");
   const [input, setInput] = useState("");
 
-  const beginEdit = () => {
-    setPicked(saved.map(v => v.name));
-    setNotes(Object.fromEntries(saved.map(v => [v.name, v.reason || ""])));
-    setScreen("select");
-  };
+  // When the header edit toggles on, seed the flow from saved data.
+  useEffect(() => {
+    if (editing) {
+      setPicked(saved.map(v => v.name));
+      setNotes(Object.fromEntries(saved.map(v => [v.name, v.reason || ""])));
+      setStep("select");
+    }
+  }, [editing]);
+
+  const view = inFlow ? step : "final";
   const addValue = (name) => {
     const n = (name || "").trim();
     if (!n || picked.length >= 4 || picked.some(p => p.toLowerCase() === n.toLowerCase())) return;
     setPicked(p => [...p, n]);
   };
   const removeValue = (name) => setPicked(p => p.filter(x => x !== name));
-  const goDescribe = () => { setScreen("describe"); };
+  const goDescribe = () => { setStep("describe"); };
   const finalize = () => {
     onChange(picked.map(name => ({ name, reason: notes[name] || "" })));
-    setScreen("final");
+    setStep("select");
+    onEditingChange?.(false);
   };
 
   const fieldBg = darkMode ? "rgba(255,255,255,0.04)" : "#fff";
@@ -13539,7 +13545,7 @@ function BrandValues({ value, onChange, accent, theme, darkMode }) {
           ))}
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto" }}>
-          <button onClick={() => setScreen("select")} style={{ width: 150, padding: "12px 0", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer", textAlign: "center" }}>Zurück</button>
+          <button onClick={() => setStep("select")} style={{ width: 150, padding: "12px 0", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer", textAlign: "center" }}>Zurück</button>
           <motion.button whileTap={{ scale: 0.97 }} onClick={finalize}
             style={{ width: 150, padding: "12px 0", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer", textAlign: "center" }}>Finalisieren</motion.button>
         </div>
@@ -13547,25 +13553,18 @@ function BrandValues({ value, onChange, accent, theme, darkMode }) {
     );
   }
 
-  // ── FINAL ──
+  // ── FINAL ── (full width; the Bearbeiten button lives in the panel header)
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 720 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 800, color: theme.text }}>Brand Values</div>
-        <motion.button whileTap={{ scale: 0.96 }} onClick={beginEdit}
-          style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>Bearbeiten</motion.button>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 }}>
-        {saved.map((v, i) => (
-          <div key={v.name || i} style={{ padding: "20px 22px", borderRadius: 18, background: panelBg, display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-              <span style={{ fontSize: 26, fontFamily: FONT, fontWeight: 800, color: accent, letterSpacing: -0.5, lineHeight: 1 }}>{String(i + 1).padStart(2, "0")}</span>
-              <span style={{ fontSize: 19, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{v.name}</span>
-            </div>
-            {v.reason && <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6 }}>{v.reason}</div>}
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+      {saved.map((v, i) => (
+        <div key={v.name || i} style={{ padding: "20px 22px", borderRadius: 18, background: panelBg, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+            <span style={{ fontSize: 26, fontFamily: FONT, fontWeight: 800, color: accent, letterSpacing: -0.5, lineHeight: 1 }}>{String(i + 1).padStart(2, "0")}</span>
+            <span style={{ fontSize: 19, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{v.name}</span>
           </div>
-        ))}
-      </div>
+          {v.reason && <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6 }}>{v.reason}</div>}
+        </div>
+      ))}
     </div>
   );
 }
@@ -13581,8 +13580,9 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, b
   // Whether the Vision sub-view is in edit mode (reported by BrandVision) — controls
   // whether the content area may scroll on the Vision tab.
   const [visionEditing, setVisionEditing] = useState(false);
-  useEffect(() => { const s = BRAND_PILLAR_SUBTABS[brandTab] || []; setBrandSub(s[0]?.key); setEditingText(false); setVisionEditing(false); }, [brandTab]);
-  useEffect(() => { setEditingText(false); setVisionEditing(false); }, [brandSub]);
+  const [valuesEditing, setValuesEditing] = useState(false);
+  useEffect(() => { const s = BRAND_PILLAR_SUBTABS[brandTab] || []; setBrandSub(s[0]?.key); setEditingText(false); setVisionEditing(false); setValuesEditing(false); }, [brandTab]);
+  useEffect(() => { setEditingText(false); setVisionEditing(false); setValuesEditing(false); }, [brandSub]);
 
   const saveSection = async (key, html) => {
     setProfile(p => ({ ...p, section_content: { ...(p?.section_content || {}), [key]: html } }));
@@ -15233,7 +15233,12 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{BRAND_SUBVIEW_LABELS[brandTab] || ""}</span>
               </div>
               <div style={{ flex: 1 }} />
-              {!((brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors" || brandSub === "positioning")) || (brandTab === "identity" && brandSub === "values")) && (
+              {(brandTab === "identity" && brandSub === "values") ? (
+                (Array.isArray(profile.brand_values) && profile.brand_values.length > 0 && !valuesEditing) ? (
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => setValuesEditing(true)}
+                    style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>Bearbeiten</motion.button>
+                ) : null
+              ) : !(brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors" || brandSub === "positioning")) ? (
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => setEditingText(v => !v)}
                 style={{
                   padding: "8px 16px", borderRadius: 10, cursor: "pointer",
@@ -15242,7 +15247,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                   color: editingText ? "#fff" : theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT,
                 }}
               >{editingText ? "Fertig" : "Bearbeiten"}</motion.button>
-              )}
+              ) : null}
             </div>
 
             {/* This view IS one pillar (Strategie / Identität / Brand Design — set from
@@ -15396,7 +15401,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                       ) : k === "strategy/positioning" ? (
                         <BrandVision value={profile.vision} onChange={saveVision} accent={theme.accent} theme={theme} darkMode={darkMode} onEditingChange={setVisionEditing} />
                       ) : k === "identity/values" ? (
-                        <BrandValues value={profile.brand_values} onChange={saveBrandValues} accent={theme.accent} theme={theme} darkMode={darkMode} />
+                        <BrandValues value={profile.brand_values} onChange={saveBrandValues} accent={theme.accent} theme={theme} darkMode={darkMode} editing={valuesEditing} onEditingChange={setValuesEditing} />
                       ) : k === "identity/voice" ? (
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
                           onSave={saveVoiceTone} onCancel={() => setEditingText(false)} />
@@ -21741,6 +21746,8 @@ export default function CircularMenu() {
         /* Hide scrollbars while keeping scroll behaviour */
         .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
         .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
+        /* No blue focus outline on clicked/active elements */
+        *:focus, *:focus-visible { outline: none !important; }
         /* Brand section rich-text (editor + rendered output) */
         .brand-rich { font-family: ${FONT}; }
         .brand-rich h1 { font-size: 24px; font-weight: 700; margin: 18px 0 8px; letter-spacing: -0.3px; }
