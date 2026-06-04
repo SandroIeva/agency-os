@@ -13660,7 +13660,10 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
               <motion.div key="shades" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }}
                 style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                  <BackLink theme={theme} onClick={() => setOpenColor(null)} label="Alle Farben" />
+                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => setOpenColor(null)} title="Zurück"
+                    style={{ cursor: "pointer", color: theme.textDim, display: "flex", alignItems: "center" }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                  </motion.div>
                   <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
                     <span style={{ width: 18, height: 18, borderRadius: 6, background: openColor.hex, border: `1px solid ${theme.borderFaint}` }} />
                     <span style={{ fontSize: 15, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{names[openColor.hex] || openColor.role || "Shades"}</span>
