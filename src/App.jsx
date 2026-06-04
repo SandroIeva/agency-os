@@ -13860,24 +13860,50 @@ const POPULAR_GOOGLE_FONTS = [
 const buildGoogleFontUrl = (name, weights) =>
   `https://fonts.googleapis.com/css2?family=${name.replace(/ /g, "+")}:wght@${[...weights].sort((a, b) => a - b).join(";")}&display=swap`;
 
-// Searchable dropdown over the curated Google Fonts list.
+// Full Google Fonts catalogue via the public google-webfonts-helper API (no key).
+// Loaded lazily on first search and cached at module level.
+const GWFH_CAT = { "sans-serif": "Sans", "serif": "Serif", "display": "Display", "handwriting": "Handschrift", "monospace": "Mono" };
+const weightsFromVariants = (variants) => {
+  const set = new Set();
+  (variants || []).forEach(v => { if (String(v).includes("italic")) return; if (v === "regular") set.add(400); else { const n = parseInt(v, 10); if (!isNaN(n)) set.add(n); } });
+  const out = [...set].sort((a, b) => a - b);
+  return out.length ? out : [400];
+};
+let GWFH_CACHE = null, GWFH_PROMISE = null;
+const loadAllGoogleFonts = () => {
+  if (GWFH_CACHE) return Promise.resolve(GWFH_CACHE);
+  if (GWFH_PROMISE) return GWFH_PROMISE;
+  GWFH_PROMISE = fetch("https://gwfh.mranftl.com/api/fonts")
+    .then(r => r.ok ? r.json() : [])
+    .then(list => { GWFH_CACHE = (list || []).map(f => ({ name: f.family, cat: GWFH_CAT[f.category] || "Sans", weights: weightsFromVariants(f.variants) })); return GWFH_CACHE; })
+    .catch(() => { GWFH_CACHE = []; return GWFH_CACHE; });
+  return GWFH_PROMISE;
+};
+
+// Searchable dropdown — shows curated popular fonts by default, searches the full
+// catalogue (lazy-loaded) as soon as you type.
 function GoogleFontPicker({ selectedName, onPick, theme, darkMode }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
+  const [all, setAll] = useState(GWFH_CACHE);
+  const [loading, setLoading] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
     const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
   }, []);
+  const ensureCatalog = () => { if (all) return; setLoading(true); loadAllGoogleFonts().then(list => { setAll(list); setLoading(false); }); };
   const inp = { width: "100%", padding: "11px 13px", borderRadius: 10, fontFamily: FONT, fontSize: 13, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff", border: `1px solid ${theme.borderFaint}`, color: theme.text, outline: "none", boxSizing: "border-box" };
   const ql = q.trim().toLowerCase();
-  const matches = POPULAR_GOOGLE_FONTS.filter(f => !ql || f.name.toLowerCase().includes(ql));
+  // Empty query → curated list. Typing → full catalogue (if loaded), else curated.
+  const source = ql && all && all.length ? all : POPULAR_GOOGLE_FONTS;
+  const matches = (ql ? source.filter(f => f.name.toLowerCase().includes(ql)) : POPULAR_GOOGLE_FONTS).slice(0, 80);
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <input value={open ? q : (selectedName || "")} onChange={e => { setQ(e.target.value); setOpen(true); }} onFocus={() => { setQ(""); setOpen(true); }}
+      <input value={open ? q : (selectedName || "")} onChange={e => { setQ(e.target.value); setOpen(true); ensureCatalog(); }} onFocus={() => { setQ(""); setOpen(true); ensureCatalog(); }}
         placeholder={selectedName || "Google Font suchen…"} style={inp} />
       {open && (
-        <div className="no-scrollbar" style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 40, maxHeight: 280, overflowY: "auto", borderRadius: 12, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 16px 44px rgba(0,0,0,0.18)" }}>
+        <div className="no-scrollbar" style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 40, maxHeight: 300, overflowY: "auto", borderRadius: 12, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 16px 44px rgba(0,0,0,0.18)" }}>
           {matches.map(f => (
             <div key={f.name} onClick={() => { onPick(f); setOpen(false); setQ(""); }}
               onMouseEnter={e => e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}
@@ -13886,7 +13912,8 @@ function GoogleFontPicker({ selectedName, onPick, theme, darkMode }) {
               <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>{f.cat}</span>
             </div>
           ))}
-          {matches.length === 0 && <div style={{ padding: "12px 13px", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>Keine Treffer</div>}
+          {ql && loading && !all && <div style={{ padding: "10px 13px", fontSize: 12, fontFamily: FONT, color: theme.textDim }}>Lade alle Schriften…</div>}
+          {matches.length === 0 && !loading && <div style={{ padding: "12px 13px", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>Keine Treffer</div>}
         </div>
       )}
     </div>
