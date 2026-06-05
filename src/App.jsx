@@ -9350,7 +9350,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
           <motion.div
             initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1, duration: 0.4 }}
-            style={{ textAlign: "center", padding: "80px 20px" }}
+            style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", minHeight: "68vh", padding: "20px" }}
           >
             <div style={{ fontSize: 16, fontFamily: FONT, color: theme.text, marginBottom: 6 }}>
               {search ? "Keine Treffer" : filterMode !== "all" ? "Hier ist noch leer" : "Noch keine Notizen"}
