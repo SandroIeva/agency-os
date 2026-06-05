@@ -18318,7 +18318,7 @@ export default function CircularMenu() {
   };
 
   // Upload an AI-generated image to Supabase Storage AND register a short-link
-  // so the user copies a clean `https://alpha.i7os.com/i/<slug>` URL instead of a
+  // so the user copies a clean `https://app.i7os.com/i/<slug>` URL instead of a
   // 300-char Supabase Storage URL.
   const uploadImageToStorage = async (dataUrl) => {
     if (!userOrg?.id) throw new Error("kein Workspace");
@@ -18348,10 +18348,10 @@ export default function CircularMenu() {
         });
         if (!insErr) {
           // The short-link host: prefer the current origin if it has a "real" domain,
-          // otherwise hard-fall-back to alpha.i7os.com so links work cross-environment (localhost included).
+          // otherwise hard-fall-back to app.i7os.com so links work cross-environment (localhost included).
           const host = (typeof window !== "undefined" && window.location && window.location.host && !/localhost|127\.0\.0\.1/i.test(window.location.host))
             ? `${window.location.protocol}//${window.location.host}`
-            : "https://alpha.i7os.com";
+            : "https://app.i7os.com";
           return `${host}/i/${slug}`;
         }
         // 23505 = unique constraint violation → retry with a new slug

@@ -1,3 +1,7 @@
+// Canonical public app URL. Override via the PUBLIC_APP_URL env var if the
+// domain changes again; defaults to the current production domain.
+const APP_URL = process.env.PUBLIC_APP_URL || "https://app.i7os.com";
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -31,7 +35,7 @@ export default async function handler(req, res) {
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px; text-align: center;">
             <div style="margin-bottom: 32px;">
-              <img src="https://alpha.i7os.com/logo-dark.svg" alt="i7 os" width="96" height="60" style="display: block; margin: 0 auto 16px;" />
+              <img src="${APP_URL}/logo-dark.svg" alt="i7 os" width="96" height="60" style="display: block; margin: 0 auto 16px;" />
               <h1 style="font-size: 22px; font-weight: 600; color: #1a1a2e; margin: 0;">You're invited to join a workspace</h1>
             </div>
             <p style="font-size: 15px; color: #444; line-height: 1.6; margin-bottom: 24px;">
@@ -41,7 +45,7 @@ export default async function handler(req, res) {
               <div style="font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Your Invite Code</div>
               <div style="font-size: 15px; font-weight: 600; color: #555; letter-spacing: 0.3px; word-break: break-all; font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;">${token}</div>
             </div>
-            <a href="https://alpha.i7os.com/?invite=${token}" style="display: inline-block; padding: 12px 28px; background: #111111; color: white; text-decoration: none; border-radius: 10px; font-weight: 500; font-size: 14px; margin-bottom: 24px;">Join Workspace</a>
+            <a href="${APP_URL}/?invite=${token}" style="display: inline-block; padding: 12px 28px; background: #111111; color: white; text-decoration: none; border-radius: 10px; font-weight: 500; font-size: 14px; margin-bottom: 24px;">Join Workspace</a>
             <p style="font-size: 13px; color: #888; line-height: 1.6; margin-bottom: 24px;">
               Click the button to join directly,<br/>or copy the invite code and enter it manually in i7 OS.
             </p>

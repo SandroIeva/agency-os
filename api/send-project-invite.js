@@ -1,3 +1,7 @@
+// Canonical public app URL. Override via the PUBLIC_APP_URL env var if the
+// domain changes again; defaults to the current production domain.
+const APP_URL = process.env.PUBLIC_APP_URL || "https://app.i7os.com";
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -26,13 +30,13 @@ export default async function handler(req, res) {
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px; text-align: center;">
             <div style="margin-bottom: 32px;">
-              <img src="https://alpha.i7os.com/logo-dark.svg" alt="i7 os" width="96" height="60" style="display: block; margin: 0 auto 16px;" />
+              <img src="${APP_URL}/logo-dark.svg" alt="i7 os" width="96" height="60" style="display: block; margin: 0 auto 16px;" />
               <h1 style="font-size: 22px; font-weight: 600; color: #1a1a2e; margin: 0;">Projekt-Einladung</h1>
             </div>
             <p style="font-size: 15px; color: #444; line-height: 1.6; margin-bottom: 24px;">
               <strong>${inviterName || "Ein Teammitglied"}</strong> hat dich eingeladen, am Projekt <strong>${projectName || ""}</strong> mitzuwirken.
             </p>
-            <a href="https://alpha.i7os.com/?project-invite=${token}" style="display: inline-block; padding: 12px 28px; background: #111111; color: white; text-decoration: none; border-radius: 10px; font-weight: 500; font-size: 14px; margin-bottom: 24px;">Projekt beitreten</a>
+            <a href="${APP_URL}/?project-invite=${token}" style="display: inline-block; padding: 12px 28px; background: #111111; color: white; text-decoration: none; border-radius: 10px; font-weight: 500; font-size: 14px; margin-bottom: 24px;">Projekt beitreten</a>
             <p style="font-size: 13px; color: #888; line-height: 1.6; margin-bottom: 24px;">
               Klick auf den Button, um dem Projekt beizutreten. Die Einladung ist 14 Tage gültig.
             </p>

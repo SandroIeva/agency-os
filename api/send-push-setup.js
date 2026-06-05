@@ -1,3 +1,7 @@
+// Canonical public app URL. Override via the PUBLIC_APP_URL env var if the
+// domain changes again; defaults to the current production domain.
+const APP_URL = process.env.PUBLIC_APP_URL || "https://app.i7os.com";
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -17,7 +21,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "RESEND_API_KEY not configured" });
   }
 
-  const setupUrl = `https://alpha.i7os.com/?push-setup=true&token=${encodeURIComponent(token)}`;
+  const setupUrl = `${APP_URL}/?push-setup=true&token=${encodeURIComponent(token)}`;
 
   try {
     const response = await fetch("https://api.resend.com/emails", {
@@ -33,7 +37,7 @@ export default async function handler(req, res) {
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px; text-align: center;">
             <div style="margin-bottom: 32px;">
-              <img src="https://alpha.i7os.com/logo-dark.svg" alt="i7 OS" width="96" height="60" style="display: block; margin: 0 auto 16px;" />
+              <img src="${APP_URL}/logo-dark.svg" alt="i7 OS" width="96" height="60" style="display: block; margin: 0 auto 16px;" />
               <h1 style="font-size: 20px; font-weight: 600; color: #1a1a2e; margin: 0;">Push-Benachrichtigungen aktivieren</h1>
             </div>
             <p style="font-size: 15px; color: #444; line-height: 1.6; margin-bottom: 8px;">
