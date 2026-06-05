@@ -14167,9 +14167,12 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
   );
 }
 
-function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken }) {
+function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true }) {
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
   const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
+  // Edit permission for the current pillar: Design System needs the Designer
+  // role, everything else needs the Brand role (admins have both).
+  const canEditCurrent = brandTab === "design" ? canEditDesign : canEditBrand;
   // Second-level sub-tab within the active pillar; resets to the first when the pillar changes.
   const pillarSubs = BRAND_PILLAR_SUBTABS[brandTab] || [];
   const [brandSub, setBrandSub] = useState(pillarSubs[0]?.key);
@@ -15864,7 +15867,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{BRAND_SUBVIEW_LABELS[brandTab] || ""}</span>
               </div>
               <div style={{ flex: 1 }} />
-              {(brandTab === "identity" && brandSub === "values") ? (
+              {!canEditCurrent ? null : (brandTab === "identity" && brandSub === "values") ? (
                 (Array.isArray(profile.brand_values) && profile.brand_values.length > 0 && !valuesEditing) ? (
                   <motion.button whileTap={{ scale: 0.97 }} onClick={() => setValuesEditing(true)}
                     style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>Bearbeiten</motion.button>
@@ -16419,7 +16422,7 @@ export default function CircularMenu() {
       setUserOrgRole("admin");
       const { data: members } = await supabase
         .from("org_members")
-        .select("user_id, role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
+        .select("user_id, role, can_edit_brand, can_edit_design, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
         .eq("org_id", org.id);
       setOrgMembers(members || []);
       setTeamInvites([]);
@@ -16432,6 +16435,18 @@ export default function CircularMenu() {
       alert((appLanguage === "de" ? "Erstellen fehlgeschlagen: " : "Create failed: ") + (e.message || ""));
     } finally {
       setCreatingWs(false);
+    }
+  };
+  // Admin toggles a member's brand/design edit role. RLS ("Admins can update
+  // members") enforces that only admins may change this.
+  const setMemberRoleFlag = async (userId, field, value) => {
+    if (!userOrg?.id) return;
+    const prev = orgMembers;
+    setOrgMembers(p => p.map(m => m.user_id === userId ? { ...m, [field]: value } : m)); // optimistic
+    const { error } = await supabase.from("org_members").update({ [field]: value }).eq("org_id", userOrg.id).eq("user_id", userId);
+    if (error) {
+      setOrgMembers(prev); // revert
+      alert((appLanguage === "de" ? "Rolle konnte nicht geändert werden: " : "Could not change role: ") + error.message);
     }
   };
   const [teamInvites, setTeamInvites] = useState([]);        // pending invites sent by admin
@@ -16586,6 +16601,11 @@ export default function CircularMenu() {
   const userEmail = session?.user?.email || "";
   // True once the user has an explicit display name (Google name or one they set).
   const hasDisplayName = !!(userName && userName.trim());
+  // ── Brand / Design edit permissions (admin always; otherwise per-member role flags) ──
+  const myMembership = (orgMembers || []).find(m => m.user_id === session?.user?.id);
+  const isOrgAdmin = userOrgRole === "admin" || userOrg?.role === "admin" || myMembership?.role === "admin";
+  const canEditBrand = isOrgAdmin || !!myMembership?.can_edit_brand;
+  const canEditDesign = isOrgAdmin || !!myMembership?.can_edit_design;
   // Persist a chosen display name to auth metadata + profiles + localStorage.
   const saveDisplayName = async (name) => {
     const clean = (name || "").trim();
@@ -16653,7 +16673,7 @@ export default function CircularMenu() {
           // Load org members for chat etc.
           const { data: members } = await supabase
             .from("org_members")
-            .select("user_id, role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
+            .select("user_id, role, can_edit_brand, can_edit_design, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
             .eq("org_id", org.id);
           setOrgMembers(members || []);
 
@@ -16708,7 +16728,7 @@ export default function CircularMenu() {
     if (!userOrg?.id) return;
     const { data: members } = await supabase
       .from("org_members")
-      .select("user_id, role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
+      .select("user_id, role, can_edit_brand, can_edit_design, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
       .eq("org_id", userOrg.id);
     setOrgMembers(members || []);
     const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", userOrg.id).eq("status", "pending");
@@ -19916,7 +19936,7 @@ export default function CircularMenu() {
         {/* BRAND VIEW */}
         <AnimatePresence>
           {currentView === "brand" && (
-            <BrandView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} brandTab={brandTab} setBrandTab={setBrandTab} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} onNavigate={(v) => setCurrentView(v)} onBack={() => setCurrentView("dashboard")} />
+            <BrandView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} brandTab={brandTab} setBrandTab={setBrandTab} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} canEditBrand={canEditBrand} canEditDesign={canEditDesign} onNavigate={(v) => setCurrentView(v)} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
@@ -21465,7 +21485,7 @@ export default function CircularMenu() {
                                   // Reload org members
                                   const { data: members } = await supabase
                                     .from("org_members")
-                                    .select("user_id, role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
+                                    .select("user_id, role, can_edit_brand, can_edit_design, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
                                     .eq("org_id", org.id);
                                   setOrgMembers(members || []);
                                   const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", org.id).eq("status", "pending");
@@ -21841,6 +21861,66 @@ export default function CircularMenu() {
                   )}
                 </div>
               </motion.div>
+              )}
+
+              {/* Workspace settings — brand/design edit roles (admin only) */}
+              {settingsTab === "workspace" && userOrg && isOrgAdmin && (
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+                  style={{ marginTop: 24 }}
+                >
+                  <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
+                    {appLanguage === "de" ? "Workspace-Einstellungen" : "Workspace settings"}
+                  </div>
+                  <div style={{ borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`, overflow: "hidden" }}>
+                    <div style={{ padding: "16px 20px", borderBottom: `1px solid ${theme.borderFaint}` }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
+                        {appLanguage === "de" ? "Bearbeitungsrechte" : "Edit permissions"}
+                      </div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, lineHeight: 1.5 }}>
+                        {appLanguage === "de"
+                          ? "Brand-Rolle darf Strategie & Identität bearbeiten, Designer-Rolle das Design System. Ohne Rolle können Mitglieder den Brand-Bereich nur ansehen."
+                          : "Brand role can edit Strategy & Identity, Designer role can edit the Design System. Without a role, members can only view the brand area."}
+                      </div>
+                    </div>
+                    {orgMembers.map((m, i) => {
+                      const isAdminRow = m.role === "admin";
+                      const mName = m.profiles?.display_name || m.profiles?.email?.split("@")[0] || "User";
+                      const pill = (label, active, onClick) => (
+                        <div onClick={onClick}
+                          style={{
+                            padding: "6px 12px", borderRadius: 8, fontSize: 12, fontFamily: FONT, fontWeight: 500,
+                            cursor: "pointer", userSelect: "none",
+                            background: active ? theme.accent + "1f" : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
+                            color: active ? theme.accent : theme.textDim,
+                            border: `1px solid ${active ? theme.accent + "55" : theme.borderFaint}`,
+                          }}>{label}</div>
+                      );
+                      return (
+                        <div key={m.user_id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 20px", borderBottom: i < orgMembers.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
+                          {m.profiles?.avatar_url ? (
+                            <img src={m.profiles.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0 }} />
+                          ) : (
+                            <div style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0, background: "linear-gradient(135deg, #8B7AFF, #6C5CE7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontFamily: FONT, color: "#fff", fontWeight: 600 }}>{(mName || "?")[0].toUpperCase()}</div>
+                          )}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{mName}</div>
+                            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.profiles?.email || ""}</div>
+                          </div>
+                          {isAdminRow ? (
+                            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.accent, fontWeight: 600, flexShrink: 0 }}>{appLanguage === "de" ? "Admin · alle Rechte" : "Admin · all rights"}</div>
+                          ) : (
+                            <div style={{ display: "flex", gap: 7, flexShrink: 0 }}>
+                              {pill("Brand", !!m.can_edit_brand, () => setMemberRoleFlag(m.user_id, "can_edit_brand", !m.can_edit_brand))}
+                              {pill("Design", !!m.can_edit_design, () => setMemberRoleFlag(m.user_id, "can_edit_design", !m.can_edit_design))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </motion.div>
               )}
 
               {/* Account section */}
