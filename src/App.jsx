@@ -21640,9 +21640,25 @@ export default function CircularMenu() {
                       <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{session ? "Connected" : "Not connected"}</div>
                     </div>
                     <div style={{
-                      width: 8, height: 8, borderRadius: "50%",
+                      width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
                       background: session ? "#00B894" : "#E84393",
                     }} />
+                    {/* Logout — moved here from the bottom of the page */}
+                    <motion.div
+                      onClick={() => { handleLogout(); setCurrentView("dashboard"); }}
+                      whileHover={{ backgroundColor: "rgba(232, 67, 67, 0.08)" }}
+                      whileTap={{ scale: 0.97 }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 10,
+                        cursor: "pointer", flexShrink: 0, border: "1px solid rgba(232, 67, 67, 0.2)",
+                      }}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" stroke="#E84343" strokeWidth="1.5" strokeLinecap="round" />
+                        <path d="M16 17l5-5-5-5M21 12H9" stroke="#E84343" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <span style={{ fontSize: 13, fontFamily: FONT, color: "#E84343", fontWeight: 500 }}>Logout</span>
+                    </motion.div>
                   </div>
 
                   {/* Subscription */}
@@ -22437,33 +22453,6 @@ export default function CircularMenu() {
                     </motion.button>
                   </div>
                 </motion.div>
-              )}
-
-              {/* Logout */}
-              {settingsTab === "account" && (
-              <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.25, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
-                style={{ marginTop: 32 }}
-              >
-                <motion.div
-                  onClick={() => { handleLogout(); setCurrentView("dashboard"); }}
-                  whileHover={{ backgroundColor: "rgba(232, 67, 67, 0.08)" }}
-                  whileTap={{ scale: 0.98 }}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-                    padding: "14px 20px", borderRadius: 16, cursor: "pointer",
-                    border: "1px solid rgba(232, 67, 67, 0.15)",
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" stroke="#E84343" strokeWidth="1.5" strokeLinecap="round" />
-                    <path d="M16 17l5-5-5-5M21 12H9" stroke="#E84343" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  <span style={{ fontSize: 14, fontFamily: FONT, color: "#E84343", fontWeight: 500 }}>Logout</span>
-                </motion.div>
-              </motion.div>
               )}
 
               {/* Version */}
