@@ -10067,8 +10067,11 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
 
   // Only show projects the user is a member of
   const myIdSet = new Set(myProjectIds);
-  const filtered = projects
-    .filter(p => myIdSet.has(p.id))
+  // Projects the current user actually has access to (drives both the list and
+  // the header count — members only see/count their own projects, not the
+  // workspace total).
+  const myProjects = projects.filter(p => myIdSet.has(p.id));
+  const filtered = myProjects
     .filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
 
   // A project opened in detail view (its files). Settings still reachable via the edit icon.
@@ -10108,7 +10111,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
             <path d="M3 10h18M9 6V4h6v2" stroke={theme.accent} strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
           <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>Projekte</span>
-          <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{projects.length}</span>
+          <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{myProjects.length}</span>
           <div style={{ flex: 1 }} />
           <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
             onClick={openNew}
