@@ -20381,7 +20381,18 @@ export default function CircularMenu() {
             const navigate = (catId, subId) => {
               // Reuse handleSubClick mapping when possible
               if (catId === "plan") {
-                if (["kanban", "timeline", "tasks", "calendar"].includes(subId)) {
+                // "tasks" is NOT a standalone view — it's the dashboard's swipe-in
+                // task panel (renders only when currentView === "dashboard" && tasksOpen).
+                // Setting currentView("tasks") matched nothing → blank screen. Open the
+                // panel the same way a swipe does instead.
+                if (subId === "tasks") {
+                  setMenuOpen(false);
+                  setCurrentView("dashboard");
+                  setPanelOpen(false);
+                  setTimeout(() => setTasksOpen(true), 50);
+                  return;
+                }
+                if (["kanban", "timeline", "calendar"].includes(subId)) {
                   setMenuOpen(false);
                   setCurrentView(subId);
                   return;
