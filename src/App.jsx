@@ -18793,6 +18793,14 @@ export default function CircularMenu() {
       return;
     }
 
+    // The AI dialog is a full-screen overlay with its own scrollable message
+    // list. It opens on top of the dashboard, which is NOT in the whitelist
+    // below — so without this guard the handler would preventDefault() and the
+    // chat history couldn't be scrolled. Let it scroll natively.
+    if (dialogMode) {
+      return;
+    }
+
     // Let views with their own scrolling handle scroll natively
     if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "timeline" || currentView === "settings" || currentView === "notes" || currentView === "projects" || currentView === "brand" || currentView === "assets" || currentView === "touchpoints") {
       return;
@@ -18854,7 +18862,7 @@ export default function CircularMenu() {
       setActiveIndex(prev => ((prev + dir) % itemCount + itemCount) % itemCount);
       try { sounds.scroll(); } catch(e) {}
     }
-  }, [currentView, menuOpen, subOpen, voiceMode, aiSpeaking, panelOpen, tasksOpen, itemCount]);
+  }, [currentView, menuOpen, subOpen, voiceMode, aiSpeaking, panelOpen, tasksOpen, itemCount, dialogMode]);
 
   useEffect(() => {
     const el = containerRef.current;
