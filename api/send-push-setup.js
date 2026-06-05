@@ -37,7 +37,7 @@ export default async function handler(req, res) {
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px; text-align: center;">
             <div style="margin-bottom: 32px;">
-              <img src="${APP_URL}/logo-dark.svg" alt="i7 OS" width="96" height="60" style="display: block; margin: 0 auto 16px;" />
+              <img src="${APP_URL}/i7OS-Logo.png" alt="i7 OS" width="96" height="59" style="display: block; margin: 0 auto 16px; border: 0;" />
               <h1 style="font-size: 20px; font-weight: 600; color: #1a1a2e; margin: 0;">Push-Benachrichtigungen aktivieren</h1>
             </div>
             <p style="font-size: 15px; color: #444; line-height: 1.6; margin-bottom: 8px;">
