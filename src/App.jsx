@@ -22420,6 +22420,7 @@ export default function CircularMenu() {
                                   </div>
                                 ) : (
                                   <div style={{ display: "flex", gap: 8 }}>
+                                <div style={{ flex: 1, position: "relative", display: "flex" }}>
                                 <input
                                   type="password"
                                   value={llmKeyInputs[p.id] || ""}
@@ -22428,7 +22429,8 @@ export default function CircularMenu() {
                                     ? (appLanguage === "de" ? "Key gespeichert · zum Ersetzen neuen Key eingeben" : "Key saved · enter a new one to replace")
                                     : (p.id === "claude" ? "sk-ant-api03-…" : p.id === "openai" ? "sk-…" : "AIza…")}
                                   style={{
-                                    flex: 1, padding: "10px 14px", borderRadius: 12,
+                                    flex: 1, width: "100%", boxSizing: "border-box",
+                                    padding: hasKey ? "10px 116px 10px 14px" : "10px 14px", borderRadius: 12,
                                     background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
                                     border: `1px solid ${theme.borderFaint}`,
                                     color: theme.text, fontSize: 12, fontFamily: FONT,
@@ -22437,6 +22439,19 @@ export default function CircularMenu() {
                                   onFocus={(e) => e.target.style.borderColor = p.color + "60"}
                                   onBlur={(e) => e.target.style.borderColor = theme.borderFaint}
                                 />
+                                {hasKey && (
+                                  <div
+                                    onClick={() => {
+                                      setLlmKeys(prev => { const n = { ...prev }; delete n[p.id]; return n; });
+                                      setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" }));
+                                      setLlmKeyStatus(prev => { const n = { ...prev }; delete n[p.id]; return n; });
+                                      setEditingKeyId(null);
+                                    }}
+                                    style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 12, fontFamily: FONT, color: theme.textDim, textDecoration: "underline", cursor: "pointer", whiteSpace: "nowrap" }}>
+                                    {appLanguage === "de" ? "Zurücksetzen" : "Reset"}
+                                  </div>
+                                )}
+                                </div>
                                 <motion.div
                                   whileHover={{ scale: 1.05 }}
                                   whileTap={{ scale: 0.95 }}
@@ -22489,25 +22504,6 @@ export default function CircularMenu() {
                                 >
                                   {status === "checking" ? "..." : "Save"}
                                 </motion.div>
-                                {hasKey && (
-                                  <motion.div
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    onClick={() => {
-                                      setLlmKeys(prev => { const n = { ...prev }; delete n[p.id]; return n; });
-                                      setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" }));
-                                      setLlmKeyStatus(prev => { const n = { ...prev }; delete n[p.id]; return n; });
-                                    }}
-                                    style={{
-                                      padding: "10px 12px", borderRadius: 12, cursor: "pointer",
-                                      background: "rgba(232,67,67,0.08)", border: "1px solid rgba(232,67,67,0.15)",
-                                      fontSize: 12, fontFamily: FONT, color: "#E84343",
-                                      display: "flex", alignItems: "center",
-                                    }}
-                                  >
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="#E84343" strokeWidth="2" strokeLinecap="round"/></svg>
-                                  </motion.div>
-                                )}
                                     <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                                       onClick={() => { setEditingKeyId(null); setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" })); setLlmKeyStatus(prev => { const n = { ...prev }; delete n[p.id]; return n; }); }}
                                       style={{ padding: "10px 14px", borderRadius: 12, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, fontSize: 12, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap" }}>
