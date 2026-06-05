@@ -22453,8 +22453,8 @@ export default function CircularMenu() {
                                 )}
                                 </div>
                                 <motion.div
-                                  whileHover={{ scale: 1.05 }}
-                                  whileTap={{ scale: 0.95 }}
+                                  whileHover={{ backgroundColor: p.color + "33" }}
+                                  whileTap={{ scale: 0.97 }}
                                   onClick={async () => {
                                     const key = llmKeyInputs[p.id];
                                     if (!key && !hasKey) return;
@@ -22502,9 +22502,9 @@ export default function CircularMenu() {
                                     display: "flex", alignItems: "center", whiteSpace: "nowrap",
                                   }}
                                 >
-                                  {status === "checking" ? "..." : "Save"}
+                                  {status === "checking" ? "…" : (appLanguage === "de" ? "Speichern" : "Save")}
                                 </motion.div>
-                                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                                    <motion.div whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }} whileTap={{ scale: 0.97 }}
                                       onClick={() => { setEditingKeyId(null); setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" })); setLlmKeyStatus(prev => { const n = { ...prev }; delete n[p.id]; return n; }); }}
                                       style={{ padding: "10px 14px", borderRadius: 12, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, fontSize: 12, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap" }}>
                                       {appLanguage === "de" ? "Abbrechen" : "Cancel"}
@@ -22514,12 +22514,12 @@ export default function CircularMenu() {
                               </div>
                               {status === "invalid" && (
                                 <div style={{ padding: "0 20px 12px", fontSize: 11, fontFamily: FONT, color: "#E84393" }}>
-                                  Invalid API key. Please check and try again.
+                                  {appLanguage === "de" ? "Ungültiger API-Key. Bitte prüfen und erneut versuchen." : "Invalid API key. Please check and try again."}
                                 </div>
                               )}
                               {status === "valid" && hasKey && (
                                 <div style={{ padding: "0 20px 12px", fontSize: 11, fontFamily: FONT, color: "#00B894" }}>
-                                  Key verified and saved.
+                                  {appLanguage === "de" ? "Key geprüft und gespeichert." : "Key verified and saved."}
                                 </div>
                               )}
                             </motion.div>
