@@ -21547,6 +21547,7 @@ export default function CircularMenu() {
                           : (appLanguage === "de" ? "PNG oder JPG, quadratisch empfohlen." : "PNG or JPG, square recommended.")}
                       </div>
                     </div>
+                    {(userOrgRole === "admin" || userOrg?.role === "admin") ? (
                     <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                       <input ref={orgLogoInputRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadOrgLogo(f); }} style={{ display: "none" }} />
                       <motion.div onClick={() => orgLogoInputRef.current?.click()} whileTap={{ scale: 0.97 }}
@@ -21563,6 +21564,11 @@ export default function CircularMenu() {
                         >{appLanguage === "de" ? "Entfernen" : "Remove"}</motion.div>
                       )}
                     </div>
+                    ) : (
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, flexShrink: 0 }}>
+                        {appLanguage === "de" ? "Nur Admins" : "Admins only"}
+                      </div>
+                    )}
                   </div>
 
                   {/* Invite member — chip-based input */}
