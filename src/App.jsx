@@ -9795,7 +9795,7 @@ function ProjectDetail({ project, onBack, onEdit, session, userOrg, theme, darkM
   );
 }
 
-function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKanban, orgMembers = [], myProjectIds = [] }) {
+function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKanban, orgMembers = [], myProjectIds = [], createNotification }) {
   const [projects, setProjects] = useState([]);
   const [taskCounts, setTaskCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -9872,14 +9872,25 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
   // already a member (which happens when the picker has stale data).
   const addOrgMemberDirectly = async (userId) => {
     if (!editing?.id) return;
-    const { error } = await supabase.from("project_members").upsert({
+    const { data, error } = await supabase.from("project_members").upsert({
       project_id: editing.id,
       user_id: userId,
       role: "member",
-    }, { onConflict: "project_id,user_id", ignoreDuplicates: true });
+    }, { onConflict: "project_id,user_id", ignoreDuplicates: true }).select();
     if (error && !/duplicate/i.test(error.message || "")) {
       alert("Fehler beim Hinzufügen: " + error.message);
       return;
+    }
+    // Notify the member — only when a row was actually inserted (skip duplicates).
+    if (!error && Array.isArray(data) && data.length > 0) {
+      const myName = session?.user?.user_metadata?.full_name || session?.user?.email?.split("@")[0] || "Jemand";
+      createNotification?.({
+        userId,
+        type: "project_added",
+        title: "Zu einem Projekt hinzugefügt",
+        body: `${myName} hat dich zum Projekt "${editing.name}" hinzugefügt`,
+        metadata: { project_id: editing.id, project_name: editing.name },
+      });
     }
     loadMembers(editing.id);
   };
@@ -19770,6 +19781,7 @@ export default function CircularMenu() {
                           member_joined: "👤", task_updated: "✏️",
                           chat_message: "💬",
                           reminder: "⏰",
+                          project_added: "📁",
                         };
                         const timeAgo = (() => {
                           const diff = Date.now() - new Date(n.created_at).getTime();
@@ -19789,6 +19801,7 @@ export default function CircularMenu() {
                               else if (n.metadata?.task_id) { setOpenTaskId(n.metadata.task_id); setCurrentView("kanban"); setNotifOpen(false); }
                               else if (n.metadata?.hangoutLink) { window.open(n.metadata.hangoutLink, "_blank"); }
                               else if (n.type === "calendar_reminder") { setCurrentView("calendar"); setNotifOpen(false); }
+                              else if (n.type === "project_added") { setCurrentView("projects"); setNotifOpen(false); }
                               else if (n.type === "reminder") { setNotifOpen(false); }
                             }}
                             style={{
@@ -19895,7 +19908,7 @@ export default function CircularMenu() {
         {/* PROJECTS VIEW */}
         <AnimatePresence>
           {currentView === "projects" && (
-            <ProjectsView session={session} userOrg={userOrg} orgMembers={orgMembers} myProjectIds={myProjectIds} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} onOpenInKanban={(projectName) => { setCurrentView("kanban"); }} />
+            <ProjectsView session={session} userOrg={userOrg} orgMembers={orgMembers} myProjectIds={myProjectIds} theme={theme} darkMode={darkMode} t={t} createNotification={createNotification} onBack={() => setCurrentView("dashboard")} onOpenInKanban={(projectName) => { setCurrentView("kanban"); }} />
           )}
         </AnimatePresence>
 
