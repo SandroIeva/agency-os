@@ -8000,8 +8000,11 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       .eq("org_id", userOrg.id)
       .order("created_at", { ascending: false });
     if (!convs) { setConversations([]); setLoadingConvs(false); return; }
-    // Build enriched conversation list
-    const enriched = convs.map(c => {
+    // Build enriched conversation list — only conversations the current user is a
+    // participant of (org-wide query would otherwise leak others' 1:1 chats and
+    // wrongly mark their members as "already chatted", hiding them from the
+    // start-a-chat list).
+    const enriched = convs.filter(c => (c.chat_participants || []).some(p => p.user_id === myId)).map(c => {
       const participants = (c.chat_participants || []).map(p => p.user_id);
       const otherIds = participants.filter(id => id !== myId);
       const other = otherIds.length > 0 ? memberMap[otherIds[0]] : null;
