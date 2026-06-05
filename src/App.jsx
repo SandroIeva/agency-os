@@ -16278,6 +16278,11 @@ export default function CircularMenu() {
   const [orgLogoUploading, setOrgLogoUploading] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [localAvatar, setLocalAvatar] = useState(null); // immediate override after upload
+  const [localName, setLocalName] = useState(null);     // immediate override after name save
+  const [nameGateInput, setNameGateInput] = useState(""); // first-login name prompt
+  const [nameSaving, setNameSaving] = useState(false);
+  const [editingName, setEditingName] = useState(false);  // settings inline name edit
+  const [nameInput, setNameInput] = useState("");
   const avatarInputRef = useRef(null);
   const orgLogoInputRef = useRef(null);
   const uploadOrgLogo = async (file) => {
@@ -16544,9 +16549,30 @@ export default function CircularMenu() {
   }, [onboardingStep, session?.user?.email]);
 
   // Derive user info from session (Google profile) or fallback to localStorage
-  const userName = session?.user?.user_metadata?.full_name || session?.user?.user_metadata?.name || localStorage.getItem("agencyos-name") || "";
-  const userAvatar = session?.user?.user_metadata?.avatar_url || null;
+  const userName = localName || session?.user?.user_metadata?.full_name || session?.user?.user_metadata?.name || localStorage.getItem("agencyos-name") || "";
+  const userAvatar = localAvatar || session?.user?.user_metadata?.avatar_url || null;
   const userEmail = session?.user?.email || "";
+  // True once the user has an explicit display name (Google name or one they set).
+  const hasDisplayName = !!(userName && userName.trim());
+  // Persist a chosen display name to auth metadata + profiles + localStorage.
+  const saveDisplayName = async (name) => {
+    const clean = (name || "").trim();
+    if (!clean || !session?.user?.id) return false;
+    setNameSaving(true);
+    try {
+      await supabase.auth.updateUser({ data: { full_name: clean } });
+      try { localStorage.setItem("agencyos-name", clean); } catch (_) {}
+      await supabase.from("profiles").update({ display_name: clean }).eq("id", session.user.id);
+      setLocalName(clean);
+      return true;
+    } catch (e) {
+      console.error("[Name] save failed", e);
+      alert((appLanguage === "de" ? "Name konnte nicht gespeichert werden: " : "Could not save name: ") + (e.message || ""));
+      return false;
+    } finally {
+      setNameSaving(false);
+    }
+  };
 
   // ── Check for invite token in URL (?invite=TOKEN) ──
   useEffect(() => {
@@ -19261,9 +19287,55 @@ export default function CircularMenu() {
       </AnimatePresence>
 
 
+      {/* NAME GATE — first login without a display name (e.g. email/magic-link users) */}
+      <AnimatePresence>
+        {!authLoading && session && !hasDisplayName && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            style={{ position: "fixed", inset: 0, zIndex: 200, background: "#111117", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
+              style={{ width: 360, maxWidth: "90vw", textAlign: "center" }}
+            >
+              <div style={{ fontSize: 26, fontWeight: 300, color: "#ffffffDD", fontFamily: FONT, letterSpacing: -0.5, marginBottom: 8 }}>
+                {appLanguage === "de" ? "Wie heißt du?" : "What's your name?"}
+              </div>
+              <div style={{ fontSize: 14, color: "#ffffff60", fontFamily: FONT, marginBottom: 28, lineHeight: 1.5 }}>
+                {appLanguage === "de" ? "Dein Name wird deinem Team im Workspace angezeigt." : "Your name is shown to your team in the workspace."}
+              </div>
+              <input
+                autoFocus value={nameGateInput}
+                onChange={(e) => setNameGateInput(e.target.value)}
+                onKeyDown={async (e) => { if (e.key === "Enter" && nameGateInput.trim() && !nameSaving) { await saveDisplayName(nameGateInput); } }}
+                placeholder={(userEmail.split("@")[0] || (appLanguage === "de" ? "Dein Name" : "Your name"))}
+                style={{
+                  width: "100%", boxSizing: "border-box", padding: "15px 18px", borderRadius: 16,
+                  background: "#16161E", border: "1px solid #ffffff15", color: "#ffffffdd",
+                  fontSize: 15, fontFamily: FONT, outline: "none", caretColor: "#8B7AFF", textAlign: "center", marginBottom: 12,
+                }}
+              />
+              <motion.button
+                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                onClick={async () => { await saveDisplayName(nameGateInput || userEmail.split("@")[0]); }}
+                disabled={nameSaving || !(nameGateInput.trim() || userEmail.split("@")[0])}
+                style={{
+                  width: "100%", padding: "15px 18px", borderRadius: 16, border: "none",
+                  background: "#ffffff", color: "#111111", fontSize: 15, fontWeight: 600, fontFamily: FONT,
+                  cursor: nameSaving ? "default" : "pointer", opacity: nameSaving ? 0.7 : 1,
+                }}
+              >
+                {nameSaving ? (appLanguage === "de" ? "Speichert…" : "Saving…") : (appLanguage === "de" ? "Weiter" : "Continue")}
+              </motion.button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ONBOARDING SCREEN — after login, before dashboard */}
       <AnimatePresence>
-        {!authLoading && session && !orgLoading && onboardingStep && (
+        {!authLoading && session && hasDisplayName && !orgLoading && onboardingStep && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -21254,9 +21326,42 @@ export default function CircularMenu() {
                     <input ref={avatarInputRef} type="file" accept="image/*" hidden onChange={(e) => { uploadAvatar(e.target.files?.[0]); }} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, lineHeight: 1.3 }}>
-                      {userName || "User"}
-                    </div>
+                    {editingName ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <input
+                          autoFocus value={nameInput}
+                          onChange={(e) => setNameInput(e.target.value)}
+                          onKeyDown={async (e) => {
+                            if (e.key === "Enter" && nameInput.trim()) { const ok = await saveDisplayName(nameInput); if (ok) setEditingName(false); }
+                            if (e.key === "Escape") setEditingName(false);
+                          }}
+                          style={{ flex: 1, minWidth: 0, padding: "8px 12px", borderRadius: 10, fontFamily: FONT, fontSize: 18, fontWeight: 600, background: darkMode ? "rgba(255,255,255,0.05)" : "#fff", border: `1px solid ${theme.border}`, color: theme.text, outline: "none" }}
+                        />
+                        <motion.button whileTap={{ scale: 0.95 }} disabled={nameSaving || !nameInput.trim()}
+                          onClick={async () => { const ok = await saveDisplayName(nameInput); if (ok) setEditingName(false); }}
+                          style={{ padding: "8px 14px", borderRadius: 10, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: "pointer", opacity: (nameSaving || !nameInput.trim()) ? 0.6 : 1, flexShrink: 0 }}>
+                          {nameSaving ? "…" : (appLanguage === "de" ? "Speichern" : "Save")}
+                        </motion.button>
+                        <motion.div whileTap={{ scale: 0.95 }} onClick={() => setEditingName(false)}
+                          style={{ padding: "8px 12px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 13, fontFamily: FONT, cursor: "pointer", flexShrink: 0 }}>
+                          {appLanguage === "de" ? "Abbrechen" : "Cancel"}
+                        </motion.div>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, lineHeight: 1.3 }}>
+                          {userName || "User"}
+                        </div>
+                        <motion.div whileHover={{ opacity: 1 }} whileTap={{ scale: 0.9 }}
+                          onClick={() => { setNameInput(userName || ""); setEditingName(true); }}
+                          title={appLanguage === "de" ? "Namen ändern" : "Edit name"}
+                          style={{ opacity: 0.5, cursor: "pointer", display: "flex", flexShrink: 0 }}>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                          </svg>
+                        </motion.div>
+                      </div>
+                    )}
                     <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {userEmail}
                     </div>
