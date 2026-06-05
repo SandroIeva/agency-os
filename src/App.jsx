@@ -16254,6 +16254,7 @@ export default function CircularMenu() {
   const [userOrgs, setUserOrgs] = useState([]);             // all orgs the user belongs to
   const [userOrgRole, setUserOrgRole] = useState(null);     // role in current org
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false); // workspace switcher dropdown
+  const [settingsTab, setSettingsTab] = useState("workspace"); // settings page tab: workspace | ai | appearance | account
   const [orgLoading, setOrgLoading] = useState(true);       // loading org check
   const [onboardingStep, setOnboardingStep] = useState(null); // null = skip, "choose" | "create" | "join"
   const [onboardingError, setOnboardingError] = useState(null);
@@ -21154,8 +21155,37 @@ export default function CircularMenu() {
                 </div>
               </motion.div>
 
+              {/* Settings tabs — cluster the page into Workspace / KI / Darstellung / Account */}
+              <div style={{
+                display: "flex", gap: 6, marginBottom: 28, padding: 5, borderRadius: 14,
+                background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
+                border: `1px solid ${theme.borderFaint}`, maxWidth: 480,
+              }}>
+                {[
+                  { id: "workspace", label: "Workspace" },
+                  { id: "ai", label: appLanguage === "de" ? "KI & Modelle" : "AI & Models" },
+                  { id: "appearance", label: appLanguage === "de" ? "Darstellung" : "Appearance" },
+                  { id: "account", label: "Account" },
+                ].map(tb => {
+                  const on = settingsTab === tb.id;
+                  return (
+                    <div key={tb.id} onClick={() => setSettingsTab(tb.id)}
+                      style={{
+                        flex: 1, textAlign: "center", padding: "9px 8px", borderRadius: 10, cursor: "pointer",
+                        fontSize: 13, fontFamily: FONT, fontWeight: on ? 600 : 500, whiteSpace: "nowrap",
+                        background: on ? (darkMode ? "rgba(255,255,255,0.10)" : "#fff") : "transparent",
+                        color: on ? theme.text : theme.textDim,
+                        boxShadow: on ? "0 1px 3px rgba(0,0,0,0.10)" : "none",
+                        transition: "background 0.15s, color 0.15s",
+                      }}>
+                      {tb.label}
+                    </div>
+                  );
+                })}
+              </div>
+
               {/* ── Workspace & Team Management ── */}
-              {userOrg && (
+              {settingsTab === "workspace" && userOrg && (
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -21421,12 +21451,8 @@ export default function CircularMenu() {
               </motion.div>
               )}
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginTop: 32 }}>
-
-              {/* Left column */}
-              <div>
-
               {/* Account section */}
+              {settingsTab === "account" && (
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -21489,8 +21515,10 @@ export default function CircularMenu() {
                   </div>
                 </div>
               </motion.div>
+              )}
 
               {/* Preferences section */}
+              {settingsTab === "appearance" && (
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -21616,8 +21644,10 @@ export default function CircularMenu() {
                   </div>
                 </div>
               </motion.div>
+              )}
 
               {/* Voice section */}
+              {settingsTab === "appearance" && (
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -21720,13 +21750,10 @@ export default function CircularMenu() {
                   })}
                 </div>
               </motion.div>
-
-              </div>{/* end left column */}
-
-              {/* Right column */}
-              <div>
+              )}
 
               {/* AI Models section */}
+              {settingsTab === "ai" && (
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -21962,8 +21989,10 @@ export default function CircularMenu() {
                   })}
                 </div>
               </motion.div>
+              )}
 
               {/* Integrations section */}
+              {settingsTab === "workspace" && (
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -22026,12 +22055,10 @@ export default function CircularMenu() {
                   </div>
                 </div>
               </motion.div>
-
-              </div>{/* end right column */}
-              </div>{/* end grid */}
+              )}
 
               {/* Google Connection Status — only shown when broken so user can reconnect */}
-              {googleConnectionBroken && (
+              {settingsTab === "account" && googleConnectionBroken && (
                 <motion.div
                   initial={{ opacity: 0, y: 16 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -22187,6 +22214,7 @@ export default function CircularMenu() {
               )}
 
               {/* OS Visuals — click to open icon customization modal */}
+              {settingsTab === "appearance" && (
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -22229,8 +22257,10 @@ export default function CircularMenu() {
                   </svg>
                 </motion.div>
               </motion.div>
+              )}
 
               {/* Logout */}
+              {settingsTab === "account" && (
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -22254,6 +22284,7 @@ export default function CircularMenu() {
                   <span style={{ fontSize: 14, fontFamily: FONT, color: "#E84343", fontWeight: 500 }}>Logout</span>
                 </motion.div>
               </motion.div>
+              )}
 
               {/* Version */}
               <div style={{ marginTop: 24, textAlign: "center" }}>
