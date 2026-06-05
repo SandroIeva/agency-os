@@ -21286,7 +21286,7 @@ export default function CircularMenu() {
 
               {/* Settings tabs — cluster the page into Workspace / KI / Darstellung / Account */}
               <div style={{
-                display: "flex", gap: 6, marginBottom: 28, padding: 5, borderRadius: 14,
+                display: "flex", gap: 6, marginBottom: 40, padding: 5, borderRadius: 14,
                 background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
                 border: `1px solid ${theme.borderFaint}`, width: "100%",
               }}>
@@ -21813,6 +21813,8 @@ export default function CircularMenu() {
               </motion.div>
               )}
 
+              {/* AI tab: render AI Modelle above AI Stimme (column-reverse keeps source order intact) */}
+              <div style={{ display: "flex", flexDirection: "column-reverse" }}>
               {/* Voice section */}
               {settingsTab === "ai" && (
               <motion.div
@@ -22157,6 +22159,7 @@ export default function CircularMenu() {
                 </div>
               </motion.div>
               )}
+              </div>
 
               {/* Integrations section */}
               {settingsTab === "workspace" && (
