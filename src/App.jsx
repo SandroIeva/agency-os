@@ -22400,9 +22400,9 @@ export default function CircularMenu() {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{t("settings.googleCalDrive")}</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{session ? t("settings.calFilesSynced") : t("settings.signInToConnect")}</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{(session?.user?.app_metadata?.provider === "google" && !googleConnectionBroken) ? t("settings.calFilesSynced") : (appLanguage === "de" ? "Nicht verbunden" : "Not connected")}</div>
                     </div>
-                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: session ? "#00B894" : "#E84393" }} />
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: (session?.user?.app_metadata?.provider === "google" && !googleConnectionBroken) ? "#00B894" : (darkMode ? "#ffffff30" : "#c4c4cc") }} />
                   </div>
                   {/* Slack */}
                   <div style={{
