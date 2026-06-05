@@ -16255,6 +16255,9 @@ export default function CircularMenu() {
   const [userOrgRole, setUserOrgRole] = useState(null);     // role in current org
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false); // workspace switcher dropdown
   const [settingsTab, setSettingsTab] = useState("workspace"); // settings page tab: workspace | ai | appearance | account
+  const [deleteWsOpen, setDeleteWsOpen] = useState(false);   // workspace-delete confirm modal
+  const [deleteWsText, setDeleteWsText] = useState("");      // typed confirmation (must match workspace name)
+  const [deletingWs, setDeletingWs] = useState(false);
   const [orgLoading, setOrgLoading] = useState(true);       // loading org check
   const [onboardingStep, setOnboardingStep] = useState(null); // null = skip, "choose" | "create" | "join"
   const [onboardingError, setOnboardingError] = useState(null);
@@ -16322,6 +16325,36 @@ export default function CircularMenu() {
     } finally {
       setAvatarUploading(false);
       if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
+  };
+  // Delete the current workspace (organization) + ALL its data. Admin-only,
+  // enforced again server-side by the delete_organization RPC.
+  const deleteWorkspace = async () => {
+    if (!userOrg?.id) return;
+    setDeletingWs(true);
+    try {
+      const { error } = await supabase.rpc("delete_organization", { p_org_id: userOrg.id });
+      if (error) throw error;
+      const deletedId = userOrg.id;
+      const remaining = userOrgs.filter(o => o.id !== deletedId);
+      setUserOrgs(remaining);
+      setDeleteWsOpen(false);
+      setDeleteWsText("");
+      if (remaining.length > 0) {
+        const next = remaining[0];
+        setUserOrg(next);
+        setUserOrgRole(next.role);
+        setCurrentView("dashboard");
+      } else {
+        // No workspaces left — sign out to a clean state.
+        await handleLogout();
+        setCurrentView("dashboard");
+      }
+    } catch (e) {
+      console.error("[DeleteWorkspace]", e);
+      alert((appLanguage === "de" ? "Löschen fehlgeschlagen: " : "Delete failed: ") + (e.message || ""));
+    } finally {
+      setDeletingWs(false);
     }
   };
   const [teamInvites, setTeamInvites] = useState([]);        // pending invites sent by admin
@@ -22328,6 +22361,34 @@ export default function CircularMenu() {
               </motion.div>
               )}
 
+              {/* Danger zone — delete workspace (admins only) */}
+              {settingsTab === "account" && userOrg && (userOrgRole === "admin" || userOrg?.role === "admin") && (
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+                  style={{ marginTop: 24 }}
+                >
+                  <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
+                    {appLanguage === "de" ? "Gefahrenzone" : "Danger Zone"}
+                  </div>
+                  <div style={{ borderRadius: 20, background: "rgba(232,67,67,0.05)", border: "1px solid rgba(232,67,67,0.18)", padding: "20px 24px", display: "flex", alignItems: "center", gap: 14 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
+                        {appLanguage === "de" ? "Workspace löschen" : "Delete workspace"}
+                      </div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.4 }}>
+                        {appLanguage === "de" ? "Entfernt diesen Workspace und alle zugehörigen Daten unwiderruflich." : "Permanently removes this workspace and all of its data."}
+                      </div>
+                    </div>
+                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                      onClick={() => { setDeleteWsText(""); setDeleteWsOpen(true); }}
+                      style={{ padding: "10px 18px", borderRadius: 12, background: "transparent", border: "1px solid rgba(232,67,67,0.4)", color: "#E84343", fontSize: 13, fontWeight: 500, fontFamily: FONT, cursor: "pointer", whiteSpace: "nowrap" }}>
+                      {appLanguage === "de" ? "Löschen" : "Delete"}
+                    </motion.button>
+                  </div>
+                </motion.div>
+              )}
+
               {/* Logout */}
               {settingsTab === "account" && (
               <motion.div
@@ -22359,6 +22420,54 @@ export default function CircularMenu() {
               <div style={{ marginTop: 24, textAlign: "center" }}>
                 <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>i7 OS v0.1.0</div>
               </div>
+
+              {/* Delete-workspace confirmation modal */}
+              <AnimatePresence>
+                {deleteWsOpen && (
+                  <motion.div
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    onClick={() => !deletingWs && setDeleteWsOpen(false)}
+                    style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+                  >
+                    <motion.div
+                      initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0 }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ width: "100%", maxWidth: 440, borderRadius: 20, background: darkMode ? "#1b1b24" : "#fff", border: `1px solid ${theme.border}`, padding: "28px 26px", boxShadow: "0 24px 60px rgba(0,0,0,0.3)" }}
+                    >
+                      <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>
+                        {appLanguage === "de" ? "Workspace wirklich löschen?" : "Delete workspace?"}
+                      </div>
+                      <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginBottom: 18 }}>
+                        {appLanguage === "de"
+                          ? <>Dadurch werden <strong style={{ color: theme.text }}>{userOrg?.name}</strong> und <strong style={{ color: theme.text }}>alle Daten</strong> (Projekte, Aufgaben, Dateien, Brand, Mitglieder) dauerhaft gelöscht. Das kann nicht rückgängig gemacht werden.</>
+                          : <>This permanently deletes <strong style={{ color: theme.text }}>{userOrg?.name}</strong> and <strong style={{ color: theme.text }}>all data</strong> (projects, tasks, files, brand, members). This cannot be undone.</>}
+                      </div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 8 }}>
+                        {appLanguage === "de" ? <>Tippe zur Bestätigung <strong style={{ color: theme.text }}>{userOrg?.name}</strong> ein:</> : <>Type <strong style={{ color: theme.text }}>{userOrg?.name}</strong> to confirm:</>}
+                      </div>
+                      <input value={deleteWsText} onChange={(e) => setDeleteWsText(e.target.value)} autoFocus
+                        placeholder={userOrg?.name || ""}
+                        onKeyDown={(e) => { if (e.key === "Enter" && deleteWsText.trim() === (userOrg?.name || "").trim() && !deletingWs) deleteWorkspace(); }}
+                        style={{ width: "100%", boxSizing: "border-box", padding: "11px 13px", borderRadius: 10, fontFamily: FONT, fontSize: 14, background: darkMode ? "rgba(255,255,255,0.05)" : "#fff", border: `1px solid ${theme.border}`, color: theme.text, outline: "none", marginBottom: 20 }} />
+                      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                        <button onClick={() => setDeleteWsOpen(false)} disabled={deletingWs}
+                          style={{ padding: "10px 18px", borderRadius: 12, background: "transparent", border: `1px solid ${theme.border}`, color: theme.text, fontSize: 13, fontWeight: 500, fontFamily: FONT, cursor: deletingWs ? "default" : "pointer" }}>
+                          {appLanguage === "de" ? "Abbrechen" : "Cancel"}
+                        </button>
+                        {(() => {
+                          const canDelete = !deletingWs && deleteWsText.trim() === (userOrg?.name || "").trim();
+                          return (
+                            <button onClick={deleteWorkspace} disabled={!canDelete}
+                              style={{ padding: "10px 18px", borderRadius: 12, background: "#E84343", border: "none", color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: canDelete ? "pointer" : "not-allowed", opacity: canDelete ? 1 : 0.5 }}>
+                              {deletingWs ? (appLanguage === "de" ? "Löscht…" : "Deleting…") : (appLanguage === "de" ? "Endgültig löschen" : "Delete forever")}
+                            </button>
+                          );
+                        })()}
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
             </div>
           </motion.div>
