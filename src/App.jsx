@@ -8162,18 +8162,31 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     try {
       // Create new conversation
       const { data: conv, error: convErr } = await supabase.from("chat_conversations").insert({ org_id: userOrg.id, is_group: false }).select().single();
-      if (convErr || !conv) return;
+      if (convErr || !conv) { console.error("[Chat] create conversation failed:", convErr); alert("Chat konnte nicht erstellt werden" + (convErr ? ": " + convErr.message : "")); return; }
       // Add both participants
-      const { data: partData, error: partErr } = await supabase.from("chat_participants").insert([
+      const { error: partErr } = await supabase.from("chat_participants").insert([
         { conversation_id: conv.id, user_id: myId },
         { conversation_id: conv.id, user_id: otherUserId },
-      ]).select();
-      if (partErr) return;
+      ]);
+      if (partErr) { console.error("[Chat] add participants failed:", partErr); alert("Teilnehmer konnten nicht hinzugefügt werden: " + partErr.message); return; }
+      // Optimistically add to the list so the chat panel opens immediately
+      // (activeConv is looked up from this list — otherwise it stays on the empty state).
+      const other = memberMap[otherUserId];
+      setConversations(prev => [
+        {
+          id: conv.id, name: other?.display_name || "Unbekannt", avatar_url: other?.avatar_url || null,
+          color: other?.color || "#8B7AFF", initials: other?.initials || "?", is_group: false,
+          lastMsg: "", time: "", lastMsgAt: conv.created_at,
+          participants: [myId, otherUserId], otherIds: [otherUserId],
+        },
+        ...prev.filter(c => c.id !== conv.id),
+      ]);
       setShowNewChat(false);
-      await loadConversations();
       openConversation(conv.id);
+      loadConversations(); // refresh in the background
     } catch (err) {
       console.error("startConversation failed:", err);
+      alert("Fehler beim Starten des Chats: " + (err.message || err));
     }
   };
 
