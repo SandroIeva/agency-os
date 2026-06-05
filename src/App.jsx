@@ -16258,6 +16258,9 @@ export default function CircularMenu() {
   const [deleteWsOpen, setDeleteWsOpen] = useState(false);   // workspace-delete confirm modal
   const [deleteWsText, setDeleteWsText] = useState("");      // typed confirmation (must match workspace name)
   const [deletingWs, setDeletingWs] = useState(false);
+  const [createWsOpen, setCreateWsOpen] = useState(false);   // create-workspace modal
+  const [newWsName, setNewWsName] = useState("");
+  const [creatingWs, setCreatingWs] = useState(false);
   const [orgLoading, setOrgLoading] = useState(true);       // loading org check
   const [onboardingStep, setOnboardingStep] = useState(null); // null = skip, "choose" | "create" | "join"
   const [onboardingError, setOnboardingError] = useState(null);
@@ -16355,6 +16358,40 @@ export default function CircularMenu() {
       alert((appLanguage === "de" ? "Löschen fehlgeschlagen: " : "Delete failed: ") + (e.message || ""));
     } finally {
       setDeletingWs(false);
+    }
+  };
+  // Create a new workspace (organization), join it as admin, and switch to it.
+  const createWorkspace = async () => {
+    const name = newWsName.trim();
+    if (!name || creatingWs || !session?.user?.id) return;
+    setCreatingWs(true);
+    try {
+      const slug = name.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").slice(0, 40);
+      const { data: org, error: orgErr } = await supabase.from("organizations")
+        .insert({ name, slug: slug + "-" + Date.now().toString(36), created_by: session.user.id })
+        .select().single();
+      if (orgErr) throw orgErr;
+      const { error: memErr } = await supabase.from("org_members").insert({ org_id: org.id, user_id: session.user.id, role: "admin" });
+      if (memErr) throw memErr;
+      const orgWithRole = { ...org, role: "admin" };
+      setUserOrgs(prev => [...prev, orgWithRole]);
+      setUserOrg(orgWithRole);
+      setUserOrgRole("admin");
+      const { data: members } = await supabase
+        .from("org_members")
+        .select("user_id, role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
+        .eq("org_id", org.id);
+      setOrgMembers(members || []);
+      setTeamInvites([]);
+      setCreateWsOpen(false);
+      setNewWsName("");
+      setWsDropdownOpen(false);
+      setCurrentView("dashboard");
+    } catch (e) {
+      console.error("[CreateWorkspace]", e);
+      alert((appLanguage === "de" ? "Erstellen fehlgeschlagen: " : "Create failed: ") + (e.message || ""));
+    } finally {
+      setCreatingWs(false);
     }
   };
   const [teamInvites, setTeamInvites] = useState([]);        // pending invites sent by admin
@@ -21226,6 +21263,19 @@ export default function CircularMenu() {
                                 )}
                               </motion.div>
                             ))}
+                            {/* Create a new workspace */}
+                            <div style={{ borderTop: `1px solid ${theme.borderFaint}`, marginTop: 4, paddingTop: 4 }}>
+                              <motion.div
+                                whileHover={{ background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}
+                                onClick={() => { setWsDropdownOpen(false); setNewWsName(""); setCreateWsOpen(true); }}
+                                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", cursor: "pointer" }}
+                              >
+                                <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, border: `1px dashed ${theme.borderFaint}`, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, fontSize: 16, lineHeight: 1 }}>+</div>
+                                <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
+                                  {appLanguage === "de" ? "Neuer Workspace" : "New workspace"}
+                                </div>
+                              </motion.div>
+                            </div>
                           </motion.div>
                         )}
                       </AnimatePresence>
@@ -22460,6 +22510,49 @@ export default function CircularMenu() {
                             <button onClick={deleteWorkspace} disabled={!canDelete}
                               style={{ padding: "10px 18px", borderRadius: 12, background: "#E84343", border: "none", color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: canDelete ? "pointer" : "not-allowed", opacity: canDelete ? 1 : 0.5 }}>
                               {deletingWs ? (appLanguage === "de" ? "Löscht…" : "Deleting…") : (appLanguage === "de" ? "Endgültig löschen" : "Delete forever")}
+                            </button>
+                          );
+                        })()}
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Create-workspace modal */}
+              <AnimatePresence>
+                {createWsOpen && (
+                  <motion.div
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    onClick={() => !creatingWs && setCreateWsOpen(false)}
+                    style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+                  >
+                    <motion.div
+                      initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0 }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ width: "100%", maxWidth: 440, borderRadius: 20, background: darkMode ? "#1b1b24" : "#fff", border: `1px solid ${theme.border}`, padding: "28px 26px", boxShadow: "0 24px 60px rgba(0,0,0,0.3)" }}
+                    >
+                      <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>
+                        {appLanguage === "de" ? "Neuer Workspace" : "New workspace"}
+                      </div>
+                      <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginBottom: 18 }}>
+                        {appLanguage === "de" ? "Gib deinem Workspace einen Namen. Du wirst automatisch als Admin hinzugefügt." : "Give your workspace a name. You'll be added as its admin."}
+                      </div>
+                      <input value={newWsName} onChange={(e) => setNewWsName(e.target.value)} autoFocus
+                        placeholder={appLanguage === "de" ? "z.B. Meine Agentur" : "e.g. My Agency"}
+                        onKeyDown={(e) => { if (e.key === "Enter" && newWsName.trim() && !creatingWs) createWorkspace(); }}
+                        style={{ width: "100%", boxSizing: "border-box", padding: "11px 13px", borderRadius: 10, fontFamily: FONT, fontSize: 14, background: darkMode ? "rgba(255,255,255,0.05)" : "#fff", border: `1px solid ${theme.border}`, color: theme.text, outline: "none", marginBottom: 20 }} />
+                      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                        <button onClick={() => setCreateWsOpen(false)} disabled={creatingWs}
+                          style={{ padding: "10px 18px", borderRadius: 12, background: "transparent", border: `1px solid ${theme.border}`, color: theme.text, fontSize: 13, fontWeight: 500, fontFamily: FONT, cursor: creatingWs ? "default" : "pointer" }}>
+                          {appLanguage === "de" ? "Abbrechen" : "Cancel"}
+                        </button>
+                        {(() => {
+                          const canCreate = !creatingWs && !!newWsName.trim();
+                          return (
+                            <button onClick={createWorkspace} disabled={!canCreate}
+                              style={{ padding: "10px 18px", borderRadius: 12, background: "#8B7AFF", border: "none", color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: canCreate ? "pointer" : "not-allowed", opacity: canCreate ? 1 : 0.5 }}>
+                              {creatingWs ? (appLanguage === "de" ? "Erstellt…" : "Creating…") : (appLanguage === "de" ? "Erstellen" : "Create")}
                             </button>
                           );
                         })()}
