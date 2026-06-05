@@ -96,6 +96,28 @@ const LINEAR_MENU_ITEMS_DEF = [
   ]},
 ];
 
+// Workspace member permissions + role presets (assigning a role pre-checks these flags).
+const WS_PERMISSIONS = [
+  { key: "can_edit_brand",      de: "Brand bearbeiten",            en: "Edit brand" },
+  { key: "can_edit_design",     de: "Design System bearbeiten",   en: "Edit design system" },
+  { key: "can_manage_projects", de: "Projekte anlegen & verwalten", en: "Manage projects" },
+  { key: "can_invite_members",  de: "Mitglieder einladen",         en: "Invite members" },
+];
+const WS_ROLE_PRESETS = {
+  member:         { can_edit_brand: false, can_edit_design: false, can_manage_projects: false, can_invite_members: false },
+  branddesigner:  { can_edit_brand: true,  can_edit_design: true,  can_manage_projects: false, can_invite_members: false },
+  projektmanager: { can_edit_brand: false, can_edit_design: false, can_manage_projects: true,  can_invite_members: true  },
+};
+const WS_ROLE_LABELS = { member: "Mitglied", branddesigner: "Branddesigner", projektmanager: "Projektmanager" };
+// Given a member's flags, return the matching preset key or "custom".
+const deriveWsRole = (m) => {
+  for (const role of Object.keys(WS_ROLE_PRESETS)) {
+    const p = WS_ROLE_PRESETS[role];
+    if (WS_PERMISSIONS.every(({ key }) => !!m?.[key] === !!p[key])) return role;
+  }
+  return "custom";
+};
+
 const FONT = "'Geist', -apple-system, sans-serif";
 const VAPID_PUBLIC_KEY = "BJJ_TXEs7qnwTKLnYO5_pvuuzr6oB59d4xpSCssTZCkfujAaQYlCwxptfnUPXxhSnikKcG4rPH1FuU4CTYh4gvg";
 
@@ -16296,6 +16318,7 @@ export default function CircularMenu() {
   const [deleteWsOpen, setDeleteWsOpen] = useState(false);   // workspace-delete confirm modal
   const [deleteWsText, setDeleteWsText] = useState("");      // typed confirmation (must match workspace name)
   const [deletingWs, setDeletingWs] = useState(false);
+  const [expandedMemberId, setExpandedMemberId] = useState(null); // members & permissions expander
   const [createWsOpen, setCreateWsOpen] = useState(false);   // create-workspace modal
   const [newWsName, setNewWsName] = useState("");
   const [creatingWs, setCreatingWs] = useState(false);
@@ -16422,7 +16445,7 @@ export default function CircularMenu() {
       setUserOrgRole("admin");
       const { data: members } = await supabase
         .from("org_members")
-        .select("user_id, role, can_edit_brand, can_edit_design, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
+        .select("user_id, role, can_edit_brand, can_edit_design, can_manage_projects, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
         .eq("org_id", org.id);
       setOrgMembers(members || []);
       setTeamInvites([]);
@@ -16437,16 +16460,16 @@ export default function CircularMenu() {
       setCreatingWs(false);
     }
   };
-  // Admin toggles a member's brand/design edit role. RLS ("Admins can update
-  // members") enforces that only admins may change this.
-  const setMemberRoleFlag = async (userId, field, value) => {
+  // Admin updates a member's permission flags / workspace role. RLS ("Admins
+  // can update members") enforces that only admins may change this.
+  const updateMember = async (userId, patch) => {
     if (!userOrg?.id) return;
     const prev = orgMembers;
-    setOrgMembers(p => p.map(m => m.user_id === userId ? { ...m, [field]: value } : m)); // optimistic
-    const { error } = await supabase.from("org_members").update({ [field]: value }).eq("org_id", userOrg.id).eq("user_id", userId);
+    setOrgMembers(p => p.map(m => m.user_id === userId ? { ...m, ...patch } : m)); // optimistic
+    const { error } = await supabase.from("org_members").update(patch).eq("org_id", userOrg.id).eq("user_id", userId);
     if (error) {
       setOrgMembers(prev); // revert
-      alert((appLanguage === "de" ? "Rolle konnte nicht geändert werden: " : "Could not change role: ") + error.message);
+      alert((appLanguage === "de" ? "Konnte nicht gespeichert werden: " : "Could not save: ") + error.message);
     }
   };
   const [teamInvites, setTeamInvites] = useState([]);        // pending invites sent by admin
@@ -16606,6 +16629,8 @@ export default function CircularMenu() {
   const isOrgAdmin = userOrgRole === "admin" || userOrg?.role === "admin" || myMembership?.role === "admin";
   const canEditBrand = isOrgAdmin || !!myMembership?.can_edit_brand;
   const canEditDesign = isOrgAdmin || !!myMembership?.can_edit_design;
+  const canManageProjects = isOrgAdmin || !!myMembership?.can_manage_projects;
+  const canInviteMembers = isOrgAdmin || !!myMembership?.can_invite_members;
   // Persist a chosen display name to auth metadata + profiles + localStorage.
   const saveDisplayName = async (name) => {
     const clean = (name || "").trim();
@@ -16673,7 +16698,7 @@ export default function CircularMenu() {
           // Load org members for chat etc.
           const { data: members } = await supabase
             .from("org_members")
-            .select("user_id, role, can_edit_brand, can_edit_design, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
+            .select("user_id, role, can_edit_brand, can_edit_design, can_manage_projects, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
             .eq("org_id", org.id);
           setOrgMembers(members || []);
 
@@ -16728,7 +16753,7 @@ export default function CircularMenu() {
     if (!userOrg?.id) return;
     const { data: members } = await supabase
       .from("org_members")
-      .select("user_id, role, can_edit_brand, can_edit_design, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
+      .select("user_id, role, can_edit_brand, can_edit_design, can_manage_projects, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
       .eq("org_id", userOrg.id);
     setOrgMembers(members || []);
     const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", userOrg.id).eq("status", "pending");
@@ -21485,7 +21510,7 @@ export default function CircularMenu() {
                                   // Reload org members
                                   const { data: members } = await supabase
                                     .from("org_members")
-                                    .select("user_id, role, can_edit_brand, can_edit_design, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
+                                    .select("user_id, role, can_edit_brand, can_edit_design, can_manage_projects, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
                                     .eq("org_id", org.id);
                                   setOrgMembers(members || []);
                                   const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", org.id).eq("status", "pending");
@@ -21626,8 +21651,8 @@ export default function CircularMenu() {
                     )}
                   </div>
 
-                  {/* Invite member — chip-based input (admins only) */}
-                  {(userOrgRole === "admin" || userOrg?.role === "admin") && (
+                  {/* Invite member — admins or members with the invite permission */}
+                  {canInviteMembers && (
                   <div style={{ padding: "18px 20px", borderBottom: `1px solid ${theme.borderFaint}` }}>
                     <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 12 }}>
                       {appLanguage === "de" ? "Teammitglied einladen" : "Invite Team Member"}
@@ -21765,41 +21790,100 @@ export default function CircularMenu() {
                   </div>
                   )}
 
-                  {/* Current members */}
+                  {/* Members & permissions */}
                   <div style={{ padding: "14px 20px" }}>
                     <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.5, marginBottom: 10, textTransform: "uppercase" }}>
-                      {appLanguage === "de" ? "Mitglieder" : "Members"} ({orgMembers.length})
+                      {appLanguage === "de" ? "Mitglieder & Berechtigungen" : "Members & Permissions"} ({orgMembers.length})
                     </div>
-                    {orgMembers.map((m, i) => (
-                      <div key={m.user_id || i} style={{
-                        display: "flex", alignItems: "center", gap: 12, padding: "10px 0",
-                        borderBottom: i < orgMembers.length - 1 ? `1px solid ${theme.borderFaint}` : "none",
-                      }}>
-                        {m.profiles?.avatar_url ? (
-                          <img src={m.profiles.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${theme.borderFaint}` }} />
-                        ) : (
-                          <div style={{
-                            width: 34, height: 34, borderRadius: 10,
-                            background: "linear-gradient(135deg, #8B7AFF50, #8B7AFF20)",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 12, fontWeight: 600, fontFamily: FONT, color: "#8B7AFF",
-                          }}>{m.profiles?.initials || "?"}</div>
-                        )}
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{m.profiles?.display_name || "Unknown"}</div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>{m.profiles?.email || ""}</div>
+                    {orgMembers.map((m, i) => {
+                      const isAdminRow = m.role === "admin";
+                      const wsRole = isAdminRow ? "admin" : deriveWsRole(m);
+                      const roleLabel = isAdminRow
+                        ? (appLanguage === "de" ? "Admin · alle Rechte" : "Admin · all rights")
+                        : (wsRole === "custom" ? (appLanguage === "de" ? "Individuell" : "Custom") : WS_ROLE_LABELS[wsRole]);
+                      const expanded = expandedMemberId === m.user_id;
+                      const expandable = isOrgAdmin && !isAdminRow;
+                      return (
+                        <div key={m.user_id || i} style={{ borderBottom: i < orgMembers.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
+                          <div
+                            onClick={() => expandable && setExpandedMemberId(expanded ? null : m.user_id)}
+                            style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", cursor: expandable ? "pointer" : "default" }}
+                          >
+                            {m.profiles?.avatar_url ? (
+                              <img src={m.profiles.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${theme.borderFaint}` }} />
+                            ) : (
+                              <div style={{ width: 34, height: 34, borderRadius: 10, background: "linear-gradient(135deg, #8B7AFF50, #8B7AFF20)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, fontFamily: FONT, color: "#8B7AFF" }}>{m.profiles?.initials || (m.profiles?.display_name || "?")[0]?.toUpperCase()}</div>
+                            )}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{m.profiles?.display_name || "Unknown"}</div>
+                              <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.profiles?.email || ""}</div>
+                            </div>
+                            <div style={{
+                              padding: "3px 10px", borderRadius: 8, flexShrink: 0,
+                              background: isAdminRow ? "rgba(139, 122, 255, 0.1)" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+                              border: `1px solid ${isAdminRow ? "rgba(139, 122, 255, 0.2)" : theme.borderFaint}`,
+                              fontSize: 11, fontFamily: FONT, color: isAdminRow ? "#8B7AFF" : theme.textDim, fontWeight: 500,
+                            }}>{roleLabel}</div>
+                            {expandable && (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
+                                <path d="M6 9l6 6 6-6" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            )}
+                          </div>
+                          <AnimatePresence>
+                            {expandable && expanded && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.2 }}
+                                style={{ overflow: "hidden" }}
+                              >
+                                <div style={{ padding: "4px 0 16px", display: "flex", flexDirection: "column", gap: 14 }}>
+                                  {/* Role presets */}
+                                  <div>
+                                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 600, marginBottom: 8 }}>{appLanguage === "de" ? "Rolle" : "Role"}</div>
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                                      {Object.keys(WS_ROLE_PRESETS).map(role => {
+                                        const on = wsRole === role;
+                                        return (
+                                          <div key={role} onClick={() => updateMember(m.user_id, { ...WS_ROLE_PRESETS[role], workspace_role: role })}
+                                            style={{ padding: "6px 12px", borderRadius: 8, fontSize: 12, fontFamily: FONT, fontWeight: on ? 600 : 500, cursor: "pointer", userSelect: "none",
+                                              background: on ? theme.accent + "1f" : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
+                                              color: on ? theme.accent : theme.textDim, border: `1px solid ${on ? theme.accent + "55" : theme.borderFaint}` }}>
+                                            {WS_ROLE_LABELS[role]}
+                                          </div>
+                                        );
+                                      })}
+                                      {wsRole === "custom" && (
+                                        <div style={{ padding: "6px 12px", borderRadius: 8, fontSize: 12, fontFamily: FONT, fontWeight: 600, background: theme.accent + "1f", color: theme.accent, border: `1px solid ${theme.accent}55` }}>{appLanguage === "de" ? "Individuell" : "Custom"}</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {/* Granular permissions */}
+                                  <div>
+                                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 600, marginBottom: 8 }}>{appLanguage === "de" ? "Berechtigungen" : "Permissions"}</div>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                      {WS_PERMISSIONS.map(perm => {
+                                        const checked = !!m[perm.key];
+                                        return (
+                                          <div key={perm.key} onClick={() => updateMember(m.user_id, { [perm.key]: !checked, workspace_role: deriveWsRole({ ...m, [perm.key]: !checked }) })}
+                                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", cursor: "pointer" }}>
+                                            <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                                              background: checked ? theme.accent : "transparent", border: `1.5px solid ${checked ? theme.accent : theme.borderFaint}` }}>
+                                              {checked && <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                                            </div>
+                                            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>{appLanguage === "de" ? perm.de : perm.en}</div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </div>
-                        <div style={{
-                          padding: "3px 10px", borderRadius: 8,
-                          background: m.role === "admin" ? "rgba(139, 122, 255, 0.1)" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
-                          border: `1px solid ${m.role === "admin" ? "rgba(139, 122, 255, 0.2)" : theme.borderFaint}`,
-                          fontSize: 11, fontFamily: FONT, color: m.role === "admin" ? "#8B7AFF" : theme.textDim,
-                          fontWeight: 500,
-                        }}>
-                          {m.role === "admin" ? "Admin" : "Member"}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {orgMembers.length === 0 && (
                       <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, padding: "8px 0" }}>
                         {appLanguage === "de" ? "Noch keine Mitglieder" : "No members yet"}
@@ -21863,65 +21947,6 @@ export default function CircularMenu() {
               </motion.div>
               )}
 
-              {/* Workspace settings — brand/design edit roles (admin only) */}
-              {settingsTab === "workspace" && userOrg && isOrgAdmin && (
-                <motion.div
-                  initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
-                  style={{ marginTop: 24 }}
-                >
-                  <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
-                    {appLanguage === "de" ? "Workspace-Einstellungen" : "Workspace settings"}
-                  </div>
-                  <div style={{ borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`, overflow: "hidden" }}>
-                    <div style={{ padding: "16px 20px", borderBottom: `1px solid ${theme.borderFaint}` }}>
-                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
-                        {appLanguage === "de" ? "Bearbeitungsrechte" : "Edit permissions"}
-                      </div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, lineHeight: 1.5 }}>
-                        {appLanguage === "de"
-                          ? "Brand-Rolle darf Strategie & Identität bearbeiten, Designer-Rolle das Design System. Ohne Rolle können Mitglieder den Brand-Bereich nur ansehen."
-                          : "Brand role can edit Strategy & Identity, Designer role can edit the Design System. Without a role, members can only view the brand area."}
-                      </div>
-                    </div>
-                    {orgMembers.map((m, i) => {
-                      const isAdminRow = m.role === "admin";
-                      const mName = m.profiles?.display_name || m.profiles?.email?.split("@")[0] || "User";
-                      const pill = (label, active, onClick) => (
-                        <div onClick={onClick}
-                          style={{
-                            padding: "6px 12px", borderRadius: 8, fontSize: 12, fontFamily: FONT, fontWeight: 500,
-                            cursor: "pointer", userSelect: "none",
-                            background: active ? theme.accent + "1f" : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
-                            color: active ? theme.accent : theme.textDim,
-                            border: `1px solid ${active ? theme.accent + "55" : theme.borderFaint}`,
-                          }}>{label}</div>
-                      );
-                      return (
-                        <div key={m.user_id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 20px", borderBottom: i < orgMembers.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
-                          {m.profiles?.avatar_url ? (
-                            <img src={m.profiles.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0 }} />
-                          ) : (
-                            <div style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0, background: "linear-gradient(135deg, #8B7AFF, #6C5CE7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontFamily: FONT, color: "#fff", fontWeight: 600 }}>{(mName || "?")[0].toUpperCase()}</div>
-                          )}
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{mName}</div>
-                            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.profiles?.email || ""}</div>
-                          </div>
-                          {isAdminRow ? (
-                            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.accent, fontWeight: 600, flexShrink: 0 }}>{appLanguage === "de" ? "Admin · alle Rechte" : "Admin · all rights"}</div>
-                          ) : (
-                            <div style={{ display: "flex", gap: 7, flexShrink: 0 }}>
-                              {pill("Brand", !!m.can_edit_brand, () => setMemberRoleFlag(m.user_id, "can_edit_brand", !m.can_edit_brand))}
-                              {pill("Design", !!m.can_edit_design, () => setMemberRoleFlag(m.user_id, "can_edit_design", !m.can_edit_design))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </motion.div>
-              )}
 
               {/* Account section */}
               {settingsTab === "account" && (
