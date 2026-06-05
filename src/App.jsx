@@ -19735,8 +19735,8 @@ export default function CircularMenu() {
                 </svg>
                 {unreadCount > 0 && (
                   <div style={{
-                    position: "absolute", top: 2, right: 2, minWidth: 16, height: 16, borderRadius: 8,
-                    background: "#EF4444", color: "#fff", fontSize: 9, fontWeight: 700, fontFamily: FONT,
+                    position: "absolute", top: 2, right: 2, minWidth: 18, height: 18, borderRadius: 9,
+                    background: theme.accent, color: "#fff", fontSize: 9, fontWeight: 700, fontFamily: FONT,
                     display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px",
                     border: `2px solid ${darkMode ? "#111117" : "#ffffff"}`,
                   }}>{unreadCount > 9 ? "9+" : unreadCount}</div>
