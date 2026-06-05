@@ -16201,6 +16201,7 @@ export default function CircularMenu() {
   // The "is this saved?" signal lives in the green status dot and the placeholder text instead.
   const [llmKeyInputs, setLlmKeyInputs] = useState({ claude: "", openai: "", gemini: "" });
   const [llmKeyStatus, setLlmKeyStatus] = useState({}); // { claude: "valid"|"invalid"|"checking" }
+  const [editingKeyId, setEditingKeyId] = useState(null); // which provider's key is being edited
 
   // Voice selection state
   const VOICE_OPTIONS = [
@@ -22404,7 +22405,21 @@ export default function CircularMenu() {
                               transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
                               style={{ overflow: "hidden" }}
                             >
-                              <div style={{ padding: "0 20px 14px", display: "flex", gap: 8 }}>
+                              <div style={{ padding: "0 20px 14px" }}>
+                                {editingKeyId !== p.id ? (
+                                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                    <div style={{ flex: 1, padding: "10px 14px", borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, color: hasKey ? theme.textSub : theme.textDim, fontSize: 12, fontFamily: FONT, display: "flex", alignItems: "center", gap: 8 }}>
+                                      {hasKey && <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#00B894", flexShrink: 0 }} />}
+                                      {hasKey ? (appLanguage === "de" ? "Key gespeichert" : "Key saved") : (appLanguage === "de" ? "Kein Key hinterlegt" : "No key set")}
+                                    </div>
+                                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                                      onClick={() => { setEditingKeyId(p.id); setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" })); setLlmKeyStatus(prev => { const n = { ...prev }; delete n[p.id]; return n; }); }}
+                                      style={{ padding: "10px 16px", borderRadius: 12, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 12, fontFamily: FONT, color: theme.textSub, fontWeight: 500, whiteSpace: "nowrap" }}>
+                                      {appLanguage === "de" ? "Bearbeiten" : "Edit"}
+                                    </motion.div>
+                                  </div>
+                                ) : (
+                                  <div style={{ display: "flex", gap: 8 }}>
                                 <input
                                   type="password"
                                   value={llmKeyInputs[p.id] || ""}
@@ -22447,6 +22462,7 @@ export default function CircularMenu() {
                                           // Clear the input — never let a real key sit visibly in the field.
                                           setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" }));
                                           setLlmKeyStatus(prev => ({ ...prev, [p.id]: "valid" }));
+                                          setEditingKeyId(null);
                                         } else {
                                           // 429 = rate limited but key format is valid — save it
                                           const errData = await res.json().catch(() => ({}));
@@ -22454,6 +22470,7 @@ export default function CircularMenu() {
                                             setLlmKeys(prev => ({ ...prev, [p.id]: key }));
                                             setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" }));
                                             setLlmKeyStatus(prev => ({ ...prev, [p.id]: "valid" }));
+                                          setEditingKeyId(null);
                                           } else {
                                             setLlmKeyStatus(prev => ({ ...prev, [p.id]: "invalid" }));
                                           }
@@ -22490,6 +22507,13 @@ export default function CircularMenu() {
                                   >
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="#E84343" strokeWidth="2" strokeLinecap="round"/></svg>
                                   </motion.div>
+                                )}
+                                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                                      onClick={() => { setEditingKeyId(null); setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" })); setLlmKeyStatus(prev => { const n = { ...prev }; delete n[p.id]; return n; }); }}
+                                      style={{ padding: "10px 14px", borderRadius: 12, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, fontSize: 12, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap" }}>
+                                      {appLanguage === "de" ? "Abbrechen" : "Cancel"}
+                                    </motion.div>
+                                  </div>
                                 )}
                               </div>
                               {status === "invalid" && (
