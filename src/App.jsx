@@ -21637,12 +21637,11 @@ export default function CircularMenu() {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Google Account</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{session ? "Connected" : "Not connected"}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: session ? "#00B894" : "#E84393" }} />
+                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{session ? "Connected" : "Not connected"}</div>
+                      </div>
                     </div>
-                    <div style={{
-                      width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
-                      background: session ? "#00B894" : "#E84393",
-                    }} />
                     {/* Logout — moved here from the bottom of the page */}
                     <motion.div
                       onClick={() => { handleLogout(); setCurrentView("dashboard"); }}
