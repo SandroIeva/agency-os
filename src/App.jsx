@@ -21311,14 +21311,19 @@ export default function CircularMenu() {
                           }
                           if (emails.length === 0) return;
                           try {
+                            const failed = []; // { email, reason } — surfaced to the user
                             for (const email of emails) {
                               const { data: inv, error } = await supabase.from("invitations")
                                 .insert({ org_id: userOrg.id, email, invited_by: session.user.id, role: "member" })
                                 .select()
                                 .single();
                               if (error) throw error;
+                              // fetch() does NOT throw on HTTP 4xx/5xx — it only rejects on
+                              // network errors. So we must inspect response.ok explicitly,
+                              // otherwise a Resend rejection (bounce, bad address, limit)
+                              // silently looks like a successful send.
                               try {
-                                await fetch("/api/send-invite", {
+                                const resp = await fetch("/api/send-invite", {
                                   method: "POST",
                                   headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify({
@@ -21328,14 +21333,31 @@ export default function CircularMenu() {
                                     inviterName: userName || "A team member",
                                   }),
                                 });
+                                if (!resp.ok) {
+                                  const d = await resp.json().catch(() => ({}));
+                                  failed.push({ email, reason: d.error || `HTTP ${resp.status}` });
+                                  console.warn("[Invite] Email send rejected:", email, d);
+                                }
                               } catch (emailErr) {
-                                console.warn("[Invite] Email send failed:", emailErr);
+                                failed.push({ email, reason: emailErr.message || "Netzwerkfehler" });
+                                console.warn("[Invite] Email send failed:", email, emailErr);
                               }
                             }
                             setInviteEmails([]);
                             setInviteInputVal("");
                             const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", userOrg.id).eq("status", "pending");
                             setTeamInvites(invites || []);
+                            if (failed.length > 0) {
+                              const lines = failed.map(f => `• ${f.email}: ${f.reason}`).join("\n");
+                              alert(
+                                (appLanguage === "de"
+                                  ? "Einladung gespeichert, aber die E-Mail konnte nicht zugestellt werden:\n\n"
+                                  : "Invitation saved, but the email could not be delivered:\n\n") + lines +
+                                (appLanguage === "de"
+                                  ? "\n\nDer Invite-Code lässt sich auch manuell teilen."
+                                  : "\n\nYou can also share the invite code manually.")
+                              );
+                            }
                           } catch (e) {
                             console.error("[Invite]", e);
                             alert(e.message || "Failed to send invite");
