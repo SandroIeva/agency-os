@@ -16267,6 +16267,9 @@ export default function CircularMenu() {
   const [joining, setJoining] = useState(false);             // joining workspace loading
   const [pendingInvites, setPendingInvites] = useState([]);  // pending invitations for user
   const [orgLogoUploading, setOrgLogoUploading] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [localAvatar, setLocalAvatar] = useState(null); // immediate override after upload
+  const avatarInputRef = useRef(null);
   const orgLogoInputRef = useRef(null);
   const uploadOrgLogo = async (file) => {
     if (!file || !userOrg?.id) return;
@@ -16296,6 +16299,30 @@ export default function CircularMenu() {
     await supabase.from("organizations").update({ logo_url: null }).eq("id", userOrg.id);
     setUserOrg(o => o ? { ...o, logo_url: null } : o);
     setUserOrgs(prev => prev.map(o => o.id === userOrg.id ? { ...o, logo_url: null } : o));
+  };
+  // Upload / change the user's own profile picture (avatar).
+  const uploadAvatar = async (file) => {
+    if (!file || !session?.user?.id) return;
+    setAvatarUploading(true);
+    try {
+      const ext = (file.name.split(".").pop() || "png").toLowerCase();
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const filePath = `avatars/${session.user.id}/${fileName}`;
+      const { error } = await supabase.storage.from("project-logos").upload(filePath, file, { upsert: true, contentType: file.type });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from("project-logos").getPublicUrl(filePath);
+      const newUrl = urlData.publicUrl;
+      // Persist to auth metadata (drives userAvatar) and to the profiles row (visible to teammates).
+      await supabase.auth.updateUser({ data: { avatar_url: newUrl } });
+      await supabase.from("profiles").update({ avatar_url: newUrl }).eq("id", session.user.id);
+      setLocalAvatar(newUrl);
+    } catch (err) {
+      console.error("Avatar upload failed:", err);
+      alert((appLanguage === "de" ? "Profilbild-Upload fehlgeschlagen: " : "Avatar upload failed: ") + (err.message || ""));
+    } finally {
+      setAvatarUploading(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
   };
   const [teamInvites, setTeamInvites] = useState([]);        // pending invites sent by admin
   const [inviteEmails, setInviteEmails] = useState([]);      // email chips for invite input
@@ -21035,16 +21062,35 @@ export default function CircularMenu() {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-                  {userAvatar ? (
-                    <img src={userAvatar} alt="" referrerPolicy="no-referrer" style={{ width: 64, height: 64, borderRadius: 18, border: `1px solid ${theme.border}` }} />
-                  ) : (
-                    <div style={{
-                      width: 64, height: 64, borderRadius: 18,
-                      background: "linear-gradient(135deg, #8B7AFF, #6C5CE7)",
+                  {/* Avatar — click to change profile picture */}
+                  <div
+                    onClick={() => !avatarUploading && avatarInputRef.current?.click()}
+                    className="avatar-edit"
+                    style={{ position: "relative", width: 64, height: 64, borderRadius: 18, flexShrink: 0, cursor: "pointer", overflow: "hidden" }}
+                    title={appLanguage === "de" ? "Profilbild ändern" : "Change profile picture"}
+                  >
+                    {(localAvatar || userAvatar) ? (
+                      <img src={localAvatar || userAvatar} alt="" referrerPolicy="no-referrer" style={{ width: 64, height: 64, borderRadius: 18, border: `1px solid ${theme.border}`, objectFit: "cover", display: "block" }} />
+                    ) : (
+                      <div style={{
+                        width: 64, height: 64, borderRadius: 18,
+                        background: "linear-gradient(135deg, #8B7AFF, #6C5CE7)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 26, fontFamily: FONT, color: "#fff", fontWeight: 600,
+                      }}>{(userName || "?")[0]}</div>
+                    )}
+                    {/* Hover overlay */}
+                    <div className="avatar-edit-overlay" style={{
+                      position: "absolute", inset: 0, borderRadius: 18,
+                      background: "rgba(0,0,0,0.5)", color: "#fff",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 26, fontFamily: FONT, color: "#fff", fontWeight: 600,
-                    }}>{(userName || "?")[0]}</div>
-                  )}
+                      fontSize: 10, fontFamily: FONT, fontWeight: 500, textAlign: "center", padding: "0 6px",
+                      opacity: 0, transition: "opacity 0.15s", pointerEvents: "none",
+                    }}>
+                      {avatarUploading ? (appLanguage === "de" ? "Lädt…" : "Uploading…") : (appLanguage === "de" ? "Foto ändern" : "Change photo")}
+                    </div>
+                    <input ref={avatarInputRef} type="file" accept="image/*" hidden onChange={(e) => { uploadAvatar(e.target.files?.[0]); }} />
+                  </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, lineHeight: 1.3 }}>
                       {userName || "User"}
@@ -21159,7 +21205,7 @@ export default function CircularMenu() {
               <div style={{
                 display: "flex", gap: 6, marginBottom: 28, padding: 5, borderRadius: 14,
                 background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
-                border: `1px solid ${theme.borderFaint}`, maxWidth: 480,
+                border: `1px solid ${theme.borderFaint}`, width: "100%",
               }}>
                 {[
                   { id: "workspace", label: "Workspace" },
@@ -21244,10 +21290,10 @@ export default function CircularMenu() {
                     <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 12 }}>
                       {appLanguage === "de" ? "Teammitglied einladen" : "Invite Team Member"}
                     </div>
-                    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "stretch" }}>
                       <div style={{
                         flex: 1, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6,
-                        padding: "8px 12px", borderRadius: 12, minHeight: 42,
+                        padding: "8px 12px", borderRadius: 12, minHeight: 44,
                         background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
                         border: `1px solid ${theme.borderFaint}`,
                       }}>
@@ -21364,7 +21410,8 @@ export default function CircularMenu() {
                           }
                         }}
                         style={{
-                          padding: "10px 20px", borderRadius: 12, marginTop: 1,
+                          padding: "0 22px", borderRadius: 12, flexShrink: 0,
+                          display: "flex", alignItems: "center", justifyContent: "center",
                           background: "#8B7AFF", border: "none",
                           color: "#fff", fontSize: 13, fontWeight: 500, fontFamily: FONT,
                           cursor: "pointer", opacity: inviteEmails.length === 0 && !inviteInputVal ? 0.5 : 1,
@@ -22310,7 +22357,7 @@ export default function CircularMenu() {
 
               {/* Version */}
               <div style={{ marginTop: 24, textAlign: "center" }}>
-                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>Agency OS v0.1.0</div>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>i7 OS v0.1.0</div>
               </div>
 
             </div>
@@ -22428,6 +22475,7 @@ export default function CircularMenu() {
         /* Hide scrollbars while keeping scroll behaviour */
         .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
         .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
+        .avatar-edit:hover .avatar-edit-overlay { opacity: 1 !important; }
         /* No blue focus outline on clicked/active elements */
         *:focus, *:focus-visible { outline: none !important; }
         /* Brand section rich-text (editor + rendered output) */
