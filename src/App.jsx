@@ -10269,12 +10269,13 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
                 <div>
                   <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Name</label>
                   <input value={form.name} onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
-                    autoFocus placeholder="z.B. Agency OS"
+                    autoFocus={canManageThisProject} placeholder="z.B. Agency OS" readOnly={!canManageThisProject}
                     style={{
                       width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
                       border: `1px solid ${theme.borderFaint}`, borderRadius: 12,
                       padding: "11px 14px", fontSize: 14, fontFamily: FONT,
                       color: theme.text, outline: "none", caretColor: theme.accent,
+                      cursor: canManageThisProject ? "text" : "default", opacity: canManageThisProject ? 1 : 0.7,
                     }}
                   />
                 </div>
@@ -10334,25 +10335,31 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
                 <div>
                   <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Akzentfarbe</label>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                    {["#8B7AFF","#6C5CE7","#5BA889","#D67885","#D4A85A","#5A7AB5","#7A9560","#C68460"].map(c => (
-                      <motion.div key={c} whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.9 }}
-                        onClick={() => setForm(prev => ({ ...prev, color: c }))}
-                        style={{
-                          width: 26, height: 26, borderRadius: "50%", background: c, cursor: "pointer",
-                          border: form.color === c ? `2px solid ${darkMode ? "#fff" : "#1a1a2e"}` : "2px solid transparent",
-                          boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
-                        }}
-                      />
-                    ))}
-                    <label style={{
-                      width: 26, height: 26, borderRadius: "50%", cursor: "pointer",
-                      background: "conic-gradient(from 0deg, #ff5e3a, #ffdb4d, #5bd1d7, #8b7aff, #ff5e3a)",
-                      border: "2px solid transparent", marginLeft: 4,
-                    }}>
-                      <input type="color" value={form.color} onChange={(e) => setForm(prev => ({ ...prev, color: e.target.value }))}
-                        style={{ opacity: 0, width: 0, height: 0 }}
-                      />
-                    </label>
+                    {canManageThisProject ? (
+                      <>
+                        {["#8B7AFF","#6C5CE7","#5BA889","#D67885","#D4A85A","#5A7AB5","#7A9560","#C68460"].map(c => (
+                          <motion.div key={c} whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.9 }}
+                            onClick={() => setForm(prev => ({ ...prev, color: c }))}
+                            style={{
+                              width: 26, height: 26, borderRadius: "50%", background: c, cursor: "pointer",
+                              border: form.color === c ? `2px solid ${darkMode ? "#fff" : "#1a1a2e"}` : "2px solid transparent",
+                              boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                            }}
+                          />
+                        ))}
+                        <label style={{
+                          width: 26, height: 26, borderRadius: "50%", cursor: "pointer",
+                          background: "conic-gradient(from 0deg, #ff5e3a, #ffdb4d, #5bd1d7, #8b7aff, #ff5e3a)",
+                          border: "2px solid transparent", marginLeft: 4,
+                        }}>
+                          <input type="color" value={form.color} onChange={(e) => setForm(prev => ({ ...prev, color: e.target.value }))}
+                            style={{ opacity: 0, width: 0, height: 0 }}
+                          />
+                        </label>
+                      </>
+                    ) : (
+                      <div style={{ width: 26, height: 26, borderRadius: "50%", background: form.color, border: `2px solid ${darkMode ? "#fff" : "#1a1a2e"}`, boxShadow: "0 1px 3px rgba(0,0,0,0.15)" }} />
+                    )}
                   </div>
                 </div>
 
@@ -10605,6 +10612,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
                     }}
                   >Löschen</motion.button>
                 ) : <div />}
+                {canManageThisProject ? (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={saveProject}
                   disabled={!form.name.trim()}
                   style={{
@@ -10615,6 +10623,11 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
                     fontSize: 13, fontWeight: 500, fontFamily: FONT,
                   }}
                 >{editing?.id ? "Speichern" : "Erstellen"}</motion.button>
+                ) : (
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={closeEditor}
+                    style={{ padding: "10px 22px", borderRadius: 12, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 13, fontWeight: 500, fontFamily: FONT }}
+                  >Schließen</motion.button>
+                )}
               </div>
             </motion.div>
           </motion.div>
