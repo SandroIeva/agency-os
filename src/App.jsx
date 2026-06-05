@@ -9352,11 +9352,6 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
             transition={{ delay: 0.1, duration: 0.4 }}
             style={{ textAlign: "center", padding: "80px 20px" }}
           >
-            <motion.div
-              initial={{ rotate: -10, scale: 0.8 }} animate={{ rotate: 0, scale: 1 }}
-              transition={{ type: "spring", stiffness: 200, damping: 14 }}
-              style={{ fontSize: 44, marginBottom: 20, opacity: 0.5, display: "inline-block" }}
-            >📝</motion.div>
             <div style={{ fontSize: 16, fontFamily: FONT, color: theme.text, marginBottom: 6 }}>
               {search ? "Keine Treffer" : filterMode !== "all" ? "Hier ist noch leer" : "Noch keine Notizen"}
             </div>
