@@ -22412,7 +22412,7 @@ export default function CircularMenu() {
                                       {hasKey && <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#00B894", flexShrink: 0 }} />}
                                       {hasKey ? (appLanguage === "de" ? "Key gespeichert" : "Key saved") : (appLanguage === "de" ? "Kein Key hinterlegt" : "No key set")}
                                     </div>
-                                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                                    <motion.div whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.11)" : "rgba(0,0,0,0.07)" }} whileTap={{ scale: 0.97 }}
                                       onClick={() => { setEditingKeyId(p.id); setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" })); setLlmKeyStatus(prev => { const n = { ...prev }; delete n[p.id]; return n; }); }}
                                       style={{ padding: "10px 16px", borderRadius: 12, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 12, fontFamily: FONT, color: theme.textSub, fontWeight: 500, whiteSpace: "nowrap" }}>
                                       {appLanguage === "de" ? "Bearbeiten" : "Edit"}
