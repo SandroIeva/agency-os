@@ -8031,7 +8031,18 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
         participants, otherIds,
       };
     }).sort((a, b) => new Date(b.lastMsgAt) - new Date(a.lastMsgAt));
-    setConversations(enriched);
+    // Dedupe 1:1 conversations: keep only one per other-user (the most recent,
+    // since `enriched` is sorted newest-first). Repeated "start chat" clicks
+    // could otherwise create several empty conversations with the same person.
+    const seenDirect = new Set();
+    const deduped = enriched.filter(c => {
+      if (c.is_group || (c.otherIds || []).length !== 1) return true;
+      const key = c.otherIds[0];
+      if (seenDirect.has(key)) return false;
+      seenDirect.add(key);
+      return true;
+    });
+    setConversations(deduped);
     setLoadingConvs(false);
   }, [myId, userOrg?.id, memberMap]);
 
