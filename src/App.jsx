@@ -9965,6 +9965,12 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
   // project's owner_id, treat them as owner. This way the Add button shows
   // immediately even if loadMembers is slow / fails.
   const isOwner = currentUserRole === "owner" || (editing?.id && editing?.owner_id === session?.user?.id);
+  // Who may manage a project (change/remove its logo, delete it): the project
+  // owner, an org admin, or anyone with the project-manager permission.
+  const myOrgMembership = (orgMembers || []).find(m => m.user_id === session?.user?.id);
+  const canManageThisProject = isOwner
+    || myOrgMembership?.role === "admin"
+    || !!myOrgMembership?.can_manage_projects;
 
   const sendInvite = async () => {
     const email = inviteEmail.trim().toLowerCase();
@@ -10279,11 +10285,13 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
                     {(logoPreview || form.logo_url) ? (
                       <div style={{ position: "relative" }}>
                         <img src={logoPreview || form.logo_url} alt="" style={{ width: 64, height: 64, borderRadius: 14, objectFit: "cover", border: `1px solid ${theme.borderFaint}` }} />
-                        <motion.div whileTap={{ scale: 0.9 }} onClick={removeLogo}
-                          style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: "#EF4444", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, cursor: "pointer", border: `2px solid ${darkMode ? "#16161e" : "#fff"}` }}
-                        >✕</motion.div>
+                        {canManageThisProject && (
+                          <motion.div whileTap={{ scale: 0.9 }} onClick={removeLogo}
+                            style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: "#EF4444", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, cursor: "pointer", border: `2px solid ${darkMode ? "#16161e" : "#fff"}` }}
+                          >✕</motion.div>
+                        )}
                       </div>
-                    ) : (
+                    ) : canManageThisProject ? (
                       <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                         onClick={() => logoInputRef.current?.click()}
                         style={{
@@ -10295,19 +10303,29 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
                       >
                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
                       </motion.div>
+                    ) : (
+                      <div style={{ width: 64, height: 64, borderRadius: 14, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textFaint }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>
+                      </div>
                     )}
                     <div style={{ flex: 1 }}>
-                      <motion.button whileTap={{ scale: 0.97 }}
-                        onClick={() => logoInputRef.current?.click()} disabled={logoUploading}
-                        style={{
-                          padding: "7px 14px", borderRadius: 10, cursor: "pointer",
-                          background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-                          border: `1px solid ${theme.borderFaint}`,
-                          fontSize: 12, fontFamily: FONT, color: theme.textSub,
-                          opacity: logoUploading ? 0.6 : 1,
-                        }}
-                      >{logoUploading ? "Lädt..." : (form.logo_url ? "Ersetzen" : "Logo hochladen")}</motion.button>
-                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 6 }}>PNG/JPG/SVG, quadratisch ideal</div>
+                      {canManageThisProject ? (
+                        <>
+                          <motion.button whileTap={{ scale: 0.97 }}
+                            onClick={() => logoInputRef.current?.click()} disabled={logoUploading}
+                            style={{
+                              padding: "7px 14px", borderRadius: 10, cursor: "pointer",
+                              background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                              border: `1px solid ${theme.borderFaint}`,
+                              fontSize: 12, fontFamily: FONT, color: theme.textSub,
+                              opacity: logoUploading ? 0.6 : 1,
+                            }}
+                          >{logoUploading ? "Lädt..." : (form.logo_url ? "Ersetzen" : "Logo hochladen")}</motion.button>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 6 }}>PNG/JPG/SVG, quadratisch ideal</div>
+                        </>
+                      ) : (
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, lineHeight: 1.5 }}>Nur Admins, der Projekt-Ersteller oder Projektmanager können das Logo ändern.</div>
+                      )}
                     </div>
                   </div>
                   <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" style={{ display: "none" }} onChange={handleLogoUpload} />
@@ -10578,7 +10596,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
               </div>
               {/* Actions */}
               <div style={{ padding: "12px 24px 18px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", justifyContent: "space-between", gap: 10 }}>
-                {editing?.id ? (
+                {editing?.id && canManageThisProject ? (
                   <motion.button whileTap={{ scale: 0.97 }} onClick={() => setConfirmDelete(editing)}
                     style={{
                       padding: "10px 18px", borderRadius: 12, cursor: "pointer",
