@@ -19156,7 +19156,8 @@ export default function CircularMenu() {
                 whileTap={{ scale: 0.97 }}
                 onClick={handleGoogleLogin}
                 style={{
-                  display: "flex", alignItems: "center", gap: 14,
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 14,
+                  width: 320, maxWidth: "80vw", boxSizing: "border-box",
                   background: "#16161E", border: "1px solid #ffffff15", borderRadius: 16,
                   padding: "16px 32px", cursor: "pointer",
                   fontSize: 16, fontFamily: FONT, color: "#ffffffdd", fontWeight: 400,
@@ -19224,7 +19225,7 @@ export default function CircularMenu() {
                     disabled={magicSending}
                     style={{
                       width: "100%", padding: "15px 18px", borderRadius: 16, border: "none",
-                      background: "#8B7AFF", color: "#fff", fontSize: 15, fontWeight: 500, fontFamily: FONT,
+                      background: "#ffffff", color: "#111111", fontSize: 15, fontWeight: 600, fontFamily: FONT,
                       cursor: magicSending ? "default" : "pointer", opacity: magicSending ? 0.7 : 1,
                     }}
                   >
