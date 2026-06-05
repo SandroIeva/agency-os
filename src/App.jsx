@@ -21571,7 +21571,8 @@ export default function CircularMenu() {
                     )}
                   </div>
 
-                  {/* Invite member — chip-based input */}
+                  {/* Invite member — chip-based input (admins only) */}
+                  {(userOrgRole === "admin" || userOrg?.role === "admin") && (
                   <div style={{ padding: "18px 20px", borderBottom: `1px solid ${theme.borderFaint}` }}>
                     <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 12 }}>
                       {appLanguage === "de" ? "Teammitglied einladen" : "Invite Team Member"}
@@ -21707,6 +21708,7 @@ export default function CircularMenu() {
                       </motion.button>
                     </div>
                   </div>
+                  )}
 
                   {/* Current members */}
                   <div style={{ padding: "14px 20px" }}>
