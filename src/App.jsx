@@ -17344,7 +17344,7 @@ export default function CircularMenu() {
 
   const createNotification = useCallback(async ({ userId, type, title, body, metadata }) => {
     if (!userId || userId === session?.user?.id) return; // don't notify yourself
-    await supabase.from("notifications").insert({
+    const { error } = await supabase.from("notifications").insert({
       user_id: userId,
       org_id: userOrg?.id || null,
       type,
@@ -17352,6 +17352,7 @@ export default function CircularMenu() {
       body: body || null,
       metadata: metadata || {},
     });
+    if (error) console.warn("[Notification] insert failed:", type, error.message);
   }, [session?.user?.id, userOrg?.id]);
 
   const markNotifRead = useCallback(async (id) => {
