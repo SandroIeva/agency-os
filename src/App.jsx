@@ -8192,7 +8192,6 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
         },
         ...prev.filter(c => c.id !== conv.id),
       ]);
-      setShowNewChat(false);
       openConversation(conv.id);
       loadConversations(); // refresh in the background
     } catch (err) {
