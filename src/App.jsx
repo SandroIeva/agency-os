@@ -22409,7 +22409,7 @@ export default function CircularMenu() {
                                 {editingKeyId !== p.id ? (
                                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                                     <div style={{ flex: 1, padding: "10px 14px", borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, color: hasKey ? theme.textSub : theme.textDim, fontSize: 12, fontFamily: FONT, display: "flex", alignItems: "center", gap: 8 }}>
-                                      {hasKey && <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#00B894", flexShrink: 0 }} />}
+                                      {hasKey && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><path d="M20 6L9 17l-5-5" stroke="#00B894" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                                       {hasKey ? (appLanguage === "de" ? "Key gespeichert" : "Key saved") : (appLanguage === "de" ? "Kein Key hinterlegt" : "No key set")}
                                     </div>
                                     <motion.div whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.11)" : "rgba(0,0,0,0.07)" }} whileTap={{ scale: 0.97 }}
