@@ -16248,6 +16248,9 @@ export default function CircularMenu() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
+  const [loginEmail, setLoginEmail] = useState("");     // magic-link email
+  const [magicSending, setMagicSending] = useState(false);
+  const [magicSent, setMagicSent] = useState(false);
 
   // Organization / onboarding state
   const [userOrg, setUserOrg] = useState(null);            // current org the user belongs to
@@ -16800,6 +16803,32 @@ export default function CircularMenu() {
       },
     });
     if (error) setAuthError(error.message);
+  };
+
+  // Passwordless e-mail login (magic link) — lets non-Google users (and invited
+  // teammates without Google) sign in. Google stays available as an option.
+  const handleMagicLink = async () => {
+    const email = (loginEmail || "").trim().toLowerCase();
+    if (!email || !email.includes("@") || !email.includes(".") || magicSending) return;
+    setAuthError(null);
+    setMagicSending(true);
+    try {
+      // Preserve an ?invite= token through the e-mail round-trip so invited users
+      // land back on their invitation after authenticating.
+      const params = new URLSearchParams(window.location.search);
+      const inviteTok = params.get("invite");
+      const redirect = window.location.origin + (inviteTok ? `/?invite=${encodeURIComponent(inviteTok)}` : "");
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: redirect },
+      });
+      if (error) throw error;
+      setMagicSent(true);
+    } catch (e) {
+      setAuthError(e.message || "Konnte den Login-Link nicht senden.");
+    } finally {
+      setMagicSending(false);
+    }
   };
 
   // Silent token refresh: tries two strategies (popup strategy removed — COOP-blocked)
@@ -19143,6 +19172,68 @@ export default function CircularMenu() {
                 </svg>
                 {t("auth.signInGoogle")}
               </motion.button>
+
+              {/* Divider */}
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7, duration: 0.5 }}
+                style={{ display: "flex", alignItems: "center", gap: 12, width: 320, maxWidth: "80vw", margin: "22px 0 18px" }}
+              >
+                <div style={{ flex: 1, height: 1, background: "#ffffff18" }} />
+                <div style={{ fontSize: 12, color: "#ffffff45", fontFamily: FONT }}>{appLanguage === "de" ? "oder" : "or"}</div>
+                <div style={{ flex: 1, height: 1, background: "#ffffff18" }} />
+              </motion.div>
+
+              {/* Magic-link e-mail login */}
+              {magicSent ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                  style={{ width: 320, maxWidth: "80vw", textAlign: "center", background: "#16161E", border: "1px solid #ffffff15", borderRadius: 16, padding: "20px 22px" }}
+                >
+                  <div style={{ fontSize: 22, marginBottom: 8 }}>✉️</div>
+                  <div style={{ fontSize: 14, color: "#ffffffdd", fontFamily: FONT, fontWeight: 500, marginBottom: 6 }}>
+                    {appLanguage === "de" ? "Login-Link gesendet" : "Login link sent"}
+                  </div>
+                  <div style={{ fontSize: 13, color: "#ffffff70", fontFamily: FONT, lineHeight: 1.5 }}>
+                    {appLanguage === "de"
+                      ? <>Wir haben dir einen Anmelde-Link an <strong style={{ color: "#ffffffcc" }}>{loginEmail.trim().toLowerCase()}</strong> geschickt. Öffne ihn auf diesem Gerät.</>
+                      : <>We sent a sign-in link to <strong style={{ color: "#ffffffcc" }}>{loginEmail.trim().toLowerCase()}</strong>. Open it on this device.</>}
+                  </div>
+                  <div onClick={() => { setMagicSent(false); }} style={{ marginTop: 14, fontSize: 12, color: "#8B7AFF", fontFamily: FONT, cursor: "pointer" }}>
+                    {appLanguage === "de" ? "Andere E-Mail verwenden" : "Use a different email"}
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.72, duration: 0.5 }}
+                  style={{ display: "flex", flexDirection: "column", gap: 10, width: 320, maxWidth: "80vw" }}
+                >
+                  <input
+                    type="email" value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleMagicLink(); }}
+                    placeholder={appLanguage === "de" ? "deine@email.com" : "you@email.com"}
+                    style={{
+                      width: "100%", boxSizing: "border-box", padding: "15px 18px", borderRadius: 16,
+                      background: "#16161E", border: "1px solid #ffffff15", color: "#ffffffdd",
+                      fontSize: 15, fontFamily: FONT, outline: "none", caretColor: "#8B7AFF",
+                    }}
+                  />
+                  <motion.button
+                    whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                    onClick={handleMagicLink}
+                    disabled={magicSending}
+                    style={{
+                      width: "100%", padding: "15px 18px", borderRadius: 16, border: "none",
+                      background: "#8B7AFF", color: "#fff", fontSize: 15, fontWeight: 500, fontFamily: FONT,
+                      cursor: magicSending ? "default" : "pointer", opacity: magicSending ? 0.7 : 1,
+                    }}
+                  >
+                    {magicSending
+                      ? (appLanguage === "de" ? "Sende Link…" : "Sending link…")
+                      : (appLanguage === "de" ? "Login-Link per E-Mail" : "Email me a login link")}
+                  </motion.button>
+                </motion.div>
+              )}
 
               {authError && (
                 <motion.div
