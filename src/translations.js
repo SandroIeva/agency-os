@@ -40,6 +40,7 @@ const translations = {
   "linearMenu.timeline":      { de: "Timeline",         en: "Timeline" },
   "linearMenu.tasks":         { de: "Aufgaben",         en: "Tasks" },
   "linearMenu.calendar":      { de: "Kalender",         en: "Calendar" },
+  "linearMenu.notes":         { de: "Notizen",          en: "Notes" },
   // Empty-state
   "linearMenu.comingSoon":    { de: "Bald verfügbar",   en: "Coming soon" },
 

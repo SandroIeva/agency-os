@@ -92,6 +92,7 @@ const LINEAR_MENU_ITEMS_DEF = [
     { id: "timeline", labelKey: "linearMenu.timeline" },
     { id: "tasks",    labelKey: "linearMenu.tasks" },
     { id: "calendar", labelKey: "linearMenu.calendar" },
+    { id: "notes",    labelKey: "linearMenu.notes" },
   ]},
 ];
 
@@ -20390,6 +20391,11 @@ export default function CircularMenu() {
                   setCurrentView("dashboard");
                   setPanelOpen(false);
                   setTimeout(() => setTasksOpen(true), 50);
+                  return;
+                }
+                if (subId === "notes") {
+                  setMenuOpen(false);
+                  setCurrentView("notes");
                   return;
                 }
                 if (["kanban", "timeline", "calendar"].includes(subId)) {
