@@ -10878,7 +10878,7 @@ const frostedPanelStyle = (darkMode) => ({
     : "0 22px 60px rgba(0,0,0,0.09), inset 0 1px 0 rgba(255,255,255,0.7)",
 });
 
-function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
+function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, canEdit = true }) {
   const [profile, setProfile] = useState(null);
   const [channels, setChannels] = useState({});
   const [loading, setLoading] = useState(true);
@@ -10955,7 +10955,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
                     <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 14 }}>{t("touchpoints.social") || "Social-Media-Kanäle"}</div>
                     {connected.length === 0 ? (
                       <div style={{ padding: "26px 18px", borderRadius: 16, border: `1px dashed ${theme.borderFaint}`, textAlign: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT, lineHeight: 1.6 }}>
-                        {t("touchpoints.noneConnected") || "Noch keine Kanäle verbunden — wähle unten eine Plattform aus."}
+                        {canEdit ? (t("touchpoints.noneConnected") || "Noch keine Kanäle verbunden — wähle unten eine Plattform aus.") : "Noch keine Kanäle hinterlegt."}
                       </div>
                     ) : (
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(252px, 1fr))", gap: 14 }}>
@@ -10975,10 +10975,12 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
                                 <div style={{ width: 42, height: 42, borderRadius: 12, background: "rgba(255,255,255,0.20)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                   <svg width={tpGlyphSize(p.key, 22)} height={tpGlyphSize(p.key, 22)} viewBox="0 0 24 24">{touchpointGlyph(p.key)}</svg>
                                 </div>
+                                {canEdit && (
                                 <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); setEditKey(editing ? null : p.key); setDraft(url || ""); }}
                                   style={{ width: 30, height: 30, borderRadius: 9, background: "rgba(255,255,255,0.18)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff" }}>
                                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>
                                 </motion.div>
+                                )}
                               </div>
                               <div style={{ flex: 1 }} />
                               {editing ? (
@@ -11004,8 +11006,8 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t }) {
                       </div>
                     )}
 
-                    {/* Unconnected — quiet ghost chips */}
-                    {unconnected.length > 0 && (
+                    {/* Unconnected — quiet ghost chips (only for users who may edit) */}
+                    {canEdit && unconnected.length > 0 && (
                       <>
                         <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, margin: "26px 0 12px" }}>{t("touchpoints.addMore") || "Kanal verbinden"}</div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 9 }}>
@@ -20055,7 +20057,7 @@ export default function CircularMenu() {
         {/* TOUCHPOINTS VIEW (Brand → Touchpoints): social channels + strategy teaser */}
         <AnimatePresence>
           {currentView === "touchpoints" && (
-            <TouchpointsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} />
+            <TouchpointsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} canEdit={canEditBrand} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
