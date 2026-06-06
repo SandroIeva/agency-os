@@ -100,13 +100,14 @@ const LINEAR_MENU_ITEMS_DEF = [
 const WS_PERMISSIONS = [
   { key: "can_edit_brand",      de: "Brand bearbeiten",            en: "Edit brand" },
   { key: "can_edit_design",     de: "Design System bearbeiten",   en: "Edit design system" },
-  { key: "can_manage_projects", de: "Projekte anlegen & verwalten", en: "Manage projects" },
+  { key: "can_create_projects", de: "Neues Projekt anlegen",      en: "Create projects" },
+  { key: "can_manage_projects", de: "Projekte verwalten",          en: "Manage projects" },
   { key: "can_invite_members",  de: "Mitglieder einladen",         en: "Invite members" },
 ];
 const WS_ROLE_PRESETS = {
-  member:         { can_edit_brand: false, can_edit_design: false, can_manage_projects: false, can_invite_members: false },
-  branddesigner:  { can_edit_brand: true,  can_edit_design: true,  can_manage_projects: false, can_invite_members: false },
-  projektmanager: { can_edit_brand: false, can_edit_design: false, can_manage_projects: true,  can_invite_members: true  },
+  member:         { can_edit_brand: false, can_edit_design: false, can_create_projects: false, can_manage_projects: false, can_invite_members: false },
+  branddesigner:  { can_edit_brand: true,  can_edit_design: true,  can_create_projects: false, can_manage_projects: false, can_invite_members: false },
+  projektmanager: { can_edit_brand: false, can_edit_design: false, can_create_projects: true,  can_manage_projects: true,  can_invite_members: true  },
 };
 const WS_ROLE_LABELS = { member: "Mitglied", branddesigner: "Branddesigner", projektmanager: "Projektmanager" };
 // Given a member's flags, return the matching preset key or "custom".
@@ -1671,6 +1672,10 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
   const myKanbanMembership = (orgMembers || []).find(m => m.user_id === myUserId);
   const canMoveAnyTask = myKanbanMembership?.role === "admin" || !!myKanbanMembership?.can_manage_projects;
   const canMoveTask = (task) => canMoveAnyTask || task?.assignee_id === myUserId || task?.creator_id === myUserId;
+  // Project management rights (also used by the "Projekte verwalten" modal).
+  const canManageProjectsK = myKanbanMembership?.role === "admin" || !!myKanbanMembership?.can_manage_projects;
+  const canCreateProjectsK = myKanbanMembership?.role === "admin" || !!myKanbanMembership?.can_create_projects;
+  const canManageProjectRow = (p) => canManageProjectsK || p?.owner_id === myUserId;
 
   // Move task to another column
   const moveTask = async (taskId, newColumnKey) => {
@@ -3076,14 +3081,18 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{p.name}</div>
                       </div>
-                      <motion.div whileTap={{ scale: 0.9 }}
-                        onClick={() => { setEditingProject(p); setProjectForm({ name: p.name, logo_url: p.logo_url || "", color: p.color || "#8B7AFF" }); setLogoPreview(p.logo_url || null); }}
-                        style={{ padding: "4px 10px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.textDim, border: `1px solid ${theme.borderFaint}` }}
-                      >Edit</motion.div>
-                      <motion.div whileTap={{ scale: 0.9 }}
-                        onClick={() => deleteProject(p)}
-                        style={{ padding: "4px 8px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontFamily: FONT, color: "#EF4444", border: "1px solid rgba(239,68,68,0.15)" }}
-                      >✕</motion.div>
+                      {canManageProjectRow(p) && (
+                        <motion.div whileTap={{ scale: 0.9 }}
+                          onClick={() => { setEditingProject(p); setProjectForm({ name: p.name, logo_url: p.logo_url || "", color: p.color || "#8B7AFF" }); setLogoPreview(p.logo_url || null); }}
+                          style={{ padding: "4px 10px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.textDim, border: `1px solid ${theme.borderFaint}` }}
+                        >Edit</motion.div>
+                      )}
+                      {canManageProjectRow(p) && (
+                        <motion.div whileTap={{ scale: 0.9 }}
+                          onClick={() => deleteProject(p)}
+                          style={{ padding: "4px 8px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontFamily: FONT, color: "#EF4444", border: "1px solid rgba(239,68,68,0.15)" }}
+                        >✕</motion.div>
+                      )}
                     </div>
                   ))}
                   {projects.length === 0 && (
@@ -3094,7 +3103,8 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                 </div>
               )}
 
-              {/* Add / Edit form */}
+              {/* Add / Edit form — creating needs the create permission; editing is reached via the gated Edit button */}
+              {(editingProject || canCreateProjectsK) && (
               <div style={{ display: "flex", flexDirection: "column", gap: 12, borderTop: editingProject ? "none" : `1px solid ${theme.borderFaint}`, paddingTop: editingProject ? 0 : 16 }}>
                 <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}>
                   {editingProject ? "" : "Neues Projekt"}
@@ -3200,6 +3210,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                   >{editingProject ? "Speichern" : "Erstellen"}</motion.button>
                 </div>
               </div>
+              )}
             </motion.div>
           </motion.div>
         )}
@@ -9980,6 +9991,10 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
   const canManageThisProject = isOwner
     || myOrgMembership?.role === "admin"
     || !!myOrgMembership?.can_manage_projects;
+  // Creating a new project is a separate permission from managing existing ones.
+  const canCreateNewProject = myOrgMembership?.role === "admin" || !!myOrgMembership?.can_create_projects;
+  // Whether the current form submit (create vs edit) is allowed.
+  const canSubmitForm = editing?.id ? canManageThisProject : canCreateNewProject;
 
   const sendInvite = async () => {
     const email = inviteEmail.trim().toLowerCase();
@@ -10122,6 +10137,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
           <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>Projekte</span>
           <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{myProjects.length}</span>
           <div style={{ flex: 1 }} />
+          {canCreateNewProject && (
           <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
             onClick={openNew}
             style={{
@@ -10134,6 +10150,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
             Neues Projekt
           </motion.button>
+          )}
         </motion.div>
 
         {/* Search bar */}
@@ -10624,7 +10641,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
                     }}
                   >Löschen</motion.button>
                 ) : <div />}
-                {canManageThisProject ? (
+                {canSubmitForm ? (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={saveProject}
                   disabled={!form.name.trim()}
                   style={{
@@ -16489,7 +16506,7 @@ export default function CircularMenu() {
       setUserOrgRole("admin");
       const { data: members } = await supabase
         .from("org_members")
-        .select("user_id, role, can_edit_brand, can_edit_design, can_manage_projects, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
+        .select("user_id, role, can_edit_brand, can_edit_design, can_create_projects, can_manage_projects, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
         .eq("org_id", org.id);
       setOrgMembers(members || []);
       setTeamInvites([]);
@@ -16674,6 +16691,7 @@ export default function CircularMenu() {
   const canEditBrand = isOrgAdmin || !!myMembership?.can_edit_brand;
   const canEditDesign = isOrgAdmin || !!myMembership?.can_edit_design;
   const canManageProjects = isOrgAdmin || !!myMembership?.can_manage_projects;
+  const canCreateProjects = isOrgAdmin || !!myMembership?.can_create_projects;
   const canInviteMembers = isOrgAdmin || !!myMembership?.can_invite_members;
   // Persist a chosen display name to auth metadata + profiles + localStorage.
   const saveDisplayName = async (name) => {
@@ -16742,7 +16760,7 @@ export default function CircularMenu() {
           // Load org members for chat etc.
           const { data: members } = await supabase
             .from("org_members")
-            .select("user_id, role, can_edit_brand, can_edit_design, can_manage_projects, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
+            .select("user_id, role, can_edit_brand, can_edit_design, can_create_projects, can_manage_projects, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
             .eq("org_id", org.id);
           setOrgMembers(members || []);
 
@@ -16797,7 +16815,7 @@ export default function CircularMenu() {
     if (!userOrg?.id) return;
     const { data: members } = await supabase
       .from("org_members")
-      .select("user_id, role, can_edit_brand, can_edit_design, can_manage_projects, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
+      .select("user_id, role, can_edit_brand, can_edit_design, can_create_projects, can_manage_projects, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
       .eq("org_id", userOrg.id);
     setOrgMembers(members || []);
     const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", userOrg.id).eq("status", "pending");
@@ -21554,7 +21572,7 @@ export default function CircularMenu() {
                                   // Reload org members
                                   const { data: members } = await supabase
                                     .from("org_members")
-                                    .select("user_id, role, can_edit_brand, can_edit_design, can_manage_projects, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
+                                    .select("user_id, role, can_edit_brand, can_edit_design, can_create_projects, can_manage_projects, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
                                     .eq("org_id", org.id);
                                   setOrgMembers(members || []);
                                   const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", org.id).eq("status", "pending");
