@@ -12366,7 +12366,7 @@ const SAMPLE_PERSONA = () => ({
   created_at: new Date().toISOString(),
 });
 
-function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, darkMode, t }) {
+function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, darkMode, t, canEdit = true }) {
   // Ignore legacy auto-generated website stubs — they shouldn't show an overview
   // before the user has actually created a persona. They get dropped on next save.
   const personas = (Array.isArray(value) ? value : []).filter(p => p && p.source !== "website");
@@ -12639,8 +12639,10 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
         {/* Top bar: back + edit */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <BackLink theme={theme} onClick={() => setScreen("overview")} label="Alle Personas" />
+          {canEdit && (
           <motion.button whileTap={{ scale: 0.96 }} onClick={() => startEdit(selIdx)}
             style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>Bearbeiten</motion.button>
+          )}
         </div>
 
         {/* Row 1: Photo (left 50%) | Name + Info (right 50%) */}
@@ -12814,7 +12816,7 @@ function CompAccordion({ label, children, theme, darkMode, defaultOpen = false }
   );
 }
 
-function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, theme, darkMode, t }) {
+function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, theme, darkMode, t, canEdit = true }) {
   const competitors = Array.isArray(value) ? value : [];
   const [screen, setScreen] = useState("auto"); // auto | choice | describe | direct | detail | edit
   const [selIdx, setSelIdx] = useState(0);
@@ -13131,8 +13133,10 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
       <div style={{ display: "flex", flexDirection: "column", gap: 36 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <BackLink theme={theme} onClick={() => setScreen("overview")} label="Alle Competitors" />
+          {canEdit && (
           <motion.button whileTap={{ scale: 0.96 }} onClick={() => startEdit(selIdx)}
             style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>Bearbeiten</motion.button>
+          )}
         </div>
 
         {/* Header: company + website + stats (left) | summary (right) */}
@@ -13246,7 +13250,7 @@ function VisionOrb({ size, label }) {
 
 // Vision view with three states: intro (no data) → edit (timeline form) → saved
 // (smaller hero + read-only timeline + Bearbeiten button). Saved to brand_profile.vision.
-function BrandVision({ value, onChange, accent, theme, darkMode, onEditingChange }) {
+function BrandVision({ value, onChange, accent, theme, darkMode, onEditingChange, canEdit = true }) {
   const v = value && typeof value === "object" ? value : {};
   const hasData = !!(v.now || v.year3 || v.year5 || v.aspiration);
   const [editing, setEditing] = useState(false);
@@ -13321,11 +13325,13 @@ function BrandVision({ value, onChange, accent, theme, darkMode, onEditingChange
           <div style={{ marginTop: 100, fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 520 }}>
             A vision is your destination plan. It aligns your team<br />and turns tasks into purpose.
           </div>
+          {canEdit && (
           <motion.button whileTap={{ scale: 0.97 }} onClick={startEdit}
             style={{ marginTop: 28, padding: "13px 26px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 600,
               background: darkMode ? "#fff" : "#0f1320", color: darkMode ? "#0f1320" : "#fff" }}>
             Define Your Vision
           </motion.button>
+          )}
         </div>
       </div>
     );
@@ -13336,8 +13342,10 @@ function BrandVision({ value, onChange, accent, theme, darkMode, onEditingChange
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <VisionOrb size={120} label="VISION" />
+        {canEdit && (
         <motion.button whileTap={{ scale: 0.96 }} onClick={startEdit}
           style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT, alignSelf: "flex-start" }}>Bearbeiten</motion.button>
+        )}
       </div>
       <Timeline editable={false} />
       {v.aspiration && (
@@ -16128,12 +16136,12 @@ If you don't know a field, infer a plausible value. Write all text values in the
                     <>
                       {k === "strategy/personas" ? (
                         <BrandPersonas value={profile.personas} onChange={savePersonas} generatePersona={generatePersona}
-                          cp={cp} accent={theme.accent} theme={theme} darkMode={darkMode} t={t} />
+                          cp={cp} accent={theme.accent} theme={theme} darkMode={darkMode} t={t} canEdit={canEditCurrent} />
                       ) : k === "strategy/competitors" ? (
                         <BrandCompetitors value={profile.competitors} onChange={saveCompetitors} generateCompetitor={generateCompetitor}
-                          cp={cp} accent={theme.accent} theme={theme} darkMode={darkMode} t={t} />
+                          cp={cp} accent={theme.accent} theme={theme} darkMode={darkMode} t={t} canEdit={canEditCurrent} />
                       ) : k === "strategy/positioning" ? (
-                        <BrandVision value={profile.vision} onChange={saveVision} accent={theme.accent} theme={theme} darkMode={darkMode} onEditingChange={setVisionEditing} />
+                        <BrandVision value={profile.vision} onChange={saveVision} accent={theme.accent} theme={theme} darkMode={darkMode} onEditingChange={setVisionEditing} canEdit={canEditCurrent} />
                       ) : k === "identity/values" ? (
                         <BrandValues value={profile.brand_values} onChange={saveBrandValues} accent={theme.accent} theme={theme} darkMode={darkMode} editing={valuesEditing} onEditingChange={setValuesEditing} />
                       ) : k === "design/colors" ? (
