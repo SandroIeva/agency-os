@@ -2320,7 +2320,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                             onClick={() => openEditTask(task)}
                             style={{
                               background: darkMode ? "#1A1A24" : "#ffffff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
-                              padding: "14px 16px", cursor: "grab",
+                              padding: "14px 16px", cursor: canMoveTask(task) ? "grab" : "not-allowed",
                             }}
                           >
                             {/* Top row: Creator avatar + name · date · project | priority + delete */}
