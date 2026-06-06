@@ -1665,8 +1665,17 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
     setProjects(prev => prev.filter(p => p.id !== proj.id));
   };
 
+  // A member may only move their OWN cards (where they're the assignee or
+  // creator). Admins and project managers may move any card.
+  const myUserId = session?.user?.id;
+  const myKanbanMembership = (orgMembers || []).find(m => m.user_id === myUserId);
+  const canMoveAnyTask = myKanbanMembership?.role === "admin" || !!myKanbanMembership?.can_manage_projects;
+  const canMoveTask = (task) => canMoveAnyTask || task?.assignee_id === myUserId || task?.creator_id === myUserId;
+
   // Move task to another column
   const moveTask = async (taskId, newColumnKey) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (task && !canMoveTask(task)) return; // not allowed to move someone else's card
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, column_key: newColumnKey } : t));
     await supabase.from("tasks").update({ column_key: newColumnKey, updated_at: new Date().toISOString() }).eq("id", taskId);
   };
@@ -2306,8 +2315,8 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95 }}
                             transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0], delay: i * 0.03 }}
-                            draggable
-                            onDragStart={() => { dragItem.current = task.id; }}
+                            draggable={canMoveTask(task)}
+                            onDragStart={() => { if (canMoveTask(task)) dragItem.current = task.id; }}
                             onClick={() => openEditTask(task)}
                             style={{
                               background: darkMode ? "#1A1A24" : "#ffffff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
