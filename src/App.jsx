@@ -102,12 +102,14 @@ const WS_PERMISSIONS = [
   { key: "can_edit_design",     de: "Design System bearbeiten",   en: "Edit design system" },
   { key: "can_create_projects", de: "Neues Projekt anlegen",      en: "Create projects" },
   { key: "can_manage_projects", de: "Projekte verwalten",          en: "Manage projects" },
+  { key: "can_create_sprints",  de: "Neue Sprints anlegen",        en: "Create sprints" },
+  { key: "can_manage_sprints",  de: "Sprints bearbeiten",          en: "Manage sprints" },
   { key: "can_invite_members",  de: "Mitglieder einladen",         en: "Invite members" },
 ];
 const WS_ROLE_PRESETS = {
-  member:         { can_edit_brand: false, can_edit_design: false, can_create_projects: false, can_manage_projects: false, can_invite_members: false },
-  branddesigner:  { can_edit_brand: true,  can_edit_design: true,  can_create_projects: false, can_manage_projects: false, can_invite_members: false },
-  projektmanager: { can_edit_brand: false, can_edit_design: false, can_create_projects: true,  can_manage_projects: true,  can_invite_members: true  },
+  member:         { can_edit_brand: false, can_edit_design: false, can_create_projects: false, can_manage_projects: false, can_create_sprints: false, can_manage_sprints: false, can_invite_members: false },
+  branddesigner:  { can_edit_brand: true,  can_edit_design: true,  can_create_projects: false, can_manage_projects: false, can_create_sprints: false, can_manage_sprints: false, can_invite_members: false },
+  projektmanager: { can_edit_brand: false, can_edit_design: false, can_create_projects: true,  can_manage_projects: true,  can_create_sprints: true,  can_manage_sprints: true,  can_invite_members: true  },
 };
 const WS_ROLE_LABELS = { member: "Mitglied", branddesigner: "Branddesigner", projektmanager: "Projektmanager" };
 // Given a member's flags, return the matching preset key or "custom".
@@ -3701,6 +3703,14 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
     setChecklists(prev => { const n = { ...prev }; delete n[id]; return n; });
   };
 
+  // Timeline permissions: creating new sprints and editing/moving existing ones
+  // are separate rights; admins always have both.
+  const myTlId = session?.user?.id;
+  const myTlMembership = (orgMembers || []).find(m => m.user_id === myTlId);
+  const isTlAdmin = myTlMembership?.role === "admin";
+  const canCreateSprints = isTlAdmin || !!myTlMembership?.can_create_sprints;
+  const canManageSprints = isTlAdmin || !!myTlMembership?.can_manage_sprints;
+
   // ── Drag/Resize handlers ──────────────────────────────
   const dragRef = useRef(null); // { itemId, mode, startX, origStart, origEnd, pxPerDay }
   const justDraggedRef = useRef(false); // true right after a drag that actually moved — suppress the immediately-following click
@@ -3717,6 +3727,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
   };
 
   const onItemDragStart = (e, item, mode) => {
+    if (!canManageSprints) return; // members can't move/resize sprints
     e.stopPropagation();
     e.preventDefault();
     justDraggedRef.current = false;
@@ -4104,13 +4115,15 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
             </AnimatePresence>
           </div>
 
-          {/* New sprint */}
+          {/* New sprint — only with the create-sprint permission */}
+          {canCreateSprints && (
           <motion.div onClick={() => { setCreateForProject(null); setCreating(true); }} whileTap={{ scale: 0.97 }}
             style={{ padding: "6px 14px", borderRadius: 999, background: theme.accent, color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, boxShadow: `0 4px 14px ${theme.accent}45` }}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Neuer Sprint
           </motion.div>
+          )}
         </div>
       </div>
 
@@ -4336,6 +4349,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
           <TimelineItemModal
             item={selectedItem}
             creating={creating}
+            canEdit={creating ? canCreateSprints : canManageSprints}
             sprintDays={sprintDays}
             defaultProjectId={chainFrom?.projectId ?? createForProject}
             defaultPredecessorId={chainFrom?.predecessorId ?? null}
@@ -4391,7 +4405,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
   );
 }
 
-function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId = null, defaultPredecessorId = null, defaultGroupId = null, defaultStartDate = null, defaultEndDate = null, projects, sprintGroups = [], orgMembers = [], tasks = [], allItems = [], initialAssigneeIds = [], initialLinkedTaskIds = [], initialChecklist = [], onOpenTask, onChainNext, theme, darkMode, onClose, onSave, onDelete }) {
+function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, defaultProjectId = null, defaultPredecessorId = null, defaultGroupId = null, defaultStartDate = null, defaultEndDate = null, projects, sprintGroups = [], orgMembers = [], tasks = [], allItems = [], initialAssigneeIds = [], initialLinkedTaskIds = [], initialChecklist = [], onOpenTask, onChainNext, theme, darkMode, onClose, onSave, onDelete }) {
   const today = tlIsoDate(new Date());
   const defaultEnd = tlIsoDate(tlAddDays(new Date(), sprintDays - 1));
   const [title, setTitle] = useState(item?.title || "");
@@ -4899,12 +4913,12 @@ function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId =
         </div>{/* end two-column grid */}
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 18 }}>
-          {onDelete && !confirmDel && (
+          {onDelete && canEdit && !confirmDel && (
             <motion.div onClick={() => setConfirmDel(true)} whileTap={{ scale: 0.97 }}
               style={{ padding: "10px 16px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: "#E84393", fontSize: 12, fontFamily: FONT, fontWeight: 500 }}
             >Löschen</motion.div>
           )}
-          {onDelete && confirmDel && (
+          {onDelete && canEdit && confirmDel && (
             <div style={{ display: "flex", gap: 6 }}>
               <motion.div onClick={() => setConfirmDel(false)} whileTap={{ scale: 0.97 }}
                 style={{ padding: "10px 14px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 12, fontFamily: FONT }}
@@ -4918,10 +4932,12 @@ function TimelineItemModal({ item, creating, sprintDays = 14, defaultProjectId =
           <div style={{ display: "flex", gap: 8 }}>
             <motion.div onClick={onClose} whileTap={{ scale: 0.97 }}
               style={{ padding: "10px 18px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500 }}
-            >Abbrechen</motion.div>
+            >{canEdit ? "Abbrechen" : "Schließen"}</motion.div>
+            {canEdit && (
             <motion.div onClick={save} whileTap={{ scale: 0.97 }}
               style={{ padding: "10px 22px", borderRadius: 999, cursor: (!title.trim() || saving) ? "not-allowed" : "pointer", background: title.trim() && !saving ? theme.accent : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"), color: title.trim() && !saving ? "#fff" : theme.textFaint, fontSize: 13, fontFamily: FONT, fontWeight: 600 }}
             >{saving ? "Speichert…" : creating ? "Erstellen" : "Speichern"}</motion.div>
+            )}
           </div>
         </div>
       </motion.div>
@@ -16506,7 +16522,7 @@ export default function CircularMenu() {
       setUserOrgRole("admin");
       const { data: members } = await supabase
         .from("org_members")
-        .select("user_id, role, can_edit_brand, can_edit_design, can_create_projects, can_manage_projects, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
+        .select("user_id, role, can_edit_brand, can_edit_design, can_create_projects, can_manage_projects, can_create_sprints, can_manage_sprints, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
         .eq("org_id", org.id);
       setOrgMembers(members || []);
       setTeamInvites([]);
@@ -16692,6 +16708,8 @@ export default function CircularMenu() {
   const canEditDesign = isOrgAdmin || !!myMembership?.can_edit_design;
   const canManageProjects = isOrgAdmin || !!myMembership?.can_manage_projects;
   const canCreateProjects = isOrgAdmin || !!myMembership?.can_create_projects;
+  const canCreateSprints = isOrgAdmin || !!myMembership?.can_create_sprints;
+  const canManageSprints = isOrgAdmin || !!myMembership?.can_manage_sprints;
   const canInviteMembers = isOrgAdmin || !!myMembership?.can_invite_members;
   // Persist a chosen display name to auth metadata + profiles + localStorage.
   const saveDisplayName = async (name) => {
@@ -16760,7 +16778,7 @@ export default function CircularMenu() {
           // Load org members for chat etc.
           const { data: members } = await supabase
             .from("org_members")
-            .select("user_id, role, can_edit_brand, can_edit_design, can_create_projects, can_manage_projects, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
+            .select("user_id, role, can_edit_brand, can_edit_design, can_create_projects, can_manage_projects, can_create_sprints, can_manage_sprints, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
             .eq("org_id", org.id);
           setOrgMembers(members || []);
 
@@ -16815,7 +16833,7 @@ export default function CircularMenu() {
     if (!userOrg?.id) return;
     const { data: members } = await supabase
       .from("org_members")
-      .select("user_id, role, can_edit_brand, can_edit_design, can_create_projects, can_manage_projects, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
+      .select("user_id, role, can_edit_brand, can_edit_design, can_create_projects, can_manage_projects, can_create_sprints, can_manage_sprints, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
       .eq("org_id", userOrg.id);
     setOrgMembers(members || []);
     const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", userOrg.id).eq("status", "pending");
@@ -21572,7 +21590,7 @@ export default function CircularMenu() {
                                   // Reload org members
                                   const { data: members } = await supabase
                                     .from("org_members")
-                                    .select("user_id, role, can_edit_brand, can_edit_design, can_create_projects, can_manage_projects, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
+                                    .select("user_id, role, can_edit_brand, can_edit_design, can_create_projects, can_manage_projects, can_create_sprints, can_manage_sprints, can_invite_members, workspace_role, profiles:profiles!org_members_profile_fkey(display_name, avatar_url, email, initials, status)")
                                     .eq("org_id", org.id);
                                   setOrgMembers(members || []);
                                   const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", org.id).eq("status", "pending");
