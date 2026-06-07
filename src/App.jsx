@@ -12320,7 +12320,11 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
   return (
     <div ref={wrapRef} className="doc-blocknote" style={{ minHeight: 440, position: "relative" }} onMouseMove={onMove} onMouseLeave={() => setHoveredId(null)}>
       <BlockNoteView editor={editor} theme={darkMode ? "dark" : "light"} onChange={handleChange} slashMenu={false}>
-        <SuggestionMenuController triggerCharacter="/" getItems={async (query) => filterSuggestionItems(getSlashItems(editor), query)} />
+        {/* Portal the slash menu to <body> so it isn't clipped by the rounded,
+            overflow:hidden document panel — floating-ui then flips/sizes it to the
+            viewport, keeping it fully visible and scrollable to the bottom. */}
+        <SuggestionMenuController triggerCharacter="/" portalElement={typeof document !== "undefined" ? document.body : undefined}
+          getItems={async (query) => filterSuggestionItems(getSlashItems(editor), query)} />
       </BlockNoteView>
       {dictating && (
         <button onClick={stopEditorDictation}
