@@ -24197,6 +24197,10 @@ export default function CircularMenu() {
         }
         ::-webkit-scrollbar-corner { background: transparent; }
         @keyframes docpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        /* Slash / "+" menu: cap height (~half the viewport) so it stays compact and
+           scrolls. BlockNote's size middleware sets max-height to the full available
+           space inline; override it. shift() keeps the (shorter) menu fully in view. */
+        .bn-suggestion-menu { max-height: min(44vh, 420px) !important; overflow-y: auto; }
         .avatar-edit:hover .avatar-edit-overlay { opacity: 1 !important; }
         /* No blue focus outline on clicked/active elements */
         *:focus, *:focus-visible { outline: none !important; }
