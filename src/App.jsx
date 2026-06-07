@@ -12468,18 +12468,84 @@ function docDownload(filename, text, mime) {
   a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-function docExportPDF(title, blocks) {
-  const w = window.open("", "_blank");
-  if (!w) { alert("Bitte Pop-ups erlauben, um als PDF zu exportieren."); return; }
-  const body = docBlocksToHtml(blocks);
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${docEscHtml(title || "Dokument")}</title>
-    <style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:720px;margin:48px auto;padding:0 28px;color:#1a1a2e;line-height:1.6}
-    h1{font-size:30px;margin:0 0 24px}h2{font-size:22px}h3{font-size:18px}p{margin:0 0 12px}.li{margin:0 0 6px}
-    pre{background:#f5f5f7;padding:14px 16px;border-radius:10px;overflow:auto;font-size:13.5px}code{font-family:ui-monospace,Menlo,Consolas,monospace}
-    blockquote{border-left:3px solid #ddd;margin:0 0 12px;padding-left:14px;color:#555}</style></head>
-    <body><h1>${docEscHtml(title || "Unbenanntes Dokument")}</h1>${body}</body></html>`);
-  w.document.close(); w.focus();
-  setTimeout(() => { try { w.print(); } catch (_) {} }, 350);
+// Inline content → styled runs for the PDF generator.
+function docInlineRuns(content) {
+  if (typeof content === "string") return [{ text: content, bold: false, italic: false }];
+  return (content || []).map(c => (typeof c === "string"
+    ? { text: c, bold: false, italic: false }
+    : { text: c.text || "", bold: !!c.styles?.bold, italic: !!c.styles?.italic }));
+}
+// Fetch an image and return a jsPDF-compatible data URL + natural size.
+async function docLoadImage(url) {
+  const res = await fetch(url); const blob = await res.blob();
+  const dataURL = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = no; fr.readAsDataURL(blob); });
+  const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = dataURL; });
+  let fmt = (blob.type.split("/")[1] || "").toUpperCase(); let out = dataURL;
+  if (!["PNG", "JPEG", "JPG"].includes(fmt)) {
+    const c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight;
+    c.getContext("2d").drawImage(img, 0, 0); out = c.toDataURL("image/jpeg", 0.92); fmt = "JPEG";
+  }
+  if (fmt === "JPG") fmt = "JPEG";
+  return { dataURL: out, fmt, w: img.naturalWidth, h: img.naturalHeight };
+}
+// Generate and download a real PDF (jsPDF) — no print dialog.
+async function docExportPDF(title, blocks) {
+  let jsPDF;
+  try { ({ jsPDF } = await import("jspdf")); }
+  catch (_) { alert("PDF-Export konnte nicht geladen werden."); return; }
+  const doc = new jsPDF({ unit: "pt", format: "a4", compress: true });
+  const PW = doc.internal.pageSize.getWidth(), PH = doc.internal.pageSize.getHeight();
+  const M = 56, CW = PW - 2 * M; let y = M;
+  const rgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const setText = (hex) => doc.setTextColor(...rgb(hex));
+  const setFill = (hex) => doc.setFillColor(...rgb(hex));
+  const ensure = (h) => { if (y + h > PH - M) { doc.addPage(); y = M; } };
+  const sName = (b, i) => (b && i ? "bolditalic" : b ? "bold" : i ? "italic" : "normal");
+
+  const drawPara = (runs, o = {}) => {
+    const fs = o.fontSize || 11, lh = o.lineHeight || fs * 1.5, fam = o.font || "helvetica";
+    const x0 = M + (o.indent || 0), maxW = CW - (o.indent || 0);
+    setText(o.color || "#1a1a2e");
+    const words = [];
+    runs.forEach(r => (r.text || "").split(/(\s+)/).forEach(p => { if (p !== "") words.push({ t: p, b: !!r.bold || !!o.bold, i: !!r.italic || !!o.italic, sp: /^\s+$/.test(p) }); }));
+    if (!words.length) { ensure(lh); y += lh; return; }
+    let line = [], lineW = 0;
+    const flush = () => { ensure(lh); let cx = x0; line.forEach(w => { doc.setFont(fam, sName(w.b, w.i)); doc.setFontSize(fs); doc.text(w.t, cx, y, { baseline: "top" }); cx += doc.getTextWidth(w.t); }); y += lh; line = []; lineW = 0; };
+    words.forEach(w => { doc.setFont(fam, sName(w.b, w.i)); doc.setFontSize(fs); const ww = doc.getTextWidth(w.t); if (lineW + ww > maxW && line.length && !w.sp) flush(); if (w.sp && !line.length) return; line.push(w); lineW += ww; });
+    if (line.length) flush();
+  };
+
+  if (title && title.trim()) { drawPara([{ text: title.trim() }], { fontSize: 22, bold: true, lineHeight: 28 }); y += 14; }
+
+  const walk = async (arr, depth = 0) => {
+    let numCount = 0;
+    for (const b of arr || []) {
+      const runs = docInlineRuns(b.content); const indent = depth * 18;
+      if (b.type !== "numberedListItem") numCount = 0;
+      if (b.type === "heading") { const lvl = b.props?.level || 1, fs = lvl === 1 ? 18 : lvl === 2 ? 15 : 13; y += 8; drawPara(runs, { fontSize: fs, bold: true, lineHeight: fs * 1.35, indent }); y += 4; }
+      else if (b.type === "bulletListItem") drawPara([{ text: "•  " }, ...runs], { indent });
+      else if (b.type === "numberedListItem") { numCount++; drawPara([{ text: numCount + ".  " }, ...runs], { indent }); }
+      else if (b.type === "checkListItem") drawPara([{ text: b.props?.checked ? "[x]  " : "[ ]  " }, ...runs], { indent });
+      else if (b.type === "quote") { const ys = y; drawPara(runs, { italic: true, indent: indent + 14, color: "#555555" }); setFill("#d8d8de"); doc.rect(M + indent, ys, 3, Math.max(2, y - ys - 6), "F"); }
+      else if (b.type === "codeBlock") {
+        const lines = []; doc.setFont("courier", "normal"); doc.setFontSize(9.5);
+        docInlineToText(b.content).split("\n").forEach(ln => doc.splitTextToSize(ln || " ", CW - indent - 24).forEach(w => lines.push(w)));
+        const lh = 13, boxH = lines.length * lh + 20; ensure(boxH);
+        setFill("#f4f5f7"); doc.roundedRect(M + indent, y, CW - indent, boxH, 6, 6, "F");
+        setText("#1a1a2e"); let cy = y + 10; lines.forEach(w => { doc.text(w, M + indent + 12, cy, { baseline: "top" }); cy += lh; }); y += boxH + 8;
+      }
+      else if (b.type === "divider") { y += 6; ensure(2); doc.setDrawColor(220); doc.line(M, y, M + CW, y); y += 10; }
+      else if (b.type === "youtube") { const url = b.props?.url || ""; ensure(18); setText("#5b5bd6"); doc.setFont("helvetica", "normal"); doc.setFontSize(11); doc.textWithLink("YouTube: " + url, M + indent, y, { url, baseline: "top" }); y += 20; }
+      else if (b.type === "image") {
+        const url = b.props?.url;
+        if (url) { try { const im = await docLoadImage(url); const dw = Math.min(CW - indent, im.w || CW), dh = im.h && im.w ? im.h * (dw / im.w) : dw * 0.6; ensure(dh); doc.addImage(im.dataURL, im.fmt, M + indent, y, dw, dh); y += dh + 10; } catch (_) {} }
+      }
+      else { drawPara(runs, { indent }); y += 4; }
+      if (b.children?.length) await walk(b.children, depth + 1);
+    }
+  };
+  try { await walk(blocks); } catch (_) {}
+  doc.save(docSafeName(title) + ".pdf");
 }
 const docSafeName = (title) => (title || "Dokument").replace(/[^\wÀ-ɏ\- ]+/g, "").trim().slice(0, 60) || "Dokument";
 
