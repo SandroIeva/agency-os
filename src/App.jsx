@@ -12658,30 +12658,24 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
     return (
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 0 60px" }}>
         <div style={{ width: "100%", padding: "0 30px", boxSizing: "border-box" }}>
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 22, position: "relative" }}>
-            {/* Back (arrow only) */}
-            <button onClick={() => { setOpenDoc(null); load(); }} title="Zurück"
-              style={{ marginTop: 3, border: "none", background: "transparent", cursor: "pointer", color: theme.textDim, lineHeight: 0, padding: 4, borderRadius: 8, flexShrink: 0 }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-            </button>
-            {/* Title + project breadcrumb */}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 22, position: "relative" }}>
+            {/* Title (with arrow on the same line) + project breadcrumb */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <input value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Ohne Titel"
-                style={{ width: "100%", border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 20, fontWeight: 700, fontFamily: FONT, letterSpacing: -0.2, padding: 0 }} />
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3, color: theme.textDim }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button onClick={() => { setOpenDoc(null); load(); }} title="Zurück"
+                  style={{ marginLeft: -4, border: "none", background: "transparent", cursor: "pointer", color: theme.textDim, lineHeight: 0, padding: 4, borderRadius: 8, flexShrink: 0 }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                </button>
+                <input value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Ohne Titel"
+                  style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 20, fontWeight: 700, fontFamily: FONT, letterSpacing: -0.2, padding: 0 }} />
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, color: theme.textDim }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
                 <span style={{ fontSize: 13, fontFamily: FONT }}>{projects.find(p => p.id === openDoc.project_id)?.name || "Unsortiert"}</span>
               </div>
             </div>
-            {/* Right cluster: save state · owner · Teilen */}
-            <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0, marginTop: 4 }}>
-              <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, display: "flex", alignItems: "center", gap: 6 }}>
-                {saveState === "saving" ? (
-                  <>{"Speichert…"}</>
-                ) : (
-                  <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00B894" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>{"Alle Änderungen gespeichert"}</>
-                )}
-              </span>
+            {/* Right cluster: owner · Teilen */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
               <div title={`Owner: ${memberById[openDoc.created_by]?.display_name || "Unbekannt"}`} style={{ display: "flex", alignItems: "center" }}>
                 <DocAvatar profile={memberById[openDoc.created_by] || {}} accent={accent} />
               </div>
