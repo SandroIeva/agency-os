@@ -12225,7 +12225,8 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4M8 21h8"/></svg>,
       onItemClick: () => startEditorDictation(),
     };
-    return [...base, youtube, dictate];
+    // Dictation first so its group renders at the very top of the menu.
+    return [dictate, ...base, youtube];
   }, [startEditorDictation]);
 
   // Sync overlays: (1) line-number gutters for code blocks (BlockNote strips DOM
