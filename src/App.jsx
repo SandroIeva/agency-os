@@ -11087,11 +11087,13 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, canEdit
 // a Grid (overview of everything) and a freeform Canvas (drag images around).
 // Images upload to the public brand-assets bucket so their URLs can later be
 // reused as reference inputs for image/video generation (Higgsfield etc.).
-function AssetsView({ onBack, session, userOrg, theme, darkMode, t, orgMembers, createNotification }) {
+function AssetsView({ onBack, session, userOrg, theme, darkMode, t, orgMembers, createNotification, docDeepLink }) {
   // Assets has three tabs: Moodboards (curated boards), Creations (your generated
   // outputs) and Inspirations (saved references).
   const [tab, setTab] = useState("moodboards");
   const [docOpen, setDocOpen] = useState(false); // a document is open in the editor → hide header/tabs
+  // A notification deep-link → jump to the Documents tab so DocsTab can open it.
+  useEffect(() => { if (docDeepLink?.documentId) setTab("docs"); }, [docDeepLink?.ts]); // eslint-disable-line
   // Brand identity for the header (logo + name), to stay consistent with the
   // Brand views: "<Brand> Assets".
   const [brand, setBrand] = useState(null);
@@ -11383,7 +11385,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, orgMembers, 
 
           {/* ── DOCS tab ── */}
           {tab === "docs" && (
-            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} orgMembers={orgMembers} createNotification={createNotification} createRef={docsCreate} onOpenChange={setDocOpen} />
+            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} orgMembers={orgMembers} createNotification={createNotification} deepLink={docDeepLink} createRef={docsCreate} onOpenChange={setDocOpen} />
           )}
 
           {/* ── MOODBOARDS tab (boards grid) ── */}
@@ -12103,10 +12105,11 @@ function CommentPopover({ block, comments, memberById, mentionables, currentUser
   );
 }
 
-function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = [], memberById = {}, mentionables = [], currentUserId, onAddComment, onDeleteComment }) {
+function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = [], memberById = {}, mentionables = [], currentUserId, onAddComment, onDeleteComment, focusBlockId }) {
   const timer = useRef(null);
   const wrapRef = useRef(null);
   const moveRaf = useRef(0);
+  const focusedRef = useRef(null);
   const [blockMeta, setBlockMeta] = useState([]); // [{ id, centerY }]
   const [hoveredId, setHoveredId] = useState(null);
   const [openId, setOpenId] = useState(null);
@@ -12178,6 +12181,17 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
 
   // Re-sync controls when comment counts change (badges appear/disappear).
   useEffect(() => { syncOverlays(); }, [comments, syncOverlays]);
+
+  // Deep-link from a mention notification: once the target block is measured,
+  // open its comment thread and scroll it into view (only once per target).
+  useEffect(() => {
+    if (!focusBlockId || focusedRef.current === focusBlockId) return;
+    if (!blockMeta.some(b => b.id === focusBlockId)) return;
+    focusedRef.current = focusBlockId;
+    setOpenId(focusBlockId);
+    const el = wrapRef.current?.querySelector(`.bn-block-outer[data-id="${focusBlockId}"]`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusBlockId, blockMeta]);
 
   // Close the open popover on outside click / Escape.
   useEffect(() => {
@@ -12258,7 +12272,7 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
 
 // Docs tab — Google-Docs-style: a list of workspace documents + a rich-text
 // editor. Documents are stored in brand_documents (org-scoped).
-function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, createNotification, createRef, onOpenChange }) {
+function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, createNotification, deepLink, createRef, onOpenChange }) {
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openDoc, setOpenDoc] = useState(null);
@@ -12269,6 +12283,21 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
   const [search, setSearch] = useState("");
   const [sortMode, setSortMode] = useState("updated"); // "updated" | "name"
   const [comments, setComments] = useState([]); // block comments for the open doc
+  const [focusBlockId, setFocusBlockId] = useState(null); // block whose comment to auto-open (deep link)
+
+  // Open a document from a notification deep-link (mention). Fetch by id so it
+  // works even before the list has loaded; then auto-open the mentioned block's
+  // comment thread.
+  useEffect(() => {
+    if (!deepLink?.documentId) return;
+    let cancelled = false;
+    (async () => {
+      let doc = docs.find(d => d.id === deepLink.documentId);
+      if (!doc) { const { data } = await supabase.from("brand_documents").select("*").eq("id", deepLink.documentId).single(); doc = data; }
+      if (!cancelled && doc) { setOpenDoc(doc); setTitle(doc.title || ""); setFocusBlockId(deepLink.blockId || null); }
+    })();
+    return () => { cancelled = true; };
+  }, [deepLink?.ts]); // eslint-disable-line
 
   // Resolve author/mention display from the team roster (+ the current user).
   const memberById = useMemo(() => {
@@ -12404,7 +12433,8 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
             <DocEditor key={openDoc.id} initialHTML={openDoc.content} theme={theme} darkMode={darkMode} accent={accent}
               onChange={(html) => persist({ content: html })}
               comments={comments} memberById={memberById} mentionables={mentionables}
-              currentUserId={session?.user?.id} onAddComment={addComment} onDeleteComment={deleteComment} />
+              currentUserId={session?.user?.id} onAddComment={addComment} onDeleteComment={deleteComment}
+              focusBlockId={openDoc.id === deepLink?.documentId ? focusBlockId : null} />
           </div>
         </div>
       </div>
@@ -16993,6 +17023,7 @@ export default function CircularMenu() {
   const [onboardingStep, setOnboardingStep] = useState(null); // null = skip, "choose" | "create" | "join"
   const [onboardingError, setOnboardingError] = useState(null);
   const [orgMembers, setOrgMembers] = useState([]);          // team members for chat etc.
+  const [docDeepLink, setDocDeepLink] = useState(null);      // open a document from a notification: { documentId, blockId, ts }
   const [brandProfile, setBrandProfile] = useState(null);    // brand_profile row for current org — fed into AI context
   const [appProjects, setAppProjects] = useState([]);        // [{name}] — known project names for AI context + vocab correction
   const [wsName, setWsName] = useState("");                  // workspace name input
@@ -20518,6 +20549,7 @@ export default function CircularMenu() {
                               else if (n.metadata?.hangoutLink) { window.open(n.metadata.hangoutLink, "_blank"); }
                               else if (n.type === "calendar_reminder") { setCurrentView("calendar"); setNotifOpen(false); }
                               else if (n.type === "project_added") { setCurrentView("projects"); setNotifOpen(false); }
+                              else if (n.type === "comment_mention" && n.metadata?.document_id) { setDocDeepLink({ documentId: n.metadata.document_id, blockId: n.metadata.block_id || null, ts: Date.now() }); setCurrentView("assets"); setNotifOpen(false); }
                               else if (n.type === "reminder") { setNotifOpen(false); }
                             }}
                             style={{
@@ -20638,7 +20670,7 @@ export default function CircularMenu() {
         {/* ASSETS VIEW (Brand → Assets): Moodboards / Creations / Inspirations */}
         <AnimatePresence>
           {currentView === "assets" && (
-            <AssetsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} orgMembers={orgMembers} createNotification={createNotification} onBack={() => setCurrentView("dashboard")} />
+            <AssetsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} orgMembers={orgMembers} createNotification={createNotification} docDeepLink={docDeepLink} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
