@@ -23335,7 +23335,7 @@ export default function CircularMenu() {
                       whileHover={{ backgroundColor: "rgba(232, 67, 67, 0.08)" }}
                       whileTap={{ scale: 0.97 }}
                       style={{
-                        display: "flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 10,
+                        display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: 140, padding: "8px 14px", borderRadius: 10,
                         cursor: "pointer", flexShrink: 0, border: "1px solid rgba(232, 67, 67, 0.2)",
                       }}
                     >
@@ -24196,10 +24196,13 @@ export default function CircularMenu() {
                         {appLanguage === "de" ? "Entfernt diesen Workspace und alle zugehörigen Daten unwiderruflich." : "Permanently removes this workspace and all of its data."}
                       </div>
                     </div>
-                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                    <motion.button whileHover={{ backgroundColor: "rgba(232, 67, 67, 0.08)" }} whileTap={{ scale: 0.97 }}
                       onClick={() => { setDeleteWsText(""); setDeleteWsOpen(true); }}
-                      style={{ padding: "10px 18px", borderRadius: 12, background: "transparent", border: "1px solid rgba(232,67,67,0.4)", color: "#E84343", fontSize: 13, fontWeight: 500, fontFamily: FONT, cursor: "pointer", whiteSpace: "nowrap" }}>
-                      {appLanguage === "de" ? "Löschen" : "Delete"}
+                      style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: 140, padding: "8px 14px", borderRadius: 10, background: "transparent", border: "1px solid rgba(232,67,67,0.2)", color: "#E84343", fontSize: 13, fontWeight: 500, fontFamily: FONT, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E84343" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />
+                      </svg>
+                      <span style={{ fontSize: 13, fontFamily: FONT, color: "#E84343", fontWeight: 500 }}>{appLanguage === "de" ? "Löschen" : "Delete"}</span>
                     </motion.button>
                   </div>
                 </motion.div>
