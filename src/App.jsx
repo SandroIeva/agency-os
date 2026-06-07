@@ -12475,18 +12475,21 @@ function docInlineRuns(content) {
     ? { text: c, bold: false, italic: false }
     : { text: c.text || "", bold: !!c.styles?.bold, italic: !!c.styles?.italic }));
 }
-// Fetch an image and return a jsPDF-compatible data URL + natural size.
+// Fetch an image and return a jsPDF-compatible JPEG data URL + natural size.
+// External hosts (e.g. cdn.duden.de) usually block CORS, so direct fetch fails —
+// fall back to the same-origin /api/img-proxy. Always re-encode through a canvas
+// to a baseline JPEG so jsPDF embeds it reliably (handles WEBP/odd PNGs too).
 async function docLoadImage(url) {
-  const res = await fetch(url); const blob = await res.blob();
+  const grab = async (u) => { const r = await fetch(u); if (!r.ok) throw new Error("status " + r.status); return r.blob(); };
+  let blob;
+  try { blob = await grab(url); }
+  catch (_) { blob = await grab("/api/img-proxy?url=" + encodeURIComponent(url)); }
   const dataURL = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = no; fr.readAsDataURL(blob); });
   const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = dataURL; });
-  let fmt = (blob.type.split("/")[1] || "").toUpperCase(); let out = dataURL;
-  if (!["PNG", "JPEG", "JPG"].includes(fmt)) {
-    const c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight;
-    c.getContext("2d").drawImage(img, 0, 0); out = c.toDataURL("image/jpeg", 0.92); fmt = "JPEG";
-  }
-  if (fmt === "JPG") fmt = "JPEG";
-  return { dataURL: out, fmt, w: img.naturalWidth, h: img.naturalHeight };
+  const w = img.naturalWidth || 1, h = img.naturalHeight || 1;
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const ctx = c.getContext("2d"); ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0);
+  return { dataURL: c.toDataURL("image/jpeg", 0.9), fmt: "JPEG", w, h };
 }
 // Generate and download a real PDF (jsPDF) — no print dialog.
 async function docExportPDF(title, blocks) {
