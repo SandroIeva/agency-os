@@ -22940,13 +22940,23 @@ export default function CircularMenu() {
                   borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`,
                   overflow: "hidden",
                 }}>
-                  {/* Workspace logo */}
+                  {/* Workspace logo — click the logo (admins) to change it; hover shows an upload overlay */}
                   <div style={{ padding: "18px 20px", borderBottom: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", gap: 16 }}>
-                    <div style={{ position: "relative", flexShrink: 0 }}>
+                    <div
+                      onClick={() => (userOrgRole === "admin" || userOrg?.role === "admin") && !orgLogoUploading && orgLogoInputRef.current?.click()}
+                      className={(userOrgRole === "admin" || userOrg?.role === "admin") ? "avatar-edit" : undefined}
+                      title={(userOrgRole === "admin" || userOrg?.role === "admin") ? (appLanguage === "de" ? "Logo ändern" : "Change logo") : undefined}
+                      style={{ position: "relative", width: 56, height: 56, borderRadius: 12, flexShrink: 0, overflow: "hidden", cursor: (userOrgRole === "admin" || userOrg?.role === "admin") ? (orgLogoUploading ? "wait" : "pointer") : "default" }}
+                    >
                       {userOrg.logo_url ? (
-                        <img src={userOrg.logo_url} alt="" style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", border: `1px solid ${theme.border}` }} />
+                        <img src={userOrg.logo_url} alt="" style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", border: `1px solid ${theme.border}`, display: "block" }} />
                       ) : (
                         <div style={{ width: 56, height: 56, borderRadius: 12, background: "linear-gradient(135deg, #8B7AFF, #6C5CE7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontFamily: FONT, color: "#fff", fontWeight: 600 }}>{(userOrg.name || "W")[0]}</div>
+                      )}
+                      {(userOrgRole === "admin" || userOrg?.role === "admin") && (
+                        <div className="avatar-edit-overlay" style={{ position: "absolute", inset: 0, borderRadius: 12, background: "rgba(0,0,0,0.5)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", opacity: 0, transition: "opacity 0.15s", pointerEvents: "none" }}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        </div>
                       )}
                       {orgLogoUploading && (
                         <div style={{ position: "absolute", inset: 0, borderRadius: 12, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -22963,22 +22973,14 @@ export default function CircularMenu() {
                       </div>
                     </div>
                     {(userOrgRole === "admin" || userOrg?.role === "admin") ? (
-                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                      <input ref={orgLogoInputRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadOrgLogo(f); }} style={{ display: "none" }} />
-                      <motion.div onClick={() => orgLogoInputRef.current?.click()} whileTap={{ scale: 0.97 }}
-                        style={{ padding: "7px 14px", borderRadius: 999, background: theme.accent, color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600, cursor: orgLogoUploading ? "wait" : "pointer", opacity: orgLogoUploading ? 0.7 : 1, display: "inline-flex", alignItems: "center", gap: 6 }}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                        {userOrg.logo_url
-                          ? (appLanguage === "de" ? "Profilbild ändern" : "Change picture")
-                          : (appLanguage === "de" ? "Hochladen" : "Upload")}
-                      </motion.div>
-                      {userOrg.logo_url && (
-                        <motion.div onClick={removeOrgLogo} whileTap={{ scale: 0.97 }}
-                          style={{ padding: "7px 12px", borderRadius: 999, background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}
-                        >{appLanguage === "de" ? "Entfernen" : "Remove"}</motion.div>
-                      )}
-                    </div>
+                      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                        <input ref={orgLogoInputRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadOrgLogo(f); }} style={{ display: "none" }} />
+                        {userOrg.logo_url && (
+                          <motion.div onClick={removeOrgLogo} whileTap={{ scale: 0.97 }}
+                            style={{ padding: "7px 12px", borderRadius: 999, background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}
+                          >{appLanguage === "de" ? "Entfernen" : "Remove"}</motion.div>
+                        )}
+                      </div>
                     ) : (
                       <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, flexShrink: 0 }}>
                         {appLanguage === "de" ? "Nur Admins" : "Admins only"}
