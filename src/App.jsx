@@ -12241,12 +12241,11 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
     const emojiIdx = base.findIndex(it => it.key === "emoji");
     const emoji = emojiIdx >= 0 ? base.splice(emojiIdx, 1)[0] : null;
     if (emoji) emoji.group = mediaGroup;
-    // Insert YouTube (and Emoji) right after Video so they join the existing
-    // "Medien" group (BlockNote groups by consecutive runs — appending would
-    // create a duplicate header). Dictation first so its group renders at the top.
+    // YouTube right after Video; Emoji at the top of the Medien group (above Bild)
+    // — all share the "Medien" group so they form one consecutive run (no dupes).
     const vidIdx = base.findIndex(it => it.key === "video");
-    const extras = emoji ? [youtube, emoji] : [youtube];
-    if (vidIdx >= 0) base.splice(vidIdx + 1, 0, ...extras); else base.push(...extras);
+    if (vidIdx >= 0) base.splice(vidIdx + 1, 0, youtube); else base.push(youtube);
+    if (emoji) { const imgIdx = base.findIndex(it => it.key === "image"); base.splice(imgIdx >= 0 ? imgIdx : base.length, 0, emoji); }
     return [dictate, ...base];
   }, [startEditorDictation]);
 
