@@ -12056,7 +12056,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, createRef }) {
       ) : visibleDocs.length === 0 ? (
         <div style={{ textAlign: "center", padding: "60px 20px" }}>
           <div style={{ fontSize: 16, fontFamily: FONT, color: theme.text, marginBottom: 6 }}>{search ? "Keine Treffer" : "Noch keine Dokumente"}</div>
-          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{search ? "Versuche einen anderen Suchbegriff." : "Klicke auf „Neues Dokument", um loszulegen."}</div>
+          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{search ? "Versuche einen anderen Suchbegriff." : "Klicke auf Neues Dokument, um loszulegen."}</div>
         </div>
       ) : viewMode === "grid" ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
