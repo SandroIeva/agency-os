@@ -12658,28 +12658,41 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
     return (
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 0 60px" }}>
         <div style={{ width: "100%", padding: "0 30px", boxSizing: "border-box" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18, position: "relative" }}>
-            <BackLink theme={theme} onClick={() => { setOpenDoc(null); load(); }} label="Alle Dokumente" />
-            <div style={{ flex: 1 }} />
-            <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, display: "flex", alignItems: "center", gap: 6 }}>
-              {saveState === "saving" ? (
-                <>{"Speichert…"}</>
-              ) : (
-                <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00B894" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>{"Alle Änderungen gespeichert"}</>
-              )}
-            </span>
-            {/* Owner (creator) of the document */}
-            <div title={`Owner: ${memberById[openDoc.created_by]?.display_name || "Unbekannt"}`} style={{ display: "flex", alignItems: "center" }}>
-              <DocAvatar profile={memberById[openDoc.created_by] || {}} accent={accent} />
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 22, position: "relative" }}>
+            {/* Back (arrow only) */}
+            <button onClick={() => { setOpenDoc(null); load(); }} title="Zurück"
+              style={{ marginTop: 3, border: "none", background: "transparent", cursor: "pointer", color: theme.textDim, lineHeight: 0, padding: 4, borderRadius: 8, flexShrink: 0 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+            {/* Title + project breadcrumb */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <input value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Ohne Titel"
+                style={{ width: "100%", border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 20, fontWeight: 700, fontFamily: FONT, letterSpacing: -0.2, padding: 0 }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3, color: theme.textDim }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                <span style={{ fontSize: 13, fontFamily: FONT }}>{projects.find(p => p.id === openDoc.project_id)?.name || "Unsortiert"}</span>
+              </div>
             </div>
-            {/* Share — only the owner (or admin) can change sharing */}
-            {(openDoc.created_by === session?.user?.id || userOrg?.role === "admin") && (
-              <button className="doc-share-btn" onClick={(e) => { e.stopPropagation(); setShareOpen(o => !o); }}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 9, border: "none", cursor: "pointer", background: accent, color: "#fff", fontSize: 12.5, fontWeight: 600, fontFamily: FONT }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
-                Teilen
-              </button>
-            )}
+            {/* Right cluster: save state · owner · Teilen */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0, marginTop: 4 }}>
+              <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, display: "flex", alignItems: "center", gap: 6 }}>
+                {saveState === "saving" ? (
+                  <>{"Speichert…"}</>
+                ) : (
+                  <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00B894" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>{"Alle Änderungen gespeichert"}</>
+                )}
+              </span>
+              <div title={`Owner: ${memberById[openDoc.created_by]?.display_name || "Unbekannt"}`} style={{ display: "flex", alignItems: "center" }}>
+                <DocAvatar profile={memberById[openDoc.created_by] || {}} accent={accent} />
+              </div>
+              {(openDoc.created_by === session?.user?.id || userOrg?.role === "admin") && (
+                <button className="doc-share-btn" onClick={(e) => { e.stopPropagation(); setShareOpen(o => !o); }}
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 9, border: "none", cursor: "pointer", background: accent, color: "#fff", fontSize: 12.5, fontWeight: 600, fontFamily: FONT }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
+                  Teilen
+                </button>
+              )}
+            </div>
             {shareOpen && (
               <SharePopover doc={openDoc} ownerProfile={memberById[openDoc.created_by] || {}}
                 members={Object.values(memberById)} shares={shares} projects={projects}
@@ -12688,10 +12701,8 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
                 onSetVisibility={setDocVisibility} onSetProject={setDocProject} onToggleShare={toggleShareMember} />
             )}
           </div>
-          {/* Writing area gets more side padding than the back/save bar */}
-          <div style={{ padding: "24px 40px 0" }}>
-            <input value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Ohne Titel"
-              style={{ width: "100%", border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 32, fontWeight: 700, fontFamily: FONT, letterSpacing: -0.4, marginBottom: 28 }} />
+          {/* Writing area gets more side padding than the header bar */}
+          <div style={{ padding: "8px 40px 0" }}>
             <DocEditor key={openDoc.id} initialHTML={openDoc.content} theme={theme} darkMode={darkMode} accent={accent}
               onChange={(html) => persist({ content: html })}
               comments={comments} memberById={memberById} mentionables={mentionables}
