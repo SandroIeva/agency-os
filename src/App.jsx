@@ -12758,6 +12758,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
   const [viewMode, setViewMode] = useState("grid"); // "grid" (Kachel) | "list"
   const [search, setSearch] = useState("");
   const [sortMode, setSortMode] = useState("updated"); // "updated" | "name"
+  const [confirmDeleteDoc, setConfirmDeleteDoc] = useState(null); // doc pending delete confirmation
   const [comments, setComments] = useState([]); // block comments for the open doc
   const [focusBlockId, setFocusBlockId] = useState(null); // block whose comment to auto-open (deep link)
   const [projects, setProjects] = useState([]);      // org projects (for "share to project")
@@ -12950,11 +12951,16 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
     titleTimer.current = setTimeout(() => persist({ title: val.trim() || "Unbenanntes Dokument" }), 600);
   };
 
-  const deleteDoc = async (id, e) => {
+  const deleteDoc = (id, e) => {
     e?.stopPropagation?.();
-    if (!confirm("Dokument wirklich löschen?")) return;
-    await supabase.from("brand_documents").delete().eq("id", id);
+    const doc = docs.find(d => d.id === id);
+    if (doc) setConfirmDeleteDoc(doc);
+  };
+  const performDeleteDoc = async () => {
+    const id = confirmDeleteDoc?.id; if (!id) return;
+    setConfirmDeleteDoc(null);
     setDocs(prev => prev.filter(d => d.id !== id));
+    await supabase.from("brand_documents").delete().eq("id", id);
   };
 
   const fmtDate = (ts) => { try { return new Date(ts).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" }); } catch { return ""; } };
@@ -13119,6 +13125,23 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
           ))}
         </div>
       )}
+      {confirmDeleteDoc && createPortal(
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setConfirmDeleteDoc(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(10px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} onClick={(e) => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: 380, padding: 28, borderRadius: 20, background: darkMode ? "rgba(22,22,30,0.98)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.border}`, textAlign: "center" }}>
+            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>Dokument löschen?</div>
+            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 24, lineHeight: 1.5 }}>
+              „{confirmDeleteDoc.title || "Unbenanntes Dokument"}" wird unwiderruflich gelöscht.
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setConfirmDeleteDoc(null)}
+                style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, fontWeight: 500 }}>Abbrechen</motion.button>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={performDeleteDoc}
+                style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", fontSize: 13, fontFamily: FONT, color: "#EF4444", fontWeight: 600 }}>Löschen</motion.button>
+            </div>
+          </motion.div>
+        </motion.div>, document.body)}
     </div>
   );
 }
