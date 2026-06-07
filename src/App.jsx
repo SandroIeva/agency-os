@@ -12150,9 +12150,15 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
     const meta = [];
     wrap.querySelectorAll(".bn-block-outer[data-id]").forEach((bo) => {
       const id = bo.getAttribute("data-id"); if (!id) return;
-      const content = bo.querySelector(":scope > .bn-block > .bn-block-content") || bo.querySelector(".bn-block-content");
+      // Measure the inline-content (text) element, not .bn-block-content: the
+      // latter is a flex box whose getClientRects() returns its full height
+      // (≈ block center), while the inline element yields true per-line rects —
+      // so rects[0] is the first text line, matching BlockNote's left side-menu.
+      const ref = bo.querySelector(":scope > .bn-block > .bn-block-content .bn-inline-content")
+        || bo.querySelector(".bn-inline-content")
+        || bo.querySelector(".bn-block-content") || bo;
       let centerY;
-      try { const rects = (content || bo).getClientRects(); if (rects.length) centerY = rects[0].top + rects[0].height / 2 - wrapRect.top; } catch (_) {}
+      try { const rects = ref.getClientRects(); if (rects.length) centerY = rects[0].top + rects[0].height / 2 - wrapRect.top; } catch (_) {}
       if (centerY == null) { const r = bo.getBoundingClientRect(); centerY = r.top - wrapRect.top + 16; }
       meta.push({ id, centerY });
     });
@@ -12176,7 +12182,13 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
   // Close the open popover on outside click / Escape.
   useEffect(() => {
     if (!openId) return;
-    const onDown = (e) => { if (!e.target.closest(".doc-anno-pop-card") && !e.target.closest(".doc-anno-btn")) setOpenId(null); };
+    const onDown = (e) => {
+      // Ignore clicks whose target was removed mid-event (e.g. a mention
+      // suggestion that unmounts on mousedown) — a detached node has no
+      // ancestors, so closest() would wrongly read it as an outside click.
+      if (!e.target.isConnected) return;
+      if (!e.target.closest(".doc-anno-pop-card") && !e.target.closest(".doc-anno-btn")) setOpenId(null);
+    };
     const onKey = (e) => { if (e.key === "Escape") setOpenId(null); };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -12231,7 +12243,8 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
           );
         })}
         {openBlock && (
-          <div className="doc-anno-pop" style={{ top: Math.max(8, openBlock.centerY + 18) }}>
+          <div className="doc-anno-pop" style={{ top: Math.max(8, openBlock.centerY + 18) }}
+            onMouseDown={(e) => e.stopPropagation()}>
             <CommentPopover block={openBlock} comments={comments.filter(c => c.block_id === openId)}
               memberById={memberById} mentionables={mentionables} currentUserId={currentUserId}
               theme={theme} darkMode={darkMode} accent={accent}
