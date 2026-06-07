@@ -12672,6 +12672,61 @@ function SharePopover({ doc, ownerProfile, members, shares, projects, theme, dar
   );
 }
 
+// Info popover: document properties (owner, created/updated) + activity history.
+const DOC_ACTIVITY_LABEL = {
+  created: "hat das Dokument erstellt",
+  edited: "hat das Dokument bearbeitet",
+  image_added: "hat ein Bild hinzugefügt",
+  shared: "hat die Freigabe geändert",
+  renamed: "hat den Titel geändert",
+};
+function InfoPopover({ doc, memberById, activity, theme, darkMode, accent, onClose }) {
+  const owner = memberById[doc.created_by] || {};
+  const dimLabel = { fontSize: 10.5, letterSpacing: 1.2, textTransform: "uppercase", color: theme.textFaint || theme.textDim, fontFamily: FONT, padding: "13px 14px 6px", fontWeight: 600 };
+  const calSvg = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>;
+  const usrSvg = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>;
+  const Row = ({ icon, label, value }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "5px 14px" }}>
+      <span style={{ color: theme.textDim, lineHeight: 0 }}>{icon}</span>
+      <span style={{ fontSize: 12.5, color: theme.textDim, fontFamily: FONT }}>{label}</span>
+      <span style={{ fontSize: 12.5, color: theme.text, fontFamily: FONT, fontWeight: 500, marginLeft: "auto", textAlign: "right" }}>{value}</span>
+    </div>
+  );
+  return (
+    <div className="doc-info-card" onMouseDown={(e) => e.stopPropagation()}
+      style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 320, zIndex: 40, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 16, boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px 2px" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: FONT }}>Info</span>
+        <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: theme.textDim, lineHeight: 0, padding: 2 }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div style={dimLabel}>Eigenschaften</div>
+      <Row icon={calSvg} label="Erstellt" value={docTimeAgo(doc.created_at)} />
+      <Row icon={calSvg} label="Aktualisiert" value={docTimeAgo(doc.updated_at)} />
+      <Row icon={usrSvg} label="Autor" value={owner.display_name || "Unbekannt"} />
+      <div style={{ ...dimLabel, borderTop: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "#f0f0f3"}`, marginTop: 8 }}>Verlauf</div>
+      <div className="no-scrollbar" style={{ maxHeight: 240, overflowY: "auto", padding: "0 0 10px" }}>
+        {activity.length === 0 && <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, padding: "2px 14px 10px" }}>Noch keine Aktivität.</div>}
+        {activity.map(a => {
+          const p = memberById[a.user_id] || {};
+          return (
+            <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "6px 14px" }}>
+              <DocAvatar profile={p} accent={accent} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, color: theme.text, fontFamily: FONT, lineHeight: 1.35 }}>
+                  <span style={{ fontWeight: 600 }}>{p.display_name || "Jemand"}</span> {DOC_ACTIVITY_LABEL[a.type] || "hat etwas geändert"}
+                </div>
+                <div style={{ fontSize: 11, color: theme.textDim, fontFamily: FONT }}>{docTimeAgo(a.created_at)}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // Docs tab — Google-Docs-style: a list of workspace documents + a rich-text
 // editor. Documents are stored in brand_documents (org-scoped).
 function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, createNotification, deepLink, createRef, onOpenChange }) {
@@ -12689,6 +12744,9 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
   const [projects, setProjects] = useState([]);      // org projects (for "share to project")
   const [shares, setShares] = useState([]);          // user_ids the open doc is shared with
   const [shareOpen, setShareOpen] = useState(false); // share popover open
+  const [activity, setActivity] = useState([]);      // document_activity entries (newest first)
+  const [infoOpen, setInfoOpen] = useState(false);   // info popover open
+  const editLogRef = useRef(0);                      // throttle "edited" activity logging
 
   // Open a document from a notification deep-link (mention). Fetch by id so it
   // works even before the list has loaded; then auto-open the mentioned block's
@@ -12760,6 +12818,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
     const { error } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type, upsert: true });
     if (error) throw error;
     const { data } = supabase.storage.from("brand-assets").getPublicUrl(path);
+    recordActivity("image_added");
     return data.publicUrl;
   }, [userOrg?.id]);
 
@@ -12789,8 +12848,31 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
     return () => document.removeEventListener("mousedown", onDown);
   }, [shareOpen]);
 
-  const setDocVisibility = async (v) => { await persist(v === "project" ? { visibility: v } : { visibility: v, project_id: null }); };
-  const setDocProject = async (projectId) => { await persist({ visibility: "project", project_id: projectId || null }); };
+  // ── Activity log (Info popover history) ──
+  const openDocRef = useRef(null);
+  useEffect(() => { openDocRef.current = openDoc?.id || null; }, [openDoc]);
+  useEffect(() => {
+    setInfoOpen(false);
+    if (!openDoc?.id) { setActivity([]); return; }
+    supabase.from("document_activity").select("*").eq("document_id", openDoc.id).order("created_at", { ascending: false }).limit(60)
+      .then(({ data }) => setActivity(data || []));
+  }, [openDoc?.id]);
+  useEffect(() => {
+    if (!infoOpen) return;
+    const onDown = (e) => { if (!e.target.isConnected) return; if (!e.target.closest(".doc-info-card") && !e.target.closest(".doc-info-btn")) setInfoOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [infoOpen]);
+  const recordActivity = async (type, docId) => {
+    const id = docId || openDocRef.current; if (!id || !session?.user?.id) return;
+    const { data } = await supabase.from("document_activity").insert({ document_id: id, user_id: session.user.id, type }).select().single();
+    if (data && id === openDocRef.current) setActivity(prev => [data, ...prev]);
+  };
+  // Coalesce rapid autosaves into ~one "edited" entry per few minutes.
+  const maybeLogEdit = () => { const now = Date.now(); if (now - editLogRef.current > 180000) { editLogRef.current = now; recordActivity("edited"); } };
+
+  const setDocVisibility = async (v) => { await persist(v === "project" ? { visibility: v } : { visibility: v, project_id: null }); recordActivity("shared"); };
+  const setDocProject = async (projectId) => { await persist({ visibility: "project", project_id: projectId || null }); recordActivity("shared"); };
   const toggleShareMember = async (userId) => {
     if (!openDoc?.id) return;
     if (shares.includes(userId)) {
@@ -12799,6 +12881,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
     } else {
       setShares(prev => [...prev, userId]);
       await supabase.from("document_shares").insert({ document_id: openDoc.id, user_id: userId });
+      recordActivity("shared");
       createNotification?.({ userId, type: "comment_mention", title: "Ein Dokument wurde mit dir geteilt", body: `${memberById[session?.user?.id]?.display_name || "Jemand"}: „${openDoc.title || "Unbenanntes Dokument"}"`, metadata: { document_id: openDoc.id, document_title: openDoc.title } });
     }
   };
@@ -12825,6 +12908,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
     if (error) { alert("Dokument konnte nicht erstellt werden: " + error.message); return; }
     setDocs(prev => [data, ...prev]);
     setOpenDoc(data); setTitle(data.title || "");
+    recordActivity("created", data.id);
   };
   // Expose create to the AssetsView header (keeps the action in the same slot
   // as Moodboards/Creations for consistency).
@@ -12836,6 +12920,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
     const { data } = await supabase.from("brand_documents")
       .update({ ...patch, updated_at: new Date().toISOString() }).eq("id", openDoc.id).select().single();
     if (data) { setOpenDoc(data); setDocs(prev => prev.map(d => d.id === data.id ? data : d)); }
+    if (patch.content !== undefined || patch.title !== undefined) maybeLogEdit();
     setSaveState("saved");
     setTimeout(() => setSaveState(s => s === "saved" ? "" : s), 1500);
   };
@@ -12892,10 +12977,14 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
                 <span style={{ fontSize: 13, fontFamily: FONT }}>{projects.find(p => p.id === openDoc.project_id)?.name || "Unsortiert"}</span>
               </div>
             </div>
-            {/* Right cluster: Teilen (owner is shown inside the share overlay) */}
-            <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+            {/* Right cluster: Info · Teilen */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+              <button className="doc-info-btn" title="Info" onClick={(e) => { e.stopPropagation(); setShareOpen(false); setInfoOpen(o => !o); }}
+                style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${infoOpen ? accent : theme.borderFaint}`, background: infoOpen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent", color: infoOpen ? accent : theme.textDim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="7.5" x2="12.01" y2="7.5"/></svg>
+              </button>
               {(openDoc.created_by === session?.user?.id || userOrg?.role === "admin") && (
-                <button className="doc-share-btn" onClick={(e) => { e.stopPropagation(); setShareOpen(o => !o); }}
+                <button className="doc-share-btn" onClick={(e) => { e.stopPropagation(); setInfoOpen(false); setShareOpen(o => !o); }}
                   style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 9, border: "none", cursor: "pointer", background: accent, color: "#fff", fontSize: 12.5, fontWeight: 600, fontFamily: FONT }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
                   Teilen
@@ -12908,6 +12997,10 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
                 theme={theme} darkMode={darkMode} accent={accent}
                 onClose={() => setShareOpen(false)}
                 onSetVisibility={setDocVisibility} onSetProject={setDocProject} onToggleShare={toggleShareMember} />
+            )}
+            {infoOpen && (
+              <InfoPopover doc={openDoc} memberById={memberById} activity={activity}
+                theme={theme} darkMode={darkMode} accent={accent} onClose={() => setInfoOpen(false)} />
             )}
           </div>
           {/* Writing area gets more side padding than the header bar */}
