@@ -2089,7 +2089,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
             fontSize: 14, color: theme.textDim, fontFamily: FONT,
           }}>←</motion.div>
         <div>
-          <div style={{ fontSize: 22, fontWeight: 500, color: theme.text, fontFamily: FONT, letterSpacing: -0.5 }}>Tasks</div>
+          <div style={{ fontSize: 22, fontWeight: 500, color: theme.text, fontFamily: FONT, letterSpacing: -0.5 }}>Aufgaben</div>
           <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, marginTop: 2 }}>
             {loading ? "Loading..." : `${filtered.length} tasks across ${colEntries.length} columns`}
           </div>
@@ -3872,7 +3872,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{userOrg?.name || "Workspace"}</div>
-              <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 1 }}>Team Workspace</div>
+              <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 1 }}>Team-Workspace</div>
             </div>
           </div>
         </div>
@@ -4645,7 +4645,7 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
           </div>
           <div>
             <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Sprinttitel</label>
-            <input value={title} onChange={e => setTitle(e.target.value)} autoFocus placeholder="Sprint Title"
+            <input value={title} onChange={e => setTitle(e.target.value)} autoFocus placeholder="Sprinttitel"
               style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent }}
             />
           </div>
@@ -5858,7 +5858,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                             <span style={{ fontSize: 10, fontFamily: FONT, color: "#8B7AFF", padding: "2px 8px", borderRadius: 4, background: "rgba(139,122,255,0.1)" }}>Team</span>
                           )}
                           {e.type === "task" && (
-                            <span style={{ fontSize: 10, fontFamily: FONT, color: "#8B7AFF", padding: "2px 8px", borderRadius: 4, background: "rgba(139,122,255,0.1)" }}>Task</span>
+                            <span style={{ fontSize: 10, fontFamily: FONT, color: "#8B7AFF", padding: "2px 8px", borderRadius: 4, background: "rgba(139,122,255,0.1)" }}>Aufgabe</span>
                           )}
                           {e.project && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>{e.project}</span>}
                           {e.location && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>📍 {e.location}</span>}
@@ -5966,7 +5966,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                         <span style={{ fontSize: 9, fontFamily: FONT, color: "#5B8DEF", padding: "1px 6px", borderRadius: 4, background: "rgba(91,141,239,0.1)" }}>Google</span>
                       )}
                       {e.type === "task" && (
-                        <span style={{ fontSize: 9, fontFamily: FONT, color: "#8B7AFF", padding: "1px 6px", borderRadius: 4, background: "rgba(139,122,255,0.1)" }}>Task</span>
+                        <span style={{ fontSize: 9, fontFamily: FONT, color: "#8B7AFF", padding: "1px 6px", borderRadius: 4, background: "rgba(139,122,255,0.1)" }}>Aufgabe</span>
                       )}
                       {e.project && (
                         <span style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint }}>{e.project}</span>
@@ -6036,7 +6036,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                   <motion.div animate={{ x: eventForm.isTeamEvent ? 17 : 2 }} transition={{ duration: 0.2 }}
                     style={{ width: 16, height: 16, borderRadius: "50%", background: eventForm.isTeamEvent ? "#8B7AFF" : theme.textDim, position: "absolute", top: 2 }} />
                 </motion.div>
-                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub }}>Team Event</span>
+                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub }}>Team-Termin</span>
                 <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim }}>{eventForm.isTeamEvent ? "Sichtbar für alle" : "Nur Google Calendar"}</span>
               </div>
             )}
@@ -7124,7 +7124,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
               <span onClick={() => {
                 if (activeSource === "supabase") { setCurrentSbFolder(null); setSbFolderPath([]); }
                 else { setCurrentFolder(null); setFolderPath([]); }
-              }} style={{ cursor: "pointer", color: theme.textSub }}>Root</span>
+              }} style={{ cursor: "pointer", color: theme.textSub }}>Start</span>
               {(activeSource === "supabase" ? sbFolderPath : folderPath).map((fp, i) => (
                 <span key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <span style={{ color: theme.textFaint }}>/</span>
@@ -12348,13 +12348,13 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
         {draft.attributes.map((a, ai) => (
           <div key={ai} style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 18, borderTop: `1px solid ${divider}` }}>
             <input value={a.name} onChange={e => setAttr(ai, "name", e.target.value)} style={{ ...fieldStyle, fontSize: 20, fontWeight: 700 }} />
-            <div style={label}>Overview</div>
+            <div style={label}>Übersicht</div>
             <textarea rows={3} value={a.overview} onChange={e => setAttr(ai, "overview", e.target.value)} style={fieldStyle} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div><div style={label}>We should be (eine pro Zeile)</div><textarea rows={6} value={lines(a.shouldBe)} onChange={e => setAttr(ai, "shouldBe", toArr(e.target.value))} style={fieldStyle} /></div>
               <div><div style={label}>We shouldn't be (eine pro Zeile)</div><textarea rows={6} value={lines(a.shouldntBe)} onChange={e => setAttr(ai, "shouldntBe", toArr(e.target.value))} style={fieldStyle} /></div>
             </div>
-            <div style={label}>Tactics</div>
+            <div style={label}>Taktiken</div>
             {a.tactics.map((tc, ti) => (
               <div key={ti} style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 4 }}>
                 <input value={tc.title} onChange={e => setTactic(ai, ti, "title", e.target.value)} style={{ ...fieldStyle, fontWeight: 600 }} />
@@ -12374,7 +12374,7 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
     <div style={{ display: "flex", flexDirection: "column", gap: 72 }}>
       {/* Our tone intro */}
       <div style={{ maxWidth: 640 }}>
-        <div style={{ fontSize: 32, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 18 }}>Our tone</div>
+        <div style={{ fontSize: 32, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 18 }}>Unser Ton</div>
         <p style={{ fontSize: 16, fontFamily: FONT, lineHeight: 1.6, color: theme.textSub, margin: "0 0 18px" }}>{d.intro.body}</p>
         <p style={{ fontSize: 16, fontFamily: FONT, color: theme.text, margin: "0 0 12px" }}>Beim Hoch- oder Runterregeln der Stimme frag dich:</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
@@ -12421,22 +12421,22 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 48 }}>
             {/* Left: Overview + should/shouldn't */}
             <div>
-              <div style={label}>Overview</div>
+              <div style={label}>Übersicht</div>
               <p style={{ fontSize: 18, fontFamily: FONT, lineHeight: 1.5, color: theme.text, margin: "0 0 32px" }}>{a.overview}</p>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
                 <div>
-                  <div style={label}>We should be</div>
+                  <div style={label}>So sollten wir sein</div>
                   {(a.shouldBe || []).map((w, i) => <div key={i} style={listItem}>{w}</div>)}
                 </div>
                 <div>
-                  <div style={label}>We shouldn't be</div>
+                  <div style={label}>So sollten wir nicht sein</div>
                   {(a.shouldntBe || []).map((w, i) => <div key={i} style={listItem}>{w}</div>)}
                 </div>
               </div>
             </div>
             {/* Right: Tactics */}
             <div>
-              <div style={label}>Tactics</div>
+              <div style={label}>Taktiken</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "30px 28px", marginTop: 6 }}>
                 {(a.tactics || []).map((tc, i) => (
                   <div key={i} style={{ borderTop: `1px solid ${divider}`, paddingTop: 14 }}>
@@ -12463,11 +12463,11 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
 const SAMPLE_PERSONA = () => ({
   id: `persona_${Date.now()}`,
   photo_url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=480&q=80",
-  name: "Lily Ng", age: "24", role: "German Teacher", gender: "Weiblich",
+  name: "Lily Ng", age: "24", role: "Deutschlehrerin", gender: "Weiblich",
   location: "Queens, NY", consumer_behavior: "Fast Pace-Buyer",
   quote: "Love trying new products out all the time. Hate the hassle. The city is fast and non-stop so my lifestyle has to keep up with it, too.",
   motivations: [
-    { label: "Read Reviews/Testimonials", value: 70 },
+    { label: "Bewertungen/Testimonials lesen", value: 70 },
     { label: "See What's Popular", value: 85 },
     { label: "Get the Best Price", value: 50 },
     { label: "Check Ingredients", value: 35 },
@@ -12671,7 +12671,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
               <div>{Lbl("Name")}<input value={draft.name} onChange={e => setF({ name: e.target.value })} style={inputStyle} placeholder="Lily Ng" /></div>
               <div>{Lbl("Alter")}<input value={draft.age} onChange={e => setF({ age: e.target.value })} style={inputStyle} placeholder="24" /></div>
             </div>
-            <div>{Lbl("Beruf / Rolle")}<input value={draft.role} onChange={e => setF({ role: e.target.value })} style={inputStyle} placeholder="German Teacher" /></div>
+            <div>{Lbl("Beruf / Rolle")}<input value={draft.role} onChange={e => setF({ role: e.target.value })} style={inputStyle} placeholder="Deutschlehrerin" /></div>
             <div>{Lbl("Geschlecht")}
               <select value={draft.gender || ""} onChange={e => setF({ gender: e.target.value })} style={selectStyle}>
                 <option value="">– auswählen –</option>
@@ -12694,7 +12694,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {(draft.motivations || []).map((m, i) => (
               <div key={i} style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <input value={m.label} onChange={e => setMot(i, { label: e.target.value })} style={{ ...inputStyle, flex: 1 }} placeholder="Read Reviews" />
+                <input value={m.label} onChange={e => setMot(i, { label: e.target.value })} style={{ ...inputStyle, flex: 1 }} placeholder="Bewertungen lesen" />
                 <input type="range" min="0" max="100" value={m.value} onChange={e => setMot(i, { value: Number(e.target.value) })} style={{ flex: 1, accentColor: theme.accent }} />
                 <span style={{ width: 34, textAlign: "right", fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{m.value}</span>
                 <button onClick={() => setDraft(d => ({ ...d, motivations: d.motivations.filter((_, j) => j !== i) }))}
@@ -12817,7 +12817,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
         {/* Row 4: Product Expectation (full width, no border) */}
         {p.product_expectation && (
           <div style={{ padding: "22px 26px", borderRadius: 18, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
-            <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 8 }}>Product Expectation</div>
+            <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 8 }}>Produkterwartung</div>
             <div style={{ fontSize: 15, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{p.product_expectation}</div>
           </div>
         )}
@@ -13160,7 +13160,7 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
             <div>{Lbl("Standort")}<input value={draft.location} onChange={e => setF({ location: e.target.value })} style={headInput} placeholder="Menlo Park, CA" /></div>
           </div>
           <div>
-            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 10 }}>Summary</div>
+            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 10 }}>Zusammenfassung</div>
             <textarea value={draft.summary || ""} onChange={e => setF({ summary: e.target.value })} rows={9} placeholder="Kurze Zusammenfassung des Wettbewerbers…"
               style={{ ...headInput, resize: "vertical", lineHeight: 1.6 }} />
           </div>
@@ -13275,7 +13275,7 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
             )}
           </div>
           <div>
-            <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 14 }}>Summary</div>
+            <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 14 }}>Zusammenfassung</div>
             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7 }}>{c.summary || "—"}</div>
           </div>
         </div>
@@ -13320,7 +13320,7 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
         {/* Strategic Recommendations: heading (left) | list (right) */}
         {(c.recommendations || []).filter(Boolean).length > 0 && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, alignItems: "start" }}>
-            <div style={{ fontSize: 28, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.5, lineHeight: 1.15 }}>Strategic Recommendations</div>
+            <div style={{ fontSize: 28, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.5, lineHeight: 1.15 }}>Strategische Empfehlungen</div>
             <div>{(c.recommendations || []).filter(Boolean).map((r, i) => <Arrow key={i}>{r}</Arrow>)}</div>
           </div>
         )}
@@ -16172,9 +16172,9 @@ If you don't know a field, infer a plausible value. Write all text values in the
                       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
                         {claim && <div>{SL("Claim")}<div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 500, color: theme.text, lineHeight: 1.4 }}>{claim}</div></div>}
                         {profile.description && <div>{SL("Beschreibung")}{Para(profile.description)}</div>}
-                        {valueProps.length > 0 && <div>{SL("Value Props")}<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{valueProps.map((v, i) => <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.015)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5 }}><span style={{ color: theme.accent, marginRight: 8, fontWeight: 600 }}>·</span>{v}</div>)}</div></div>}
+                        {valueProps.length > 0 && <div>{SL("Nutzenversprechen")}<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{valueProps.map((v, i) => <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.015)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5 }}><span style={{ color: theme.accent, marginRight: 8, fontWeight: 600 }}>·</span>{v}</div>)}</div></div>}
                       </div>
-                    ) : Empty("Noch kein Brand Core hinterlegt. Ergänze Claim, Beschreibung und Value Props im Onboarding.");
+                    ) : Empty("Noch kein Brand Core hinterlegt. Ergänze Claim, Beschreibung und Nutzenversprechen im Onboarding.");
                   } else if (k === "strategy/positioning") {
                     const positioning = ana.market_positioning;
                     body = positioning ? <div>{SL("Positionierung")}{Para(positioning)}</div> : Empty("Noch keine Positionierung hinterlegt.");
@@ -16245,7 +16245,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                     if (k === "identity/core") {
                       seed = (claimT ? `<h3>Claim</h3><h2>${esc(claimT)}</h2>` : "")
                         + (profile.description ? `<h3>Beschreibung</h3><p>${p2(profile.description)}</p>` : "")
-                        + (vProps.length ? `<h3>Value Props</h3><ul>${vProps.map(v => `<li>${esc(v)}</li>`).join("")}</ul>` : "")
+                        + (vProps.length ? `<h3>Nutzenversprechen</h3><ul>${vProps.map(v => `<li>${esc(v)}</li>`).join("")}</ul>` : "")
                         + (kMsgs.length ? `<h3>Kern-Botschaften</h3><ul>${kMsgs.map(m => `<li>${esc(m)}</li>`).join("")}</ul>` : "");
                     } else if (k === "strategy/positioning") seed = posT ? `<p>${p2(posT)}</p>` : "";
                     else if (k === "identity/story") seed = profile.description ? `<p>${p2(profile.description)}</p>` : "";
@@ -20017,7 +20017,7 @@ export default function CircularMenu() {
                       padding: "14px 18px 12px", display: "flex", alignItems: "center", justifyContent: "space-between",
                       borderBottom: `1px solid ${theme.borderFaint}`,
                     }}>
-                      <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Notifications</div>
+                      <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{appLanguage === "de" ? "Benachrichtigungen" : "Notifications"}</div>
                       {unreadCount > 0 && (
                         <motion.div whileTap={{ scale: 0.95 }}
                           onClick={markAllNotifsRead}
@@ -21203,7 +21203,7 @@ export default function CircularMenu() {
 
               {/* Quick actions */}
               <div>
-                <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>Quick Actions</div>
+                <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>{appLanguage === "de" ? "Schnellaktionen" : "Quick Actions"}</div>
                 <div style={{ display: "flex", gap: 10 }}>
                   {[
                     { label: t("dash.newTask"), icon: "＋", color: "#8B7AFF" },
@@ -22148,7 +22148,7 @@ export default function CircularMenu() {
                             padding: "3px 10px", borderRadius: 8,
                             background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.15)",
                             fontSize: 11, fontFamily: FONT, color: "#F59E0B", flexShrink: 0,
-                          }}>Pending</div>
+                          }}>{appLanguage === "de" ? "Ausstehend" : "Pending"}</div>
                         </div>
                       ))}
                     </div>
@@ -22201,7 +22201,7 @@ export default function CircularMenu() {
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{(session?.user?.app_metadata?.provider === "google") ? "Google Account" : (appLanguage === "de" ? "E-Mail-Account" : "Email account")}</div>
                       <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
                         <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: session ? "#00B894" : "#E84393" }} />
-                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{session ? "Connected" : "Not connected"}</div>
+                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{session ? (appLanguage === "de" ? "Verbunden" : "Connected") : (appLanguage === "de" ? "Nicht verbunden" : "Not connected")}</div>
                       </div>
                     </div>
                     {/* Logout — moved here from the bottom of the page */}
@@ -22218,7 +22218,7 @@ export default function CircularMenu() {
                         <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" stroke="#E84343" strokeWidth="1.5" strokeLinecap="round" />
                         <path d="M16 17l5-5-5-5M21 12H9" stroke="#E84343" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
-                      <span style={{ fontSize: 13, fontFamily: FONT, color: "#E84343", fontWeight: 500 }}>Logout</span>
+                      <span style={{ fontSize: 13, fontFamily: FONT, color: "#E84343", fontWeight: 500 }}>{appLanguage === "de" ? "Abmelden" : "Logout"}</span>
                     </motion.div>
                   </div>
 
@@ -22238,9 +22238,9 @@ export default function CircularMenu() {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Plan</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Early Access</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{appLanguage === "de" ? "Früher Zugang" : "Early Access"}</div>
                     </div>
-                    <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, border: `1px solid ${theme.accentBorder}`, fontSize: 11, fontFamily: FONT, color: theme.accent }}>Active</div>
+                    <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, border: `1px solid ${theme.accentBorder}`, fontSize: 11, fontFamily: FONT, color: theme.accent }}>{appLanguage === "de" ? "Aktiv" : "Active"}</div>
                   </div>
                 </div>
               </motion.div>
@@ -22369,7 +22369,7 @@ export default function CircularMenu() {
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{t("settings.notifications")}</div>
                       <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{t("settings.notificationsSub")}</div>
                     </div>
-                    <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent }}>Coming soon</div>
+                    <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent }}>{appLanguage === "de" ? "Bald verfügbar" : "Coming soon"}</div>
                   </div>
                 </div>
               </motion.div>
