@@ -23154,10 +23154,8 @@ export default function CircularMenu() {
                               <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.profiles?.email || ""}</div>
                             </div>
                             <div style={{
-                              padding: "3px 10px", borderRadius: 8, flexShrink: 0,
-                              background: isAdminRow ? "rgba(139, 122, 255, 0.1)" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
-                              border: `1px solid ${isAdminRow ? "rgba(139, 122, 255, 0.2)" : theme.borderFaint}`,
-                              fontSize: 11, fontFamily: FONT, color: isAdminRow ? "#8B7AFF" : theme.textDim, fontWeight: 500,
+                              padding: "4px 10px", borderRadius: 20, flexShrink: 0,
+                              background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent,
                             }}>{roleLabel}</div>
                             {expandable && (
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
@@ -23365,7 +23363,7 @@ export default function CircularMenu() {
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Plan</div>
                       <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{appLanguage === "de" ? "Früher Zugang" : "Early Access"}</div>
                     </div>
-                    <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, border: `1px solid ${theme.accentBorder}`, fontSize: 11, fontFamily: FONT, color: theme.accent }}>{appLanguage === "de" ? "Aktiv" : "Active"}</div>
+                    <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent }}>{appLanguage === "de" ? "Aktiv" : "Active"}</div>
                   </div>
                 </div>
               </motion.div>
