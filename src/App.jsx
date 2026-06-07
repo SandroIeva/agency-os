@@ -23458,7 +23458,7 @@ export default function CircularMenu() {
                         value={appLanguage}
                         onChange={(e) => setAppLanguage(e.target.value)}
                         style={{
-                          padding: "6px 28px 6px 12px", borderRadius: 12,
+                          width: 170, padding: "6px 28px 6px 12px", borderRadius: 12,
                           background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
                           border: `1px solid ${theme.borderFaint}`,
                           color: theme.text, fontSize: 13, fontFamily: FONT,
@@ -23500,7 +23500,7 @@ export default function CircularMenu() {
                         value={docDefaultVisibility}
                         onChange={(e) => setDocDefaultVisibility(e.target.value)}
                         style={{
-                          padding: "6px 28px 6px 12px", borderRadius: 12,
+                          width: 170, padding: "6px 28px 6px 12px", borderRadius: 12,
                           background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
                           border: `1px solid ${theme.borderFaint}`,
                           color: theme.text, fontSize: 13, fontFamily: FONT,
@@ -23508,7 +23508,7 @@ export default function CircularMenu() {
                           appearance: "none", WebkitAppearance: "none", MozAppearance: "none",
                         }}
                       >
-                        <option value="workspace">{appLanguage === "de" ? "Ganzer Workspace" : "Whole workspace"}</option>
+                        <option value="workspace">{appLanguage === "de" ? "Workspace" : "Workspace"}</option>
                         <option value="private">{appLanguage === "de" ? "Privat (nur ich)" : "Private (only me)"}</option>
                       </select>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
