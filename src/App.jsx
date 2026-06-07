@@ -12656,21 +12656,21 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
   // ── EDITOR (full-screen, autosaving) ──
   if (openDoc) {
     return (
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 0 60px" }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "30px 0 60px" }}>
         <div style={{ width: "100%", padding: "0 30px", boxSizing: "border-box" }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 22, position: "relative" }}>
             {/* Title (with arrow on the same line) + project breadcrumb */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                 <button onClick={() => { setOpenDoc(null); load(); }} title="Zurück"
-                  style={{ marginLeft: -4, border: "none", background: "transparent", cursor: "pointer", color: theme.textDim, lineHeight: 0, padding: 4, borderRadius: 8, flexShrink: 0 }}>
+                  style={{ marginLeft: -10, border: "none", background: "transparent", cursor: "pointer", color: theme.textDim, lineHeight: 0, padding: 4, borderRadius: 8, flexShrink: 0 }}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
                 </button>
                 <input value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Ohne Titel"
                   style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 20, fontWeight: 700, fontFamily: FONT, letterSpacing: -0.2, padding: 0 }} />
               </div>
-              {/* Breadcrumb: aligned with the title text (+5px), folder icon flush */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, paddingLeft: 37, color: theme.textDim }}>
+              {/* Breadcrumb: flush under the title text */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 1, paddingLeft: 32, color: theme.textDim }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
                 <span style={{ fontSize: 13, fontFamily: FONT }}>{projects.find(p => p.id === openDoc.project_id)?.name || "Unsortiert"}</span>
               </div>
