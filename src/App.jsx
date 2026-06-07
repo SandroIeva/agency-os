@@ -12163,6 +12163,23 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
     const m = {}; comments.forEach(c => { m[c.block_id] = (m[c.block_id] || 0) + 1; }); return m;
   }, [comments]);
 
+  // Portal target for the slash menu: a <body>-level node that carries BlockNote's
+  // root classes + color-scheme, so the menu keeps its full styling (background,
+  // shadow) while escaping the rounded panel's overflow:hidden clip. floating-ui
+  // then sizes/flips it against the viewport → always fully visible & scrollable.
+  const slashPortal = useMemo(() => {
+    if (typeof document === "undefined") return null;
+    const el = document.createElement("div");
+    el.className = "bn-container bn-mantine bn-root";
+    return el;
+  }, []);
+  useEffect(() => {
+    if (!slashPortal) return;
+    slashPortal.setAttribute("data-color-scheme", darkMode ? "dark" : "light");
+    document.body.appendChild(slashPortal);
+    return () => { slashPortal.remove(); };
+  }, [slashPortal, darkMode]);
+
   // Dictation directly into the editor (triggered from the slash / "+" menu):
   // inserts recognised text at the cursor; a floating control stops it.
   const [dictating, setDictating] = useState(false);
@@ -12323,7 +12340,7 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
         {/* Portal the slash menu to <body> so it isn't clipped by the rounded,
             overflow:hidden document panel — floating-ui then flips/sizes it to the
             viewport, keeping it fully visible and scrollable to the bottom. */}
-        <SuggestionMenuController triggerCharacter="/" portalElement={typeof document !== "undefined" ? document.body : undefined}
+        <SuggestionMenuController triggerCharacter="/" portalElement={slashPortal || undefined}
           getItems={async (query) => filterSuggestionItems(getSlashItems(editor), query)} />
       </BlockNoteView>
       {dictating && (
