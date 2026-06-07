@@ -3087,7 +3087,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                         <motion.div whileTap={{ scale: 0.9 }}
                           onClick={() => { setEditingProject(p); setProjectForm({ name: p.name, logo_url: p.logo_url || "", color: p.color || "#8B7AFF" }); setLogoPreview(p.logo_url || null); }}
                           style={{ padding: "4px 10px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.textDim, border: `1px solid ${theme.borderFaint}` }}
-                        >Edit</motion.div>
+                        >Bearbeiten</motion.div>
                       )}
                       {canManageProjectRow(p) && (
                         <motion.div whileTap={{ scale: 0.9 }}
