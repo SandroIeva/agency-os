@@ -5,6 +5,11 @@ import { supabase } from "./supabase";
 import { buildSystemPrompt } from "./systemPrompt";
 import { getTranslation } from "./translations";
 import { openGooglePicker, openGoogleFolderPicker } from "./googlePicker";
+import { useCreateBlockNote } from "@blocknote/react";
+import { BlockNoteView } from "@blocknote/mantine";
+import { de as blockNoteDe } from "@blocknote/core/locales";
+import "@blocknote/core/fonts/inter.css";
+import "@blocknote/mantine/style.css";
 
 // Error Boundary to prevent black screen — shows error info in production
 export class AppErrorBoundary extends Component {
@@ -11929,55 +11934,26 @@ function RichTextEditor({ initialHTML, theme, darkMode, onSave, onCancel }) {
   );
 }
 
-// Document editor — clean floating toolbar + contentEditable page that
-// autosaves (debounced) on input/blur. No manual save button.
-function DocEditor({ initialHTML, theme, darkMode, accent, onChange }) {
-  const ref = useRef(null);
+// Document editor — Notion/Craft-style block editor (BlockNote): drag-to-
+// reorder blocks, "+" / slash block menu, images, headings, lists. Content is
+// stored as BlockNote block JSON and autosaved (debounced) on change.
+function DocEditor({ initialHTML, theme, darkMode, onChange }) {
   const timer = useRef(null);
-  const [, force] = useState(0);
-  useEffect(() => { if (ref.current) ref.current.innerHTML = initialHTML || "<p></p>"; /* eslint-disable-next-line */ }, []);
+  // Parse stored block JSON; tolerate empty/legacy (HTML) content → start fresh.
+  const initialContent = useMemo(() => {
+    if (!initialHTML) return undefined;
+    try { const p = JSON.parse(initialHTML); return Array.isArray(p) && p.length > 0 ? p : undefined; }
+    catch { return undefined; }
+  }, []);
+  const editor = useCreateBlockNote({ initialContent, dictionary: blockNoteDe });
   useEffect(() => () => clearTimeout(timer.current), []);
-  const schedule = () => { clearTimeout(timer.current); timer.current = setTimeout(() => onChange(ref.current?.innerHTML || ""), 800); };
-  const exec = (cmd, val) => { ref.current?.focus(); document.execCommand(cmd, false, val); force(n => n + 1); schedule(); };
-  const isOn = (cmd) => { try { return document.queryCommandState(cmd); } catch { return false; } };
-  const addLink = () => { const url = prompt("Link-URL:"); if (url) exec("createLink", /^https?:\/\//i.test(url) ? url : "https://" + url); };
-  const Divider = () => <div style={{ width: 1, height: 20, background: theme.borderFaint, margin: "0 4px" }} />;
-  const Btn = ({ onClick, active, title, children }) => (
-    <button type="button" title={title} onMouseDown={(e) => e.preventDefault()} onClick={onClick}
-      style={{ minWidth: 30, height: 30, padding: "0 8px", borderRadius: 8, border: "none", cursor: "pointer",
-        background: active ? (darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.07)") : "transparent",
-        color: active ? theme.text : theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600,
-        display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "background 0.12s" }}>{children}</button>
-  );
+  const handleChange = () => {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => { try { onChange(JSON.stringify(editor.document)); } catch (_) {} }, 800);
+  };
   return (
-    <div>
-      {/* Floating formatting toolbar */}
-      <div style={{ display: "inline-flex", flexWrap: "wrap", alignItems: "center", gap: 2, padding: 6, borderRadius: 12,
-        background: darkMode ? "rgba(255,255,255,0.05)" : "#fff", border: `1px solid ${theme.borderFaint}`,
-        boxShadow: darkMode ? "none" : "0 4px 16px rgba(0,0,0,0.06)", marginBottom: 18 }}>
-        <Btn title="Fett (⌘B)" active={isOn("bold")} onClick={() => exec("bold")}><b>B</b></Btn>
-        <Btn title="Kursiv (⌘I)" active={isOn("italic")} onClick={() => exec("italic")}><i>I</i></Btn>
-        <Btn title="Unterstrichen (⌘U)" active={isOn("underline")} onClick={() => exec("underline")}><span style={{ textDecoration: "underline" }}>U</span></Btn>
-        <Btn title="Durchgestrichen" active={isOn("strikeThrough")} onClick={() => exec("strikeThrough")}><span style={{ textDecoration: "line-through" }}>S</span></Btn>
-        <Divider />
-        <Btn title="Überschrift 1" onClick={() => exec("formatBlock", "H1")}>H1</Btn>
-        <Btn title="Überschrift 2" onClick={() => exec("formatBlock", "H2")}>H2</Btn>
-        <Btn title="Überschrift 3" onClick={() => exec("formatBlock", "H3")}>H3</Btn>
-        <Btn title="Absatz" onClick={() => exec("formatBlock", "P")}>¶</Btn>
-        <Divider />
-        <Btn title="Aufzählung" onClick={() => exec("insertUnorderedList")}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
-        </Btn>
-        <Btn title="Nummerierte Liste" onClick={() => exec("insertOrderedList")}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><line x1="10" y1="6" x2="20" y2="6"/><line x1="10" y1="12" x2="20" y2="12"/><line x1="10" y1="18" x2="20" y2="18"/><path d="M4 6h1v4"/><path d="M4 16h2v1l-2 2h2"/></svg>
-        </Btn>
-        <Btn title="Link einfügen" onClick={addLink}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>
-        </Btn>
-      </div>
-      <div ref={ref} contentEditable suppressContentEditableWarning className="brand-rich" onInput={schedule}
-        onBlur={() => { clearTimeout(timer.current); onChange(ref.current?.innerHTML || ""); }}
-        style={{ outline: "none", minHeight: 440, color: theme.text, fontSize: 16, fontFamily: FONT, lineHeight: 1.75 }} />
+    <div className="doc-blocknote" style={{ minHeight: 440 }}>
+      <BlockNoteView editor={editor} theme={darkMode ? "dark" : "light"} onChange={handleChange} />
     </div>
   );
 }
@@ -12042,7 +12018,21 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, createRef, onOp
   };
 
   const fmtDate = (ts) => { try { return new Date(ts).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" }); } catch { return ""; } };
-  const snippet = (html) => (html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+  const snippet = (content) => {
+    if (!content) return "";
+    // BlockNote stores block JSON — extract plain text from inline content.
+    try {
+      const blocks = JSON.parse(content);
+      if (Array.isArray(blocks)) {
+        const walk = (arr) => (arr || []).map(b => {
+          const inline = (b.content || []).map(c => (typeof c === "string" ? c : (c.text || ""))).join("");
+          return inline + (b.children?.length ? " " + walk(b.children) : "");
+        }).join(" ");
+        return walk(blocks).replace(/\s+/g, " ").trim().slice(0, 120);
+      }
+    } catch (_) { /* legacy HTML */ }
+    return content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+  };
 
   // ── EDITOR (full-screen, autosaving) ──
   if (openDoc) {
