@@ -12051,9 +12051,9 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, createRef, onOp
             </span>
           </div>
           {/* Writing area gets more side padding than the back/save bar */}
-          <div style={{ padding: "0 40px" }}>
+          <div style={{ padding: "24px 40px 0" }}>
             <input value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Ohne Titel"
-              style={{ width: "100%", border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 32, fontWeight: 700, fontFamily: FONT, letterSpacing: -0.4, marginBottom: 14 }} />
+              style={{ width: "100%", border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 32, fontWeight: 700, fontFamily: FONT, letterSpacing: -0.4, marginBottom: 28 }} />
             <DocEditor key={openDoc.id} initialHTML={openDoc.content} theme={theme} darkMode={darkMode} accent={accent}
               onChange={(html) => persist({ content: html })} />
           </div>
@@ -23374,6 +23374,15 @@ export default function CircularMenu() {
         .brand-rich li { font-size: 14px; line-height: 1.6; margin: 0 0 4px; }
         .brand-rich a { color: ${theme.accent}; text-decoration: underline; }
         .brand-rich a:hover { opacity: 0.8; }
+        /* BlockNote document editor — blend with the panel/overlay background */
+        .doc-blocknote .bn-container,
+        .doc-blocknote .bn-editor {
+          background: transparent !important;
+          --bn-colors-editor-background: transparent;
+        }
+        .doc-blocknote .ProseMirror { background: transparent !important; }
+        /* Medium-like breathing room between blocks (~16px) */
+        .doc-blocknote .bn-block-content { padding: 8px 0; }
         .hover-row {
           transition: background 0.6s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
