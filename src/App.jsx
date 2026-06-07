@@ -23458,7 +23458,7 @@ export default function CircularMenu() {
                         value={appLanguage}
                         onChange={(e) => setAppLanguage(e.target.value)}
                         style={{
-                          width: 150, padding: "6px 28px 6px 12px", borderRadius: 10,
+                          width: 150, padding: "10px 28px 10px 12px", borderRadius: 10,
                           background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
                           border: `1px solid ${theme.borderFaint}`,
                           color: theme.text, fontSize: 13, fontFamily: FONT,
@@ -23500,7 +23500,7 @@ export default function CircularMenu() {
                         value={docDefaultVisibility}
                         onChange={(e) => setDocDefaultVisibility(e.target.value)}
                         style={{
-                          width: 150, padding: "6px 28px 6px 12px", borderRadius: 10,
+                          width: 150, padding: "10px 28px 10px 12px", borderRadius: 10,
                           background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
                           border: `1px solid ${theme.borderFaint}`,
                           color: theme.text, fontSize: 13, fontFamily: FONT,
@@ -23784,13 +23784,13 @@ export default function CircularMenu() {
                               <div style={{ padding: "0 20px 14px" }}>
                                 {editingKeyId !== p.id ? (
                                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                                    <div style={{ flex: 1, padding: "10px 14px", borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, color: hasKey ? theme.textSub : theme.textDim, fontSize: 12, fontFamily: FONT, display: "flex", alignItems: "center", gap: 8 }}>
+                                    <div style={{ flex: 1, padding: "10px 14px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, color: hasKey ? theme.textSub : theme.textDim, fontSize: 12, fontFamily: FONT, display: "flex", alignItems: "center", gap: 8 }}>
                                       {hasKey && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><path d="M20 6L9 17l-5-5" stroke={theme.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                                       {hasKey ? (appLanguage === "de" ? "Key gespeichert" : "Key saved") : (appLanguage === "de" ? "Kein Key hinterlegt" : "No key set")}
                                     </div>
                                     <motion.div whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.11)" : "rgba(0,0,0,0.07)" }} whileTap={{ scale: 0.97 }}
                                       onClick={() => { setEditingKeyId(p.id); setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" })); setLlmKeyStatus(prev => { const n = { ...prev }; delete n[p.id]; return n; }); }}
-                                      style={{ padding: "10px 16px", borderRadius: 12, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 12, fontFamily: FONT, color: theme.textSub, fontWeight: 500, whiteSpace: "nowrap" }}>
+                                      style={{ padding: "10px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 12, fontFamily: FONT, color: theme.textSub, fontWeight: 500, whiteSpace: "nowrap" }}>
                                       {appLanguage === "de" ? "Bearbeiten" : "Edit"}
                                     </motion.div>
                                   </div>
@@ -23806,7 +23806,7 @@ export default function CircularMenu() {
                                     : (p.id === "claude" ? "sk-ant-api03-…" : p.id === "openai" ? "sk-…" : "AIza…")}
                                   style={{
                                     flex: 1, width: "100%", boxSizing: "border-box",
-                                    padding: hasKey ? "10px 116px 10px 14px" : "10px 14px", borderRadius: 12,
+                                    padding: hasKey ? "10px 116px 10px 14px" : "10px 14px", borderRadius: 10,
                                     background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
                                     border: `1px solid ${theme.borderFaint}`,
                                     color: theme.text, fontSize: 12, fontFamily: FONT,
@@ -23872,7 +23872,7 @@ export default function CircularMenu() {
                                     }
                                   }}
                                   style={{
-                                    padding: "10px 16px", borderRadius: 12, cursor: "pointer",
+                                    padding: "10px 16px", borderRadius: 10, cursor: "pointer",
                                     background: p.color + "20", border: `1px solid ${p.color}40`,
                                     fontSize: 12, fontFamily: FONT, color: p.color, fontWeight: 500,
                                     display: "flex", alignItems: "center", whiteSpace: "nowrap",
@@ -23882,7 +23882,7 @@ export default function CircularMenu() {
                                 </motion.div>
                                     <motion.div whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }} whileTap={{ scale: 0.97 }}
                                       onClick={() => { setEditingKeyId(null); setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" })); setLlmKeyStatus(prev => { const n = { ...prev }; delete n[p.id]; return n; }); }}
-                                      style={{ padding: "10px 14px", borderRadius: 12, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, fontSize: 12, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap" }}>
+                                      style={{ padding: "10px 14px", borderRadius: 10, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, fontSize: 12, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap" }}>
                                       {appLanguage === "de" ? "Abbrechen" : "Cancel"}
                                     </motion.div>
                                   </div>
