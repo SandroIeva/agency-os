@@ -24051,6 +24051,19 @@ export default function CircularMenu() {
         /* Hide scrollbars while keeping scroll behaviour */
         .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
         .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
+        /* Custom scrollbars: a slim rounded thumb that stops short of the top/bottom
+           so it never collides with the rounded corners of the content panels.
+           (.no-scrollbar above still wins where scrollbars should be hidden.) */
+        ::-webkit-scrollbar { width: 12px; height: 12px; }
+        ::-webkit-scrollbar-track { background: transparent; margin: 16px 0; }
+        ::-webkit-scrollbar-thumb {
+          background-color: ${darkMode ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.18)"};
+          border-radius: 10px; border: 3px solid transparent; background-clip: content-box;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background-color: ${darkMode ? "rgba(255,255,255,0.34)" : "rgba(0,0,0,0.30)"};
+        }
+        ::-webkit-scrollbar-corner { background: transparent; }
         .avatar-edit:hover .avatar-edit-overlay { opacity: 1 !important; }
         /* No blue focus outline on clicked/active elements */
         *:focus, *:focus-visible { outline: none !important; }
