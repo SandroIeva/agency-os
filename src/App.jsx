@@ -12060,10 +12060,13 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, createRef, onOp
               )}
             </span>
           </div>
-          <input value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Ohne Titel"
-            style={{ width: "100%", border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 32, fontWeight: 700, fontFamily: FONT, letterSpacing: -0.4, marginBottom: 14 }} />
-          <DocEditor key={openDoc.id} initialHTML={openDoc.content} theme={theme} darkMode={darkMode} accent={accent}
-            onChange={(html) => persist({ content: html })} />
+          {/* Writing area gets more side padding than the back/save bar */}
+          <div style={{ padding: "0 40px" }}>
+            <input value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Ohne Titel"
+              style={{ width: "100%", border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 32, fontWeight: 700, fontFamily: FONT, letterSpacing: -0.4, marginBottom: 14 }} />
+            <DocEditor key={openDoc.id} initialHTML={openDoc.content} theme={theme} darkMode={darkMode} accent={accent}
+              onChange={(html) => persist({ content: html })} />
+          </div>
         </div>
       </div>
     );
