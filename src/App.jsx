@@ -12680,31 +12680,31 @@ const DOC_ACTIVITY_LABEL = {
   shared: "hat die Freigabe geändert",
   renamed: "hat den Titel geändert",
 };
-function InfoPopover({ doc, memberById, activity, theme, darkMode, accent, onClose }) {
+function docDateTime(ts) { try { return new Date(ts).toLocaleString("de-DE", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return ""; } }
+function InfoPopover({ doc, memberById, activity, projectName, theme, darkMode, accent, onClose }) {
   const owner = memberById[doc.created_by] || {};
   const dimLabel = { fontSize: 10.5, letterSpacing: 1.2, textTransform: "uppercase", color: theme.textFaint || theme.textDim, fontFamily: FONT, padding: "13px 14px 6px", fontWeight: 600 };
   const calSvg = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>;
   const usrSvg = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>;
+  const folderSvg = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>;
   const Row = ({ icon, label, value }) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "5px 14px" }}>
-      <span style={{ color: theme.textDim, lineHeight: 0 }}>{icon}</span>
-      <span style={{ fontSize: 12.5, color: theme.textDim, fontFamily: FONT }}>{label}</span>
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "5px 14px" }}>
+      <span style={{ color: theme.textDim, lineHeight: 0, marginTop: 1 }}>{icon}</span>
+      <span style={{ fontSize: 12.5, color: theme.textDim, fontFamily: FONT, flexShrink: 0 }}>{label}</span>
       <span style={{ fontSize: 12.5, color: theme.text, fontFamily: FONT, fontWeight: 500, marginLeft: "auto", textAlign: "right" }}>{value}</span>
     </div>
   );
   return (
     <div className="doc-info-card" onMouseDown={(e) => e.stopPropagation()}
       style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 320, zIndex: 40, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 16, boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px 2px" }}>
+      <div style={{ padding: "12px 14px 2px" }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: FONT }}>Info</span>
-        <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: theme.textDim, lineHeight: 0, padding: 2 }}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-        </button>
       </div>
       <div style={dimLabel}>Eigenschaften</div>
-      <Row icon={calSvg} label="Erstellt" value={docTimeAgo(doc.created_at)} />
-      <Row icon={calSvg} label="Aktualisiert" value={docTimeAgo(doc.updated_at)} />
+      <Row icon={calSvg} label="Erstellt" value={docDateTime(doc.created_at)} />
+      <Row icon={calSvg} label="Aktualisiert" value={docDateTime(doc.updated_at)} />
       <Row icon={usrSvg} label="Autor" value={owner.display_name || "Unbekannt"} />
+      <Row icon={folderSvg} label="Ort" value={projectName || "Unsortiert"} />
       <div style={{ ...dimLabel, borderTop: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "#f0f0f3"}`, marginTop: 8 }}>Verlauf</div>
       <div className="no-scrollbar" style={{ maxHeight: 240, overflowY: "auto", padding: "0 0 10px" }}>
         {activity.length === 0 && <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, padding: "2px 14px 10px" }}>Noch keine Aktivität.</div>}
@@ -13000,6 +13000,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
             )}
             {infoOpen && (
               <InfoPopover doc={openDoc} memberById={memberById} activity={activity}
+                projectName={projects.find(p => p.id === openDoc.project_id)?.name || "Unsortiert"}
                 theme={theme} darkMode={darkMode} accent={accent} onClose={() => setInfoOpen(false)} />
             )}
           </div>
