@@ -11973,8 +11973,9 @@ const YouTubeBlock = createReactBlockSpec(
   }
 );
 
-// Schema = all default blocks + the YouTube embed.
-const docSchema = BlockNoteSchema.create({ blockSpecs: { ...defaultBlockSpecs, youtube: YouTubeBlock } });
+// Schema = all default blocks + the YouTube embed. createReactBlockSpec returns a
+// creator function, so it must be called to produce the BlockSpec.
+const docSchema = BlockNoteSchema.create({ blockSpecs: { ...defaultBlockSpecs, youtube: YouTubeBlock() } });
 
 // Short relative time, German.
 function docTimeAgo(ts) {
