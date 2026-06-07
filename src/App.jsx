@@ -12270,8 +12270,105 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
   );
 }
 
+// ── Document export helpers (work from the stored BlockNote block JSON) ──
+function docBlocksFromContent(content) {
+  if (!content) return [];
+  try { const p = JSON.parse(content); return Array.isArray(p) ? p : []; } catch { return []; }
+}
+function docInlineToText(content) {
+  if (typeof content === "string") return content;
+  return (content || []).map(c => (typeof c === "string" ? c : (c.text || ""))).join("");
+}
+function docInlineToMd(content) {
+  if (typeof content === "string") return content;
+  return (content || []).map(c => {
+    if (typeof c === "string") return c;
+    let t = c.text || ""; const s = c.styles || {};
+    if (s.code) t = "`" + t + "`";
+    if (s.bold) t = "**" + t + "**";
+    if (s.italic) t = "*" + t + "*";
+    return t;
+  }).join("");
+}
+function docBlocksToPlainText(blocks) {
+  const out = [];
+  const walk = (arr) => (arr || []).forEach(b => { out.push(docInlineToText(b.content)); if (b.children?.length) walk(b.children); });
+  walk(blocks);
+  return out.join("\n");
+}
+function docBlocksToMarkdown(blocks) {
+  const out = [];
+  const walk = (arr, depth = 0) => (arr || []).forEach(b => {
+    const pad = "  ".repeat(depth); const t = docInlineToMd(b.content);
+    switch (b.type) {
+      case "heading": out.push("#".repeat(b.props?.level || 1) + " " + t); break;
+      case "bulletListItem": out.push(pad + "- " + t); break;
+      case "numberedListItem": out.push(pad + "1. " + t); break;
+      case "checkListItem": out.push(pad + "- [" + (b.props?.checked ? "x" : " ") + "] " + t); break;
+      case "quote": out.push("> " + t); break;
+      case "codeBlock": out.push("```" + (b.props?.language || "") + "\n" + docInlineToText(b.content) + "\n```"); break;
+      default: out.push(t);
+    }
+    if (b.children?.length) walk(b.children, depth + 1);
+  });
+  walk(blocks);
+  return out.join("\n\n");
+}
+function docEscHtml(s) { return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+function docInlineToHtml(content) {
+  if (typeof content === "string") return docEscHtml(content);
+  return (content || []).map(c => {
+    if (typeof c === "string") return docEscHtml(c);
+    let t = docEscHtml(c.text || ""); const s = c.styles || {};
+    if (s.code) t = "<code>" + t + "</code>";
+    if (s.bold) t = "<strong>" + t + "</strong>";
+    if (s.italic) t = "<em>" + t + "</em>";
+    if (s.underline) t = "<u>" + t + "</u>";
+    if (s.strike) t = "<s>" + t + "</s>";
+    return t;
+  }).join("");
+}
+function docBlocksToHtml(blocks) {
+  let html = "";
+  const walk = (arr) => (arr || []).forEach(b => {
+    const t = docInlineToHtml(b.content);
+    if (b.type === "heading") { const l = Math.min(6, b.props?.level || 1); html += `<h${l}>${t}</h${l}>`; }
+    else if (b.type === "bulletListItem") html += `<div class="li">• ${t}</div>`;
+    else if (b.type === "numberedListItem") html += `<div class="li">${t}</div>`;
+    else if (b.type === "checkListItem") html += `<div class="li">${b.props?.checked ? "☑" : "☐"} ${t}</div>`;
+    else if (b.type === "codeBlock") html += `<pre><code>${docInlineToHtml(b.content)}</code></pre>`;
+    else if (b.type === "quote") html += `<blockquote>${t}</blockquote>`;
+    else html += `<p>${t || "<br/>"}</p>`;
+    if (b.children?.length) walk(b.children);
+  });
+  walk(blocks);
+  return html;
+}
+function docDownload(filename, text, mime) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function docExportPDF(title, blocks) {
+  const w = window.open("", "_blank");
+  if (!w) { alert("Bitte Pop-ups erlauben, um als PDF zu exportieren."); return; }
+  const body = docBlocksToHtml(blocks);
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${docEscHtml(title || "Dokument")}</title>
+    <style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:720px;margin:48px auto;padding:0 28px;color:#1a1a2e;line-height:1.6}
+    h1{font-size:30px;margin:0 0 24px}h2{font-size:22px}h3{font-size:18px}p{margin:0 0 12px}.li{margin:0 0 6px}
+    pre{background:#f5f5f7;padding:14px 16px;border-radius:10px;overflow:auto;font-size:13.5px}code{font-family:ui-monospace,Menlo,Consolas,monospace}
+    blockquote{border-left:3px solid #ddd;margin:0 0 12px;padding-left:14px;color:#555}</style></head>
+    <body><h1>${docEscHtml(title || "Unbenanntes Dokument")}</h1>${body}</body></html>`);
+  w.document.close(); w.focus();
+  setTimeout(() => { try { w.print(); } catch (_) {} }, 350);
+}
+const docSafeName = (title) => (title || "Dokument").replace(/[^\wÀ-ɏ\- ]+/g, "").trim().slice(0, 60) || "Dokument";
+
 // Share controls for a document: workspace-wide, specific members, or a project.
 function SharePopover({ doc, ownerProfile, members, shares, projects, theme, darkMode, accent, onClose, onSetVisibility, onSetProject, onToggleShare }) {
+  const [tab, setTab] = useState("share");
   const vis = doc.visibility || "workspace";
   const shareables = (members || []).filter(m => m.user_id !== doc.created_by && m.display_name);
   const Check = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>;
@@ -12285,56 +12382,98 @@ function SharePopover({ doc, ownerProfile, members, shares, projects, theme, dar
       {vis === id && <div style={{ marginTop: 2 }}><Check /></div>}
     </button>
   );
+  const Tab = ({ id, label }) => (
+    <button onClick={() => setTab(id)} style={{ flex: 1, padding: "6px 8px", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12.5, fontWeight: 600, fontFamily: FONT, color: tab === id ? theme.text : theme.textDim, background: tab === id ? (darkMode ? "#1c1c26" : "#fff") : "transparent", boxShadow: tab === id ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>{label}</button>
+  );
+  const ExportRow = ({ icon, label, sub, onClick }) => (
+    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 11, width: "100%", textAlign: "left", padding: "10px 12px", border: "none", borderRadius: 10, cursor: "pointer", background: "transparent" }}
+      onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.06)" : "#f1f2f4"}
+      onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+      <div style={{ color: accent, lineHeight: 0 }}>{icon}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{label}</div>
+        {sub && <div style={{ fontSize: 11.5, color: theme.textDim, fontFamily: FONT }}>{sub}</div>}
+      </div>
+    </button>
+  );
+  const doExport = (kind) => {
+    const blocks = docBlocksFromContent(doc.content);
+    const name = docSafeName(doc.title);
+    const title = (doc.title || "").trim();
+    if (kind === "text") docDownload(`${name}.txt`, (title ? title + "\n\n" : "") + docBlocksToPlainText(blocks), "text/plain;charset=utf-8");
+    else if (kind === "markdown") docDownload(`${name}.md`, (title ? "# " + title + "\n\n" : "") + docBlocksToMarkdown(blocks), "text/markdown;charset=utf-8");
+    else if (kind === "pdf") docExportPDF(doc.title, blocks);
+    onClose();
+  };
   return (
     <div className="doc-share-card" onMouseDown={(e) => e.stopPropagation()}
-      style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 320, zIndex: 40, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14, boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px 6px" }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: FONT }}>Teilen</span>
-        <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: theme.textDim, lineHeight: 0, padding: 2 }}>
+      style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 320, zIndex: 40, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 16, boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden" }}>
+      {/* Tab switcher (Teilen / Exportieren) */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 12px 8px" }}>
+        <div style={{ flex: 1, display: "flex", gap: 4, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.05)" : "#eceef1" }}>
+          <Tab id="share" label="Teilen" />
+          <Tab id="export" label="Exportieren" />
+        </div>
+        <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: theme.textDim, lineHeight: 0, padding: 4 }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
         </button>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 14px 10px", borderBottom: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "#f0f0f3"}` }}>
-        <DocAvatar profile={ownerProfile} accent={accent} />
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{ownerProfile?.display_name || "Unbekannt"}</div>
-          <div style={{ fontSize: 11, color: theme.textDim, fontFamily: FONT }}>Owner</div>
+
+      {tab === "share" && (<>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 14px 10px", borderBottom: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "#f0f0f3"}` }}>
+          <DocAvatar profile={ownerProfile} accent={accent} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{ownerProfile?.display_name || "Unbekannt"}</div>
+            <div style={{ fontSize: 11, color: theme.textDim, fontFamily: FONT }}>Owner</div>
+          </div>
         </div>
-      </div>
-      <div style={{ padding: 6 }}>
-        <Opt id="workspace" label="Ganzer Workspace" desc="Alle Mitglieder können sehen & bearbeiten"
-          icon={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 0 0 18M12 3a14 14 0 0 1 0 18"/></svg>} />
-        <Opt id="restricted" label="Bestimmte Mitglieder" desc="Nur ausgewählte Personen"
-          icon={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg>} />
-        {vis === "restricted" && (
-          <div className="no-scrollbar" style={{ maxHeight: 190, overflowY: "auto", margin: "2px 6px 8px", padding: "2px 0" }}>
-            {shareables.length === 0 && <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, padding: "6px 8px" }}>Keine weiteren Mitglieder</div>}
-            {shareables.map(m => {
-              const on = shares.includes(m.user_id);
-              return (
-                <button key={m.user_id} onClick={() => onToggleShare(m.user_id)} style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left", padding: "6px 8px", border: "none", borderRadius: 8, cursor: "pointer", background: "transparent" }}>
-                  <DocAvatar profile={m} accent={accent} />
-                  <span style={{ flex: 1, fontSize: 13, color: theme.text, fontFamily: FONT }}>{m.display_name}</span>
-                  <span style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${on ? accent : theme.borderFaint}`, background: on ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-        <Opt id="project" label="Projekt" desc="Mitglieder eines Projekts erhalten Zugriff"
-          icon={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>} />
-        {vis === "project" && (
-          <div style={{ padding: "2px 12px 10px" }}>
-            <select value={doc.project_id || ""} onChange={(e) => onSetProject(e.target.value)}
-              style={{ width: "100%", padding: "9px 11px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff", color: theme.text, fontFamily: FONT, fontSize: 13, outline: "none" }}>
-              <option value="">Projekt wählen…</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
-        )}
-      </div>
+        <div style={{ padding: 6 }}>
+          <Opt id="workspace" label="Ganzer Workspace" desc="Alle Mitglieder können sehen & bearbeiten"
+            icon={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 0 0 18M12 3a14 14 0 0 1 0 18"/></svg>} />
+          <Opt id="restricted" label="Bestimmte Mitglieder" desc="Nur ausgewählte Personen"
+            icon={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg>} />
+          {vis === "restricted" && (
+            <div className="no-scrollbar" style={{ maxHeight: 190, overflowY: "auto", margin: "2px 6px 8px", padding: "2px 0" }}>
+              {shareables.length === 0 && <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, padding: "6px 8px" }}>Keine weiteren Mitglieder</div>}
+              {shareables.map(m => {
+                const on = shares.includes(m.user_id);
+                return (
+                  <button key={m.user_id} onClick={() => onToggleShare(m.user_id)} style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left", padding: "6px 8px", border: "none", borderRadius: 8, cursor: "pointer", background: "transparent" }}>
+                    <DocAvatar profile={m} accent={accent} />
+                    <span style={{ flex: 1, fontSize: 13, color: theme.text, fontFamily: FONT }}>{m.display_name}</span>
+                    <span style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${on ? accent : theme.borderFaint}`, background: on ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <Opt id="project" label="Projekt" desc="Mitglieder eines Projekts erhalten Zugriff"
+            icon={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>} />
+          {vis === "project" && (
+            <div style={{ padding: "2px 12px 10px" }}>
+              <select value={doc.project_id || ""} onChange={(e) => onSetProject(e.target.value)}
+                style={{ width: "100%", padding: "9px 11px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff", color: theme.text, fontFamily: FONT, fontSize: 13, outline: "none" }}>
+                <option value="">Projekt wählen…</option>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+      </>)}
+
+      {tab === "export" && (
+        <div style={{ padding: 6 }}>
+          <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textFaint || theme.textDim, letterSpacing: 1.5, textTransform: "uppercase", padding: "4px 8px 6px" }}>Exportieren als</div>
+          <ExportRow label="Text" sub=".txt" onClick={() => doExport("text")}
+            icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h8M8 9h2"/></svg>} />
+          <ExportRow label="PDF" sub="Druck-/PDF-Dialog" onClick={() => doExport("pdf")}
+            icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h1.5a1.5 1.5 0 0 0 0-3H9zM9 18v-6"/></svg>} />
+          <ExportRow label="Markdown" sub=".md" onClick={() => doExport("markdown")}
+            icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15V9l3 3 3-3v6M17 9v6M17 15l-2-2M17 15l2-2"/></svg>} />
+        </div>
+      )}
     </div>
   );
 }
