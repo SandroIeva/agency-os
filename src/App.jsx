@@ -12270,6 +12270,75 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
   );
 }
 
+// Share controls for a document: workspace-wide, specific members, or a project.
+function SharePopover({ doc, ownerProfile, members, shares, projects, theme, darkMode, accent, onClose, onSetVisibility, onSetProject, onToggleShare }) {
+  const vis = doc.visibility || "workspace";
+  const shareables = (members || []).filter(m => m.user_id !== doc.created_by && m.display_name);
+  const Check = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>;
+  const Opt = ({ id, label, desc, icon }) => (
+    <button onClick={() => onSetVisibility(id)} style={{ display: "flex", gap: 10, alignItems: "flex-start", width: "100%", textAlign: "left", padding: "10px 12px", border: "none", borderRadius: 10, cursor: "pointer", background: vis === id ? (darkMode ? "rgba(255,255,255,0.06)" : "#f1f2f4") : "transparent" }}>
+      <div style={{ marginTop: 1, color: vis === id ? accent : theme.textDim, lineHeight: 0 }}>{icon}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{label}</div>
+        <div style={{ fontSize: 11.5, color: theme.textDim, fontFamily: FONT, lineHeight: 1.4 }}>{desc}</div>
+      </div>
+      {vis === id && <div style={{ marginTop: 2 }}><Check /></div>}
+    </button>
+  );
+  return (
+    <div className="doc-share-card" onMouseDown={(e) => e.stopPropagation()}
+      style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 320, zIndex: 40, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14, boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px 6px" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: FONT }}>Teilen</span>
+        <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: theme.textDim, lineHeight: 0, padding: 2 }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 14px 10px", borderBottom: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "#f0f0f3"}` }}>
+        <DocAvatar profile={ownerProfile} accent={accent} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{ownerProfile?.display_name || "Unbekannt"}</div>
+          <div style={{ fontSize: 11, color: theme.textDim, fontFamily: FONT }}>Owner</div>
+        </div>
+      </div>
+      <div style={{ padding: 6 }}>
+        <Opt id="workspace" label="Ganzer Workspace" desc="Alle Mitglieder können sehen & bearbeiten"
+          icon={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 0 0 18M12 3a14 14 0 0 1 0 18"/></svg>} />
+        <Opt id="restricted" label="Bestimmte Mitglieder" desc="Nur ausgewählte Personen"
+          icon={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg>} />
+        {vis === "restricted" && (
+          <div className="no-scrollbar" style={{ maxHeight: 190, overflowY: "auto", margin: "2px 6px 8px", padding: "2px 0" }}>
+            {shareables.length === 0 && <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, padding: "6px 8px" }}>Keine weiteren Mitglieder</div>}
+            {shareables.map(m => {
+              const on = shares.includes(m.user_id);
+              return (
+                <button key={m.user_id} onClick={() => onToggleShare(m.user_id)} style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left", padding: "6px 8px", border: "none", borderRadius: 8, cursor: "pointer", background: "transparent" }}>
+                  <DocAvatar profile={m} accent={accent} />
+                  <span style={{ flex: 1, fontSize: 13, color: theme.text, fontFamily: FONT }}>{m.display_name}</span>
+                  <span style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${on ? accent : theme.borderFaint}`, background: on ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <Opt id="project" label="Projekt" desc="Mitglieder eines Projekts erhalten Zugriff"
+          icon={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>} />
+        {vis === "project" && (
+          <div style={{ padding: "2px 12px 10px" }}>
+            <select value={doc.project_id || ""} onChange={(e) => onSetProject(e.target.value)}
+              style={{ width: "100%", padding: "9px 11px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff", color: theme.text, fontFamily: FONT, fontSize: 13, outline: "none" }}>
+              <option value="">Projekt wählen…</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Docs tab — Google-Docs-style: a list of workspace documents + a rich-text
 // editor. Documents are stored in brand_documents (org-scoped).
 function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, createNotification, deepLink, createRef, onOpenChange }) {
@@ -12284,6 +12353,9 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
   const [sortMode, setSortMode] = useState("updated"); // "updated" | "name"
   const [comments, setComments] = useState([]); // block comments for the open doc
   const [focusBlockId, setFocusBlockId] = useState(null); // block whose comment to auto-open (deep link)
+  const [projects, setProjects] = useState([]);      // org projects (for "share to project")
+  const [shares, setShares] = useState([]);          // user_ids the open doc is shared with
+  const [shareOpen, setShareOpen] = useState(false); // share popover open
 
   // Open a document from a notification deep-link (mention). Fetch by id so it
   // works even before the list has loaded; then auto-open the mentioned block's
@@ -12347,6 +12419,38 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
     setComments(prev => prev.filter(c => c.id !== id));
   };
 
+  // Projects for the "share to project" option.
+  useEffect(() => {
+    if (!userOrg?.id) return;
+    supabase.from("projects").select("id, name").eq("org_id", userOrg.id).order("name").then(({ data }) => setProjects(data || []));
+  }, [userOrg?.id]);
+  // Explicit per-member shares for the open doc.
+  useEffect(() => {
+    setShareOpen(false);
+    if (!openDoc?.id) { setShares([]); return; }
+    supabase.from("document_shares").select("user_id").eq("document_id", openDoc.id).then(({ data }) => setShares((data || []).map(r => r.user_id)));
+  }, [openDoc?.id]);
+  useEffect(() => {
+    if (!shareOpen) return;
+    const onDown = (e) => { if (!e.target.isConnected) return; if (!e.target.closest(".doc-share-card") && !e.target.closest(".doc-share-btn")) setShareOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [shareOpen]);
+
+  const setDocVisibility = async (v) => { await persist(v === "project" ? { visibility: v } : { visibility: v, project_id: null }); };
+  const setDocProject = async (projectId) => { await persist({ visibility: "project", project_id: projectId || null }); };
+  const toggleShareMember = async (userId) => {
+    if (!openDoc?.id) return;
+    if (shares.includes(userId)) {
+      setShares(prev => prev.filter(u => u !== userId));
+      await supabase.from("document_shares").delete().eq("document_id", openDoc.id).eq("user_id", userId);
+    } else {
+      setShares(prev => [...prev, userId]);
+      await supabase.from("document_shares").insert({ document_id: openDoc.id, user_id: userId });
+      createNotification?.({ userId, type: "comment_mention", title: "Ein Dokument wurde mit dir geteilt", body: `${memberById[session?.user?.id]?.display_name || "Jemand"}: „${openDoc.title || "Unbenanntes Dokument"}"`, metadata: { document_id: openDoc.id, document_title: openDoc.title } });
+    }
+  };
+
   const load = async () => {
     if (!userOrg?.id) { setLoading(false); return; }
     const { data } = await supabase.from("brand_documents").select("*").eq("org_id", userOrg.id).order("updated_at", { ascending: false });
@@ -12359,8 +12463,12 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
 
   const createDoc = async () => {
     if (!userOrg?.id) return;
+    // Personal default visibility (Settings → Darstellung); "private" maps to a
+    // restricted doc with no shares yet (owner-only).
+    let pref = "workspace"; try { pref = localStorage.getItem("agencyos-doc-default-visibility") || "workspace"; } catch (_) {}
+    const visibility = pref === "private" ? "restricted" : "workspace";
     const { data, error } = await supabase.from("brand_documents")
-      .insert({ org_id: userOrg.id, title: "Unbenanntes Dokument", content: "", created_by: session?.user?.id })
+      .insert({ org_id: userOrg.id, title: "Unbenanntes Dokument", content: "", created_by: session?.user?.id, visibility })
       .select().single();
     if (error) { alert("Dokument konnte nicht erstellt werden: " + error.message); return; }
     setDocs(prev => [data, ...prev]);
@@ -12415,7 +12523,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
     return (
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 0 60px" }}>
         <div style={{ width: "100%", padding: "0 30px", boxSizing: "border-box" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18, position: "relative" }}>
             <BackLink theme={theme} onClick={() => { setOpenDoc(null); load(); }} label="Alle Dokumente" />
             <div style={{ flex: 1 }} />
             <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, display: "flex", alignItems: "center", gap: 6 }}>
@@ -12425,6 +12533,25 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
                 <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00B894" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>{"Alle Änderungen gespeichert"}</>
               )}
             </span>
+            {/* Owner (creator) of the document */}
+            <div title={`Owner: ${memberById[openDoc.created_by]?.display_name || "Unbekannt"}`} style={{ display: "flex", alignItems: "center" }}>
+              <DocAvatar profile={memberById[openDoc.created_by] || {}} accent={accent} />
+            </div>
+            {/* Share — only the owner (or admin) can change sharing */}
+            {(openDoc.created_by === session?.user?.id || userOrg?.role === "admin") && (
+              <button className="doc-share-btn" onClick={(e) => { e.stopPropagation(); setShareOpen(o => !o); }}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 9, border: "none", cursor: "pointer", background: accent, color: "#fff", fontSize: 12.5, fontWeight: 600, fontFamily: FONT }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
+                Teilen
+              </button>
+            )}
+            {shareOpen && (
+              <SharePopover doc={openDoc} ownerProfile={memberById[openDoc.created_by] || {}}
+                members={Object.values(memberById)} shares={shares} projects={projects}
+                theme={theme} darkMode={darkMode} accent={accent}
+                onClose={() => setShareOpen(false)}
+                onSetVisibility={setDocVisibility} onSetProject={setDocProject} onToggleShare={toggleShareMember} />
+            )}
           </div>
           {/* Writing area gets more side padding than the back/save bar */}
           <div style={{ padding: "24px 40px 0" }}>
@@ -16920,6 +17047,9 @@ export default function CircularMenu() {
 
   // Persist dark mode preference
   useEffect(() => { localStorage.setItem("agencyos-dark-mode", JSON.stringify(darkMode)); }, [darkMode]);
+  // Personal default visibility for newly created documents (Darstellung).
+  const [docDefaultVisibility, setDocDefaultVisibility] = useState(() => { try { return localStorage.getItem("agencyos-doc-default-visibility") || "workspace"; } catch { return "workspace"; } });
+  useEffect(() => { try { localStorage.setItem("agencyos-doc-default-visibility", docDefaultVisibility); } catch (_) {} }, [docDefaultVisibility]);
 
   // Theme based on dark/light mode
   const theme = darkMode ? {
@@ -22835,6 +22965,48 @@ export default function CircularMenu() {
                       >
                         <option value="de">Deutsch</option>
                         <option value="en">English</option>
+                      </select>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                        style={{ position: "absolute", right: 8, pointerEvents: "none" }}>
+                        <path d="M6 9l6 6 6-6" stroke={darkMode ? "#ffffff60" : "#1a1a2e60"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Default document visibility (personal preference) */}
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: "16px 20px",
+                    borderBottom: `1px solid ${theme.borderFaint}`,
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.svgStroke} strokeWidth="1.5">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{appLanguage === "de" ? "Neue Dokumente" : "New documents"}</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{appLanguage === "de" ? "Standard-Sichtbarkeit beim Erstellen" : "Default visibility on creation"}</div>
+                    </div>
+                    <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                      <select
+                        value={docDefaultVisibility}
+                        onChange={(e) => setDocDefaultVisibility(e.target.value)}
+                        style={{
+                          padding: "6px 28px 6px 12px", borderRadius: 12,
+                          background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
+                          border: `1px solid ${theme.borderFaint}`,
+                          color: theme.text, fontSize: 13, fontFamily: FONT,
+                          cursor: "pointer", outline: "none",
+                          appearance: "none", WebkitAppearance: "none", MozAppearance: "none",
+                        }}
+                      >
+                        <option value="workspace">{appLanguage === "de" ? "Ganzer Workspace" : "Whole workspace"}</option>
+                        <option value="private">{appLanguage === "de" ? "Privat (nur ich)" : "Private (only me)"}</option>
                       </select>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
                         style={{ position: "absolute", right: 8, pointerEvents: "none" }}>
