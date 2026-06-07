@@ -11983,7 +11983,14 @@ function CommentToolbarButton({ editor, onComment }) {
   const Components = useComponentsContext();
   return (
     <Components.FormattingToolbar.Button mainTooltip="Kommentieren"
-      onClick={() => { try { const b = editor.getTextCursorPosition().block; if (b) onComment(b.id); } catch (_) {} }}>
+      onClick={() => {
+        try {
+          // Highlight the selected text so it's visible what the comment refers to.
+          editor.addStyles({ backgroundColor: "yellow" });
+          const b = editor.getTextCursorPosition().block;
+          if (b) onComment(b.id);
+        } catch (_) {}
+      }}>
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
     </Components.FormattingToolbar.Button>
   );
