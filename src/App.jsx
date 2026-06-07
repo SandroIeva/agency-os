@@ -11934,6 +11934,9 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, createRef }) {
   const [title, setTitle] = useState("");
   const [saveState, setSaveState] = useState(""); // "saving" | "saved" | ""
   const titleTimer = useRef(null);
+  const [viewMode, setViewMode] = useState("grid"); // "grid" (Kachel) | "list"
+  const [search, setSearch] = useState("");
+  const [sortMode, setSortMode] = useState("updated"); // "updated" | "name"
 
   const load = async () => {
     if (!userOrg?.id) { setLoading(false); return; }
@@ -12003,32 +12006,83 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, createRef }) {
   }
 
   // ── LIST ──
+  const visibleDocs = docs
+    .filter(d => (d.title || "").toLowerCase().includes(search.trim().toLowerCase()))
+    .slice()
+    .sort((a, b) => sortMode === "name"
+      ? (a.title || "").localeCompare(b.title || "", "de")
+      : new Date(b.updated_at) - new Date(a.updated_at));
+  const docIcon = (size) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg>
+  );
+  const delBtn = (d) => (
+    <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => deleteDoc(d.id, e)} title="Löschen"
+      style={{ width: 24, height: 24, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, flexShrink: 0 }}>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+    </motion.div>
+  );
+  const viewBtn = (mode, title, children) => {
+    const on = viewMode === mode;
+    return (
+      <motion.div whileTap={{ scale: 0.92 }} onClick={() => setViewMode(mode)} title={title}
+        style={{ width: 32, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+          background: on ? (darkMode ? "rgba(255,255,255,0.10)" : "#fff") : "transparent", color: on ? theme.text : theme.textDim,
+          boxShadow: on ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>{children}</motion.div>
+    );
+  };
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
+      {/* Toolbar: search · sort · view toggle */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, maxWidth: 340 }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Dokumente durchsuchen…"
+            style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }} />
+        </div>
+        <div style={{ flex: 1 }} />
+        <motion.div whileTap={{ scale: 0.96 }} onClick={() => setSortMode(m => m === "updated" ? "name" : "updated")}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, whiteSpace: "nowrap" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+          {sortMode === "name" ? "Name" : "Zuletzt geändert"}
+        </motion.div>
+        <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+          {viewBtn("grid", "Kachelansicht", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>)}
+          {viewBtn("list", "Listenansicht", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>)}
+        </div>
+      </div>
+
       {loading ? (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 60, color: theme.textDim, fontSize: 13, fontFamily: FONT }}>Lädt…</div>
-      ) : docs.length === 0 ? (
+      ) : visibleDocs.length === 0 ? (
         <div style={{ textAlign: "center", padding: "60px 20px" }}>
-          <div style={{ fontSize: 16, fontFamily: FONT, color: theme.text, marginBottom: 6 }}>Noch keine Dokumente</div>
-          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>Klicke auf „Neues Dokument", um loszulegen.</div>
+          <div style={{ fontSize: 16, fontFamily: FONT, color: theme.text, marginBottom: 6 }}>{search ? "Keine Treffer" : "Noch keine Dokumente"}</div>
+          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{search ? "Versuche einen anderen Suchbegriff." : "Klicke auf „Neues Dokument", um loszulegen."}</div>
         </div>
-      ) : (
+      ) : viewMode === "grid" ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
-          {docs.map(d => (
+          {visibleDocs.map(d => (
             <motion.div key={d.id} whileHover={{ y: -3 }} onClick={() => { setOpenDoc(d); setTitle(d.title || ""); }}
               style={{ position: "relative", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)", padding: 18, cursor: "pointer", minHeight: 132, display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 9, background: accent + "1f", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg>
-                </div>
+                <div style={{ width: 32, height: 32, borderRadius: 9, background: accent + "1f", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16)}</div>
                 <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || "Unbenanntes Dokument"}</div>
-                <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => deleteDoc(d.id, e)} title="Löschen"
-                  style={{ width: 24, height: 24, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, flexShrink: 0 }}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-                </motion.div>
+                {delBtn(d)}
               </div>
               <div style={{ flex: 1, fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, overflow: "hidden" }}>{snippet(d.content) || "Leeres Dokument"}</div>
               <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textFaint }}>{fmtDate(d.updated_at)}</div>
+            </motion.div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", borderRadius: 14, border: `1px solid ${theme.borderFaint}`, overflow: "hidden" }}>
+          {visibleDocs.map((d, i) => (
+            <motion.div key={d.id} whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }} onClick={() => { setOpenDoc(d); setTitle(d.title || ""); }}
+              style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", cursor: "pointer", borderBottom: i < visibleDocs.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
+              <div style={{ width: 30, height: 30, borderRadius: 8, background: accent + "1f", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(15)}</div>
+              <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, flexShrink: 0, maxWidth: 240, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || "Unbenanntes Dokument"}</div>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 12, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{snippet(d.content) || "Leeres Dokument"}</div>
+              <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, flexShrink: 0 }}>{fmtDate(d.updated_at)}</div>
+              {delBtn(d)}
             </motion.div>
           ))}
         </div>
