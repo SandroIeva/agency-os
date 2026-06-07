@@ -23381,10 +23381,11 @@ export default function CircularMenu() {
           --bn-colors-editor-background: transparent;
         }
         .doc-blocknote .ProseMirror { background: transparent !important; }
-        /* Medium-like breathing room between blocks (~16px). Keep the top padding
-           small so the first text line stays vertically aligned with the centered
-           side-menu (drag + plus); put the spacing on the bottom instead. */
-        .doc-blocknote .bn-block-content { padding: 2px 0 14px; }
+        /* Medium-like breathing room between blocks (~16px). Only set the BOTTOM
+           padding — BlockNote's per-block-type top padding (e.g. headings get
+           padding-top:18px) is what its calibrated side-menu heights rely on to
+           sit on the first text line, so we must not clobber it with a shorthand. */
+        .doc-blocknote .bn-block-content { padding-bottom: 14px; }
         /* Give the hover side-menu (drag handle + plus) a bit more gap from text. */
         .doc-blocknote .bn-side-menu { transform: translateX(-8px); }
         .hover-row {
