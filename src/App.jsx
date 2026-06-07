@@ -117,7 +117,7 @@ const WS_ROLE_PRESETS = {
   branddesigner:  { can_edit_brand: true,  can_edit_design: true,  can_create_projects: false, can_manage_projects: false, can_create_sprints: false, can_manage_sprints: false, can_invite_members: false },
   projektmanager: { can_edit_brand: false, can_edit_design: false, can_create_projects: true,  can_manage_projects: true,  can_create_sprints: true,  can_manage_sprints: true,  can_invite_members: true  },
 };
-const WS_ROLE_LABELS = { member: "Mitglied", branddesigner: "Branddesigner", projektmanager: "Projektmanager" };
+const WS_ROLE_LABELS = { member: "Teammitglied", branddesigner: "Branddesigner", projektmanager: "Projektmanager" };
 // Given a member's flags, return the matching preset key or "custom".
 const deriveWsRole = (m) => {
   for (const role of Object.keys(WS_ROLE_PRESETS)) {
@@ -23134,10 +23134,10 @@ export default function CircularMenu() {
                       const isAdminRow = m.role === "admin";
                       const wsRole = isAdminRow ? "admin" : deriveWsRole(m);
                       const roleLabel = isAdminRow
-                        ? (appLanguage === "de" ? "Admin · alle Rechte" : "Admin · all rights")
+                        ? "Admin"
                         : (wsRole === "custom" ? (appLanguage === "de" ? "Individuell" : "Custom") : WS_ROLE_LABELS[wsRole]);
                       const expanded = expandedMemberId === m.user_id;
-                      const expandable = isOrgAdmin && !isAdminRow;
+                      const expandable = isOrgAdmin; // admins too — but their row is read-only
                       return (
                         <div key={m.user_id || i} style={{ borderBottom: i < orgMembers.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
                           <div
@@ -23171,7 +23171,8 @@ export default function CircularMenu() {
                                 style={{ overflow: "hidden" }}
                               >
                                 <div style={{ padding: "4px 0 16px", display: "flex", flexDirection: "column", gap: 14 }}>
-                                  {/* Role presets */}
+                                  {/* Role presets — editable members only (admin row is read-only) */}
+                                  {!isAdminRow && (
                                   <div>
                                     <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 600, marginBottom: 8 }}>{appLanguage === "de" ? "Rolle" : "Role"}</div>
                                     <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
@@ -23191,15 +23192,16 @@ export default function CircularMenu() {
                                       )}
                                     </div>
                                   </div>
-                                  {/* Granular permissions */}
+                                  )}
+                                  {/* Granular permissions — admins have all (read-only) */}
                                   <div>
-                                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 600, marginBottom: 8 }}>{appLanguage === "de" ? "Berechtigungen" : "Permissions"}</div>
+                                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 600, marginBottom: 8 }}>{appLanguage === "de" ? "Berechtigungen" : "Permissions"}{isAdminRow ? (appLanguage === "de" ? " · Admin hat alle Rechte" : " · admin has all rights") : ""}</div>
                                     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                                       {WS_PERMISSIONS.map(perm => {
-                                        const checked = !!m[perm.key];
+                                        const checked = isAdminRow ? true : !!m[perm.key];
                                         return (
-                                          <div key={perm.key} onClick={() => updateMember(m.user_id, { [perm.key]: !checked, workspace_role: deriveWsRole({ ...m, [perm.key]: !checked }) })}
-                                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", cursor: "pointer" }}>
+                                          <div key={perm.key} onClick={isAdminRow ? undefined : () => updateMember(m.user_id, { [perm.key]: !checked, workspace_role: deriveWsRole({ ...m, [perm.key]: !checked }) })}
+                                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", cursor: isAdminRow ? "default" : "pointer", opacity: isAdminRow ? 0.85 : 1 }}>
                                             <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
                                               background: checked ? theme.accent : "transparent", border: `1.5px solid ${checked ? theme.accent : theme.borderFaint}` }}>
                                               {checked && <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg>}
