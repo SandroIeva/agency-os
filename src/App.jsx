@@ -12048,7 +12048,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, createRef, onOp
   if (openDoc) {
     return (
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 0 60px" }}>
-        <div style={{ maxWidth: 760, margin: "0 auto", padding: "0 30px" }}>
+        <div style={{ width: "100%", padding: "0 30px", boxSizing: "border-box" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
             <BackLink theme={theme} onClick={() => { setOpenDoc(null); load(); }} label="Alle Dokumente" />
             <div style={{ flex: 1 }} />
