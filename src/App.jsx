@@ -11087,7 +11087,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, canEdit
 // a Grid (overview of everything) and a freeform Canvas (drag images around).
 // Images upload to the public brand-assets bucket so their URLs can later be
 // reused as reference inputs for image/video generation (Higgsfield etc.).
-function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
+function AssetsView({ onBack, session, userOrg, theme, darkMode, t, orgMembers, createNotification }) {
   // Assets has three tabs: Moodboards (curated boards), Creations (your generated
   // outputs) and Inspirations (saved references).
   const [tab, setTab] = useState("moodboards");
@@ -11383,7 +11383,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
 
           {/* ── DOCS tab ── */}
           {tab === "docs" && (
-            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} createRef={docsCreate} onOpenChange={setDocOpen} />
+            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} orgMembers={orgMembers} createNotification={createNotification} createRef={docsCreate} onOpenChange={setDocOpen} />
           )}
 
           {/* ── MOODBOARDS tab (boards grid) ── */}
@@ -11937,9 +11937,179 @@ function RichTextEditor({ initialHTML, theme, darkMode, onSave, onCancel }) {
 // Document editor — Notion/Craft-style block editor (BlockNote): drag-to-
 // reorder blocks, "+" / slash block menu, images, headings, lists. Content is
 // stored as BlockNote block JSON and autosaved (debounced) on change.
-function DocEditor({ initialHTML, theme, darkMode, onChange }) {
+// Short relative time, German.
+function docTimeAgo(ts) {
+  try {
+    const s = (Date.now() - new Date(ts).getTime()) / 1000;
+    if (s < 60) return "gerade eben";
+    if (s < 3600) return Math.floor(s / 60) + " Min.";
+    if (s < 86400) return Math.floor(s / 3600) + " Std.";
+    if (s < 604800) return Math.floor(s / 86400) + " T.";
+    return new Date(ts).toLocaleDateString("de-DE", { day: "2-digit", month: "short" });
+  } catch { return ""; }
+}
+
+function DocAvatar({ profile, accent }) {
+  const name = profile?.display_name || profile?.email || "?";
+  const initials = profile?.initials || name.split(" ").map(w => w[0]).filter(Boolean).join("").slice(0, 2).toUpperCase();
+  if (profile?.avatar_url) return <img src={profile.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />;
+  return <div style={{ width: 24, height: 24, borderRadius: "50%", flexShrink: 0, background: accent, color: "#fff", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{initials}</div>;
+}
+
+// Comment thread + composer for a single block. Supports @mentions of teammates
+// and speech-to-text dictation (same SpeechRecognition approach used elsewhere).
+function CommentPopover({ block, comments, memberById, mentionables, currentUserId, theme, darkMode, accent, onClose, onSubmit, onDelete }) {
+  const [text, setText] = useState("");
+  const [mentionState, setMentionState] = useState(null); // { query, start } | null
+  const [pickIdx, setPickIdx] = useState(0);
+  const [selected, setSelected] = useState([]); // [{ user_id, name }]
+  const [isRecording, setIsRecording] = useState(false);
+  const recRef = useRef(null);
+  const taRef = useRef(null);
+
+  const filtered = useMemo(() => {
+    if (!mentionState) return [];
+    const q = (mentionState.query || "").toLowerCase();
+    return mentionables.filter(m => (m.display_name || "").toLowerCase().includes(q)).slice(0, 6);
+  }, [mentionState, mentionables]);
+
+  const onChangeText = (e) => {
+    const val = e.target.value; const caret = e.target.selectionStart;
+    setText(val);
+    const m = val.slice(0, caret).match(/(?:^|\s)@([\wÀ-ÿ.\-]*)$/);
+    setMentionState(m ? { query: m[1], start: caret - m[1].length - 1 } : null);
+    setPickIdx(0);
+  };
+
+  const insertMention = (member) => {
+    const ta = taRef.current; const caret = ta ? ta.selectionStart : text.length;
+    const start = mentionState ? mentionState.start : caret;
+    const inserted = "@" + member.display_name + " ";
+    const newText = text.slice(0, start) + inserted + text.slice(caret);
+    setText(newText);
+    setSelected(prev => prev.some(s => s.user_id === member.user_id) ? prev : [...prev, { user_id: member.user_id, name: member.display_name }]);
+    setMentionState(null);
+    requestAnimationFrame(() => { if (ta) { ta.focus(); const pos = start + inserted.length; ta.setSelectionRange(pos, pos); } });
+  };
+
+  const submit = () => {
+    const body = text.trim(); if (!body) return;
+    const ids = [...new Set(selected.filter(s => body.includes("@" + s.name)).map(s => s.user_id))];
+    onSubmit(block.id, body, ids);
+    setText(""); setSelected([]); setMentionState(null); stopRec();
+  };
+
+  const onKeyDown = (e) => {
+    if (mentionState && filtered.length) {
+      if (e.key === "ArrowDown") { e.preventDefault(); setPickIdx(i => (i + 1) % filtered.length); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); setPickIdx(i => (i - 1 + filtered.length) % filtered.length); return; }
+      if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); insertMention(filtered[pickIdx]); return; }
+      if (e.key === "Escape") { e.preventDefault(); setMentionState(null); return; }
+    } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); }
+  };
+
+  const startRec = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert("Spracherkennung wird in diesem Browser nicht unterstützt. Bitte verwende Chrome."); return; }
+    if (isRecording) { stopRec(); return; }
+    const rec = new SR(); rec.lang = "de-DE"; rec.continuous = true; rec.interimResults = true;
+    let base = text; let needsSpace = base.length > 0 && !/\s$/.test(base);
+    rec.onresult = (ev) => {
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        if (ev.results[i].isFinal) {
+          let c = ev.results[i][0].transcript.trim();
+          if (c) { base += (needsSpace ? " " : "") + c; needsSpace = true; setText(base); }
+        }
+      }
+    };
+    rec.onerror = (e) => { if (e.error !== "no-speech") console.error("Speech error:", e.error); };
+    rec.onend = () => { setIsRecording(false); recRef.current = null; };
+    rec.start(); recRef.current = rec; setIsRecording(true);
+  };
+  const stopRec = () => { if (recRef.current) { recRef.current.stop(); recRef.current = null; } setIsRecording(false); };
+  useEffect(() => () => stopRec(), []);
+
+  const renderBody = (body, mentionIds) => {
+    const names = (mentionIds || []).map(id => memberById[id]?.display_name).filter(Boolean);
+    if (!names.length) return body;
+    const esc = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const re = new RegExp("(@(?:" + esc.join("|") + "))", "g");
+    return body.split(re).map((part, i) =>
+      part.startsWith("@") && names.includes(part.slice(1))
+        ? <span key={i} style={{ color: accent, fontWeight: 600 }}>{part}</span>
+        : <span key={i}>{part}</span>);
+  };
+
+  const inputBg = darkMode ? "rgba(255,255,255,0.06)" : "#f4f5f7";
+  return (
+    <div className="doc-anno-pop-card" style={{ background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint || (darkMode ? "rgba(255,255,255,0.1)" : "#e6e7eb")}`, boxShadow: "0 16px 44px rgba(0,0,0,0.18)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px 8px" }}>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: theme.text, fontFamily: FONT }}>Kommentare</span>
+        <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: theme.textDim, lineHeight: 0, padding: 2 }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      {comments.length > 0 && (
+        <div style={{ maxHeight: 240, overflowY: "auto", padding: "0 14px 4px" }} className="no-scrollbar">
+          {comments.map(c => {
+            const author = memberById[c.author_id] || {};
+            return (
+              <div key={c.id} style={{ display: "flex", gap: 9, padding: "8px 0", borderTop: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "#f0f0f3"}` }}>
+                <DocAvatar profile={author} accent={accent} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{author.display_name || "Unbekannt"}</span>
+                    <span style={{ fontSize: 11, color: theme.textDim, fontFamily: FONT }}>{docTimeAgo(c.created_at)}</span>
+                    {c.author_id === currentUserId && (
+                      <button onClick={() => onDelete(c.id)} title="Löschen" style={{ marginLeft: "auto", border: "none", background: "transparent", cursor: "pointer", color: theme.textDim, lineHeight: 0, padding: 2 }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg>
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 13, color: theme.text, fontFamily: FONT, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{renderBody(c.body, c.mentions)}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div style={{ position: "relative", padding: "8px 14px 12px" }}>
+        <textarea ref={taRef} value={text} onChange={onChangeText} onKeyDown={onKeyDown} autoFocus
+          placeholder="Kommentar schreiben… @ für Erwähnung"
+          style={{ width: "100%", boxSizing: "border-box", resize: "none", minHeight: 60, border: "none", outline: "none", background: inputBg, borderRadius: 10, padding: "10px 38px 10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.5 }} />
+        <button onClick={startRec} title={isRecording ? "Diktat stoppen" : "Diktieren"}
+          style={{ position: "absolute", right: 22, top: 16, border: "none", background: isRecording ? accent : "transparent", color: isRecording ? "#fff" : theme.textDim, cursor: "pointer", borderRadius: 8, padding: 5, lineHeight: 0, display: "flex" }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.6"/><path d="M5 10a7 7 0 0014 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><path d="M12 17v4M8 21h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+        </button>
+        {mentionState && filtered.length > 0 && (
+          <div className="no-scrollbar" style={{ position: "absolute", left: 14, right: 14, bottom: 50, maxHeight: 180, overflowY: "auto", background: darkMode ? "#23232f" : "#fff", border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "#e6e7eb"}`, borderRadius: 10, boxShadow: "0 12px 32px rgba(0,0,0,0.18)", zIndex: 5, padding: 4 }}>
+            {filtered.map((m, i) => (
+              <div key={m.user_id} onMouseDown={(e) => { e.preventDefault(); insertMention(m); }}
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8, cursor: "pointer", background: i === pickIdx ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent" }}>
+                <DocAvatar profile={m} accent={accent} />
+                <span style={{ fontSize: 13, color: theme.text, fontFamily: FONT }}>{m.display_name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+          <button onClick={submit} disabled={!text.trim()}
+            style={{ border: "none", background: text.trim() ? accent : (darkMode ? "rgba(255,255,255,0.1)" : "#e6e7eb"), color: text.trim() ? "#fff" : theme.textDim, cursor: text.trim() ? "pointer" : "default", borderRadius: 9, padding: "7px 16px", fontSize: 12.5, fontWeight: 600, fontFamily: FONT }}>
+            Kommentieren
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = [], memberById = {}, mentionables = [], currentUserId, onAddComment, onDeleteComment }) {
   const timer = useRef(null);
   const wrapRef = useRef(null);
+  const moveRaf = useRef(0);
+  const [blockMeta, setBlockMeta] = useState([]); // [{ id, centerY }]
+  const [hoveredId, setHoveredId] = useState(null);
+  const [openId, setOpenId] = useState(null);
   // Parse stored block JSON; tolerate empty/legacy (HTML) content → start fresh.
   const initialContent = useMemo(() => {
     if (!initialHTML) return undefined;
@@ -11948,66 +12118,134 @@ function DocEditor({ initialHTML, theme, darkMode, onChange }) {
   }, []);
   const editor = useCreateBlockNote({ initialContent, dictionary: blockNoteDe });
 
-  // Line-number gutters for code blocks. BlockNote renders a code block as a
-  // single <pre><code> with raw "\n" newlines and strips any DOM injected into
-  // its managed subtree, so we render the gutters in an overlay layer that is a
-  // sibling of the editor (outside ProseMirror) and position each one over its
-  // code block. white-space:pre means logical lines == visual rows, so numbers
-  // line up. Re-synced on edit + resize (no scroll listener needed — the layer
-  // lives inside the same scrolling content as the editor).
-  const syncGutters = useCallback(() => {
+  const countByBlock = useMemo(() => {
+    const m = {}; comments.forEach(c => { m[c.block_id] = (m[c.block_id] || 0) + 1; }); return m;
+  }, [comments]);
+
+  // Sync overlays: (1) line-number gutters for code blocks (BlockNote strips DOM
+  // injected into its managed subtree, so gutters live in a sibling layer), and
+  // (2) per-block metadata for the right-side comment controls. Re-synced on
+  // edit + resize; lives inside the same scrolling content, so no scroll handler.
+  const syncOverlays = useCallback(() => {
     const wrap = wrapRef.current; if (!wrap) return;
-    const layer = wrap.querySelector(":scope > .cb-gutter-layer"); if (!layer) return;
     const wrapRect = wrap.getBoundingClientRect();
-    const blocks = wrap.querySelectorAll(".bn-block-content[data-content-type=codeBlock]");
-    layer.innerHTML = "";
-    blocks.forEach((cb) => {
-      const pre = cb.querySelector("pre"); const code = cb.querySelector("code");
-      if (!pre || !code) return;
-      const n = Math.max(1, code.textContent.split("\n").length);
-      const r = cb.getBoundingClientRect(); const pcs = getComputedStyle(pre);
-      const g = document.createElement("div");
-      g.className = "cb-gutter";
-      g.style.top = (r.top - wrapRect.top) + "px";
-      g.style.left = (r.left - wrapRect.left) + "px";
-      g.style.height = r.height + "px";
-      g.style.paddingTop = pcs.paddingTop;
-      g.style.lineHeight = pcs.lineHeight;
-      g.style.fontSize = pcs.fontSize;
-      let html = ""; for (let i = 1; i <= n; i++) html += "<div>" + i + "</div>";
-      g.innerHTML = html;
-      layer.appendChild(g);
+    const layer = wrap.querySelector(":scope > .cb-gutter-layer");
+    if (layer) {
+      layer.innerHTML = "";
+      wrap.querySelectorAll(".bn-block-content[data-content-type=codeBlock]").forEach((cb) => {
+        const pre = cb.querySelector("pre"); const code = cb.querySelector("code");
+        if (!pre || !code) return;
+        const n = Math.max(1, code.textContent.split("\n").length);
+        const r = cb.getBoundingClientRect(); const pcs = getComputedStyle(pre);
+        const g = document.createElement("div");
+        g.className = "cb-gutter";
+        g.style.top = (r.top - wrapRect.top) + "px";
+        g.style.left = (r.left - wrapRect.left) + "px";
+        g.style.height = r.height + "px";
+        g.style.paddingTop = pcs.paddingTop; g.style.lineHeight = pcs.lineHeight; g.style.fontSize = pcs.fontSize;
+        let html = ""; for (let i = 1; i <= n; i++) html += "<div>" + i + "</div>";
+        g.innerHTML = html; layer.appendChild(g);
+      });
+    }
+    const meta = [];
+    wrap.querySelectorAll(".bn-block-outer[data-id]").forEach((bo) => {
+      const id = bo.getAttribute("data-id"); if (!id) return;
+      const content = bo.querySelector(":scope > .bn-block > .bn-block-content") || bo.querySelector(".bn-block-content");
+      let centerY;
+      try { const rects = (content || bo).getClientRects(); if (rects.length) centerY = rects[0].top + rects[0].height / 2 - wrapRect.top; } catch (_) {}
+      if (centerY == null) { const r = bo.getBoundingClientRect(); centerY = r.top - wrapRect.top + 16; }
+      meta.push({ id, centerY });
     });
+    setBlockMeta(meta);
   }, []);
 
   useEffect(() => {
     const wrap = wrapRef.current; if (!wrap) return;
-    const raf = requestAnimationFrame(syncGutters);
-    const t1 = setTimeout(syncGutters, 120);
-    const t2 = setTimeout(syncGutters, 450);
-    const ro = new ResizeObserver(() => syncGutters());
+    const raf = requestAnimationFrame(syncOverlays);
+    const t1 = setTimeout(syncOverlays, 120);
+    const t2 = setTimeout(syncOverlays, 450);
+    const ro = new ResizeObserver(() => syncOverlays());
     ro.observe(wrap);
-    window.addEventListener("resize", syncGutters);
-    return () => { cancelAnimationFrame(raf); clearTimeout(t1); clearTimeout(t2); ro.disconnect(); window.removeEventListener("resize", syncGutters); };
-  }, [syncGutters]);
+    window.addEventListener("resize", syncOverlays);
+    return () => { cancelAnimationFrame(raf); clearTimeout(t1); clearTimeout(t2); ro.disconnect(); window.removeEventListener("resize", syncOverlays); };
+  }, [syncOverlays]);
+
+  // Re-sync controls when comment counts change (badges appear/disappear).
+  useEffect(() => { syncOverlays(); }, [comments, syncOverlays]);
+
+  // Close the open popover on outside click / Escape.
+  useEffect(() => {
+    if (!openId) return;
+    const onDown = (e) => { if (!e.target.closest(".doc-anno-pop-card") && !e.target.closest(".doc-anno-btn")) setOpenId(null); };
+    const onKey = (e) => { if (e.key === "Escape") setOpenId(null); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [openId]);
+
+  const onMove = (e) => {
+    const cy = e.clientY;
+    cancelAnimationFrame(moveRaf.current);
+    moveRaf.current = requestAnimationFrame(() => {
+      const wrap = wrapRef.current; if (!wrap) return;
+      let found = null, bestH = Infinity;
+      wrap.querySelectorAll(".bn-block-outer[data-id]").forEach((bo) => {
+        const r = bo.getBoundingClientRect();
+        if (cy >= r.top && cy <= r.bottom && r.height < bestH) { bestH = r.height; found = bo.getAttribute("data-id"); }
+      });
+      setHoveredId(prev => prev === found ? prev : found);
+    });
+  };
 
   useEffect(() => () => clearTimeout(timer.current), []);
   const handleChange = () => {
-    syncGutters();
+    syncOverlays();
     clearTimeout(timer.current);
     timer.current = setTimeout(() => { try { onChange(JSON.stringify(editor.document)); } catch (_) {} }, 800);
   };
+
+  const openBlock = blockMeta.find(b => b.id === openId);
   return (
-    <div ref={wrapRef} className="doc-blocknote" style={{ minHeight: 440, position: "relative" }}>
+    <div ref={wrapRef} className="doc-blocknote" style={{ minHeight: 440, position: "relative" }} onMouseMove={onMove} onMouseLeave={() => setHoveredId(null)}>
       <BlockNoteView editor={editor} theme={darkMode ? "dark" : "light"} onChange={handleChange} />
       <div className="cb-gutter-layer" aria-hidden="true" />
+      <div className="doc-anno-layer">
+        {blockMeta.map(b => {
+          const count = countByBlock[b.id] || 0;
+          const show = count > 0 || hoveredId === b.id || openId === b.id;
+          if (!show) return null;
+          const active = openId === b.id;
+          return (
+            <button key={b.id} className="doc-anno-btn" onClick={(e) => { e.stopPropagation(); setOpenId(prev => prev === b.id ? null : b.id); }}
+              title={count > 0 ? "Kommentare ansehen" : "Kommentieren"}
+              style={{ top: b.centerY - 13, color: count > 0 ? accent : theme.textDim, borderColor: active ? accent : (darkMode ? "rgba(255,255,255,0.16)" : "#e0e1e6"), background: darkMode ? "#1c1c26" : "#fff" }}>
+              {count > 0 ? (
+                <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  <span style={{ fontSize: 11, fontWeight: 600, fontFamily: FONT }}>{count}</span>
+                </span>
+              ) : (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg>
+              )}
+            </button>
+          );
+        })}
+        {openBlock && (
+          <div className="doc-anno-pop" style={{ top: Math.max(8, openBlock.centerY + 18) }}>
+            <CommentPopover block={openBlock} comments={comments.filter(c => c.block_id === openId)}
+              memberById={memberById} mentionables={mentionables} currentUserId={currentUserId}
+              theme={theme} darkMode={darkMode} accent={accent}
+              onClose={() => setOpenId(null)} onSubmit={onAddComment} onDelete={onDeleteComment} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 // Docs tab — Google-Docs-style: a list of workspace documents + a rich-text
 // editor. Documents are stored in brand_documents (org-scoped).
-function DocsTab({ session, userOrg, theme, darkMode, accent, t, createRef, onOpenChange }) {
+function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, createNotification, createRef, onOpenChange }) {
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openDoc, setOpenDoc] = useState(null);
@@ -12017,6 +12255,55 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, createRef, onOp
   const [viewMode, setViewMode] = useState("grid"); // "grid" (Kachel) | "list"
   const [search, setSearch] = useState("");
   const [sortMode, setSortMode] = useState("updated"); // "updated" | "name"
+  const [comments, setComments] = useState([]); // block comments for the open doc
+
+  // Resolve author/mention display from the team roster (+ the current user).
+  const memberById = useMemo(() => {
+    const m = {};
+    (orgMembers || []).forEach(om => { if (om.user_id) m[om.user_id] = { user_id: om.user_id, ...(om.profiles || {}) }; });
+    if (session?.user?.id) {
+      m[session.user.id] = m[session.user.id] || {
+        user_id: session.user.id,
+        display_name: session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "Du",
+        avatar_url: session.user.user_metadata?.avatar_url || null,
+        email: session.user.email,
+      };
+    }
+    return m;
+  }, [orgMembers, session?.user?.id]);
+  // Mentionable teammates (exclude self).
+  const mentionables = useMemo(() => Object.values(memberById)
+    .filter(p => p.user_id !== session?.user?.id && p.display_name)
+    .sort((a, b) => (a.display_name || "").localeCompare(b.display_name || "")), [memberById, session?.user?.id]);
+
+  const loadComments = async (docId) => {
+    if (!docId) { setComments([]); return; }
+    const { data } = await supabase.from("document_comments").select("*").eq("document_id", docId).order("created_at", { ascending: true });
+    setComments(data || []);
+  };
+  useEffect(() => { loadComments(openDoc?.id); /* eslint-disable-next-line */ }, [openDoc?.id]);
+
+  const addComment = async (blockId, body, mentions) => {
+    if (!openDoc?.id || !body.trim()) return;
+    const { data, error } = await supabase.from("document_comments")
+      .insert({ document_id: openDoc.id, block_id: blockId, author_id: session?.user?.id, body: body.trim(), mentions: mentions || [] })
+      .select().single();
+    if (error) { alert("Kommentar konnte nicht gespeichert werden: " + error.message); return; }
+    setComments(prev => [...prev, data]);
+    const myName = memberById[session?.user?.id]?.display_name || "Jemand";
+    (mentions || []).forEach(uid => createNotification?.({
+      userId: uid,
+      type: "comment_mention",
+      title: "Du wurdest in einem Kommentar erwähnt",
+      body: `${myName}: ${body.trim().slice(0, 90)}`,
+      metadata: { document_id: openDoc.id, document_title: openDoc.title, block_id: blockId },
+    }));
+  };
+
+  const deleteComment = async (id) => {
+    await supabase.from("document_comments").delete().eq("id", id);
+    setComments(prev => prev.filter(c => c.id !== id));
+  };
 
   const load = async () => {
     if (!userOrg?.id) { setLoading(false); return; }
@@ -12102,7 +12389,9 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, createRef, onOp
             <input value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Ohne Titel"
               style={{ width: "100%", border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 32, fontWeight: 700, fontFamily: FONT, letterSpacing: -0.4, marginBottom: 28 }} />
             <DocEditor key={openDoc.id} initialHTML={openDoc.content} theme={theme} darkMode={darkMode} accent={accent}
-              onChange={(html) => persist({ content: html })} />
+              onChange={(html) => persist({ content: html })}
+              comments={comments} memberById={memberById} mentionables={mentionables}
+              currentUserId={session?.user?.id} onAddComment={addComment} onDeleteComment={deleteComment} />
           </div>
         </div>
       </div>
@@ -20336,7 +20625,7 @@ export default function CircularMenu() {
         {/* ASSETS VIEW (Brand → Assets): Moodboards / Creations / Inspirations */}
         <AnimatePresence>
           {currentView === "assets" && (
-            <AssetsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} />
+            <AssetsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} orgMembers={orgMembers} createNotification={createNotification} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
@@ -23459,6 +23748,20 @@ export default function CircularMenu() {
           overflow: hidden;
         }
         .doc-blocknote .cb-gutter > div { padding-right: 10px; }
+        /* Per-block comment controls (right side) + popover. */
+        .doc-blocknote .doc-anno-layer { position: absolute; inset: 0; pointer-events: none; }
+        .doc-blocknote .doc-anno-btn {
+          position: absolute; right: 0; width: 26px; height: 26px;
+          display: flex; align-items: center; justify-content: center;
+          border: 1px solid; border-radius: 50%; cursor: pointer;
+          pointer-events: auto; padding: 0; line-height: 0;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+          transition: background 0.15s, border-color 0.15s, transform 0.1s;
+        }
+        .doc-blocknote .doc-anno-btn:has(span span) { width: auto; padding: 0 9px; border-radius: 13px; }
+        .doc-blocknote .doc-anno-btn:active { transform: scale(0.94); }
+        .doc-blocknote .doc-anno-pop { position: absolute; right: 0; width: 330px; pointer-events: auto; z-index: 30; }
+        .doc-blocknote .doc-anno-pop-card { border-radius: 14px; overflow: hidden; }
         .hover-row {
           transition: background 0.6s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
