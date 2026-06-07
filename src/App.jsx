@@ -12408,15 +12408,12 @@ function SharePopover({ doc, ownerProfile, members, shares, projects, theme, dar
   return (
     <div className="doc-share-card" onMouseDown={(e) => e.stopPropagation()}
       style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 320, zIndex: 40, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 16, boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden" }}>
-      {/* Tab switcher (Teilen / Exportieren) */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 12px 8px" }}>
+      {/* Tab switcher (Teilen / Exportieren) — closes on outside click */}
+      <div style={{ display: "flex", alignItems: "center", padding: "10px 12px 8px" }}>
         <div style={{ flex: 1, display: "flex", gap: 4, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.05)" : "#eceef1" }}>
           <Tab id="share" label="Teilen" />
           <Tab id="export" label="Exportieren" />
         </div>
-        <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: theme.textDim, lineHeight: 0, padding: 4 }}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-        </button>
       </div>
 
       {tab === "share" && (<>
@@ -12465,12 +12462,11 @@ function SharePopover({ doc, ownerProfile, members, shares, projects, theme, dar
 
       {tab === "export" && (
         <div style={{ padding: 6 }}>
-          <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textFaint || theme.textDim, letterSpacing: 1.5, textTransform: "uppercase", padding: "4px 8px 6px" }}>Exportieren als</div>
-          <ExportRow label="Text" sub=".txt" onClick={() => doExport("text")}
+          <ExportRow label="Text" onClick={() => doExport("text")}
             icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h8M8 9h2"/></svg>} />
-          <ExportRow label="PDF" sub="Druck-/PDF-Dialog" onClick={() => doExport("pdf")}
+          <ExportRow label="PDF" onClick={() => doExport("pdf")}
             icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h1.5a1.5 1.5 0 0 0 0-3H9zM9 18v-6"/></svg>} />
-          <ExportRow label="Markdown" sub=".md" onClick={() => doExport("markdown")}
+          <ExportRow label="Markdown" onClick={() => doExport("markdown")}
             icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15V9l3 3 3-3v6M17 9v6M17 15l-2-2M17 15l2-2"/></svg>} />
         </div>
       )}
