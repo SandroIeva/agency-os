@@ -11939,6 +11939,7 @@ function RichTextEditor({ initialHTML, theme, darkMode, onSave, onCancel }) {
 // stored as BlockNote block JSON and autosaved (debounced) on change.
 function DocEditor({ initialHTML, theme, darkMode, onChange }) {
   const timer = useRef(null);
+  const wrapRef = useRef(null);
   // Parse stored block JSON; tolerate empty/legacy (HTML) content → start fresh.
   const initialContent = useMemo(() => {
     if (!initialHTML) return undefined;
@@ -11946,14 +11947,60 @@ function DocEditor({ initialHTML, theme, darkMode, onChange }) {
     catch { return undefined; }
   }, []);
   const editor = useCreateBlockNote({ initialContent, dictionary: blockNoteDe });
+
+  // Line-number gutters for code blocks. BlockNote renders a code block as a
+  // single <pre><code> with raw "\n" newlines and strips any DOM injected into
+  // its managed subtree, so we render the gutters in an overlay layer that is a
+  // sibling of the editor (outside ProseMirror) and position each one over its
+  // code block. white-space:pre means logical lines == visual rows, so numbers
+  // line up. Re-synced on edit + resize (no scroll listener needed — the layer
+  // lives inside the same scrolling content as the editor).
+  const syncGutters = useCallback(() => {
+    const wrap = wrapRef.current; if (!wrap) return;
+    const layer = wrap.querySelector(":scope > .cb-gutter-layer"); if (!layer) return;
+    const wrapRect = wrap.getBoundingClientRect();
+    const blocks = wrap.querySelectorAll(".bn-block-content[data-content-type=codeBlock]");
+    layer.innerHTML = "";
+    blocks.forEach((cb) => {
+      const pre = cb.querySelector("pre"); const code = cb.querySelector("code");
+      if (!pre || !code) return;
+      const n = Math.max(1, code.textContent.split("\n").length);
+      const r = cb.getBoundingClientRect(); const pcs = getComputedStyle(pre);
+      const g = document.createElement("div");
+      g.className = "cb-gutter";
+      g.style.top = (r.top - wrapRect.top) + "px";
+      g.style.left = (r.left - wrapRect.left) + "px";
+      g.style.height = r.height + "px";
+      g.style.paddingTop = pcs.paddingTop;
+      g.style.lineHeight = pcs.lineHeight;
+      g.style.fontSize = pcs.fontSize;
+      let html = ""; for (let i = 1; i <= n; i++) html += "<div>" + i + "</div>";
+      g.innerHTML = html;
+      layer.appendChild(g);
+    });
+  }, []);
+
+  useEffect(() => {
+    const wrap = wrapRef.current; if (!wrap) return;
+    const raf = requestAnimationFrame(syncGutters);
+    const t1 = setTimeout(syncGutters, 120);
+    const t2 = setTimeout(syncGutters, 450);
+    const ro = new ResizeObserver(() => syncGutters());
+    ro.observe(wrap);
+    window.addEventListener("resize", syncGutters);
+    return () => { cancelAnimationFrame(raf); clearTimeout(t1); clearTimeout(t2); ro.disconnect(); window.removeEventListener("resize", syncGutters); };
+  }, [syncGutters]);
+
   useEffect(() => () => clearTimeout(timer.current), []);
   const handleChange = () => {
+    syncGutters();
     clearTimeout(timer.current);
     timer.current = setTimeout(() => { try { onChange(JSON.stringify(editor.document)); } catch (_) {} }, 800);
   };
   return (
-    <div className="doc-blocknote" style={{ minHeight: 440 }}>
+    <div ref={wrapRef} className="doc-blocknote" style={{ minHeight: 440, position: "relative" }}>
       <BlockNoteView editor={editor} theme={darkMode ? "dark" : "light"} onChange={handleChange} />
+      <div className="cb-gutter-layer" aria-hidden="true" />
     </div>
   );
 }
@@ -23388,6 +23435,30 @@ export default function CircularMenu() {
         .doc-blocknote .bn-block-content { padding-bottom: 14px; }
         /* Give the hover side-menu (drag handle + plus) a bit more gap from text. */
         .doc-blocknote .bn-side-menu { transform: translateX(-8px); }
+        /* Code block — light, rounded, with a line-number gutter (overlay layer). */
+        .doc-blocknote .bn-block-content[data-content-type=codeBlock] {
+          background: ${darkMode ? "rgba(255,255,255,0.05)" : "#f6f7f9"} !important;
+          color: ${darkMode ? "#e8e8ee" : "#1a1a2e"} !important;
+          border: 1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "#e6e7eb"};
+          border-radius: 10px;
+        }
+        .doc-blocknote [data-content-type=codeBlock] > pre {
+          padding: 14px 16px 14px 52px !important;
+          font-size: 13.5px; line-height: 21px;
+          font-family: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+        }
+        .doc-blocknote .cb-gutter-layer { position: absolute; inset: 0; pointer-events: none; }
+        .doc-blocknote .cb-gutter {
+          position: absolute; width: 42px; box-sizing: border-box;
+          text-align: right;
+          font-family: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+          color: ${darkMode ? "rgba(255,255,255,0.30)" : "#b6b8c0"};
+          background: ${darkMode ? "rgba(255,255,255,0.05)" : "#f6f7f9"};
+          border-right: 1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "#e6e7eb"};
+          border-radius: 10px 0 0 10px;
+          overflow: hidden;
+        }
+        .doc-blocknote .cb-gutter > div { padding-right: 10px; }
         .hover-row {
           transition: background 0.6s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
