@@ -5,9 +5,10 @@ import { supabase } from "./supabase";
 import { buildSystemPrompt } from "./systemPrompt";
 import { getTranslation } from "./translations";
 import { openGooglePicker, openGoogleFolderPicker } from "./googlePicker";
-import { useCreateBlockNote } from "@blocknote/react";
+import { useCreateBlockNote, getDefaultReactSlashMenuItems, SuggestionMenuController, createReactBlockSpec } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { de as blockNoteDe } from "@blocknote/core/locales";
+import { BlockNoteSchema, defaultBlockSpecs, filterSuggestionItems } from "@blocknote/core";
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 
@@ -11939,6 +11940,42 @@ function RichTextEditor({ initialHTML, theme, darkMode, onSave, onCancel }) {
 // Document editor — Notion/Craft-style block editor (BlockNote): drag-to-
 // reorder blocks, "+" / slash block menu, images, headings, lists. Content is
 // stored as BlockNote block JSON and autosaved (debounced) on change.
+// Extract the video id from common YouTube URL shapes.
+function ytVideoId(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(url.trim());
+    if (u.hostname.includes("youtu.be")) return u.pathname.slice(1).split("/")[0] || null;
+    if (u.pathname.startsWith("/shorts/")) return u.pathname.split("/")[2] || null;
+    if (u.pathname.startsWith("/embed/")) return u.pathname.split("/")[2] || null;
+    if (u.searchParams.get("v")) return u.searchParams.get("v");
+  } catch (_) {
+    const m = String(url).match(/[\w-]{11}/); return m ? m[0] : null;
+  }
+  return null;
+}
+
+// Custom BlockNote block: an embedded YouTube video.
+const YouTubeBlock = createReactBlockSpec(
+  { type: "youtube", propSchema: { url: { default: "" } }, content: "none" },
+  {
+    render: ({ block }) => {
+      const id = ytVideoId(block.props.url);
+      if (!id) return <div contentEditable={false} style={{ padding: "10px 12px", borderRadius: 8, background: "rgba(0,0,0,0.05)", color: "#888", fontSize: 13, fontFamily: FONT }}>Ungültiger YouTube-Link</div>;
+      return (
+        <div contentEditable={false} style={{ width: "100%", borderRadius: 12, overflow: "hidden", background: "#000" }}>
+          <div style={{ position: "relative", paddingBottom: "56.25%", height: 0 }}>
+            <iframe src={`https://www.youtube-nocookie.com/embed/${id}`} title="YouTube" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: 0 }} />
+          </div>
+        </div>
+      );
+    },
+  }
+);
+
+// Schema = all default blocks + the YouTube embed.
+const docSchema = BlockNoteSchema.create({ blockSpecs: { ...defaultBlockSpecs, youtube: YouTubeBlock } });
+
 // Short relative time, German.
 function docTimeAgo(ts) {
   try {
@@ -12119,11 +12156,59 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
     try { const p = JSON.parse(initialHTML); return Array.isArray(p) && p.length > 0 ? p : undefined; }
     catch { return undefined; }
   }, []);
-  const editor = useCreateBlockNote({ initialContent, dictionary: blockNoteDe });
+  const editor = useCreateBlockNote({ schema: docSchema, initialContent, dictionary: blockNoteDe });
 
   const countByBlock = useMemo(() => {
     const m = {}; comments.forEach(c => { m[c.block_id] = (m[c.block_id] || 0) + 1; }); return m;
   }, [comments]);
+
+  // Dictation directly into the editor (triggered from the slash / "+" menu):
+  // inserts recognised text at the cursor; a floating control stops it.
+  const [dictating, setDictating] = useState(false);
+  const dictRef = useRef(null);
+  const stopEditorDictation = useCallback(() => { if (dictRef.current) { dictRef.current.stop(); dictRef.current = null; } setDictating(false); }, []);
+  const startEditorDictation = useCallback(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert("Spracherkennung wird in diesem Browser nicht unterstützt. Bitte verwende Chrome."); return; }
+    if (dictRef.current) { stopEditorDictation(); return; }
+    const rec = new SR(); rec.lang = "de-DE"; rec.continuous = true; rec.interimResults = false;
+    rec.onresult = (ev) => {
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        if (ev.results[i].isFinal) {
+          let t = ev.results[i][0].transcript.trim();
+          if (t) { t = t.charAt(0).toUpperCase() + t.slice(1); try { editor.insertInlineContent(t + " "); } catch (_) {} }
+        }
+      }
+    };
+    rec.onerror = (e) => { if (e.error !== "no-speech") console.error("Speech error:", e.error); };
+    rec.onend = () => { dictRef.current = null; setDictating(false); };
+    rec.start(); dictRef.current = rec; setDictating(true);
+  }, [editor, stopEditorDictation]);
+  useEffect(() => () => { if (dictRef.current) dictRef.current.stop(); }, []);
+
+  // Slash / "+" menu items: defaults minus audio & file, plus YouTube + dictation.
+  const getSlashItems = useCallback((ed) => {
+    const base = getDefaultReactSlashMenuItems(ed).filter(it => it.key !== "audio" && it.key !== "file");
+    const mediaGroup = base.find(it => it.key === "video")?.group;
+    const youtube = {
+      title: "YouTube", subtext: "YouTube-Video einbetten", aliases: ["youtube", "yt", "video", "embed"], group: mediaGroup, key: "youtube",
+      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M21.6 7.2a2.5 2.5 0 0 0-1.77-1.77C18.25 5 12 5 12 5s-6.25 0-7.83.43A2.5 2.5 0 0 0 2.4 7.2 26 26 0 0 0 2 12a26 26 0 0 0 .4 4.8 2.5 2.5 0 0 0 1.77 1.77C5.75 19 12 19 12 19s6.25 0 7.83-.43a2.5 2.5 0 0 0 1.77-1.77A26 26 0 0 0 22 12a26 26 0 0 0-.4-4.8zM10 15V9l5 3z"/></svg>,
+      onItemClick: () => {
+        const url = window.prompt("YouTube-Link einfügen:");
+        if (!url || !url.trim()) return;
+        const cur = ed.getTextCursorPosition().block;
+        const empty = !cur.content || (Array.isArray(cur.content) && cur.content.length === 0);
+        if (empty) ed.updateBlock(cur, { type: "youtube", props: { url: url.trim() } });
+        else ed.insertBlocks([{ type: "youtube", props: { url: url.trim() } }], cur, "after");
+      },
+    };
+    const dictate = {
+      title: "Diktieren", subtext: "Text per Sprache einfügen", aliases: ["diktieren", "diktat", "sprache", "mikrofon", "voice", "mic"], group: "Aktionen", key: "dictate",
+      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4M8 21h8"/></svg>,
+      onItemClick: () => startEditorDictation(),
+    };
+    return [...base, youtube, dictate];
+  }, [startEditorDictation]);
 
   // Sync overlays: (1) line-number gutters for code blocks (BlockNote strips DOM
   // injected into its managed subtree, so gutters live in a sibling layer), and
@@ -12233,7 +12318,16 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
   const openBlock = blockMeta.find(b => b.id === openId);
   return (
     <div ref={wrapRef} className="doc-blocknote" style={{ minHeight: 440, position: "relative" }} onMouseMove={onMove} onMouseLeave={() => setHoveredId(null)}>
-      <BlockNoteView editor={editor} theme={darkMode ? "dark" : "light"} onChange={handleChange} />
+      <BlockNoteView editor={editor} theme={darkMode ? "dark" : "light"} onChange={handleChange} slashMenu={false}>
+        <SuggestionMenuController triggerCharacter="/" getItems={async (query) => filterSuggestionItems(getSlashItems(editor), query)} />
+      </BlockNoteView>
+      {dictating && (
+        <button onClick={stopEditorDictation}
+          style={{ position: "fixed", bottom: 28, left: "50%", transform: "translateX(-50%)", zIndex: 1000, display: "flex", alignItems: "center", gap: 9, padding: "10px 16px", borderRadius: 999, border: "none", cursor: "pointer", background: accent, color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT, boxShadow: "0 8px 30px rgba(0,0,0,0.25)" }}>
+          <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#fff", animation: "docpulse 1s ease-in-out infinite" }} />
+          Diktat läuft – stoppen
+        </button>
+      )}
       <div className="cb-gutter-layer" aria-hidden="true" />
       <div className="doc-anno-layer">
         {blockMeta.map(b => {
@@ -24080,6 +24174,7 @@ export default function CircularMenu() {
           background-color: ${darkMode ? "rgba(255,255,255,0.24)" : "rgba(0,0,0,0.20)"};
         }
         ::-webkit-scrollbar-corner { background: transparent; }
+        @keyframes docpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         .avatar-edit:hover .avatar-edit-overlay { opacity: 1 !important; }
         /* No blue focus outline on clicked/active elements */
         *:focus, *:focus-visible { outline: none !important; }
