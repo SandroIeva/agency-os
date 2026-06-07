@@ -11086,6 +11086,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
   // Assets has three tabs: Moodboards (curated boards), Creations (your generated
   // outputs) and Inspirations (saved references).
   const [tab, setTab] = useState("moodboards");
+  const [docOpen, setDocOpen] = useState(false); // a document is open in the editor → hide header/tabs
   // Brand identity for the header (logo + name), to stay consistent with the
   // Brand views: "<Brand> Assets".
   const [brand, setBrand] = useState(null);
@@ -11298,6 +11299,8 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
         exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
         style={panelWrap}>
         <div style={card}>
+          {/* Header + tabs — hidden while a document is open in the editor (full-screen writing) */}
+          {!(tab === "docs" && docOpen) && (<>
           {/* Header */}
           <div style={{ padding: "18px 26px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -11348,6 +11351,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
               );
             })}
           </div>
+          </>)}
 
           {/* Inline create (moodboards only) */}
           <AnimatePresence>
@@ -11374,7 +11378,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t }) {
 
           {/* ── DOCS tab ── */}
           {tab === "docs" && (
-            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} createRef={docsCreate} />
+            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} createRef={docsCreate} onOpenChange={setDocOpen} />
           )}
 
           {/* ── MOODBOARDS tab (boards grid) ── */}
@@ -11925,9 +11929,62 @@ function RichTextEditor({ initialHTML, theme, darkMode, onSave, onCancel }) {
   );
 }
 
+// Document editor — clean floating toolbar + contentEditable page that
+// autosaves (debounced) on input/blur. No manual save button.
+function DocEditor({ initialHTML, theme, darkMode, accent, onChange }) {
+  const ref = useRef(null);
+  const timer = useRef(null);
+  const [, force] = useState(0);
+  useEffect(() => { if (ref.current) ref.current.innerHTML = initialHTML || "<p></p>"; /* eslint-disable-next-line */ }, []);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const schedule = () => { clearTimeout(timer.current); timer.current = setTimeout(() => onChange(ref.current?.innerHTML || ""), 800); };
+  const exec = (cmd, val) => { ref.current?.focus(); document.execCommand(cmd, false, val); force(n => n + 1); schedule(); };
+  const isOn = (cmd) => { try { return document.queryCommandState(cmd); } catch { return false; } };
+  const addLink = () => { const url = prompt("Link-URL:"); if (url) exec("createLink", /^https?:\/\//i.test(url) ? url : "https://" + url); };
+  const Divider = () => <div style={{ width: 1, height: 20, background: theme.borderFaint, margin: "0 4px" }} />;
+  const Btn = ({ onClick, active, title, children }) => (
+    <button type="button" title={title} onMouseDown={(e) => e.preventDefault()} onClick={onClick}
+      style={{ minWidth: 30, height: 30, padding: "0 8px", borderRadius: 8, border: "none", cursor: "pointer",
+        background: active ? (darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.07)") : "transparent",
+        color: active ? theme.text : theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600,
+        display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "background 0.12s" }}>{children}</button>
+  );
+  return (
+    <div>
+      {/* Floating formatting toolbar */}
+      <div style={{ display: "inline-flex", flexWrap: "wrap", alignItems: "center", gap: 2, padding: 6, borderRadius: 12,
+        background: darkMode ? "rgba(255,255,255,0.05)" : "#fff", border: `1px solid ${theme.borderFaint}`,
+        boxShadow: darkMode ? "none" : "0 4px 16px rgba(0,0,0,0.06)", marginBottom: 18 }}>
+        <Btn title="Fett (⌘B)" active={isOn("bold")} onClick={() => exec("bold")}><b>B</b></Btn>
+        <Btn title="Kursiv (⌘I)" active={isOn("italic")} onClick={() => exec("italic")}><i>I</i></Btn>
+        <Btn title="Unterstrichen (⌘U)" active={isOn("underline")} onClick={() => exec("underline")}><span style={{ textDecoration: "underline" }}>U</span></Btn>
+        <Btn title="Durchgestrichen" active={isOn("strikeThrough")} onClick={() => exec("strikeThrough")}><span style={{ textDecoration: "line-through" }}>S</span></Btn>
+        <Divider />
+        <Btn title="Überschrift 1" onClick={() => exec("formatBlock", "H1")}>H1</Btn>
+        <Btn title="Überschrift 2" onClick={() => exec("formatBlock", "H2")}>H2</Btn>
+        <Btn title="Überschrift 3" onClick={() => exec("formatBlock", "H3")}>H3</Btn>
+        <Btn title="Absatz" onClick={() => exec("formatBlock", "P")}>¶</Btn>
+        <Divider />
+        <Btn title="Aufzählung" onClick={() => exec("insertUnorderedList")}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
+        </Btn>
+        <Btn title="Nummerierte Liste" onClick={() => exec("insertOrderedList")}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><line x1="10" y1="6" x2="20" y2="6"/><line x1="10" y1="12" x2="20" y2="12"/><line x1="10" y1="18" x2="20" y2="18"/><path d="M4 6h1v4"/><path d="M4 16h2v1l-2 2h2"/></svg>
+        </Btn>
+        <Btn title="Link einfügen" onClick={addLink}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>
+        </Btn>
+      </div>
+      <div ref={ref} contentEditable suppressContentEditableWarning className="brand-rich" onInput={schedule}
+        onBlur={() => { clearTimeout(timer.current); onChange(ref.current?.innerHTML || ""); }}
+        style={{ outline: "none", minHeight: 440, color: theme.text, fontSize: 16, fontFamily: FONT, lineHeight: 1.75 }} />
+    </div>
+  );
+}
+
 // Docs tab — Google-Docs-style: a list of workspace documents + a rich-text
 // editor. Documents are stored in brand_documents (org-scoped).
-function DocsTab({ session, userOrg, theme, darkMode, accent, t, createRef }) {
+function DocsTab({ session, userOrg, theme, darkMode, accent, t, createRef, onOpenChange }) {
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openDoc, setOpenDoc] = useState(null);
@@ -11945,6 +12002,8 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, createRef }) {
     setLoading(false);
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [userOrg?.id]);
+  // Tell AssetsView whether a doc is open (so it can hide the header/tabs).
+  useEffect(() => { onOpenChange?.(!!openDoc); /* eslint-disable-next-line */ }, [openDoc]);
 
   const createDoc = async () => {
     if (!userOrg?.id) return;
@@ -11985,22 +12044,27 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, createRef }) {
   const fmtDate = (ts) => { try { return new Date(ts).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" }); } catch { return ""; } };
   const snippet = (html) => (html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
 
-  // ── EDITOR ──
+  // ── EDITOR (full-screen, autosaving) ──
   if (openDoc) {
     return (
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
-          <BackLink theme={theme} onClick={() => { setOpenDoc(null); load(); }} label="Alle Dokumente" />
-          <div style={{ flex: 1 }} />
-          <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>
-            {saveState === "saving" ? "Speichert…" : saveState === "saved" ? "Gespeichert ✓" : ""}
-          </span>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 0 60px" }}>
+        <div style={{ maxWidth: 760, margin: "0 auto", padding: "0 30px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+            <BackLink theme={theme} onClick={() => { setOpenDoc(null); load(); }} label="Alle Dokumente" />
+            <div style={{ flex: 1 }} />
+            <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, display: "flex", alignItems: "center", gap: 6 }}>
+              {saveState === "saving" ? (
+                <>{"Speichert…"}</>
+              ) : (
+                <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00B894" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>{"Alle Änderungen gespeichert"}</>
+              )}
+            </span>
+          </div>
+          <input value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Ohne Titel"
+            style={{ width: "100%", border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 32, fontWeight: 700, fontFamily: FONT, letterSpacing: -0.4, marginBottom: 14 }} />
+          <DocEditor key={openDoc.id} initialHTML={openDoc.content} theme={theme} darkMode={darkMode} accent={accent}
+            onChange={(html) => persist({ content: html })} />
         </div>
-        <input value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Titel…"
-          style={{ width: "100%", border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 28, fontWeight: 700, fontFamily: FONT, letterSpacing: -0.3, marginBottom: 18 }} />
-        <RichTextEditor key={openDoc.id} initialHTML={openDoc.content} theme={theme} darkMode={darkMode}
-          onSave={(html) => persist({ content: html })}
-          onCancel={() => { setOpenDoc(null); load(); }} />
       </div>
     );
   }
