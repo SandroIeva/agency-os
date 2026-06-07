@@ -24057,11 +24057,11 @@ export default function CircularMenu() {
         ::-webkit-scrollbar { width: 12px; height: 12px; }
         ::-webkit-scrollbar-track { background: transparent; margin: 16px 0; }
         ::-webkit-scrollbar-thumb {
-          background-color: ${darkMode ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.18)"};
+          background-color: ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.11)"};
           border-radius: 10px; border: 3px solid transparent; background-clip: content-box;
         }
         ::-webkit-scrollbar-thumb:hover {
-          background-color: ${darkMode ? "rgba(255,255,255,0.34)" : "rgba(0,0,0,0.30)"};
+          background-color: ${darkMode ? "rgba(255,255,255,0.24)" : "rgba(0,0,0,0.20)"};
         }
         ::-webkit-scrollbar-corner { background: transparent; }
         .avatar-edit:hover .avatar-edit-overlay { opacity: 1 !important; }
