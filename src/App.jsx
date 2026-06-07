@@ -12372,15 +12372,20 @@ function SharePopover({ doc, ownerProfile, members, shares, projects, theme, dar
   const vis = doc.visibility || "workspace";
   const shareables = (members || []).filter(m => m.user_id !== doc.created_by && m.display_name);
   const Check = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>;
-  const Opt = ({ id, label, desc, icon }) => (
-    <button onClick={() => onSetVisibility(id)} style={{ display: "flex", gap: 10, alignItems: "flex-start", width: "100%", textAlign: "left", padding: "10px 12px", border: "none", borderRadius: 10, cursor: "pointer", background: vis === id ? (darkMode ? "rgba(255,255,255,0.06)" : "#f1f2f4") : "transparent" }}>
-      <div style={{ marginTop: 1, color: vis === id ? accent : theme.textDim, lineHeight: 0 }}>{icon}</div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{label}</div>
-        <div style={{ fontSize: 11.5, color: theme.textDim, fontFamily: FONT, lineHeight: 1.4 }}>{desc}</div>
-      </div>
-      {vis === id && <div style={{ marginTop: 2 }}><Check /></div>}
-    </button>
+  // An option whose sub-panel (member list / project select) lives INSIDE the same
+  // highlighted box. Header padding is 12px on both sides so children align to it.
+  const OptBlock = ({ id, label, desc, icon, children }) => (
+    <div style={{ borderRadius: 10, background: vis === id ? (darkMode ? "rgba(255,255,255,0.06)" : "#f1f2f4") : "transparent", marginBottom: 2 }}>
+      <button onClick={() => onSetVisibility(id)} style={{ display: "flex", gap: 10, alignItems: "flex-start", width: "100%", textAlign: "left", padding: "10px 12px", border: "none", borderRadius: 10, cursor: "pointer", background: "transparent" }}>
+        <div style={{ marginTop: 1, color: vis === id ? accent : theme.textDim, lineHeight: 0 }}>{icon}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{label}</div>
+          <div style={{ fontSize: 11.5, color: theme.textDim, fontFamily: FONT, lineHeight: 1.4 }}>{desc}</div>
+        </div>
+        {vis === id && <div style={{ marginTop: 2 }}><Check /></div>}
+      </button>
+      {vis === id && children}
+    </div>
   );
   const Tab = ({ id, label }) => (
     <button onClick={() => setTab(id)} style={{ flex: 1, padding: "6px 8px", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12.5, fontWeight: 600, fontFamily: FONT, color: tab === id ? theme.text : theme.textDim, background: tab === id ? (darkMode ? "#1c1c26" : "#fff") : "transparent", boxShadow: tab === id ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>{label}</button>
@@ -12425,17 +12430,16 @@ function SharePopover({ doc, ownerProfile, members, shares, projects, theme, dar
           </div>
         </div>
         <div style={{ padding: 6 }}>
-          <Opt id="workspace" label="Ganzer Workspace" desc="Alle Mitglieder können sehen & bearbeiten"
+          <OptBlock id="workspace" label="Ganzer Workspace" desc="Alle Mitglieder können sehen & bearbeiten"
             icon={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 0 0 18M12 3a14 14 0 0 1 0 18"/></svg>} />
-          <Opt id="restricted" label="Bestimmte Mitglieder" desc="Nur ausgewählte Personen"
-            icon={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg>} />
-          {vis === "restricted" && (
-            <div className="no-scrollbar" style={{ maxHeight: 190, overflowY: "auto", margin: "2px 6px 8px", padding: "2px 0" }}>
-              {shareables.length === 0 && <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, padding: "6px 8px" }}>Keine weiteren Mitglieder</div>}
+          <OptBlock id="restricted" label="Bestimmte Mitglieder" desc="Nur ausgewählte Personen"
+            icon={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg>}>
+            <div className="no-scrollbar" style={{ maxHeight: 190, overflowY: "auto", padding: "0 0 6px" }}>
+              {shareables.length === 0 && <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, padding: "4px 12px 8px" }}>Keine weiteren Mitglieder</div>}
               {shareables.map(m => {
                 const on = shares.includes(m.user_id);
                 return (
-                  <button key={m.user_id} onClick={() => onToggleShare(m.user_id)} style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left", padding: "6px 8px", border: "none", borderRadius: 8, cursor: "pointer", background: "transparent" }}>
+                  <button key={m.user_id} onClick={() => onToggleShare(m.user_id)} style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left", padding: "6px 12px", border: "none", borderRadius: 8, cursor: "pointer", background: "transparent" }}>
                     <DocAvatar profile={m} accent={accent} />
                     <span style={{ flex: 1, fontSize: 13, color: theme.text, fontFamily: FONT }}>{m.display_name}</span>
                     <span style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${on ? accent : theme.borderFaint}`, background: on ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -12445,18 +12449,22 @@ function SharePopover({ doc, ownerProfile, members, shares, projects, theme, dar
                 );
               })}
             </div>
-          )}
-          <Opt id="project" label="Projekt" desc="Mitglieder eines Projekts erhalten Zugriff"
-            icon={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>} />
-          {vis === "project" && (
-            <div style={{ padding: "2px 12px 10px" }}>
-              <select value={doc.project_id || ""} onChange={(e) => onSetProject(e.target.value)}
-                style={{ width: "100%", padding: "9px 11px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff", color: theme.text, fontFamily: FONT, fontSize: 13, outline: "none" }}>
-                <option value="">Projekt wählen…</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+          </OptBlock>
+          <OptBlock id="project" label="Projekt" desc="Mitglieder eines Projekts erhalten Zugriff"
+            icon={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>}>
+            <div style={{ padding: "0 12px 12px", position: "relative" }}>
+              <div style={{ position: "relative" }}>
+                <select value={doc.project_id || ""} onChange={(e) => onSetProject(e.target.value)}
+                  style={{ width: "100%", padding: "9px 34px 9px 11px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff", color: theme.text, fontFamily: FONT, fontSize: 13, outline: "none", appearance: "none", WebkitAppearance: "none", MozAppearance: "none", cursor: "pointer" }}>
+                  <option value="">Projekt wählen…</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+                  <path d="M6 9l6 6 6-6" stroke={darkMode ? "#ffffff70" : "#1a1a2e70"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
             </div>
-          )}
+          </OptBlock>
         </div>
       </>)}
 
