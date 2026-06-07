@@ -12562,11 +12562,19 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
     setComments(prev => prev.filter(c => c.id !== id));
   };
 
-  // Projects for the "share to project" option.
+  // Projects for the "share to project" option — only the ones the current user
+  // is actually a member of (you can't assign a doc to, or even see, a project
+  // you're not part of), mirroring how ProjectsView scopes projects.
   useEffect(() => {
-    if (!userOrg?.id) return;
-    supabase.from("projects").select("id, name").eq("org_id", userOrg.id).order("name").then(({ data }) => setProjects(data || []));
-  }, [userOrg?.id]);
+    if (!userOrg?.id || !session?.user?.id) { setProjects([]); return; }
+    (async () => {
+      const { data: pm } = await supabase.from("project_members").select("project_id").eq("user_id", session.user.id);
+      const ids = [...new Set((pm || []).map(r => r.project_id))];
+      if (ids.length === 0) { setProjects([]); return; }
+      const { data } = await supabase.from("projects").select("id, name").eq("org_id", userOrg.id).in("id", ids).order("name");
+      setProjects(data || []);
+    })();
+  }, [userOrg?.id, session?.user?.id]);
   // Explicit per-member shares for the open doc.
   useEffect(() => {
     setShareOpen(false);
