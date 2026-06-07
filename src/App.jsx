@@ -12143,7 +12143,7 @@ function CommentPopover({ block, comments, memberById, mentionables, currentUser
   );
 }
 
-function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = [], memberById = {}, mentionables = [], currentUserId, onAddComment, onDeleteComment, focusBlockId }) {
+function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = [], memberById = {}, mentionables = [], currentUserId, onAddComment, onDeleteComment, uploadFile, focusBlockId }) {
   const timer = useRef(null);
   const wrapRef = useRef(null);
   const moveRaf = useRef(0);
@@ -12157,7 +12157,7 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
     try { const p = JSON.parse(initialHTML); return Array.isArray(p) && p.length > 0 ? p : undefined; }
     catch { return undefined; }
   }, []);
-  const editor = useCreateBlockNote({ schema: docSchema, initialContent, dictionary: blockNoteDe });
+  const editor = useCreateBlockNote({ schema: docSchema, initialContent, dictionary: blockNoteDe, uploadFile });
 
   const countByBlock = useMemo(() => {
     const m = {}; comments.forEach(c => { m[c.block_id] = (m[c.block_id] || 0) + 1; }); return m;
@@ -12679,6 +12679,17 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
     setComments(prev => prev.filter(c => c.id !== id));
   };
 
+  // Upload handler for the editor's image block (drag/drop or "Hochladen" tab) —
+  // stores into the shared, public brand-assets bucket under documents/<org>/.
+  const uploadDocImage = useCallback(async (file) => {
+    const ext = (file.name?.split(".").pop() || "png").toLowerCase();
+    const path = `documents/${userOrg?.id || "shared"}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type, upsert: true });
+    if (error) throw error;
+    const { data } = supabase.storage.from("brand-assets").getPublicUrl(path);
+    return data.publicUrl;
+  }, [userOrg?.id]);
+
   // Projects for the "share to project" option — only the ones the current user
   // is actually a member of (you can't assign a doc to, or even see, a project
   // you're not part of), mirroring how ProjectsView scopes projects.
@@ -12832,6 +12843,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
               onChange={(html) => persist({ content: html })}
               comments={comments} memberById={memberById} mentionables={mentionables}
               currentUserId={session?.user?.id} onAddComment={addComment} onDeleteComment={deleteComment}
+              uploadFile={uploadDocImage}
               focusBlockId={openDoc.id === deepLink?.documentId ? focusBlockId : null} />
           </div>
         </div>
