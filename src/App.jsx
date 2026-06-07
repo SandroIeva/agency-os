@@ -12669,16 +12669,14 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
                 <input value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Ohne Titel"
                   style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 20, fontWeight: 700, fontFamily: FONT, letterSpacing: -0.2, padding: 0 }} />
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, color: theme.textDim }}>
+              {/* Breadcrumb: aligned with the title text (+5px), folder icon flush */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, paddingLeft: 37, color: theme.textDim }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
                 <span style={{ fontSize: 13, fontFamily: FONT }}>{projects.find(p => p.id === openDoc.project_id)?.name || "Unsortiert"}</span>
               </div>
             </div>
-            {/* Right cluster: owner · Teilen */}
+            {/* Right cluster: Teilen (owner is shown inside the share overlay) */}
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
-              <div title={`Owner: ${memberById[openDoc.created_by]?.display_name || "Unbekannt"}`} style={{ display: "flex", alignItems: "center" }}>
-                <DocAvatar profile={memberById[openDoc.created_by] || {}} accent={accent} />
-              </div>
               {(openDoc.created_by === session?.user?.id || userOrg?.role === "admin") && (
                 <button className="doc-share-btn" onClick={(e) => { e.stopPropagation(); setShareOpen(o => !o); }}
                   style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 9, border: "none", cursor: "pointer", background: accent, color: "#fff", fontSize: 12.5, fontWeight: 600, fontFamily: FONT }}>
