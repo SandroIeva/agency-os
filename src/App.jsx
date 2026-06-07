@@ -23458,7 +23458,7 @@ export default function CircularMenu() {
                         value={appLanguage}
                         onChange={(e) => setAppLanguage(e.target.value)}
                         style={{
-                          width: 170, padding: "6px 28px 6px 12px", borderRadius: 12,
+                          width: 150, padding: "6px 28px 6px 12px", borderRadius: 12,
                           background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
                           border: `1px solid ${theme.borderFaint}`,
                           color: theme.text, fontSize: 13, fontFamily: FONT,
@@ -23500,7 +23500,7 @@ export default function CircularMenu() {
                         value={docDefaultVisibility}
                         onChange={(e) => setDocDefaultVisibility(e.target.value)}
                         style={{
-                          width: 170, padding: "6px 28px 6px 12px", borderRadius: 12,
+                          width: 150, padding: "6px 28px 6px 12px", borderRadius: 12,
                           background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
                           border: `1px solid ${theme.borderFaint}`,
                           color: theme.text, fontSize: 13, fontFamily: FONT,
