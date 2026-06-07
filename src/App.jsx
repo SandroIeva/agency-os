@@ -5,7 +5,7 @@ import { supabase } from "./supabase";
 import { buildSystemPrompt } from "./systemPrompt";
 import { getTranslation } from "./translations";
 import { openGooglePicker, openGoogleFolderPicker } from "./googlePicker";
-import { useCreateBlockNote, getDefaultReactSlashMenuItems, SuggestionMenuController, createReactBlockSpec } from "@blocknote/react";
+import { useCreateBlockNote, getDefaultReactSlashMenuItems, SuggestionMenuController, createReactBlockSpec, FormattingToolbar, FormattingToolbarController, getFormattingToolbarItems, useComponentsContext } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { de as blockNoteDe } from "@blocknote/core/locales";
 import { BlockNoteSchema, defaultBlockSpecs, filterSuggestionItems } from "@blocknote/core";
@@ -11977,6 +11977,18 @@ const YouTubeBlock = createReactBlockSpec(
 // creator function, so it must be called to produce the BlockSpec.
 const docSchema = BlockNoteSchema.create({ blockSpecs: { ...defaultBlockSpecs, youtube: YouTubeBlock() } });
 
+// "Kommentieren" button for the selection formatting toolbar — opens the same
+// per-block comment thread as the hover "⋯" control.
+function CommentToolbarButton({ editor, onComment }) {
+  const Components = useComponentsContext();
+  return (
+    <Components.FormattingToolbar.Button mainTooltip="Kommentieren"
+      onClick={() => { try { const b = editor.getTextCursorPosition().block; if (b) onComment(b.id); } catch (_) {} }}>
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    </Components.FormattingToolbar.Button>
+  );
+}
+
 // Short relative time, German.
 function docTimeAgo(ts) {
   try {
@@ -12341,7 +12353,14 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
   const openBlock = blockMeta.find(b => b.id === openId);
   return (
     <div ref={wrapRef} className="doc-blocknote" style={{ minHeight: 440, position: "relative" }} onMouseMove={onMove} onMouseLeave={() => setHoveredId(null)}>
-      <BlockNoteView editor={editor} theme={darkMode ? "dark" : "light"} onChange={handleChange} slashMenu={false}>
+      <BlockNoteView editor={editor} theme={darkMode ? "dark" : "light"} onChange={handleChange} slashMenu={false} formattingToolbar={false}>
+        {/* Selection formatting toolbar + a "Kommentieren" button on the right. */}
+        <FormattingToolbarController formattingToolbar={() => (
+          <FormattingToolbar>
+            {getFormattingToolbarItems()}
+            <CommentToolbarButton editor={editor} onComment={(id) => setOpenId(id)} />
+          </FormattingToolbar>
+        )} />
         {/* Portal the slash menu to <body> so it isn't clipped by the rounded,
             overflow:hidden document panel — floating-ui then flips/sizes it to the
             viewport, keeping it fully visible and scrollable to the bottom. */}
