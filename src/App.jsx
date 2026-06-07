@@ -23381,8 +23381,12 @@ export default function CircularMenu() {
           --bn-colors-editor-background: transparent;
         }
         .doc-blocknote .ProseMirror { background: transparent !important; }
-        /* Medium-like breathing room between blocks (~16px) */
-        .doc-blocknote .bn-block-content { padding: 8px 0; }
+        /* Medium-like breathing room between blocks (~16px). Keep the top padding
+           small so the first text line stays vertically aligned with the centered
+           side-menu (drag + plus); put the spacing on the bottom instead. */
+        .doc-blocknote .bn-block-content { padding: 2px 0 14px; }
+        /* Give the hover side-menu (drag handle + plus) a bit more gap from text. */
+        .doc-blocknote .bn-side-menu { transform: translateX(-8px); }
         .hover-row {
           transition: background 0.6s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
