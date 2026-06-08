@@ -23783,7 +23783,7 @@ export default function CircularMenu() {
                               transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
                               style={{ overflow: "hidden" }}
                             >
-                              <div style={{ padding: "0 20px 14px" }}>
+                              <div style={{ padding: "0 20px 18px" }}>
                                 {editingKeyId !== p.id ? (
                                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                                     <div style={{ flex: 1, padding: "10px 14px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, color: hasKey ? theme.textSub : theme.textDim, fontSize: 12, fontFamily: FONT, display: "flex", alignItems: "center", gap: 8 }}>
