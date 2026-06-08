@@ -13029,7 +13029,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
 
   // ── EDITOR (autosaving; optional full-viewport mode) ──
   if (openDoc) {
-    return (
+    const editorView = (
       <div style={fullscreen
         ? { position: "fixed", inset: 0, zIndex: 50, overflowY: "auto", padding: "30px 0 80px", background: darkMode ? "#16161e" : "#ffffff" }
         : { flex: 1, minHeight: 0, overflowY: "auto", padding: "30px 0 60px" }}>
@@ -13099,6 +13099,9 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
         </div>
       </div>
     );
+    // In fullscreen, portal to <body> so the fixed overlay fills the real viewport
+    // (ancestors with backdrop-filter would otherwise contain position:fixed).
+    return fullscreen ? createPortal(editorView, document.body) : editorView;
   }
 
   // ── LIST ──
