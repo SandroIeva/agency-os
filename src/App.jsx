@@ -12596,6 +12596,13 @@ const docSafeName = (title) => (title || "Dokument").replace(/[^\wÀ-ɏ\- ]+/g, 
 function SharePopover({ doc, ownerProfile, members, shares, projects, canShare = true, theme, darkMode, accent, onClose, onSetVisibility, onSetProject, onToggleShare }) {
   // Non-owners can only export — open straight on the export tab.
   const [tab, setTab] = useState(canShare ? "share" : "export");
+  const [linkCopied, setLinkCopied] = useState(false);
+  const copyDocLink = async () => {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/?doc=${doc.id}`);
+      setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1600);
+    } catch (_) { alert("Link konnte nicht kopiert werden."); }
+  };
   const vis = doc.visibility || "workspace";
   const shareables = (members || []).filter(m => m.user_id !== doc.created_by && m.display_name);
   const Check = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>;
@@ -12646,6 +12653,20 @@ function SharePopover({ doc, ownerProfile, members, shares, projects, canShare =
           {canShare && <Tab id="share" label="Teilen" />}
           <Tab id="export" label="Exportieren" />
         </div>
+      </div>
+
+      {/* Copy a shareable link to the document (everyone) */}
+      <div style={{ padding: "0 6px 6px", borderBottom: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "#f0f0f3"}`, marginBottom: 2 }}>
+        <button onClick={copyDocLink}
+          onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.06)" : "#f1f2f4"}
+          onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+          style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "9px 12px", border: "none", borderRadius: 10, cursor: "pointer", background: "transparent" }}>
+          <span style={{ color: accent, lineHeight: 0 }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          </span>
+          <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: FONT }}>Link kopieren</span>
+          {linkCopied && <span style={{ fontSize: 12, color: accent, fontFamily: FONT, fontWeight: 600 }}>Kopiert ✓</span>}
+        </button>
       </div>
 
       {canShare && tab === "share" && (<>
@@ -18970,6 +18991,24 @@ export default function CircularMenu() {
         localStorage.removeItem("agencyos-project-invite-token");
       }
     })();
+  }, [session?.user?.id]);
+
+  // ── Handle ?doc=<id> — open a document directly from a shared link ──
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlDoc = params.get("doc");
+    if (urlDoc) {
+      localStorage.setItem("agencyos-open-doc", urlDoc);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("doc");
+      window.history.replaceState({}, "", url.pathname + (url.search || ""));
+    }
+    const docId = urlDoc || localStorage.getItem("agencyos-open-doc");
+    if (!docId) return;
+    if (!session?.user?.id) return; // wait for login
+    localStorage.removeItem("agencyos-open-doc");
+    setDocDeepLink({ documentId: docId, blockId: null, ts: Date.now() });
+    setCurrentView("assets");
   }, [session?.user?.id]);
 
   // ── Handle ?push-setup=true&token=... — show setup overlay (no login required) ──
