@@ -23567,7 +23567,7 @@ export default function CircularMenu() {
                     return (
                       <div key={voice.id} style={{
                         display: "flex", alignItems: "center", gap: 14,
-                        padding: "14px 20px", cursor: "pointer",
+                        padding: "16px 20px", cursor: "pointer",
                         borderBottom: idx < VOICE_OPTIONS.length - 1 ? `1px solid ${theme.borderFaint}` : "none",
                       }}
                         onClick={() => setSelectedVoice(voice.id)}
@@ -23737,7 +23737,7 @@ export default function CircularMenu() {
                           onClick={() => setLlmProvider(p.id)}
                           style={{
                             display: "flex", alignItems: "center", gap: 14,
-                            padding: "14px 20px", cursor: "pointer",
+                            padding: "16px 20px", cursor: "pointer",
                           }}
                         >
                           <div style={{
