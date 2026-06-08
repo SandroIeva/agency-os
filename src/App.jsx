@@ -22997,8 +22997,8 @@ export default function CircularMenu() {
                     <div style={{ display: "flex", gap: 10, alignItems: "stretch" }}>
                       <div style={{
                         flex: 1, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6,
-                        padding: "8px 12px", borderRadius: 12, minHeight: 44,
-                        background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                        padding: "8px 14px", borderRadius: 10, minHeight: 40,
+                        background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
                         border: `1px solid ${theme.borderFaint}`,
                       }}>
                         {inviteEmails.map((email, idx) => (
@@ -23114,10 +23114,10 @@ export default function CircularMenu() {
                           }
                         }}
                         style={{
-                          padding: "0 22px", borderRadius: 12, flexShrink: 0,
+                          padding: "10px 16px", borderRadius: 10, flexShrink: 0,
                           display: "flex", alignItems: "center", justifyContent: "center",
-                          background: "#8B7AFF", border: "none",
-                          color: "#fff", fontSize: 13, fontWeight: 500, fontFamily: FONT,
+                          background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`,
+                          color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT,
                           cursor: "pointer", opacity: inviteEmails.length === 0 && !inviteInputVal ? 0.5 : 1,
                         }}
                       >
