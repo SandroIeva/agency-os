@@ -11088,7 +11088,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, canEdit
 // a Grid (overview of everything) and a freeform Canvas (drag images around).
 // Images upload to the public brand-assets bucket so their URLs can later be
 // reused as reference inputs for image/video generation (Higgsfield etc.).
-function AssetsView({ onBack, session, userOrg, theme, darkMode, t, orgMembers, createNotification, docDeepLink }) {
+function AssetsView({ onBack, session, userOrg, theme, darkMode, t, orgMembers, createNotification, docDeepLink, docFullscreen, setDocFullscreen }) {
   // Assets has three tabs: Moodboards (curated boards), Creations (your generated
   // outputs) and Inspirations (saved references).
   const [tab, setTab] = useState("moodboards");
@@ -11386,7 +11386,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, orgMembers, 
 
           {/* ── DOCS tab ── */}
           {tab === "docs" && (
-            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} orgMembers={orgMembers} createNotification={createNotification} deepLink={docDeepLink} createRef={docsCreate} onOpenChange={setDocOpen} />
+            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} orgMembers={orgMembers} createNotification={createNotification} deepLink={docDeepLink} fullscreen={docFullscreen} setFullscreen={setDocFullscreen} createRef={docsCreate} onOpenChange={setDocOpen} />
           )}
 
           {/* ── MOODBOARDS tab (boards grid) ── */}
@@ -12787,7 +12787,7 @@ function InfoPopover({ doc, memberById, activity, projectName, theme, darkMode, 
 
 // Docs tab — Google-Docs-style: a list of workspace documents + a rich-text
 // editor. Documents are stored in brand_documents (org-scoped).
-function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, createNotification, deepLink, createRef, onOpenChange }) {
+function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, createNotification, deepLink, fullscreen, setFullscreen, createRef, onOpenChange }) {
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openDoc, setOpenDoc] = useState(null);
@@ -12954,6 +12954,14 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [userOrg?.id]);
   // Tell AssetsView whether a doc is open (so it can hide the header/tabs).
   useEffect(() => { onOpenChange?.(!!openDoc); /* eslint-disable-next-line */ }, [openDoc]);
+  // Fullscreen: exit on Escape and whenever the document is closed.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e) => { if (e.key === "Escape") setFullscreen?.(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen, setFullscreen]);
+  useEffect(() => { if (!openDoc && fullscreen) setFullscreen?.(false); /* eslint-disable-next-line */ }, [openDoc]);
 
   const createDoc = async () => {
     if (!userOrg?.id) return;
@@ -13019,16 +13027,18 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
     return content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
   };
 
-  // ── EDITOR (full-screen, autosaving) ──
+  // ── EDITOR (autosaving; optional full-viewport mode) ──
   if (openDoc) {
     return (
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "30px 0 60px" }}>
-        <div style={{ width: "100%", padding: "0 30px", boxSizing: "border-box" }}>
+      <div style={fullscreen
+        ? { position: "fixed", inset: 0, zIndex: 50, overflowY: "auto", padding: "30px 0 80px", background: darkMode ? "#16161e" : "#ffffff" }
+        : { flex: 1, minHeight: 0, overflowY: "auto", padding: "30px 0 60px" }}>
+        <div style={{ width: "100%", maxWidth: fullscreen ? 1100 : "100%", margin: fullscreen ? "0 auto" : undefined, padding: "0 30px", boxSizing: "border-box" }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 22, position: "relative" }}>
             {/* Title (with arrow on the same line) + project breadcrumb */}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <button onClick={() => { setOpenDoc(null); load(); }} title="Zurück"
+                <button onClick={() => { setFullscreen?.(false); setOpenDoc(null); load(); }} title="Zurück"
                   style={{ marginLeft: -10, border: "none", background: "transparent", cursor: "pointer", color: theme.textDim, lineHeight: 0, padding: 4, borderRadius: 8, flexShrink: 0 }}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
                 </button>
@@ -13046,6 +13056,15 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
               <button className="doc-info-btn" title="Info" onClick={(e) => { e.stopPropagation(); setShareOpen(false); setInfoOpen(o => !o); }}
                 style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${infoOpen ? accent : theme.borderFaint}`, background: infoOpen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent", color: infoOpen ? accent : theme.textDim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="7.5" x2="12.01" y2="7.5"/></svg>
+              </button>
+              {/* Fullscreen toggle */}
+              <button title={fullscreen ? "Vollbild beenden" : "Vollbild"} onClick={(e) => { e.stopPropagation(); setInfoOpen(false); setShareOpen(false); setFullscreen?.(!fullscreen); }}
+                style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${fullscreen ? accent : theme.borderFaint}`, background: fullscreen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent", color: fullscreen ? accent : theme.textDim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                {fullscreen ? (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
+                ) : (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+                )}
               </button>
               {/* Everyone with access sees this — non-owners get export only (see SharePopover) */}
               <button className="doc-share-btn" onClick={(e) => { e.stopPropagation(); setInfoOpen(false); setShareOpen(o => !o); }}
@@ -17685,6 +17704,7 @@ export default function CircularMenu() {
   const [onboardingError, setOnboardingError] = useState(null);
   const [orgMembers, setOrgMembers] = useState([]);          // team members for chat etc.
   const [docDeepLink, setDocDeepLink] = useState(null);      // open a document from a notification: { documentId, blockId, ts }
+  const [docFullscreen, setDocFullscreen] = useState(false); // document editor in full-viewport mode
   const [brandProfile, setBrandProfile] = useState(null);    // brand_profile row for current org — fed into AI context
   const [appProjects, setAppProjects] = useState([]);        // [{name}] — known project names for AI context + vocab correction
   const [wsName, setWsName] = useState("");                  // workspace name input
@@ -21349,7 +21369,7 @@ export default function CircularMenu() {
         {/* ASSETS VIEW (Brand → Assets): Moodboards / Creations / Inspirations */}
         <AnimatePresence>
           {currentView === "assets" && (
-            <AssetsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} orgMembers={orgMembers} createNotification={createNotification} docDeepLink={docDeepLink} onBack={() => setCurrentView("dashboard")} />
+            <AssetsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} orgMembers={orgMembers} createNotification={createNotification} docDeepLink={docDeepLink} docFullscreen={docFullscreen} setDocFullscreen={setDocFullscreen} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
@@ -24357,12 +24377,15 @@ export default function CircularMenu() {
         )}
       </AnimatePresence>
 
-      {/* Bottom bar */}
+      {/* Bottom bar — in document fullscreen only the AI orb floats above the overlay */}
       <div style={{
         padding: "16px 24px", display: "flex", alignItems: "center",
-        position: "relative", zIndex: 20,
+        ...(docFullscreen
+          ? { position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 60, pointerEvents: "none" }
+          : { position: "relative", zIndex: 20 }),
       }}>
         {/* Logo — left third (opens Profile) */}
+        {!docFullscreen && (
         <div style={{ flex: 1, display: "flex", alignItems: "center", paddingTop: 10 }}>
           <motion.div
             onClick={() => { if (currentView === "settings") { setCurrentView("dashboard"); } else { setCurrentView("settings"); } }}
@@ -24379,8 +24402,10 @@ export default function CircularMenu() {
           </svg>
           </motion.div>
         </div>
+        )}
 
         {/* Center buttons — true center */}
+        {!docFullscreen && (
         <div style={{
           display: "flex", gap: 12, alignItems: "center",
         }}>
@@ -24454,9 +24479,10 @@ export default function CircularMenu() {
           </motion.div>
           )}
         </div>
+        )}
 
-        {/* Sphere — right third */}
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
+        {/* Sphere — right third (stays visible & clickable in document fullscreen) */}
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "flex-end", pointerEvents: "auto" }}>
           <div style={{ cursor: "pointer" }} onClick={startVoice}>
             <AISphere darkMode={darkMode} />
           </div>
