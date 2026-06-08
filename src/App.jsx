@@ -22807,9 +22807,9 @@ export default function CircularMenu() {
                         )}
                         <div>
                           <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text, lineHeight: 1.2 }}>{userOrg.name}</div>
-                          <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "capitalize" }}>{userOrgRole || "member"}</div>
+                          <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "capitalize", marginTop: -2 }}>{userOrgRole || "member"}</div>
                         </div>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 4, transform: wsDropdownOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 24, transform: wsDropdownOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>
                           <path d="M6 9l6 6 6-6" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                       </motion.div>
