@@ -12593,8 +12593,9 @@ async function docExportPDF(title, blocks) {
 const docSafeName = (title) => (title || "Dokument").replace(/[^\wÀ-ɏ\- ]+/g, "").trim().slice(0, 60) || "Dokument";
 
 // Share controls for a document: workspace-wide, specific members, or a project.
-function SharePopover({ doc, ownerProfile, members, shares, projects, theme, darkMode, accent, onClose, onSetVisibility, onSetProject, onToggleShare }) {
-  const [tab, setTab] = useState("share");
+function SharePopover({ doc, ownerProfile, members, shares, projects, canShare = true, theme, darkMode, accent, onClose, onSetVisibility, onSetProject, onToggleShare }) {
+  // Non-owners can only export — open straight on the export tab.
+  const [tab, setTab] = useState(canShare ? "share" : "export");
   const vis = doc.visibility || "workspace";
   const shareables = (members || []).filter(m => m.user_id !== doc.created_by && m.display_name);
   const Check = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>;
@@ -12642,12 +12643,12 @@ function SharePopover({ doc, ownerProfile, members, shares, projects, theme, dar
       {/* Tab switcher (Teilen / Exportieren) — closes on outside click */}
       <div style={{ display: "flex", alignItems: "center", padding: "10px 12px 8px" }}>
         <div style={{ flex: 1, display: "flex", gap: 4, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.05)" : "#eceef1" }}>
-          <Tab id="share" label="Teilen" />
+          {canShare && <Tab id="share" label="Teilen" />}
           <Tab id="export" label="Exportieren" />
         </div>
       </div>
 
-      {tab === "share" && (<>
+      {canShare && tab === "share" && (<>
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 14px 10px", borderBottom: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "#f0f0f3"}` }}>
           <DocAvatar profile={ownerProfile} accent={accent} />
           <div style={{ minWidth: 0 }}>
@@ -13025,17 +13026,17 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
                 style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${infoOpen ? accent : theme.borderFaint}`, background: infoOpen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent", color: infoOpen ? accent : theme.textDim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="7.5" x2="12.01" y2="7.5"/></svg>
               </button>
-              {(openDoc.created_by === session?.user?.id || userOrg?.role === "admin") && (
-                <button className="doc-share-btn" onClick={(e) => { e.stopPropagation(); setInfoOpen(false); setShareOpen(o => !o); }}
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 9, border: "none", cursor: "pointer", background: accent, color: "#fff", fontSize: 12.5, fontWeight: 600, fontFamily: FONT }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
-                  Teilen
-                </button>
-              )}
+              {/* Everyone with access sees this — non-owners get export only (see SharePopover) */}
+              <button className="doc-share-btn" onClick={(e) => { e.stopPropagation(); setInfoOpen(false); setShareOpen(o => !o); }}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 9, border: "none", cursor: "pointer", background: accent, color: "#fff", fontSize: 12.5, fontWeight: 600, fontFamily: FONT }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
+                Teilen
+              </button>
             </div>
             {shareOpen && (
               <SharePopover doc={openDoc} ownerProfile={memberById[openDoc.created_by] || {}}
                 members={Object.values(memberById)} shares={shares} projects={projects}
+                canShare={openDoc.created_by === session?.user?.id || userOrg?.role === "admin"}
                 theme={theme} darkMode={darkMode} accent={accent}
                 onClose={() => setShareOpen(false)}
                 onSetVisibility={setDocVisibility} onSetProject={setDocProject} onToggleShare={toggleShareMember} />
