@@ -12355,28 +12355,34 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
   };
 
   useEffect(() => () => clearTimeout(timer.current), []);
-  const handleChange = () => {
+  const onChangeRef = useRef(onChange);
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+  // Stable callbacks: the editor re-renders on every mouse move (hover tracking),
+  // and recreating these prop functions each time re-initialises BlockNote's
+  // toolbar/menu controllers — which closes the open color-picker dropdown.
+  const handleChange = useCallback(() => {
     syncOverlays();
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => { try { onChange(JSON.stringify(editor.document)); } catch (_) {} }, 800);
-  };
+    timer.current = setTimeout(() => { try { onChangeRef.current(JSON.stringify(editor.document)); } catch (_) {} }, 800);
+  }, [editor, syncOverlays]);
+  const renderFmtToolbar = useCallback(() => (
+    <FormattingToolbar>
+      {getFormattingToolbarItems()}
+      <CommentToolbarButton editor={editor} onComment={(id) => setOpenId(id)} />
+    </FormattingToolbar>
+  ), [editor]);
+  const getSuggestion = useCallback(async (query) => filterSuggestionItems(getSlashItems(editor), query), [editor, getSlashItems]);
 
   const openBlock = blockMeta.find(b => b.id === openId);
   return (
     <div ref={wrapRef} className="doc-blocknote" style={{ minHeight: 440, position: "relative" }} onMouseMove={onMove} onMouseLeave={() => setHoveredId(null)}>
       <BlockNoteView editor={editor} theme={darkMode ? "dark" : "light"} onChange={handleChange} slashMenu={false} formattingToolbar={false}>
         {/* Selection formatting toolbar + a "Kommentieren" button on the right. */}
-        <FormattingToolbarController formattingToolbar={() => (
-          <FormattingToolbar>
-            {getFormattingToolbarItems()}
-            <CommentToolbarButton editor={editor} onComment={(id) => setOpenId(id)} />
-          </FormattingToolbar>
-        )} />
+        <FormattingToolbarController formattingToolbar={renderFmtToolbar} />
         {/* Portal the slash menu to <body> so it isn't clipped by the rounded,
             overflow:hidden document panel — floating-ui then flips/sizes it to the
             viewport, keeping it fully visible and scrollable to the bottom. */}
-        <SuggestionMenuController triggerCharacter="/" portalElement={slashPortal || undefined}
-          getItems={async (query) => filterSuggestionItems(getSlashItems(editor), query)} />
+        <SuggestionMenuController triggerCharacter="/" portalElement={slashPortal || undefined} getItems={getSuggestion} />
       </BlockNoteView>
       {dictating && (
         <button onClick={stopEditorDictation}
