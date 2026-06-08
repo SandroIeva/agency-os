@@ -22789,7 +22789,7 @@ export default function CircularMenu() {
                         whileHover={{ opacity: 0.85 }}
                         whileTap={{ scale: 0.97 }}
                         style={{
-                          display: "flex", alignItems: "center", gap: 8, padding: "8px 14px",
+                          display: "flex", alignItems: "center", gap: 8, padding: 8,
                           borderRadius: 12, cursor: "pointer",
                           background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
                           border: `1px solid ${theme.borderFaint}`,
