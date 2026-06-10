@@ -13053,10 +13053,6 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
             </div>
             {/* Right cluster: Info · Teilen */}
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-              <button className="doc-info-btn" title="Info" onClick={(e) => { e.stopPropagation(); setShareOpen(false); setInfoOpen(o => !o); }}
-                style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${infoOpen ? accent : theme.borderFaint}`, background: infoOpen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent", color: infoOpen ? accent : theme.textDim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="7.5" x2="12.01" y2="7.5"/></svg>
-              </button>
               {/* Fullscreen toggle */}
               <button title={fullscreen ? "Vollbild beenden" : "Vollbild"} onClick={(e) => { e.stopPropagation(); setInfoOpen(false); setShareOpen(false); setFullscreen?.(!fullscreen); }}
                 style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${fullscreen ? accent : theme.borderFaint}`, background: fullscreen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent", color: fullscreen ? accent : theme.textDim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -13065,6 +13061,10 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
                 ) : (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
                 )}
+              </button>
+              <button className="doc-info-btn" title="Info" onClick={(e) => { e.stopPropagation(); setShareOpen(false); setInfoOpen(o => !o); }}
+                style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${infoOpen ? accent : theme.borderFaint}`, background: infoOpen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent", color: infoOpen ? accent : theme.textDim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="7.5" x2="12.01" y2="7.5"/></svg>
               </button>
               {/* Everyone with access sees this — non-owners get export only (see SharePopover) */}
               <button className="doc-share-btn" onClick={(e) => { e.stopPropagation(); setInfoOpen(false); setShareOpen(o => !o); }}
