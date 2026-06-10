@@ -11088,7 +11088,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, canEdit
 // a Grid (overview of everything) and a freeform Canvas (drag images around).
 // Images upload to the public brand-assets bucket so their URLs can later be
 // reused as reference inputs for image/video generation (Higgsfield etc.).
-function AssetsView({ onBack, session, userOrg, theme, darkMode, t, orgMembers, createNotification, docDeepLink, docFullscreen, setDocFullscreen }) {
+function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, docFullscreen, setDocFullscreen }) {
   // Assets has three tabs: Moodboards (curated boards), Creations (your generated
   // outputs) and Inspirations (saved references).
   const [tab, setTab] = useState("moodboards");
@@ -11381,6 +11381,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, orgMembers, 
           {/* ── CREATIONS tab ── */}
           {tab === "creations" && (
             <CreationsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} grad={grad} glow={glow} t={t}
+              appLanguage={appLanguage} onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive}
               pickRef={creationsPick} onUploadingChange={setCreationsUploading} />
           )}
 
@@ -11604,7 +11605,7 @@ function CreationsFolderTile({ type, list, label, theme, darkMode, t, onOpen }) 
 
 // Creations tab — gallery of the workspace's images AND videos (AI-generated +
 // user uploads). Filter by media type; upload your own via the button.
-function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, pickRef, onUploadingChange }) {
+function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, onUploadStorage, onUploadDrive, pickRef, onUploadingChange }) {
   const [files, setFiles] = useState(null); // null = loading
   const [openFolder, setOpenFolder] = useState(null); // null = folder overview | "image" | "video"
   const [uploading, setUploading] = useState(false);
@@ -11732,12 +11733,17 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
 
       <AnimatePresence>
         {zoom && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setZoom(null)}
-            style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 30 }}>
-            {isVideo(zoom)
-              ? <motion.video initial={{ scale: 0.94 }} animate={{ scale: 1 }} src={zoom.public_url} controls autoPlay onClick={e => e.stopPropagation()} style={{ maxWidth: "92%", maxHeight: "88vh", borderRadius: 14 }} />
-              : <motion.img initial={{ scale: 0.94 }} animate={{ scale: 1 }} src={zoom.public_url} alt="" style={{ maxWidth: "92%", maxHeight: "88vh", borderRadius: 14, objectFit: "contain" }} />}
-          </motion.div>
+          isVideo(zoom) ? (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setZoom(null)}
+              style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(8,8,12,0.92)", backdropFilter: "blur(20px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 30 }}>
+              <motion.video initial={{ scale: 0.94 }} animate={{ scale: 1 }} src={zoom.public_url} controls autoPlay onClick={e => e.stopPropagation()} style={{ maxWidth: "92%", maxHeight: "88vh", borderRadius: 14 }} />
+            </motion.div>
+          ) : (
+            // Same full-screen lightbox as the AI chat (Download / Kopieren / Link / Drive / Neuer Tab)
+            <ImageLightbox url={zoom.public_url} onClose={() => setZoom(null)}
+              onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive}
+              theme={theme} darkMode={darkMode} appLanguage={appLanguage} />
+          )
         )}
       </AnimatePresence>
     </div>
@@ -21372,7 +21378,7 @@ export default function CircularMenu() {
         {/* ASSETS VIEW (Brand → Assets): Moodboards / Creations / Inspirations */}
         <AnimatePresence>
           {currentView === "assets" && (
-            <AssetsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} orgMembers={orgMembers} createNotification={createNotification} docDeepLink={docDeepLink} docFullscreen={docFullscreen} setDocFullscreen={setDocFullscreen} onBack={() => setCurrentView("dashboard")} />
+            <AssetsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive} orgMembers={orgMembers} createNotification={createNotification} docDeepLink={docDeepLink} docFullscreen={docFullscreen} setDocFullscreen={setDocFullscreen} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
