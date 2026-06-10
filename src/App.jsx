@@ -853,12 +853,23 @@ function ImageLightbox({ url, onClose, onUploadStorage, onUploadDrive, theme, da
     return new Blob([bytes], { type: mime });
   };
 
-  const download = () => {
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `i7os-image-${Date.now()}.png`;
-    document.body.appendChild(a); a.click(); a.remove();
-    flash(appLanguage === "de" ? "Heruntergeladen" : "Downloaded");
+  const download = async () => {
+    // The `download` attribute is ignored for cross-origin URLs (the browser just
+    // navigates to them). Fetch the bytes and download a same-origin blob instead.
+    try {
+      const blob = url.startsWith("data:") ? dataUrlToBlob(url) : await (await fetch(url)).blob();
+      if (!blob) throw new Error("decode failed");
+      const ext = (blob.type.split("/")[1] || "png").replace("jpeg", "jpg");
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = `i7os-image-${Date.now()}.${ext}`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
+      flash(appLanguage === "de" ? "Heruntergeladen" : "Downloaded");
+    } catch (e) {
+      flash((appLanguage === "de" ? "Download fehlgeschlagen: " : "Download failed: ") + (e.message || ""), "err");
+    }
   };
 
   // Browser Clipboard API only accepts image/png for write — convert anything else via canvas.
