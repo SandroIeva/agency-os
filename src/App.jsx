@@ -15886,15 +15886,15 @@ function BrandImagery({ value, editing, onChange, uploadFile, theme, darkMode, a
                   style={{ flex: 1, marginTop: 34, width: "100%", boxSizing: "border-box", resize: "none", border: "none", outline: "none", background: "transparent", color: "#fff", fontSize: 12.5, lineHeight: 1.5, fontFamily: FONT }} />
               </div>
             ) : (
-              // View mode: blurred overlay with the prompt + download/copy buttons on hover.
+              // View mode: blurred overlay with the prompt; copy top-right, download bottom-right.
               <div className="imagery-overlay" style={{ position: "absolute", inset: 0, borderRadius: 16, display: "flex", flexDirection: "column", padding: 14, background: "rgba(10,10,16,0.42)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
-                <div style={{ position: "absolute", top: 10, right: 10, display: "flex", gap: 6 }}>
-                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => download(it)} title="Herunterladen" style={{ ...btnStyle, cursor: "pointer" }}>{downloadIcon}</motion.div>
-                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => copyPrompt(it)} title="Prompt kopieren" style={{ ...btnStyle, cursor: it.prompt ? "pointer" : "default", opacity: it.prompt ? 1 : 0.4 }}>
-                    {copiedId === it.id ? checkIcon : copyIcon}
-                  </motion.div>
-                </div>
-                <div style={{ flex: 1, overflowY: "auto", paddingRight: 76, color: "#fff", fontSize: 12.5, lineHeight: 1.55, fontFamily: FONT }}>
+                <motion.div whileTap={{ scale: 0.9 }} onClick={() => copyPrompt(it)} title="Prompt kopieren"
+                  style={{ ...btnStyle, position: "absolute", top: 10, right: 10, cursor: it.prompt ? "pointer" : "default", opacity: it.prompt ? 1 : 0.4 }}>
+                  {copiedId === it.id ? checkIcon : copyIcon}
+                </motion.div>
+                <motion.div whileTap={{ scale: 0.9 }} onClick={() => download(it)} title="Herunterladen"
+                  style={{ ...btnStyle, position: "absolute", bottom: 10, right: 10, cursor: "pointer" }}>{downloadIcon}</motion.div>
+                <div style={{ flex: 1, overflowY: "auto", paddingRight: 40, paddingBottom: 36, color: "#fff", fontSize: 12.5, lineHeight: 1.55, fontFamily: FONT }}>
                   {it.prompt || <span style={{ opacity: 0.6 }}>Kein Prompt hinterlegt.</span>}
                 </div>
               </div>
