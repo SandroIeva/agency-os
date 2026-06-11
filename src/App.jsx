@@ -11621,6 +11621,9 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   const [openFolder, setOpenFolder] = useState(null); // null = folder overview | "image" | "video"
   const [uploading, setUploading] = useState(false);
   const [zoom, setZoom] = useState(null); // the file object being previewed
+  const [search, setSearch] = useState("");
+  const [sortMode, setSortMode] = useState("created"); // "created" | "name"
+  const [viewMode, setViewMode] = useState("list"); // "list" | "grid"
   const inputRef = useRef(null);
   // Register the file-picker trigger so the header Upload button can call it,
   // and surface uploading state upward.
@@ -11639,6 +11642,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     setFiles((data || []).filter(f => { const m = f.mime_type || ""; return m.startsWith("image/") || m.startsWith("video/"); }));
   }, [userOrg?.id]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setSearch(""); }, [openFolder]);
 
   const upload = async (fileList) => {
     const arr = Array.from(fileList || []).filter(f => f.type.startsWith("image/") || f.type.startsWith("video/"));
@@ -11668,10 +11672,24 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   const images = (files || []).filter(f => !isVideo(f));
   const videos = (files || []).filter(f => isVideo(f));
   const items = openFolder === "video" ? videos : images;
+  const displayItems = items
+    .filter(f => !search.trim() || (f.name || "").toLowerCase().includes(search.trim().toLowerCase()))
+    .sort((a, b) => sortMode === "name"
+      ? (a.name || "").localeCompare(b.name || "")
+      : new Date(b.created_at) - new Date(a.created_at));
   const fmtMeta = (f) => {
     const ext = ((f.name || "").split(".").pop() || (f.mime_type || "").split("/")[1] || "").toUpperCase();
     const mb = f.size_bytes ? `${Math.max(1, Math.round(f.size_bytes / 1e6))}MB` : null;
     return [mb, ext].filter(Boolean).join(" · ");
+  };
+  const viewBtn = (mode, title, children) => {
+    const on = viewMode === mode;
+    return (
+      <motion.div whileTap={{ scale: 0.92 }} onClick={() => setViewMode(mode)} title={title}
+        style={{ width: 32, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+          background: on ? (darkMode ? "rgba(255,255,255,0.10)" : "#fff") : "transparent", color: on ? theme.text : theme.textDim,
+          boxShadow: on ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>{children}</motion.div>
+    );
   };
 
   return (
@@ -11689,15 +11707,35 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
           </div>
         </div>
       ) : (
-        // ── Inside a folder: back row + list ──
+        // ── Inside a folder: back row + toolbar + grid/list ──
         <>
-          <div style={{ padding: "14px 26px", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ padding: "14px 26px 0", display: "flex", alignItems: "center", gap: 10 }}>
             <motion.div whileTap={{ scale: 0.94 }} onClick={() => setOpenFolder(null)} style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", color: theme.textDim, fontSize: 13, fontFamily: FONT, fontWeight: 500 }}>
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
               {openFolder === "video" ? (t("assets.videos") || "Videos") : (t("assets.images") || "Bilder")}
             </motion.div>
             <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>· {items.length}</span>
           </div>
+          {items.length > 0 && (
+            // Toolbar: search · sort · view toggle — mirrors the Documents tab
+            <div style={{ padding: "14px 26px 4px", display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, maxWidth: 340 }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder={openFolder === "video" ? (appLanguage === "de" ? "Videos durchsuchen…" : "Search videos…") : (appLanguage === "de" ? "Bilder durchsuchen…" : "Search images…")}
+                  style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }} />
+              </div>
+              <div style={{ flex: 1 }} />
+              <motion.div whileTap={{ scale: 0.96 }} onClick={() => setSortMode(m => m === "created" ? "name" : "created")}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, whiteSpace: "nowrap" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+                {sortMode === "name" ? "Name" : (appLanguage === "de" ? "Zuletzt hinzugefügt" : "Recently added")}
+              </motion.div>
+              <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+                {viewBtn("grid", "Kachelansicht", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>)}
+                {viewBtn("list", "Listenansicht", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>)}
+              </div>
+            </div>
+          )}
           {items.length === 0 ? (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: theme.textDim, textAlign: "center", gap: 14, padding: 20 }}>
               <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 160, damping: 16 }}
@@ -11711,10 +11749,43 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                 {t("moodboard.upload") || "Hochladen"}
               </motion.div>
             </div>
+          ) : displayItems.length === 0 ? (
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "40px 20px" }}>
+              <div style={{ fontSize: 15.5, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 6 }}>{appLanguage === "de" ? "Keine Treffer" : "No matches"}</div>
+              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{appLanguage === "de" ? "Versuche einen anderen Suchbegriff." : "Try a different search term."}</div>
+            </div>
+          ) : viewMode === "grid" ? (
+            // Gallery grid: square thumbnail tiles
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 22px 22px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 14 }}>
+                {displayItems.map((f, i) => (
+                  <motion.div key={f.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.28 }}
+                    whileHover={{ y: -3 }} onClick={() => setZoom(f)}
+                    style={{ borderRadius: 14, overflow: "hidden", cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
+                    <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
+                      {isVideo(f) ? (
+                        <>
+                          <video src={f.public_url} muted playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.22)" }}>
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
+                          </div>
+                        </>
+                      ) : (
+                        <img src={f.public_url} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
+                      )}
+                    </div>
+                    <div style={{ padding: "10px 12px" }}>
+                      <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name || "—"}</div>
+                      <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{fmtMeta(f)}</div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
           ) : (
             // Dark glassy LIST: row = thumbnail + name + "size · TYPE"
-            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 22px 22px", display: "flex", flexDirection: "column", gap: 7 }}>
-              {items.map((f, i) => (
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 22px 22px", display: "flex", flexDirection: "column", gap: 7 }}>
+              {displayItems.map((f, i) => (
                 <motion.div key={f.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.28 }}
                   onClick={() => setZoom(f)} className="hover-row"
                   style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 14, cursor: "pointer",
