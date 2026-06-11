@@ -15804,6 +15804,108 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
   );
 }
 
+// ── Brand Imagery ─────────────────────────────────────────────────────────────
+// Tiled gallery of brand image examples. Each tile carries the prompt that
+// produced it; hovering reveals a blurred overlay with that prompt + a copy
+// button. Admins toggle edit mode via the header "Bearbeiten" button to upload
+// more images, edit prompts inline, and remove tiles.
+function BrandImagery({ value, editing, onChange, uploadFile, theme, darkMode, accent }) {
+  const items = Array.isArray(value) ? value : [];
+  const [uploading, setUploading] = useState(false);
+  const [copiedId, setCopiedId] = useState(null);
+  const fileRef = useRef(null);
+
+  const addFiles = async (fileList) => {
+    const arr = Array.from(fileList || []).filter(f => f.type.startsWith("image/"));
+    if (!arr.length || !uploadFile) return;
+    setUploading(true);
+    const added = [];
+    for (const file of arr) {
+      try { const r = await uploadFile(file, "imagery"); if (r?.url) added.push({ id: crypto.randomUUID(), url: r.url, name: r.name || file.name, prompt: "" }); }
+      catch (_) {}
+    }
+    if (added.length) onChange([...(items || []), ...added]);
+    setUploading(false);
+  };
+  const updatePrompt = (id, prompt) => onChange(items.map(it => it.id === id ? { ...it, prompt } : it));
+  const remove = (id) => onChange(items.filter(it => it.id !== id));
+  const copyPrompt = (it) => {
+    if (!it.prompt) return;
+    navigator.clipboard?.writeText(it.prompt);
+    setCopiedId(it.id);
+    setTimeout(() => setCopiedId(c => c === it.id ? null : c), 1400);
+  };
+
+  const copyIcon = (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+  );
+  const checkIcon = (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+  );
+
+  if (!editing && items.length === 0) {
+    return (
+      <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>
+        Noch keine Bildsprache hinterlegt. Über „Bearbeiten" oben rechts kannst du Beispielbilder mit ihren Prompts hochladen.
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12, fontWeight: 600 }}>Bildsprache</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
+        {items.map(it => (
+          <div key={it.id} className="imagery-tile" style={{ position: "relative", borderRadius: 16, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", aspectRatio: "4 / 3" }}>
+            <img src={it.url} alt={it.name || ""} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            {editing ? (
+              // Edit mode: prompt always editable over a constant scrim + delete.
+              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", padding: 12, background: "rgba(10,10,16,0.55)", backdropFilter: "blur(7px)", WebkitBackdropFilter: "blur(7px)" }}>
+                <motion.div whileTap={{ scale: 0.9 }} onClick={() => remove(it.id)} title="Entfernen"
+                  style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "rgba(0,0,0,0.45)", color: "#fff" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </motion.div>
+                <textarea value={it.prompt || ""} onChange={e => updatePrompt(it.id, e.target.value)} placeholder="Prompt hinzufügen…"
+                  style={{ flex: 1, marginTop: 30, width: "100%", boxSizing: "border-box", resize: "none", border: "none", outline: "none", background: "transparent", color: "#fff", fontSize: 12.5, lineHeight: 1.5, fontFamily: FONT }} />
+              </div>
+            ) : (
+              // View mode: blurred overlay with the prompt + copy button on hover.
+              <div className="imagery-overlay" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", padding: 14, background: "rgba(10,10,16,0.42)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
+                <motion.div whileTap={{ scale: 0.9 }} onClick={() => copyPrompt(it)} title="Prompt kopieren"
+                  style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", cursor: it.prompt ? "pointer" : "default", background: "rgba(0,0,0,0.4)", color: "#fff", opacity: it.prompt ? 1 : 0.4 }}>
+                  {copiedId === it.id ? checkIcon : copyIcon}
+                </motion.div>
+                <div style={{ flex: 1, overflowY: "auto", paddingRight: 36, color: "#fff", fontSize: 12.5, lineHeight: 1.55, fontFamily: FONT }}>
+                  {it.prompt || <span style={{ opacity: 0.6 }}>Kein Prompt hinterlegt.</span>}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {editing && (
+          <>
+            <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={e => { addFiles(e.target.files); e.target.value = ""; }} />
+            <motion.div whileHover={{ scale: uploading ? 1 : 1.01 }} onClick={() => !uploading && fileRef.current?.click()}
+              style={{ aspectRatio: "4 / 3", borderRadius: 16, cursor: uploading ? "default" : "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, textAlign: "center", padding: 16,
+                border: `2px dashed ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", color: theme.textDim }}>
+              {uploading ? (
+                <div style={{ fontSize: 12.5, fontFamily: FONT }}>Wird hochgeladen…</div>
+              ) : (
+                <>
+                  <div style={{ width: 44, height: 44, borderRadius: 13, background: accent + "1f", display: "flex", alignItems: "center", justifyContent: "center", color: accent }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  </div>
+                  <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Bilder hinzufügen</div>
+                </>
+              )}
+            </motion.div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true }) {
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
   const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
@@ -16100,6 +16202,22 @@ If you don't know a field, infer a plausible value. Write all text values in the
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
           .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", typography: typo })
+          .select("id").single();
+        if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
+      }
+    }, 500);
+  };
+  const imageryTimer = useRef(null);
+  const saveImagery = (list) => {
+    setProfile(p => ({ ...(p || {}), imagery: list }));
+    clearTimeout(imageryTimer.current);
+    imageryTimer.current = setTimeout(async () => {
+      const cur = profileRef.current;
+      if (cur?.id) {
+        await supabase.from("brand_profile").update({ imagery: list }).eq("id", cur.id);
+      } else if (userOrg?.id) {
+        const { data } = await supabase.from("brand_profile")
+          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", imagery: list })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -17679,6 +17797,9 @@ If you don't know a field, infer a plausible value. Write all text values in the
                       ) : k === "design/typography" ? (
                         <BrandTypography value={profile.typography} fonts={fonts} editing={editingText} theme={theme} darkMode={darkMode}
                           onChange={saveTypography} session={session} userOrg={userOrg} />
+                      ) : k === "design/imagery" ? (
+                        <BrandImagery value={profile.imagery} editing={editingText} onChange={saveImagery}
+                          uploadFile={uploadFile} theme={theme} darkMode={darkMode} accent={theme.accent} />
                       ) : k === "identity/voice" ? (
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
                           onSave={saveVoiceTone} onCancel={() => setEditingText(false)} />
@@ -24754,6 +24875,9 @@ export default function CircularMenu() {
            space inline; override it. shift() keeps the (shorter) menu fully in view. */
         .bn-suggestion-menu { max-height: min(44vh, 420px) !important; overflow-y: auto; }
         .avatar-edit:hover .avatar-edit-overlay { opacity: 1 !important; }
+        /* Brand imagery: prompt overlay fades in on hover */
+        .imagery-overlay { opacity: 0; transition: opacity 0.18s ease; }
+        .imagery-tile:hover .imagery-overlay { opacity: 1; }
         /* No blue focus outline on clicked/active elements */
         *:focus, *:focus-visible { outline: none !important; }
         /* Brand section rich-text (editor + rendered output) */
