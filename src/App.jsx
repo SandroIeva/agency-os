@@ -12218,7 +12218,75 @@ function CommentPopover({ block, comments, memberById, mentionables, currentUser
   );
 }
 
-function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = [], memberById = {}, mentionables = [], currentUserId, onAddComment, onDeleteComment, uploadFile, focusBlockId }) {
+// Picker modal: choose an existing image from the workspace's Creations
+// (user_files) to drop straight into a document. Searchable thumbnail grid.
+function CreationsImagePicker({ orgId, theme, darkMode, accent, onPick, onClose }) {
+  const [imgs, setImgs] = useState(null); // null = loading
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!orgId) { setImgs([]); return; }
+      const { data, error } = await supabase.from("user_files")
+        .select("id,name,public_url,mime_type,created_at")
+        .eq("org_id", orgId)
+        .order("created_at", { ascending: false }).limit(300);
+      if (!alive) return;
+      if (error) { setImgs([]); return; }
+      setImgs((data || []).filter(f => (f.mime_type || "").startsWith("image/") && f.public_url));
+    })();
+    return () => { alive = false; };
+  }, [orgId]);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const shown = (imgs || []).filter(f => !q.trim() || (f.name || "").toLowerCase().includes(q.trim().toLowerCase()));
+  return createPortal(
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(10px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} onClick={e => e.stopPropagation()}
+        style={{ width: "100%", maxWidth: 640, maxHeight: "82vh", display: "flex", flexDirection: "column", borderRadius: 20, overflow: "hidden", background: darkMode ? "rgba(22,22,30,0.99)" : "#ffffff", border: `1px solid ${theme.border}`, boxShadow: "0 24px 70px rgba(0,0,0,0.4)" }}>
+        <div style={{ padding: "18px 20px 14px", borderBottom: `1px solid ${theme.borderFaint}` }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Bild aus Creations</div>
+            <motion.div whileTap={{ scale: 0.9 }} onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </motion.div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+            <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Bilder durchsuchen…"
+              style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }} />
+          </div>
+        </div>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 18 }}>
+          {imgs === null ? (
+            <div style={{ padding: 40, textAlign: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>Lädt…</div>
+          ) : shown.length === 0 ? (
+            <div style={{ padding: 40, textAlign: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>
+              {q.trim() ? "Keine Treffer." : "Noch keine Bilder unter Creations."}
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 12 }}>
+              {shown.map(f => (
+                <motion.div key={f.id} whileHover={{ y: -3 }} whileTap={{ scale: 0.97 }} onClick={() => onPick(f.public_url)} title={f.name}
+                  style={{ cursor: "pointer", borderRadius: 12, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+                  <div style={{ width: "100%", aspectRatio: "1 / 1", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
+                    <img src={f.public_url} alt={f.name} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  </div>
+                  <div style={{ padding: "7px 9px", fontSize: 11.5, fontFamily: FONT, color: theme.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name || "—"}</div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>, document.body);
+}
+
+function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = [], memberById = {}, mentionables = [], currentUserId, onAddComment, onDeleteComment, uploadFile, orgId, focusBlockId }) {
   const timer = useRef(null);
   const wrapRef = useRef(null);
   const moveRaf = useRef(0);
@@ -12226,6 +12294,8 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
   const [blockMeta, setBlockMeta] = useState([]); // [{ id, centerY }]
   const [hoveredId, setHoveredId] = useState(null);
   const [openId, setOpenId] = useState(null);
+  const [pickerOpen, setPickerOpen] = useState(false); // "Bild aus Creations" picker
+  const pickTargetRef = useRef(null); // block to insert the picked image after
   // Parse stored block JSON; tolerate empty/legacy (HTML) content → start fresh.
   const initialContent = useMemo(() => {
     if (!initialHTML) return undefined;
@@ -12300,17 +12370,43 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4M8 21h8"/></svg>,
       onItemClick: () => startEditorDictation(),
     };
+    // Insert an image that already lives in the workspace (Creations / user_files)
+    // via a searchable picker, rather than only upload / URL.
+    const fromCreations = {
+      title: "Bild aus Creations", subtext: "Vorhandenes Bild auswählen", aliases: ["creations", "kreationen", "asset", "assets", "galerie", "gespeichert", "bild"], group: mediaGroup, key: "creations-image",
+      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>,
+      onItemClick: () => { pickTargetRef.current = ed.getTextCursorPosition().block; setPickerOpen(true); },
+    };
     // Pull the emoji item out of its own "Andere" group and re-tag it to Medien.
     const emojiIdx = base.findIndex(it => it.key === "emoji");
     const emoji = emojiIdx >= 0 ? base.splice(emojiIdx, 1)[0] : null;
     if (emoji) emoji.group = mediaGroup;
-    // YouTube right after Video; Emoji at the top of the Medien group (above Bild)
-    // — all share the "Medien" group so they form one consecutive run (no dupes).
+    // YouTube right after Video; Emoji at the top of the Medien group (above Bild);
+    // "Bild aus Creations" right after the default Bild item — all share the
+    // "Medien" group so they form one consecutive run (no dupes).
     const vidIdx = base.findIndex(it => it.key === "video");
     if (vidIdx >= 0) base.splice(vidIdx + 1, 0, youtube); else base.push(youtube);
+    const imgIdx0 = base.findIndex(it => it.key === "image");
+    if (imgIdx0 >= 0) base.splice(imgIdx0 + 1, 0, fromCreations); else base.push(fromCreations);
     if (emoji) { const imgIdx = base.findIndex(it => it.key === "image"); base.splice(imgIdx >= 0 ? imgIdx : base.length, 0, emoji); }
     return [dictate, ...base];
   }, [startEditorDictation]);
+
+  // Insert the picked Creations image at the remembered cursor position.
+  const handlePickImage = useCallback((url) => {
+    setPickerOpen(false);
+    if (!url) return;
+    const cur = pickTargetRef.current;
+    try {
+      if (cur) {
+        const empty = !cur.content || (Array.isArray(cur.content) && cur.content.length === 0);
+        if (empty) editor.updateBlock(cur, { type: "image", props: { url } });
+        else editor.insertBlocks([{ type: "image", props: { url } }], cur, "after");
+      } else {
+        editor.insertBlocks([{ type: "image", props: { url } }], editor.getTextCursorPosition().block, "after");
+      }
+    } catch (_) {}
+  }, [editor]);
 
   // Sync overlays: (1) line-number gutters for code blocks (BlockNote strips DOM
   // injected into its managed subtree, so gutters live in a sibling layer), and
@@ -12447,6 +12543,12 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
           Diktat läuft – stoppen
         </button>
       )}
+      <AnimatePresence>
+        {pickerOpen && (
+          <CreationsImagePicker orgId={orgId} theme={theme} darkMode={darkMode} accent={accent}
+            onPick={handlePickImage} onClose={() => setPickerOpen(false)} />
+        )}
+      </AnimatePresence>
       <div className="cb-gutter-layer" aria-hidden="true" />
       <div className="doc-anno-layer">
         {blockMeta.map(b => {
@@ -13149,7 +13251,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
               onChange={(html) => persist({ content: html })}
               comments={comments} memberById={memberById} mentionables={mentionables}
               currentUserId={session?.user?.id} onAddComment={addComment} onDeleteComment={deleteComment}
-              uploadFile={uploadDocImage}
+              uploadFile={uploadDocImage} orgId={userOrg?.id}
               focusBlockId={openDoc.id === deepLink?.documentId ? focusBlockId : null} />
           </div>
         </div>
