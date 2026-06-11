@@ -11580,50 +11580,16 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 
 // One Creations folder tile (Images / Videos) — preview collage + name + count.
 // Top-level component (not inline) so framer-motion never re-mounts it per render.
-function CreationsFolderTile({ type, list, label, theme, darkMode, t, onOpen }) {
-  const covers = list.slice(0, 4);
-  return (
-    <motion.div whileHover={{ y: -4 }} transition={{ type: "spring", stiffness: 300, damping: 22 }} onClick={onOpen}
-      style={{ cursor: "pointer", borderRadius: 18, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
-      <div style={{ aspectRatio: "16/9", display: "grid", gridTemplateColumns: covers.length > 1 ? "1fr 1fr" : "1fr", gridAutoRows: "1fr", gap: 2, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
-        {covers.length === 0 ? (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim }}>
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
-          </div>
-        ) : covers.map((f, i) => (
-          <div key={f.id} style={{ position: "relative", overflow: "hidden", gridColumn: covers.length === 3 && i === 0 ? "span 2" : "auto" }}>
-            {type === "video"
-              ? <video src={f.public_url} muted playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              : <img src={f.public_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />}
-          </div>
-        ))}
-      </div>
-      <div style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 11 }}>
-        <div style={{ width: 34, height: 34, borderRadius: 10, background: "#1a1a2e", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          {type === "video"
-            ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
-            : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>}
-        </div>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 14.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{label}</div>
-          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{list.length} {list.length === 1 ? (t("assets.itemOne") || "Element") : (t("assets.itemMany") || "Elemente")}</div>
-        </div>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-      </div>
-    </motion.div>
-  );
-}
-
 // Creations tab — gallery of the workspace's images AND videos (AI-generated +
 // user uploads). Filter by media type; upload your own via the button.
 function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, onUploadStorage, onUploadDrive, pickRef, onUploadingChange }) {
   const [files, setFiles] = useState(null); // null = loading
-  const [openFolder, setOpenFolder] = useState(null); // null = folder overview | "image" | "video"
   const [uploading, setUploading] = useState(false);
   const [zoom, setZoom] = useState(null); // the file object being previewed
   const [search, setSearch] = useState("");
   const [sortMode, setSortMode] = useState("created"); // "created" | "name"
   const [viewMode, setViewMode] = useState("list"); // "list" | "grid"
+  const [mediaFilter, setMediaFilter] = useState("all"); // "all" | "image" | "video"
   const inputRef = useRef(null);
   // Register the file-picker trigger so the header Upload button can call it,
   // and surface uploading state upward.
@@ -11642,14 +11608,12 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     setFiles((data || []).filter(f => { const m = f.mime_type || ""; return m.startsWith("image/") || m.startsWith("video/"); }));
   }, [userOrg?.id]);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setSearch(""); }, [openFolder]);
 
   const upload = async (fileList) => {
     const arr = Array.from(fileList || []).filter(f => f.type.startsWith("image/") || f.type.startsWith("video/"));
     if (!arr.length || !userOrg?.id || !session?.user?.id) return;
     setUploading(true);
     const added = [];
-    let firstType = null;
     for (const file of arr) {
       const ext = (file.name.split(".").pop() || "bin").toLowerCase();
       const path = `${session.user.id}/creations/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
@@ -11661,18 +11625,16 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
         mime_type: file.type, size_bytes: file.size, storage_path: path,
         storage_provider: "supabase", public_url: signed?.signedUrl || null,
       }).select("id,name,public_url,mime_type,size_bytes,created_at").single();
-      if (!error && data) { added.push(data); if (!firstType) firstType = file.type.startsWith("video/") ? "video" : "image"; }
+      if (!error && data) added.push(data);
     }
     setFiles(prev => [...added, ...(prev || [])]);
-    if (firstType) setOpenFolder(firstType); // jump into the folder we just added to
     setUploading(false);
   };
 
   const isVideo = (f) => (f.mime_type || "").startsWith("video/");
-  const images = (files || []).filter(f => !isVideo(f));
-  const videos = (files || []).filter(f => isVideo(f));
-  const items = openFolder === "video" ? videos : images;
-  const displayItems = items
+  const allFiles = files || [];
+  const displayItems = allFiles
+    .filter(f => mediaFilter === "all" || (mediaFilter === "video" ? isVideo(f) : !isVideo(f)))
     .filter(f => !search.trim() || (f.name || "").toLowerCase().includes(search.trim().toLowerCase()))
     .sort((a, b) => sortMode === "name"
       ? (a.name || "").localeCompare(b.name || "")
@@ -11691,6 +11653,16 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
           boxShadow: on ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>{children}</motion.div>
     );
   };
+  const filterBtn = (mode, label) => {
+    const on = mediaFilter === mode;
+    return (
+      <motion.div whileTap={{ scale: 0.95 }} onClick={() => setMediaFilter(mode)}
+        style={{ padding: "6px 13px", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+          fontSize: 12.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap",
+          background: on ? (darkMode ? "rgba(255,255,255,0.10)" : "#fff") : "transparent", color: on ? theme.text : theme.textDim,
+          boxShadow: on ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>{label}</motion.div>
+    );
+  };
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
@@ -11698,33 +11670,23 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
 
       {files === null ? (
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
-      ) : openFolder === null ? (
-        // ── Folder overview: always two folders, Bilder + Videos ──
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 18 }}>
-            <CreationsFolderTile type="image" list={images} label={t("assets.images") || "Bilder"} theme={theme} darkMode={darkMode} t={t} onOpen={() => setOpenFolder("image")} />
-            <CreationsFolderTile type="video" list={videos} label={t("assets.videos") || "Videos"} theme={theme} darkMode={darkMode} t={t} onOpen={() => setOpenFolder("video")} />
-          </div>
-        </div>
       ) : (
-        // ── Inside a folder: back row + toolbar + grid/list ──
+        // ── Flat view: all media together + toolbar (search · type filter · sort · view) ──
         <>
-          <div style={{ padding: "14px 26px 0", display: "flex", alignItems: "center", gap: 10 }}>
-            <motion.div whileTap={{ scale: 0.94 }} onClick={() => setOpenFolder(null)} style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", color: theme.textDim, fontSize: 13, fontFamily: FONT, fontWeight: 500 }}>
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
-              {openFolder === "video" ? (t("assets.videos") || "Videos") : (t("assets.images") || "Bilder")}
-            </motion.div>
-            <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>· {items.length}</span>
-          </div>
-          {items.length > 0 && (
-            // Toolbar: search · sort · view toggle — mirrors the Documents tab
-            <div style={{ padding: "14px 26px 4px", display: "flex", alignItems: "center", gap: 10 }}>
+          {allFiles.length > 0 && (
+            <div style={{ padding: "16px 26px 4px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, maxWidth: 340 }}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder={openFolder === "video" ? (appLanguage === "de" ? "Videos durchsuchen…" : "Search videos…") : (appLanguage === "de" ? "Bilder durchsuchen…" : "Search images…")}
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder={appLanguage === "de" ? "Kreationen durchsuchen…" : "Search creations…"}
                   style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }} />
               </div>
               <div style={{ flex: 1 }} />
+              {/* Type filter: Alle · Bilder · Videos */}
+              <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+                {filterBtn("all", appLanguage === "de" ? "Alle" : "All")}
+                {filterBtn("image", t("assets.images") || "Bilder")}
+                {filterBtn("video", t("assets.videos") || "Videos")}
+              </div>
               <motion.div whileTap={{ scale: 0.96 }} onClick={() => setSortMode(m => m === "created" ? "name" : "created")}
                 style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, whiteSpace: "nowrap" }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
@@ -11736,7 +11698,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
               </div>
             </div>
           )}
-          {items.length === 0 ? (
+          {allFiles.length === 0 ? (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: theme.textDim, textAlign: "center", gap: 14, padding: 20 }}>
               <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 160, damping: 16 }}
                 style={{ width: 84, height: 84, borderRadius: 24, background: grad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: glow }}>
@@ -11752,7 +11714,13 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
           ) : displayItems.length === 0 ? (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "40px 20px" }}>
               <div style={{ fontSize: 15.5, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 6 }}>{appLanguage === "de" ? "Keine Treffer" : "No matches"}</div>
-              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{appLanguage === "de" ? "Versuche einen anderen Suchbegriff." : "Try a different search term."}</div>
+              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>
+                {search.trim()
+                  ? (appLanguage === "de" ? "Versuche einen anderen Suchbegriff." : "Try a different search term.")
+                  : mediaFilter === "video"
+                    ? (appLanguage === "de" ? "Noch keine Videos." : "No videos yet.")
+                    : (appLanguage === "de" ? "Noch keine Bilder." : "No images yet.")}
+              </div>
             </div>
           ) : viewMode === "grid" ? (
             // Gallery grid: square thumbnail tiles
