@@ -15835,12 +15835,29 @@ function BrandImagery({ value, editing, onChange, uploadFile, theme, darkMode, a
     setCopiedId(it.id);
     setTimeout(() => setCopiedId(c => c === it.id ? null : c), 1400);
   };
+  // Cross-origin URLs ignore <a download>, so fetch the bytes and save a blob.
+  const download = async (it) => {
+    try {
+      const blob = await (await fetch(it.url)).blob();
+      const ext = (blob.type.split("/")[1] || "png").replace("jpeg", "jpg");
+      const base = (it.name || "bildsprache").replace(/\.[^/.]+$/, "");
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl; a.download = `${base}.${ext}`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
+    } catch (_) {}
+  };
 
+  const btnStyle = { width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.4)", color: "#fff" };
   const copyIcon = (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
   );
   const checkIcon = (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+  );
+  const downloadIcon = (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
   );
 
   if (!editing && items.length === 0) {
@@ -15852,30 +15869,32 @@ function BrandImagery({ value, editing, onChange, uploadFile, theme, darkMode, a
   }
 
   return (
-    <div>
-      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12, fontWeight: 600 }}>Bildsprache</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
         {items.map(it => (
           <div key={it.id} className="imagery-tile" style={{ position: "relative", borderRadius: 16, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", aspectRatio: "4 / 3" }}>
             <img src={it.url} alt={it.name || ""} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
             {editing ? (
               // Edit mode: prompt always editable over a constant scrim + delete.
-              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", padding: 12, background: "rgba(10,10,16,0.55)", backdropFilter: "blur(7px)", WebkitBackdropFilter: "blur(7px)" }}>
-                <motion.div whileTap={{ scale: 0.9 }} onClick={() => remove(it.id)} title="Entfernen"
-                  style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "rgba(0,0,0,0.45)", color: "#fff" }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                </motion.div>
+              <div style={{ position: "absolute", inset: 0, borderRadius: 16, display: "flex", flexDirection: "column", padding: 12, background: "rgba(10,10,16,0.55)", backdropFilter: "blur(7px)", WebkitBackdropFilter: "blur(7px)" }}>
+                <div style={{ position: "absolute", top: 10, right: 10, display: "flex", gap: 6 }}>
+                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => download(it)} title="Herunterladen" style={{ ...btnStyle, width: 28, height: 28, borderRadius: 8, cursor: "pointer", background: "rgba(0,0,0,0.45)" }}>{downloadIcon}</motion.div>
+                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => remove(it.id)} title="Entfernen" style={{ ...btnStyle, width: 28, height: 28, borderRadius: 8, cursor: "pointer", background: "rgba(0,0,0,0.45)" }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  </motion.div>
+                </div>
                 <textarea value={it.prompt || ""} onChange={e => updatePrompt(it.id, e.target.value)} placeholder="Prompt hinzufügen…"
-                  style={{ flex: 1, marginTop: 30, width: "100%", boxSizing: "border-box", resize: "none", border: "none", outline: "none", background: "transparent", color: "#fff", fontSize: 12.5, lineHeight: 1.5, fontFamily: FONT }} />
+                  style={{ flex: 1, marginTop: 34, width: "100%", boxSizing: "border-box", resize: "none", border: "none", outline: "none", background: "transparent", color: "#fff", fontSize: 12.5, lineHeight: 1.5, fontFamily: FONT }} />
               </div>
             ) : (
-              // View mode: blurred overlay with the prompt + copy button on hover.
-              <div className="imagery-overlay" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", padding: 14, background: "rgba(10,10,16,0.42)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
-                <motion.div whileTap={{ scale: 0.9 }} onClick={() => copyPrompt(it)} title="Prompt kopieren"
-                  style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", cursor: it.prompt ? "pointer" : "default", background: "rgba(0,0,0,0.4)", color: "#fff", opacity: it.prompt ? 1 : 0.4 }}>
-                  {copiedId === it.id ? checkIcon : copyIcon}
-                </motion.div>
-                <div style={{ flex: 1, overflowY: "auto", paddingRight: 36, color: "#fff", fontSize: 12.5, lineHeight: 1.55, fontFamily: FONT }}>
+              // View mode: blurred overlay with the prompt + download/copy buttons on hover.
+              <div className="imagery-overlay" style={{ position: "absolute", inset: 0, borderRadius: 16, display: "flex", flexDirection: "column", padding: 14, background: "rgba(10,10,16,0.42)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
+                <div style={{ position: "absolute", top: 10, right: 10, display: "flex", gap: 6 }}>
+                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => download(it)} title="Herunterladen" style={{ ...btnStyle, cursor: "pointer" }}>{downloadIcon}</motion.div>
+                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => copyPrompt(it)} title="Prompt kopieren" style={{ ...btnStyle, cursor: it.prompt ? "pointer" : "default", opacity: it.prompt ? 1 : 0.4 }}>
+                    {copiedId === it.id ? checkIcon : copyIcon}
+                  </motion.div>
+                </div>
+                <div style={{ flex: 1, overflowY: "auto", paddingRight: 76, color: "#fff", fontSize: 12.5, lineHeight: 1.55, fontFamily: FONT }}>
                   {it.prompt || <span style={{ opacity: 0.6 }}>Kein Prompt hinterlegt.</span>}
                 </div>
               </div>
@@ -15902,7 +15921,6 @@ function BrandImagery({ value, editing, onChange, uploadFile, theme, darkMode, a
           </>
         )}
       </div>
-    </div>
   );
 }
 
