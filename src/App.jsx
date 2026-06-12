@@ -15809,7 +15809,7 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
 // produced it; hovering reveals a blurred overlay with that prompt + a copy
 // button. Admins toggle edit mode via the header "Bearbeiten" button to upload
 // more images, edit prompts inline, and remove tiles.
-function BrandImagery({ value, editing, onChange, uploadFile, llmProvider, llmKeys, ensureValidToken, theme, darkMode, accent }) {
+function BrandImagery({ value, editing, onChange, uploadFile, llmProvider, llmKeys, ensureValidToken, appLanguage = "de", theme, darkMode, accent }) {
   const items = Array.isArray(value) ? value : [];
   const [uploading, setUploading] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
@@ -15832,7 +15832,9 @@ function BrandImagery({ value, editing, onChange, uploadFile, llmProvider, llmKe
       const resp = await fetch("/api/chat-multi", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: "Analysiere dieses Bild und schreibe einen präzisen, wiederverwendbaren Bildgenerierungs-Prompt auf Deutsch. Beschreibe Motiv, visuellen Stil, Komposition, Beleuchtung, Farbpalette und Stimmung so, dass eine KI ein Bild im exakt gleichen Stil erzeugen kann. Antworte NUR mit dem Prompt, ohne Einleitung oder Anführungszeichen.",
+          message: appLanguage === "de"
+            ? "Analysiere dieses Bild und schreibe einen präzisen, wiederverwendbaren Bildgenerierungs-Prompt auf Deutsch. Beschreibe Motiv, visuellen Stil, Komposition, Beleuchtung, Farbpalette und Stimmung so, dass eine KI ein Bild im exakt gleichen Stil erzeugen kann. Antworte NUR mit dem Prompt, ohne Einleitung oder Anführungszeichen."
+            : "Analyze this image and write a precise, reusable image-generation prompt in English. Describe the subject, visual style, composition, lighting, colour palette and mood so an AI can produce an image in exactly this style. Reply with ONLY the prompt, no preamble or quotation marks.",
           image: item.url,
           provider: llmProvider || "gemini",
           apiKey: apiKey || undefined,
@@ -15901,7 +15903,9 @@ function BrandImagery({ value, editing, onChange, uploadFile, llmProvider, llmKe
   if (!editing && items.length === 0) {
     return (
       <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>
-        Noch keine Bildsprache hinterlegt. Über „Bearbeiten" oben rechts kannst du Beispielbilder mit ihren Prompts hochladen.
+        {appLanguage === "de"
+          ? 'Noch keine Bildsprache hinterlegt. Über „Bearbeiten" oben rechts kannst du Beispielbilder mit ihren Prompts hochladen.'
+          : 'No imagery yet. Use “Edit” at the top right to upload example images with their prompts.'}
       </div>
     );
   }
@@ -15927,7 +15931,9 @@ function BrandImagery({ value, editing, onChange, uploadFile, llmProvider, llmKe
                   </motion.div>
                 </div>
                 <textarea value={it.prompt || ""} onChange={e => updatePrompt(it.id, e.target.value)} disabled={genIds.includes(it.id)}
-                  placeholder={genIds.includes(it.id) ? "KI analysiert das Bild…" : (aiConnected ? "Prompt – wird automatisch generiert oder selbst eingeben…" : "Prompt hinzufügen…")}
+                  placeholder={genIds.includes(it.id)
+                    ? (appLanguage === "de" ? "KI analysiert das Bild…" : "AI is analysing the image…")
+                    : (aiConnected ? (appLanguage === "de" ? "Prompt – wird automatisch generiert oder selbst eingeben…" : "Prompt – auto-generated, or type your own…") : (appLanguage === "de" ? "Prompt hinzufügen…" : "Add a prompt…"))}
                   style={{ flex: 1, marginTop: 34, width: "100%", boxSizing: "border-box", resize: "none", border: "none", outline: "none", background: "transparent", color: "#fff", fontSize: 12.5, lineHeight: 1.5, fontFamily: FONT }} />
               </div>
             ) : (
@@ -15940,7 +15946,7 @@ function BrandImagery({ value, editing, onChange, uploadFile, llmProvider, llmKe
                 <motion.div whileTap={{ scale: 0.9 }} onClick={() => download(it)} title="Herunterladen"
                   style={{ ...btnStyle, position: "absolute", bottom: 10, right: 10, cursor: "pointer" }}>{downloadIcon}</motion.div>
                 <div style={{ flex: 1, overflowY: "auto", paddingRight: 40, paddingBottom: 36, color: "#fff", fontSize: 12.5, lineHeight: 1.55, fontFamily: FONT }}>
-                  {it.prompt || <span style={{ opacity: 0.6 }}>Kein Prompt hinterlegt.</span>}
+                  {it.prompt || <span style={{ opacity: 0.6 }}>{appLanguage === "de" ? "Kein Prompt hinterlegt." : "No prompt yet."}</span>}
                 </div>
               </div>
             )}
@@ -15953,13 +15959,13 @@ function BrandImagery({ value, editing, onChange, uploadFile, llmProvider, llmKe
               style={{ aspectRatio: "4 / 3", borderRadius: 16, cursor: uploading ? "default" : "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, textAlign: "center", padding: 16,
                 border: `2px dashed ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", color: theme.textDim }}>
               {uploading ? (
-                <div style={{ fontSize: 12.5, fontFamily: FONT }}>Wird hochgeladen…</div>
+                <div style={{ fontSize: 12.5, fontFamily: FONT }}>{appLanguage === "de" ? "Wird hochgeladen…" : "Uploading…"}</div>
               ) : (
                 <>
                   <div style={{ width: 44, height: 44, borderRadius: 13, background: accent + "1f", display: "flex", alignItems: "center", justifyContent: "center", color: accent }}>
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                   </div>
-                  <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Bilder hinzufügen</div>
+                  <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{appLanguage === "de" ? "Bilder hinzufügen" : "Add images"}</div>
                 </>
               )}
             </motion.div>
@@ -16290,7 +16296,7 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
   );
 }
 
-function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true }) {
+function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, appLanguage = "de", brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true }) {
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
   const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
   // Edit permission for the current pillar: Design System needs the Designer
@@ -18203,7 +18209,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                           theme={theme} darkMode={darkMode} accent={theme.accent} />
                       ) : k === "design/imagery" ? (
                         <BrandImagery value={profile.imagery} editing={editingText} onChange={saveImagery}
-                          uploadFile={uploadFile} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken}
+                          uploadFile={uploadFile} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} appLanguage={appLanguage}
                           theme={theme} darkMode={darkMode} accent={theme.accent} />
                       ) : k === "identity/voice" ? (
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
@@ -22130,7 +22136,7 @@ export default function CircularMenu() {
         {/* BRAND VIEW */}
         <AnimatePresence>
           {currentView === "brand" && (
-            <BrandView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} brandTab={brandTab} setBrandTab={setBrandTab} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} canEditBrand={canEditBrand} canEditDesign={canEditDesign} onNavigate={(v) => setCurrentView(v)} onBack={() => setCurrentView("dashboard")} />
+            <BrandView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} brandTab={brandTab} setBrandTab={setBrandTab} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} canEditBrand={canEditBrand} canEditDesign={canEditDesign} onNavigate={(v) => setCurrentView(v)} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
