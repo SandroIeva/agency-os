@@ -16009,7 +16009,7 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, theme, d
     const wideHeight = cfg.variant === "single" ? 460 : cfg.variant === "split" ? 331 : 300;
     const sizing = wide ? { height: wideHeight } : { aspectRatio: "4 / 3" };
     return (
-      <div key={id} className="logo-cell" style={{ flex: 1, minWidth: 0, ...sizing, borderRadius: 14, background: cfg.background, boxShadow: "0 1px 2px rgba(0,0,0,0.05), 0 6px 16px rgba(0,0,0,0.05)", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", padding: "9%" }}>
+      <div key={id} className="logo-cell" style={{ flex: 1, minWidth: 0, ...sizing, borderRadius: 14, background: cfg.background, boxShadow: "0 1px 2px rgba(0,0,0,0.035), 0 6px 16px rgba(0,0,0,0.035)", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", padding: "9%" }}>
         {c.url ? (
           <img src={c.url} alt={c.name || ""} style={{ maxWidth: `${scale * 100}%`, maxHeight: `${scale * 100}%`, objectFit: "contain" }} />
         ) : editing ? (
