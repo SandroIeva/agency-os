@@ -15924,6 +15924,188 @@ function BrandImagery({ value, editing, onChange, uploadFile, theme, darkMode, a
   );
 }
 
+// ── Brand Logo layout ─────────────────────────────────────────────────────────
+// A guidelines-style composition of framed logo cells (à la the Danelec board):
+// the layout variant is selectable, every cell holds one uploaded logo with
+// adjustable scale and built-in padding, and the whole board sits on a
+// configurable background. Admins edit via the header "Bearbeiten" button.
+const LOGO_LAYOUTS = {
+  split:   { label: "Zweiteilung + Lockup", rows: [["a", "b"], ["c"]] },
+  quad:    { label: "Vier Kacheln",         rows: [["a", "b"], ["c", "d"]] },
+  stacked: { label: "Zwei längliche",       rows: [["a"], ["b"]] },
+};
+const LOGO_BG_PRESETS = ["#ffffff", "#f4f4f6", "#1a1a2e", "#000000"];
+const LayoutGlyph = ({ variant, color }) => {
+  const rows = (LOGO_LAYOUTS[variant] || LOGO_LAYOUTS.split).rows;
+  return (
+    <svg width="20" height="16" viewBox="0 0 20 16" fill="none">
+      {(() => {
+        const out = []; const rh = (16 - (rows.length - 1) * 2) / rows.length;
+        rows.forEach((row, ri) => {
+          const y = ri * (rh + 2); const cw = (20 - (row.length - 1) * 2) / row.length;
+          row.forEach((_, ci) => out.push(<rect key={ri + "-" + ci} x={ci * (cw + 2)} y={y} width={cw} height={rh} rx="1.5" fill={color} />));
+        });
+        return out;
+      })()}
+    </svg>
+  );
+};
+
+function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, theme, darkMode, accent }) {
+  const [busyCell, setBusyCell] = useState(null);
+  const [layoutOpen, setLayoutOpen] = useState(false);
+  const cellInputRefs = useRef({});
+
+  // Working config — seeded from the existing logo variants on first use.
+  const cfg = (() => {
+    const base = (value && Object.keys(value).length) ? value : {};
+    const variant = LOGO_LAYOUTS[base.variant] ? base.variant : "split";
+    const background = base.background || "#ffffff";
+    let cells = base.cells;
+    if (!cells) {
+      const byKey = {}; (logos || []).forEach(l => { byKey[l.key] = l; });
+      const primary = byKey.primary || (logos || [])[0];
+      const symbol = byKey.icon || byKey.svg;
+      cells = {};
+      if (primary) cells.a = { url: primary.url, name: primary.name || primary.label || "", scale: 0.7 };
+      if (symbol) cells.b = { url: symbol.url, name: symbol.name || symbol.label || "", scale: 0.5 };
+      if (primary) cells.c = { url: primary.url, name: primary.name || primary.label || "", scale: 0.6 };
+    }
+    return { variant, background, cells: cells || {} };
+  })();
+
+  const update = (partial) => onChange({ ...cfg, ...partial });
+  const setCell = (id, data) => onChange({ ...cfg, cells: { ...cfg.cells, [id]: data } });
+  const removeCell = (id) => { const c = { ...cfg.cells }; delete c[id]; onChange({ ...cfg, cells: c }); };
+  const setScale = (id, scale) => setCell(id, { ...(cfg.cells[id] || {}), scale });
+  const uploadToCell = async (id, file) => {
+    if (!file || !file.type?.startsWith("image/") || !uploadFile) return;
+    setBusyCell(id);
+    try { const r = await uploadFile(file, `logo-${id}`); if (r?.url) setCell(id, { url: r.url, name: r.name || file.name, scale: cfg.cells[id]?.scale ?? 0.7 }); }
+    catch (_) {}
+    setBusyCell(null);
+  };
+
+  const layout = LOGO_LAYOUTS[cfg.variant] || LOGO_LAYOUTS.split;
+  const hasAny = Object.values(cfg.cells).some(c => c?.url);
+  const isDark = (hex) => { const h = (hex || "").replace("#", ""); if (h.length < 6) return false; const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16); return (0.299 * r + 0.587 * g + 0.114 * b) < 140; };
+  const fg = isDark(cfg.background) ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.4)";
+
+  if (!editing && !hasAny) {
+    return (
+      <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>
+        Noch kein Logo hinterlegt. Über „Bearbeiten" oben rechts kannst du Logo-Varianten hochladen und das Layout festlegen.
+      </div>
+    );
+  }
+
+  const cell = (id) => {
+    const c = cfg.cells[id] || {};
+    const scale = c.scale ?? 0.7;
+    const busy = busyCell === id;
+    return (
+      <div key={id} style={{ flex: 1, minWidth: 0, height: "100%", borderRadius: 14, border: `1px solid ${theme.borderFaint}`, background: cfg.background, position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", padding: "11%" }}>
+        {c.url ? (
+          <img src={c.url} alt={c.name || ""} style={{ maxWidth: `${scale * 100}%`, maxHeight: `${scale * 100}%`, objectFit: "contain" }} />
+        ) : editing ? (
+          <motion.div whileHover={{ scale: 1.03 }} onClick={() => !busy && cellInputRefs.current[id]?.click()}
+            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, cursor: busy ? "default" : "pointer", color: fg }}>
+            {busy ? <span style={{ fontSize: 12, fontFamily: FONT }}>Lädt…</span> : (
+              <>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span style={{ fontSize: 11.5, fontFamily: FONT, fontWeight: 600 }}>Logo</span>
+              </>
+            )}
+          </motion.div>
+        ) : null}
+
+        {editing && (
+          <input ref={el => { cellInputRefs.current[id] = el; }} type="file" accept="image/*" style={{ display: "none" }}
+            onChange={e => { uploadToCell(id, e.target.files?.[0]); e.target.value = ""; }} />
+        )}
+        {editing && c.url && (
+          <>
+            {/* top-right: replace + remove */}
+            <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 6 }}>
+              <motion.div whileTap={{ scale: 0.9 }} onClick={() => cellInputRefs.current[id]?.click()} title="Ersetzen"
+                style={{ width: 26, height: 26, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "rgba(0,0,0,0.5)", color: "#fff" }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+              </motion.div>
+              <motion.div whileTap={{ scale: 0.9 }} onClick={() => removeCell(id)} title="Entfernen"
+                style={{ width: 26, height: 26, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "rgba(0,0,0,0.5)", color: "#fff" }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </motion.div>
+            </div>
+            {/* bottom: scale slider */}
+            <div style={{ position: "absolute", left: 10, right: 10, bottom: 8, display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 9, background: "rgba(0,0,0,0.5)" }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+              <input type="range" min="0.3" max="1" step="0.05" value={scale} onChange={e => setScale(id, parseFloat(e.target.value))}
+                style={{ flex: 1, accentColor: accent, cursor: "pointer" }} />
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      {editing && (
+        <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", marginBottom: 16 }}>
+          {/* Layout dropdown */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}>Layout</span>
+            <div style={{ position: "relative" }}>
+              <div onClick={() => setLayoutOpen(o => !o)}
+                style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 34px 8px 12px", borderRadius: 10, cursor: "pointer", position: "relative", minWidth: 180, background: darkMode ? "rgba(255,255,255,0.05)" : "#fff", border: `1px solid ${theme.borderFaint}`, color: theme.text, fontSize: 12.5, fontFamily: FONT }}>
+                <LayoutGlyph variant={cfg.variant} color={theme.textDim} />
+                {layout.label}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)" }}><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+              {layoutOpen && (
+                <>
+                  <div onClick={() => setLayoutOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                  <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 41, minWidth: 200, padding: 5, borderRadius: 12, background: darkMode ? "rgba(28,28,38,0.99)" : "#fff", border: `1px solid ${theme.border}`, boxShadow: "0 12px 36px rgba(0,0,0,0.22)" }}>
+                    {Object.entries(LOGO_LAYOUTS).map(([id, l]) => (
+                      <div key={id} onClick={() => { update({ variant: id }); setLayoutOpen(false); }}
+                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 8, cursor: "pointer", fontSize: 12.5, fontFamily: FONT, color: theme.text, background: cfg.variant === id ? (darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.04)") : "transparent" }}>
+                        <LayoutGlyph variant={id} color={cfg.variant === id ? accent : theme.textDim} />
+                        {l.label}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+          {/* Background color */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}>Hintergrund</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {LOGO_BG_PRESETS.map(bg => (
+                <motion.div key={bg} whileTap={{ scale: 0.88 }} onClick={() => update({ background: bg })} title={bg}
+                  style={{ width: 24, height: 24, borderRadius: 7, cursor: "pointer", background: bg, border: cfg.background.toLowerCase() === bg ? `2px solid ${accent}` : `1px solid ${theme.borderFaint}` }} />
+              ))}
+              <label style={{ width: 24, height: 24, borderRadius: 7, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", background: cfg.background }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={isDark(cfg.background) ? "#fff" : theme.textDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.555C21.965 6.012 17.461 2 12 2z"/></svg>
+                <input type="color" value={cfg.background.length === 7 ? cfg.background : "#ffffff"} onChange={e => update({ background: e.target.value })}
+                  style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {layout.rows.map((row, ri) => (
+          <div key={ri} style={{ display: "flex", gap: 12, height: row.length === 1 ? 156 : 208 }}>
+            {row.map(id => cell(id))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true }) {
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
   const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
@@ -16236,6 +16418,22 @@ If you don't know a field, infer a plausible value. Write all text values in the
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
           .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", imagery: list })
+          .select("id").single();
+        if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
+      }
+    }, 500);
+  };
+  const logoLayoutTimer = useRef(null);
+  const saveLogoLayout = (cfg) => {
+    setProfile(p => ({ ...(p || {}), logo_layout: cfg }));
+    clearTimeout(logoLayoutTimer.current);
+    logoLayoutTimer.current = setTimeout(async () => {
+      const cur = profileRef.current;
+      if (cur?.id) {
+        await supabase.from("brand_profile").update({ logo_layout: cfg }).eq("id", cur.id);
+      } else if (userOrg?.id) {
+        const { data } = await supabase.from("brand_profile")
+          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", logo_layout: cfg })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -17815,6 +18013,9 @@ If you don't know a field, infer a plausible value. Write all text values in the
                       ) : k === "design/typography" ? (
                         <BrandTypography value={profile.typography} fonts={fonts} editing={editingText} theme={theme} darkMode={darkMode}
                           onChange={saveTypography} session={session} userOrg={userOrg} />
+                      ) : k === "design/logo" ? (
+                        <BrandLogoLayout value={profile.logo_layout} logos={profile.logos} editing={editingText} onChange={saveLogoLayout}
+                          uploadFile={uploadFile} theme={theme} darkMode={darkMode} accent={theme.accent} />
                       ) : k === "design/imagery" ? (
                         <BrandImagery value={profile.imagery} editing={editingText} onChange={saveImagery}
                           uploadFile={uploadFile} theme={theme} darkMode={darkMode} accent={theme.accent} />
