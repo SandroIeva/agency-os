@@ -15930,6 +15930,7 @@ function BrandImagery({ value, editing, onChange, uploadFile, theme, darkMode, a
 // adjustable scale and built-in padding, and the whole board sits on a
 // configurable background. Admins edit via the header "Bearbeiten" button.
 const LOGO_LAYOUTS = {
+  single:  { label: "Nur Logo",             rows: [["a"]] },
   split:   { label: "Zweiteilung + Lockup", rows: [["a", "b"], ["c"]] },
   quad:    { label: "Vier Kacheln",         rows: [["a", "b"], ["c", "d"]] },
   stacked: { label: "Zwei längliche",       rows: [["a"], ["b"]] },
@@ -15976,7 +15977,6 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, theme, d
 
   const update = (partial) => onChange({ ...cfg, ...partial });
   const setCell = (id, data) => onChange({ ...cfg, cells: { ...cfg.cells, [id]: data } });
-  const removeCell = (id) => { const c = { ...cfg.cells }; delete c[id]; onChange({ ...cfg, cells: c }); };
   const setScale = (id, scale) => setCell(id, { ...(cfg.cells[id] || {}), scale });
   const uploadToCell = async (id, file) => {
     if (!file || !file.type?.startsWith("image/") || !uploadFile) return;
@@ -15999,12 +15999,15 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, theme, d
     );
   }
 
-  const cell = (id) => {
+  const cell = (id, wide) => {
     const c = cfg.cells[id] || {};
     const scale = c.scale ?? 0.7;
     const busy = busyCell === id;
+    // Multi-cell rows get a 4:3 frame (drives a comfortable height); a full-width
+    // row would be far too tall at 4:3, so it uses a fixed, generous height.
+    const sizing = wide ? { height: 230 } : { aspectRatio: "4 / 3" };
     return (
-      <div key={id} style={{ flex: 1, minWidth: 0, height: "100%", borderRadius: 14, border: `1px solid ${theme.borderFaint}`, background: cfg.background, position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", padding: "11%" }}>
+      <div key={id} className="logo-cell" style={{ flex: 1, minWidth: 0, ...sizing, borderRadius: 14, border: `1px solid ${theme.borderFaint}`, background: cfg.background, position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", padding: "9%" }}>
         {c.url ? (
           <img src={c.url} alt={c.name || ""} style={{ maxWidth: `${scale * 100}%`, maxHeight: `${scale * 100}%`, objectFit: "contain" }} />
         ) : editing ? (
@@ -16025,22 +16028,16 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, theme, d
         )}
         {editing && c.url && (
           <>
-            {/* top-right: replace + remove */}
-            <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 6 }}>
-              <motion.div whileTap={{ scale: 0.9 }} onClick={() => cellInputRefs.current[id]?.click()} title="Ersetzen"
-                style={{ width: 26, height: 26, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "rgba(0,0,0,0.5)", color: "#fff" }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
-              </motion.div>
-              <motion.div whileTap={{ scale: 0.9 }} onClick={() => removeCell(id)} title="Entfernen"
-                style={{ width: 26, height: 26, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "rgba(0,0,0,0.5)", color: "#fff" }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-              </motion.div>
-            </div>
-            {/* bottom: scale slider */}
-            <div style={{ position: "absolute", left: 10, right: 10, bottom: 8, display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 9, background: "rgba(0,0,0,0.5)" }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-              <input type="range" min="0.3" max="1" step="0.05" value={scale} onChange={e => setScale(id, parseFloat(e.target.value))}
-                style={{ flex: 1, accentColor: accent, cursor: "pointer" }} />
+            {/* subtle upload icon (top-right) to swap the logo */}
+            <motion.div whileHover={{ opacity: 1 }} whileTap={{ scale: 0.9 }} onClick={() => cellInputRefs.current[id]?.click()} title="Neues Logo hochladen"
+              style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: isDark(cfg.background) ? "#fff" : theme.textSub, background: isDark(cfg.background) ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.05)", opacity: 0.65 }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </motion.div>
+            {/* discreet scale slider — appears on hover, bottom-centre */}
+            <div className="logo-scale-wrap" style={{ position: "absolute", left: "50%", bottom: 12, transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 7, padding: "5px 10px", borderRadius: 999, background: isDark(cfg.background) ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.06)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={isDark(cfg.background) ? "rgba(255,255,255,0.75)" : theme.textDim} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/></svg>
+              <input className="logo-scale" type="range" min="0.3" max="1" step="0.02" value={scale} onChange={e => setScale(id, parseFloat(e.target.value))}
+                style={{ width: 96, cursor: "pointer" }} />
             </div>
           </>
         )}
@@ -16097,8 +16094,8 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, theme, d
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {layout.rows.map((row, ri) => (
-          <div key={ri} style={{ display: "flex", gap: 12, height: row.length === 1 ? 156 : 208 }}>
-            {row.map(id => cell(id))}
+          <div key={ri} style={{ display: "flex", gap: 12, alignItems: "stretch" }}>
+            {row.map(id => cell(id, row.length === 1))}
           </div>
         ))}
       </div>
@@ -25097,6 +25094,12 @@ export default function CircularMenu() {
         /* Brand imagery: prompt overlay fades in on hover */
         .imagery-overlay { opacity: 0; transition: opacity 0.18s ease; }
         .imagery-tile:hover .imagery-overlay { opacity: 1; }
+        /* Brand logo: discreet scale slider, only on hover */
+        .logo-scale-wrap { opacity: 0; transition: opacity 0.18s ease; }
+        .logo-cell:hover .logo-scale-wrap { opacity: 1; }
+        input.logo-scale { -webkit-appearance: none; appearance: none; height: 3px; border-radius: 3px; background: rgba(127,127,127,0.45); outline: none; }
+        input.logo-scale::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 1px solid rgba(0,0,0,0.25); box-shadow: 0 1px 2px rgba(0,0,0,0.25); cursor: pointer; }
+        input.logo-scale::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 1px solid rgba(0,0,0,0.25); cursor: pointer; }
         /* No blue focus outline on clicked/active elements */
         *:focus, *:focus-visible { outline: none !important; }
         /* Brand section rich-text (editor + rendered output) */
