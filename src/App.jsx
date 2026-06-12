@@ -16008,8 +16008,10 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, theme, d
     // taller for a lone logo, a bit shorter for the split lockup.
     const wideHeight = cfg.variant === "single" ? 460 : cfg.variant === "split" ? 331 : 300;
     const sizing = wide ? { height: wideHeight } : { aspectRatio: "4 / 3" };
+    // The two-long-cells layout gets ~30% more horizontal breathing room.
+    const pad = cfg.variant === "stacked" ? "9% 12%" : "9%";
     return (
-      <div key={id} className="logo-cell" style={{ flex: 1, minWidth: 0, ...sizing, borderRadius: 14, background: cfg.background, boxShadow: "0 1px 2px rgba(0,0,0,0.035), 0 6px 16px rgba(0,0,0,0.035)", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", padding: "9%" }}>
+      <div key={id} className="logo-cell" style={{ flex: 1, minWidth: 0, ...sizing, borderRadius: 14, background: cfg.background, boxShadow: "0 1px 2px rgba(0,0,0,0.035), 0 6px 16px rgba(0,0,0,0.035)", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", padding: pad }}>
         {c.url ? (
           <img src={c.url} alt={c.name || ""} style={{ maxWidth: `${scale * 100}%`, maxHeight: `${scale * 100}%`, objectFit: "contain" }} />
         ) : editing ? (
@@ -16093,9 +16095,9 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, theme, d
           </div>
         </div>
       )}
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: cfg.variant === "stacked" ? 32 : 24 }}>
         {layout.rows.map((row, ri) => (
-          <div key={ri} style={{ display: "flex", gap: 12, alignItems: "stretch" }}>
+          <div key={ri} style={{ display: "flex", gap: 24, alignItems: "stretch" }}>
             {row.map(id => cell(id, row.length === 1))}
           </div>
         ))}
