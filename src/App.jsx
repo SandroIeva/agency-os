@@ -15935,7 +15935,6 @@ const LOGO_LAYOUTS = {
   quad:    { label: "Vier Kacheln",         rows: [["a", "b"], ["c", "d"]] },
   stacked: { label: "Zwei längliche",       rows: [["a"], ["b"]] },
 };
-const LOGO_BG_PRESETS = ["#ffffff", "#f4f4f6", "#1a1a2e", "#000000"];
 const LayoutGlyph = ({ variant, color }) => {
   const rows = (LOGO_LAYOUTS[variant] || LOGO_LAYOUTS.split).rows;
   return (
@@ -16094,21 +16093,6 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
                   </div>
                 </>
               )}
-            </div>
-          </div>
-          {/* Background color */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}>Hintergrund</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              {LOGO_BG_PRESETS.map(bg => (
-                <motion.div key={bg} whileTap={{ scale: 0.88 }} onClick={() => update({ background: bg })} title={bg}
-                  style={{ width: 24, height: 24, borderRadius: 7, cursor: "pointer", background: bg, border: cfg.background.toLowerCase() === bg ? `2px solid ${accent}` : `1px solid ${theme.borderFaint}` }} />
-              ))}
-              <label style={{ width: 24, height: 24, borderRadius: 7, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", background: cfg.background }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={isDark(cfg.background) ? "#fff" : theme.textDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.555C21.965 6.012 17.461 2 12 2z"/></svg>
-                <input type="color" value={cfg.background.length === 7 ? cfg.background : "#ffffff"} onChange={e => update({ background: e.target.value })}
-                  style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
-              </label>
             </div>
           </div>
         </div>
