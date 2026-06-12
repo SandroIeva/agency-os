@@ -15829,17 +15829,46 @@ function BrandImagery({ value, editing, onChange, uploadFile, llmProvider, llmKe
     if (!apiKey && !oauthToken) return;
     setGenIds(g => [...g, item.id]);
     try {
+      const sys = appLanguage === "de"
+        ? "Du bist ein erfahrener Art Director und Prompt-Engineer für KI-Bildgeneratoren (Midjourney, DALL·E, Gemini). Du analysierst Bilder extrem genau und übersetzt ihre visuelle DNA in reichhaltige, produktionsreife Prompts."
+        : "You are a senior art director and prompt engineer for AI image generators (Midjourney, DALL·E, Gemini). You analyse images with great precision and translate their visual DNA into rich, production-ready prompts.";
+      const msg = appLanguage === "de"
+        ? `Analysiere dieses Bild sehr gründlich und schreibe daraus EINEN ausführlichen, wiederverwendbaren Bildgenerierungs-Prompt auf Deutsch, mit dem eine KI ein neues Bild in exakt derselben Ästhetik erzeugen kann. Nenne nicht nur das Motiv, sondern erfasse die komplette visuelle Sprache. Berücksichtige dabei konkret:
+- Motiv & Details (Personen, Objekte, Kleidung, Pose, Ausdruck)
+- Umgebung / Hintergrund / Setting
+- Komposition & Bildausschnitt (Perspektive, Blickwinkel, Tiefe)
+- Licht (Richtung, Härte, Tageszeit, Schatten, Highlights)
+- Farbpalette & Farbstimmung (konkrete Farbtöne, Sättigung, Kontrast, Color-Grading)
+- Stimmung & Atmosphäre (Gefühl, Energie)
+- Stil / Medium / Genre (z. B. editoriale Fotografie, 3D-Render, Illustration, analog/35mm, Studio etc.)
+- Texturen, Materialien, Oberflächen
+- Bei Fotos: Kamera-Anmutung (Objektiv, Schärfentiefe, Bokeh, Korn)
+- Nachbearbeitung / Look (z. B. cinematic, matt, high-key)
+
+Schreibe das als EINEN flüssigen, sehr bildhaften und detaillierten Prompt (ca. 5–8 Sätze), nicht als Stichpunktliste. Antworte NUR mit dem Prompt, ohne Einleitung, ohne Überschriften, ohne Anführungszeichen.`
+        : `Analyse this image very thoroughly and turn it into ONE detailed, reusable image-generation prompt in English that lets an AI produce a new image in exactly the same aesthetic. Don't just name the subject — capture the full visual language. Cover specifically:
+- Subject & details (people, objects, clothing, pose, expression)
+- Environment / background / setting
+- Composition & framing (perspective, angle, depth)
+- Lighting (direction, hardness, time of day, shadows, highlights)
+- Colour palette & colour mood (specific hues, saturation, contrast, colour grading)
+- Mood & atmosphere (feeling, energy)
+- Style / medium / genre (e.g. editorial photography, 3D render, illustration, analog/35mm, studio, etc.)
+- Textures, materials, surfaces
+- For photos: camera character (lens, depth of field, bokeh, grain)
+- Post-processing / look (e.g. cinematic, matte, high-key)
+
+Write it as ONE flowing, highly vivid and detailed prompt (about 5–8 sentences), not a bullet list. Reply with ONLY the prompt — no preamble, no headings, no quotation marks.`;
       const resp = await fetch("/api/chat-multi", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: appLanguage === "de"
-            ? "Analysiere dieses Bild und schreibe einen präzisen, wiederverwendbaren Bildgenerierungs-Prompt auf Deutsch. Beschreibe Motiv, visuellen Stil, Komposition, Beleuchtung, Farbpalette und Stimmung so, dass eine KI ein Bild im exakt gleichen Stil erzeugen kann. Antworte NUR mit dem Prompt, ohne Einleitung oder Anführungszeichen."
-            : "Analyze this image and write a precise, reusable image-generation prompt in English. Describe the subject, visual style, composition, lighting, colour palette and mood so an AI can produce an image in exactly this style. Reply with ONLY the prompt, no preamble or quotation marks.",
+          message: msg,
+          systemPrompt: sys,
           image: item.url,
           provider: llmProvider || "gemini",
           apiKey: apiKey || undefined,
           oauthToken: oauthToken || undefined,
-          maxTokens: 400,
+          maxTokens: 900,
         }),
       });
       const data = await resp.json().catch(() => ({}));
