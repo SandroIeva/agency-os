@@ -16006,10 +16006,10 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, theme, d
     // Multi-cell rows get a 4:3 frame (drives a comfortable height); a full-width
     // row would be far too tall at 4:3, so it uses a fixed, generous height —
     // taller for a lone logo, a bit shorter for the split lockup.
-    const wideHeight = cfg.variant === "single" ? 460 : cfg.variant === "split" ? 276 : 300;
+    const wideHeight = cfg.variant === "single" ? 460 : cfg.variant === "split" ? 331 : 300;
     const sizing = wide ? { height: wideHeight } : { aspectRatio: "4 / 3" };
     return (
-      <div key={id} className="logo-cell" style={{ flex: 1, minWidth: 0, ...sizing, borderRadius: 14, border: `1px solid ${theme.borderFaint}`, background: cfg.background, position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", padding: "9%" }}>
+      <div key={id} className="logo-cell" style={{ flex: 1, minWidth: 0, ...sizing, borderRadius: 14, background: cfg.background, position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", padding: "9%" }}>
         {c.url ? (
           <img src={c.url} alt={c.name || ""} style={{ maxWidth: `${scale * 100}%`, maxHeight: `${scale * 100}%`, objectFit: "contain" }} />
         ) : editing ? (
@@ -16036,7 +16036,7 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, theme, d
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             </motion.div>
             {/* discreet scale slider — appears on hover, bottom-centre */}
-            <div className="logo-scale-wrap" style={{ position: "absolute", left: "50%", bottom: 12, transform: "translateX(-50%)", display: "flex", alignItems: "center", padding: "6px 12px", borderRadius: 999, background: isDark(cfg.background) ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.06)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
+            <div className="logo-scale-wrap" style={{ position: "absolute", left: "50%", bottom: 12, transform: "translateX(-50%)", display: "flex", alignItems: "center", padding: "14px 12px", borderRadius: 999, background: isDark(cfg.background) ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.06)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
               <input className="logo-scale" type="range" min="0.3" max="1" step="0.02" value={scale} onChange={e => setScale(id, parseFloat(e.target.value))}
                 style={{ width: 110, cursor: "pointer" }} />
             </div>
