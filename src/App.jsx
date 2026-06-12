@@ -15868,7 +15868,9 @@ Write it as ONE flowing, highly vivid and detailed prompt (about 5–8 sentences
           provider: llmProvider || "gemini",
           apiKey: apiKey || undefined,
           oauthToken: oauthToken || undefined,
-          maxTokens: 900,
+          // Generous ceiling so the full prompt is never cut mid-sentence — Gemini
+          // 2.5 also spends part of the budget on internal "thinking" tokens.
+          maxTokens: 3000,
         }),
       });
       const data = await resp.json().catch(() => ({}));
