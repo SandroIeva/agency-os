@@ -15900,11 +15900,23 @@ Write it as ONE flowing, highly vivid and detailed prompt (about 5–8 sentences
   };
   const updatePrompt = (id, prompt) => onChange(itemsRef.current.map(it => it.id === id ? { ...it, prompt } : it));
   const remove = (id) => onChange(items.filter(it => it.id !== id));
-  const copyPrompt = (it) => {
+  const copyPrompt = async (it) => {
     if (!it.prompt) return;
-    navigator.clipboard?.writeText(it.prompt);
-    setCopiedId(it.id);
-    setTimeout(() => setCopiedId(c => c === it.id ? null : c), 1400);
+    let ok = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(it.prompt); ok = true; }
+    } catch (_) { ok = false; }
+    if (!ok) {
+      // Fallback for blocked/insecure contexts (iframes, http, lost focus).
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = it.prompt; ta.style.position = "fixed"; ta.style.top = "-9999px"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        ok = document.execCommand("copy");
+        ta.remove();
+      } catch (_) { ok = false; }
+    }
+    if (ok) { setCopiedId(it.id); setTimeout(() => setCopiedId(c => c === it.id ? null : c), 1400); }
   };
   // Cross-origin URLs ignore <a download>, so fetch the bytes and save a blob.
   const download = async (it) => {
