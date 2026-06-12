@@ -15902,16 +15902,24 @@ Write it as ONE flowing, highly vivid and detailed prompt (about 5–8 sentences
   const remove = (id) => onChange(items.filter(it => it.id !== id));
   const copyPrompt = async (it) => {
     if (!it.prompt) return;
+    const text = it.prompt;
     let ok = false;
-    try {
-      if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(it.prompt); ok = true; }
-    } catch (_) { ok = false; }
+    // 1) Async Clipboard API — best path (needs a user gesture + focused doc).
+    try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); ok = true; } }
+    catch (_) { ok = false; }
+    // 2) Legacy execCommand fallback. Keep the textarea IN the viewport (1px),
+    //    readonly, with an explicit selection range — required by Safari/iOS,
+    //    where an off-screen textarea silently refuses to copy.
     if (!ok) {
-      // Fallback for blocked/insecure contexts (iframes, http, lost focus).
       try {
         const ta = document.createElement("textarea");
-        ta.value = it.prompt; ta.style.position = "fixed"; ta.style.top = "-9999px"; ta.style.opacity = "0";
-        document.body.appendChild(ta); ta.focus(); ta.select();
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;padding:0;border:0;margin:0;opacity:0;";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try { ta.setSelectionRange(0, text.length); } catch (_) {}
         ok = document.execCommand("copy");
         ta.remove();
       } catch (_) { ok = false; }
