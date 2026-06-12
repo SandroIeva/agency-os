@@ -15952,10 +15952,17 @@ const LayoutGlyph = ({ variant, color }) => {
   );
 };
 
-function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, theme, darkMode, accent }) {
+function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteColors = [], theme, darkMode, accent }) {
   const [busyCell, setBusyCell] = useState(null);
   const [layoutOpen, setLayoutOpen] = useState(false);
+  const [colorCellId, setColorCellId] = useState(null); // cell whose colour modal is open
   const cellInputRefs = useRef({});
+
+  // Background presets: the brand palette if defined, else common colours —
+  // always alongside neutral white/grey/black, which logo boards usually need.
+  const NEUTRALS = ["#ffffff", "#f4f4f6", "#1a1a2e", "#000000"];
+  const brandSet = (paletteColors || []).filter(Boolean);
+  const presetColors = [...new Set([...NEUTRALS, ...(brandSet.length ? brandSet : ["#5B8DEF", "#00B894", "#E84393", "#F59E0B", "#6C5CE7"])])];
 
   // Working config — seeded from the existing logo variants on first use.
   const cfg = (() => {
@@ -15978,6 +15985,7 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, theme, d
   const update = (partial) => onChange({ ...cfg, ...partial });
   const setCell = (id, data) => onChange({ ...cfg, cells: { ...cfg.cells, [id]: data } });
   const setScale = (id, scale) => setCell(id, { ...(cfg.cells[id] || {}), scale });
+  const setCellBg = (id, bg) => setCell(id, { ...(cfg.cells[id] || {}), bg });
   const uploadToCell = async (id, file) => {
     if (!file || !file.type?.startsWith("image/") || !uploadFile) return;
     setBusyCell(id);
@@ -15989,7 +15997,6 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, theme, d
   const layout = LOGO_LAYOUTS[cfg.variant] || LOGO_LAYOUTS.split;
   const hasAny = Object.values(cfg.cells).some(c => c?.url);
   const isDark = (hex) => { const h = (hex || "").replace("#", ""); if (h.length < 6) return false; const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16); return (0.299 * r + 0.587 * g + 0.114 * b) < 140; };
-  const fg = isDark(cfg.background) ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.4)";
 
   if (!editing && !hasAny) {
     return (
@@ -16003,6 +16010,10 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, theme, d
     const c = cfg.cells[id] || {};
     const scale = c.scale ?? 0.7;
     const busy = busyCell === id;
+    const bg = c.bg || cfg.background;
+    const dk = isDark(bg);
+    const ctrlColor = dk ? "#fff" : theme.textSub;
+    const ctrlBg = dk ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.05)";
     // Multi-cell rows get a 4:3 frame (drives a comfortable height); a full-width
     // row would be far too tall at 4:3, so it uses a fixed, generous height —
     // taller for a lone logo, a bit shorter for the split lockup.
@@ -16011,12 +16022,12 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, theme, d
     // The two-long-cells layout gets ~30% more horizontal breathing room.
     const pad = cfg.variant === "stacked" ? "9% 12%" : "9%";
     return (
-      <div key={id} className="logo-cell" style={{ flex: 1, minWidth: 0, ...sizing, borderRadius: 14, background: cfg.background, boxShadow: "0 1px 2px rgba(0,0,0,0.035), 0 6px 16px rgba(0,0,0,0.035)", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", padding: pad }}>
+      <div key={id} className="logo-cell" style={{ flex: 1, minWidth: 0, ...sizing, borderRadius: 14, background: bg, boxShadow: "0 1px 2px rgba(0,0,0,0.035), 0 6px 16px rgba(0,0,0,0.035)", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", padding: pad }}>
         {c.url ? (
           <img src={c.url} alt={c.name || ""} style={{ maxWidth: `${scale * 100}%`, maxHeight: `${scale * 100}%`, objectFit: "contain" }} />
         ) : editing ? (
           <motion.div whileHover={{ scale: 1.03 }} onClick={() => !busy && cellInputRefs.current[id]?.click()}
-            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, cursor: busy ? "default" : "pointer", color: fg }}>
+            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, cursor: busy ? "default" : "pointer", color: dk ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.4)" }}>
             {busy ? <span style={{ fontSize: 12, fontFamily: FONT }}>Lädt…</span> : (
               <>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -16030,15 +16041,22 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, theme, d
           <input ref={el => { cellInputRefs.current[id] = el; }} type="file" accept="image/*" style={{ display: "none" }}
             onChange={e => { uploadToCell(id, e.target.files?.[0]); e.target.value = ""; }} />
         )}
+        {editing && (
+          /* colour-fan icon (bottom-right) → per-cell background colour */
+          <motion.div whileHover={{ opacity: 1 }} whileTap={{ scale: 0.9 }} onClick={() => setColorCellId(id)} title="Hintergrundfarbe"
+            style={{ position: "absolute", bottom: 10, right: 10, width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: ctrlColor, background: ctrlBg, opacity: 0.65 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.555C21.965 6.012 17.461 2 12 2z"/></svg>
+          </motion.div>
+        )}
         {editing && c.url && (
           <>
             {/* subtle upload icon (top-right) to swap the logo */}
             <motion.div whileHover={{ opacity: 1 }} whileTap={{ scale: 0.9 }} onClick={() => cellInputRefs.current[id]?.click()} title="Neues Logo hochladen"
-              style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: isDark(cfg.background) ? "#fff" : theme.textSub, background: isDark(cfg.background) ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.05)", opacity: 0.65 }}>
+              style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: ctrlColor, background: ctrlBg, opacity: 0.65 }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             </motion.div>
             {/* discreet scale slider — appears on hover, bottom-centre */}
-            <div className="logo-scale-wrap" style={{ position: "absolute", left: "50%", bottom: 12, transform: "translateX(-50%)", display: "flex", alignItems: "center", padding: "14px 12px", borderRadius: 999, background: isDark(cfg.background) ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.06)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
+            <div className="logo-scale-wrap" style={{ position: "absolute", left: "50%", bottom: 12, transform: "translateX(-50%)", display: "flex", alignItems: "center", padding: "14px 12px", borderRadius: 999, background: dk ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.06)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
               <input className="logo-scale" type="range" min="0.3" max="1" step="0.02" value={scale} onChange={e => setScale(id, parseFloat(e.target.value))}
                 style={{ width: 110, cursor: "pointer" }} />
             </div>
@@ -16102,6 +16120,44 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, theme, d
           </div>
         ))}
       </div>
+
+      {colorCellId && createPortal(
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setColorCellId(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <motion.div initial={{ opacity: 0, scale: 0.95, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} onClick={e => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: 360, padding: 20, borderRadius: 18, background: darkMode ? "rgba(24,24,32,0.99)" : "#fff", border: `1px solid ${theme.border}`, boxShadow: "0 24px 60px rgba(0,0,0,0.35)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <div style={{ fontSize: 14.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Hintergrundfarbe</div>
+              <motion.div whileTap={{ scale: 0.9 }} onClick={() => setColorCellId(null)} style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </motion.div>
+            </div>
+            {(() => {
+              const activeBg = (cfg.cells[colorCellId]?.bg) || cfg.background;
+              return (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 10, marginBottom: 16 }}>
+                    {presetColors.map(col => {
+                      const on = (activeBg || "").toLowerCase() === col.toLowerCase();
+                      return (
+                        <motion.div key={col} whileTap={{ scale: 0.88 }} onClick={() => { setCellBg(colorCellId, col); setColorCellId(null); }} title={col}
+                          style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 9, cursor: "pointer", background: col, border: on ? `2px solid ${accent}` : `1px solid ${theme.borderFaint}`, boxShadow: on ? `0 0 0 2px ${accent}33` : "none" }} />
+                      );
+                    })}
+                  </div>
+                  <label style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 11, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.02)" }}>
+                    <span style={{ width: 26, height: 26, borderRadius: 7, background: activeBg, border: `1px solid ${theme.borderFaint}`, position: "relative", overflow: "hidden", flexShrink: 0 }}>
+                      <input type="color" value={(activeBg || "").length === 7 ? activeBg : "#ffffff"} onChange={e => setCellBg(colorCellId, e.target.value)}
+                        style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
+                    </span>
+                    <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Eigene Farbe</span>
+                    <span style={{ marginLeft: "auto", fontSize: 12.5, fontFamily: FONT, color: theme.textDim, letterSpacing: 0.3 }}>{(activeBg || "").toUpperCase()}</span>
+                  </label>
+                </>
+              );
+            })()}
+          </motion.div>
+        </motion.div>, document.body)}
     </div>
   );
 }
@@ -18015,7 +18071,8 @@ If you don't know a field, infer a plausible value. Write all text values in the
                           onChange={saveTypography} session={session} userOrg={userOrg} />
                       ) : k === "design/logo" ? (
                         <BrandLogoLayout value={profile.logo_layout} logos={profile.logos} editing={editingText} onChange={saveLogoLayout}
-                          uploadFile={uploadFile} theme={theme} darkMode={darkMode} accent={theme.accent} />
+                          uploadFile={uploadFile} paletteColors={[cp.primary, cp.secondary, ...(cp.accents || [])].filter(Boolean).length ? [cp.primary, cp.secondary, ...(cp.accents || [])].filter(Boolean) : (profile.colors || [])}
+                          theme={theme} darkMode={darkMode} accent={theme.accent} />
                       ) : k === "design/imagery" ? (
                         <BrandImagery value={profile.imagery} editing={editingText} onChange={saveImagery}
                           uploadFile={uploadFile} theme={theme} darkMode={darkMode} accent={theme.accent} />
