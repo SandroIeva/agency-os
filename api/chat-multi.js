@@ -37,7 +37,7 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { message, messages, systemPrompt, provider = "claude", apiKey, oauthToken, model, maxTokens, wantsImage } = req.body || {};
+  const { message, messages, systemPrompt, provider = "claude", apiKey, oauthToken, model, maxTokens, wantsImage, image } = req.body || {};
 
   // Build a normalised conversation history: array of { role: "user" | "assistant", content: string }
   // Accept either legacy single-message format or full messages array.
@@ -60,6 +60,25 @@ export default async function handler(req, res) {
 
   const tokenLimit = Math.min(Math.max(parseInt(maxTokens, 10) || MAX_TOKENS_DEFAULT, 64), 8000);
 
+  // Optional vision input: resolve the image to base64 once, then attach it to
+  // the last user turn in whichever provider-specific shape is needed below.
+  let imgPart = null;
+  if (image) {
+    try {
+      if (String(image).startsWith("data:")) {
+        const m = String(image).match(/^data:([^;]+);base64,(.*)$/);
+        if (m) imgPart = { mime: m[1], b64: m[2] };
+      } else {
+        const ir = await withTimeout(fetch(image), UPSTREAM_TIMEOUT_MS, "image-fetch");
+        if (ir.ok) {
+          const buf = await ir.arrayBuffer();
+          imgPart = { mime: ir.headers.get("content-type") || "image/png", b64: Buffer.from(buf).toString("base64") };
+        }
+      }
+    } catch (_) { /* best-effort — fall back to text-only */ }
+  }
+  const lastUserIdx = (() => { for (let i = conversation.length - 1; i >= 0; i--) if (conversation[i].role === "user") return i; return -1; })();
+
   try {
     // ── Claude (Anthropic) ─────────────────────
     if (provider === "claude") {
@@ -75,7 +94,11 @@ export default async function handler(req, res) {
           model: claudeModel,
           max_tokens: tokenLimit,
           system: systemPrompt || "",
-          messages: conversation,
+          messages: imgPart
+            ? conversation.map((m, i) => i === lastUserIdx
+                ? { role: "user", content: [{ type: "image", source: { type: "base64", media_type: imgPart.mime, data: imgPart.b64 } }, { type: "text", text: m.content }] }
+                : m)
+            : conversation,
         }),
       }), UPSTREAM_TIMEOUT_MS, "Claude");
 
@@ -197,7 +220,9 @@ export default async function handler(req, res) {
           max_tokens: tokenLimit,
           messages: [
             ...(systemPrompt ? [{ role: "system", content: systemPrompt }] : []),
-            ...conversation,
+            ...conversation.map((m, i) => (imgPart && i === lastUserIdx)
+              ? { role: "user", content: [{ type: "image_url", image_url: { url: `data:${imgPart.mime};base64,${imgPart.b64}` } }, { type: "text", text: m.content }] }
+              : m),
           ],
         }),
       }), UPSTREAM_TIMEOUT_MS, "OpenAI");
@@ -405,9 +430,11 @@ export default async function handler(req, res) {
           ? `https://generativelanguage.googleapis.com/v1beta/models/${candidate}:generateContent?key=${apiKey}`
           : `https://generativelanguage.googleapis.com/v1beta/models/${candidate}:generateContent`;
         const requestBody = {
-          contents: conversation.map(m => ({
+          contents: conversation.map((m, i) => ({
             role: m.role === "assistant" ? "model" : "user",
-            parts: [{ text: m.content }],
+            parts: (imgPart && i === lastUserIdx)
+              ? [{ inlineData: { mimeType: imgPart.mime, data: imgPart.b64 } }, { text: m.content }]
+              : [{ text: m.content }],
           })),
           generationConfig: {
             maxOutputTokens: tokenLimit,

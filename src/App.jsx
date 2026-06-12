@@ -15809,11 +15809,45 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
 // produced it; hovering reveals a blurred overlay with that prompt + a copy
 // button. Admins toggle edit mode via the header "Bearbeiten" button to upload
 // more images, edit prompts inline, and remove tiles.
-function BrandImagery({ value, editing, onChange, uploadFile, theme, darkMode, accent }) {
+function BrandImagery({ value, editing, onChange, uploadFile, llmProvider, llmKeys, ensureValidToken, theme, darkMode, accent }) {
   const items = Array.isArray(value) ? value : [];
   const [uploading, setUploading] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
+  const [genIds, setGenIds] = useState([]); // items whose prompt is being generated
   const fileRef = useRef(null);
+  // Always write against the freshest list so concurrent AI generations don't
+  // clobber each other (each resolves async and replaces the whole array).
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+
+  const aiConnected = !!((llmKeys && llmProvider && llmKeys[llmProvider]) || llmProvider === "gemini");
+  // Ask the connected AI to look at the image and write a reusable style prompt.
+  const generatePrompt = async (item) => {
+    const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
+    let oauthToken = null;
+    if (llmProvider === "gemini" && !apiKey && ensureValidToken) { try { oauthToken = await ensureValidToken(); } catch (_) {} }
+    if (!apiKey && !oauthToken) return;
+    setGenIds(g => [...g, item.id]);
+    try {
+      const resp = await fetch("/api/chat-multi", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Analysiere dieses Bild und schreibe einen präzisen, wiederverwendbaren Bildgenerierungs-Prompt auf Deutsch. Beschreibe Motiv, visuellen Stil, Komposition, Beleuchtung, Farbpalette und Stimmung so, dass eine KI ein Bild im exakt gleichen Stil erzeugen kann. Antworte NUR mit dem Prompt, ohne Einleitung oder Anführungszeichen.",
+          image: item.url,
+          provider: llmProvider || "gemini",
+          apiKey: apiKey || undefined,
+          oauthToken: oauthToken || undefined,
+          maxTokens: 400,
+        }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      const text = ((data?.content || []).find(c => c.type === "text")?.text || data?.content?.[0]?.text || "").trim();
+      if (resp.ok && text) {
+        onChange(itemsRef.current.map(it => it.id === item.id ? { ...it, prompt: text } : it));
+      }
+    } catch (_) {}
+    setGenIds(g => g.filter(x => x !== item.id));
+  };
 
   const addFiles = async (fileList) => {
     const arr = Array.from(fileList || []).filter(f => f.type.startsWith("image/"));
@@ -15824,10 +15858,14 @@ function BrandImagery({ value, editing, onChange, uploadFile, theme, darkMode, a
       try { const r = await uploadFile(file, "imagery"); if (r?.url) added.push({ id: crypto.randomUUID(), url: r.url, name: r.name || file.name, prompt: "" }); }
       catch (_) {}
     }
-    if (added.length) onChange([...(items || []), ...added]);
+    if (added.length) {
+      onChange([...(items || []), ...added]);
+      // Auto-analyse each new image with the connected AI (best-effort).
+      if (aiConnected) added.forEach(it => { generatePrompt(it); });
+    }
     setUploading(false);
   };
-  const updatePrompt = (id, prompt) => onChange(items.map(it => it.id === id ? { ...it, prompt } : it));
+  const updatePrompt = (id, prompt) => onChange(itemsRef.current.map(it => it.id === id ? { ...it, prompt } : it));
   const remove = (id) => onChange(items.filter(it => it.id !== id));
   const copyPrompt = (it) => {
     if (!it.prompt) return;
@@ -15877,12 +15915,19 @@ function BrandImagery({ value, editing, onChange, uploadFile, theme, darkMode, a
               // Edit mode: prompt always editable over a constant scrim + delete.
               <div style={{ position: "absolute", inset: 0, borderRadius: 16, display: "flex", flexDirection: "column", padding: 12, background: "rgba(10,10,16,0.55)", backdropFilter: "blur(7px)", WebkitBackdropFilter: "blur(7px)" }}>
                 <div style={{ position: "absolute", top: 10, right: 10, display: "flex", gap: 6 }}>
+                  {aiConnected && (
+                    <motion.div whileTap={{ scale: 0.9 }} onClick={() => !genIds.includes(it.id) && generatePrompt(it)} title="Prompt mit KI generieren"
+                      style={{ ...btnStyle, width: 28, height: 28, borderRadius: 8, cursor: genIds.includes(it.id) ? "default" : "pointer", background: "rgba(0,0,0,0.45)" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={genIds.includes(it.id) ? { animation: "docpulse 1s ease-in-out infinite" } : undefined}><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/></svg>
+                    </motion.div>
+                  )}
                   <motion.div whileTap={{ scale: 0.9 }} onClick={() => download(it)} title="Herunterladen" style={{ ...btnStyle, width: 28, height: 28, borderRadius: 8, cursor: "pointer", background: "rgba(0,0,0,0.45)" }}>{downloadIcon}</motion.div>
                   <motion.div whileTap={{ scale: 0.9 }} onClick={() => remove(it.id)} title="Entfernen" style={{ ...btnStyle, width: 28, height: 28, borderRadius: 8, cursor: "pointer", background: "rgba(0,0,0,0.45)" }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                   </motion.div>
                 </div>
-                <textarea value={it.prompt || ""} onChange={e => updatePrompt(it.id, e.target.value)} placeholder="Prompt hinzufügen…"
+                <textarea value={it.prompt || ""} onChange={e => updatePrompt(it.id, e.target.value)} disabled={genIds.includes(it.id)}
+                  placeholder={genIds.includes(it.id) ? "KI analysiert das Bild…" : (aiConnected ? "Prompt – wird automatisch generiert oder selbst eingeben…" : "Prompt hinzufügen…")}
                   style={{ flex: 1, marginTop: 34, width: "100%", boxSizing: "border-box", resize: "none", border: "none", outline: "none", background: "transparent", color: "#fff", fontSize: 12.5, lineHeight: 1.5, fontFamily: FONT }} />
               </div>
             ) : (
@@ -18158,7 +18203,8 @@ If you don't know a field, infer a plausible value. Write all text values in the
                           theme={theme} darkMode={darkMode} accent={theme.accent} />
                       ) : k === "design/imagery" ? (
                         <BrandImagery value={profile.imagery} editing={editingText} onChange={saveImagery}
-                          uploadFile={uploadFile} theme={theme} darkMode={darkMode} accent={theme.accent} />
+                          uploadFile={uploadFile} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken}
+                          theme={theme} darkMode={darkMode} accent={theme.accent} />
                       ) : k === "identity/voice" ? (
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
                           onSave={saveVoiceTone} onCancel={() => setEditingText(false)} />
