@@ -23886,15 +23886,25 @@ export default function CircularMenu() {
                             const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", userOrg.id).eq("status", "pending");
                             setTeamInvites(invites || []);
                             if (failed.length > 0) {
-                              const lines = failed.map(f => `• ${f.email}: ${f.reason}`).join("\n");
-                              alert(
-                                (appLanguage === "de"
-                                  ? "Einladung gespeichert, aber die E-Mail konnte nicht zugestellt werden:\n\n"
-                                  : "Invitation saved, but the email could not be delivered:\n\n") + lines +
-                                (appLanguage === "de"
-                                  ? "\n\nDer Invite-Code lässt sich auch manuell teilen."
-                                  : "\n\nYou can also share the invite code manually.")
-                              );
+                              // The email service is a Vercel serverless function — it only
+                              // runs in production. Locally (vite / no RESEND_API_KEY) the send
+                              // always fails, which is expected and not a broken invite.
+                              const envIssue = failed.every(f => /RESEND_API_KEY|not configured|HTTP 404|HTTP 405|Method not allowed|<!DOCTYPE/i.test(f.reason || ""));
+                              if (envIssue) {
+                                alert(appLanguage === "de"
+                                  ? "Die Einladung wurde gespeichert. Der E-Mail-Versand ist nur in der Produktionsumgebung (app.i7os.com) verfügbar — lokal wird keine E-Mail verschickt.\n\nTeile den Invite-Code so lange manuell."
+                                  : "The invitation was saved. Email delivery only works in production (app.i7os.com) — no email is sent locally.\n\nShare the invite code manually for now.");
+                              } else {
+                                const lines = failed.map(f => `• ${f.email}: ${f.reason}`).join("\n");
+                                alert(
+                                  (appLanguage === "de"
+                                    ? "Einladung gespeichert, aber die E-Mail konnte nicht zugestellt werden:\n\n"
+                                    : "Invitation saved, but the email could not be delivered:\n\n") + lines +
+                                  (appLanguage === "de"
+                                    ? "\n\nDer Invite-Code lässt sich auch manuell teilen."
+                                    : "\n\nYou can also share the invite code manually.")
+                                );
+                              }
                             }
                           } catch (e) {
                             console.error("[Invite]", e);
