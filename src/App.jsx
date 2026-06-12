@@ -15935,6 +15935,12 @@ const LOGO_LAYOUTS = {
   quad:    { label: "Vier Kacheln",         rows: [["a", "b"], ["c", "d"]] },
   stacked: { label: "Zwei längliche",       rows: [["a"], ["b"]] },
 };
+const LOGO_ASSET_SLOTS = [
+  { key: "visual",      label: "Logo Visual",              inv: false },
+  { key: "visualInv",   label: "Logo Visual · invertiert", inv: true },
+  { key: "original",    label: "Originallogo",             inv: false },
+  { key: "originalInv", label: "Originallogo · invertiert", inv: true },
+];
 const LayoutGlyph = ({ variant, color }) => {
   const rows = (LOGO_LAYOUTS[variant] || LOGO_LAYOUTS.split).rows;
   return (
@@ -15952,10 +15958,11 @@ const LayoutGlyph = ({ variant, color }) => {
 };
 
 function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteColors = [], theme, darkMode, accent }) {
-  const [busyCell, setBusyCell] = useState(null);
+  const [busyAsset, setBusyAsset] = useState(null);
   const [layoutOpen, setLayoutOpen] = useState(false);
   const [colorCellId, setColorCellId] = useState(null); // cell whose colour modal is open
-  const cellInputRefs = useRef({});
+  const [pickerCellId, setPickerCellId] = useState(null); // cell whose logo-picker is open
+  const assetInputRefs = useRef({});
 
   // Background presets: the brand palette if defined, else common colours —
   // always alongside neutral white/grey/black, which logo boards usually need.
@@ -15968,47 +15975,86 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
     const base = (value && Object.keys(value).length) ? value : {};
     const variant = LOGO_LAYOUTS[base.variant] ? base.variant : "split";
     const background = base.background || "#ffffff";
+    let assets = base.assets;
     let cells = base.cells;
-    if (!cells) {
+    if (!assets && !cells) {
+      assets = {};
       const byKey = {}; (logos || []).forEach(l => { byKey[l.key] = l; });
-      const primary = byKey.primary || (logos || [])[0];
-      const symbol = byKey.icon || byKey.svg;
+      const isSvg = (l) => (((l?.format || "") + (l?.url || "")).toLowerCase().includes("svg"));
+      const put = (slot, l) => { if (!l?.url) return; const fmt = isSvg(l) ? "svg" : "png"; assets[slot] = { ...(assets[slot] || {}), [fmt]: l.url }; };
+      put("original", byKey.primary || (logos || [])[0]);
+      put("visual", byKey.icon || byKey.svg);
+      put("originalInv", byKey.dark);
+      const u = (s) => assets[s]?.svg || assets[s]?.png || null;
       cells = {};
-      if (primary) cells.a = { url: primary.url, name: primary.name || primary.label || "", scale: 0.7 };
-      if (symbol) cells.b = { url: symbol.url, name: symbol.name || symbol.label || "", scale: 0.5 };
-      if (primary) cells.c = { url: primary.url, name: primary.name || primary.label || "", scale: 0.6 };
+      if (u("original")) cells.a = { slot: "original", scale: 0.7 };
+      if (u("visual")) cells.b = { slot: "visual", scale: 0.5 };
+      if (u("original")) cells.c = { slot: "original", scale: 0.6 };
     }
-    return { variant, background, cells: cells || {} };
+    return { variant, background, assets: assets || {}, cells: cells || {} };
   })();
 
   const update = (partial) => onChange({ ...cfg, ...partial });
   const setCell = (id, data) => onChange({ ...cfg, cells: { ...cfg.cells, [id]: data } });
   const setScale = (id, scale) => setCell(id, { ...(cfg.cells[id] || {}), scale });
   const setCellBg = (id, bg) => setCell(id, { ...(cfg.cells[id] || {}), bg });
-  const uploadToCell = async (id, file) => {
-    if (!file || !file.type?.startsWith("image/") || !uploadFile) return;
-    setBusyCell(id);
-    try { const r = await uploadFile(file, `logo-${id}`); if (r?.url) setCell(id, { url: r.url, name: r.name || file.name, scale: cfg.cells[id]?.scale ?? 0.7 }); }
+  const setCellSlot = (id, slot) => setCell(id, { ...(cfg.cells[id] || {}), slot, url: undefined });
+  const clearCell = (id) => setCell(id, { ...(cfg.cells[id] || {}), slot: null, url: null });
+  const setAsset = (slot, fmt, url) => onChange({ ...cfg, assets: { ...(cfg.assets || {}), [slot]: { ...((cfg.assets || {})[slot] || {}), [fmt]: url } } });
+  const removeAsset = (slot, fmt) => { const cur = { ...((cfg.assets || {})[slot] || {}) }; delete cur[fmt]; onChange({ ...cfg, assets: { ...(cfg.assets || {}), [slot]: cur } }); };
+  const uploadAsset = async (slot, fmt, file) => {
+    if (!file || !uploadFile) return;
+    setBusyAsset(slot + fmt);
+    try { const r = await uploadFile(file, `logo-${slot}-${fmt}`); if (r?.url) setAsset(slot, fmt, r.url); }
     catch (_) {}
-    setBusyCell(null);
+    setBusyAsset(null);
   };
 
+  const assetUrl = (slot) => { const a = cfg.assets?.[slot]; return a?.svg || a?.png || null; };
+  const cellUrl = (c) => c?.slot ? assetUrl(c.slot) : (c?.url || null);
+  const slotLabel = (key) => LOGO_ASSET_SLOTS.find(s => s.key === key)?.label || "";
+
   const layout = LOGO_LAYOUTS[cfg.variant] || LOGO_LAYOUTS.split;
-  const hasAny = Object.values(cfg.cells).some(c => c?.url);
+  const hasAny = Object.values(cfg.cells).some(c => cellUrl(c));
+  const availableSlots = LOGO_ASSET_SLOTS.filter(s => assetUrl(s.key));
   const isDark = (hex) => { const h = (hex || "").replace("#", ""); if (h.length < 6) return false; const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16); return (0.299 * r + 0.587 * g + 0.114 * b) < 140; };
 
   if (!editing && !hasAny) {
     return (
       <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>
-        Noch kein Logo hinterlegt. Über „Bearbeiten" oben rechts kannst du Logo-Varianten hochladen und das Layout festlegen.
+        Noch kein Logo hinterlegt. Über „Bearbeiten" oben rechts kannst du Logo-Dateien hochladen und das Layout festlegen.
       </div>
     );
   }
 
+  const checkIcon = <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>;
+  const formatChip = (slotKey, fmt) => {
+    const present = !!cfg.assets?.[slotKey]?.[fmt];
+    const busy = busyAsset === slotKey + fmt;
+    const accept = fmt === "svg" ? ".svg,image/svg+xml" : "image/png,image/jpeg,image/webp,image/gif";
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+        <input ref={el => { assetInputRefs.current[slotKey + fmt] = el; }} type="file" accept={accept} style={{ display: "none" }}
+          onChange={e => { uploadAsset(slotKey, fmt, e.target.files?.[0]); e.target.value = ""; }} />
+        <motion.div whileTap={{ scale: 0.95 }} onClick={() => assetInputRefs.current[slotKey + fmt]?.click()}
+          style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 9px", borderRadius: 8, cursor: "pointer", fontSize: 11.5, fontFamily: FONT, fontWeight: 600,
+            background: present ? accent + "1f" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"), color: present ? accent : theme.textSub, border: `1px solid ${present ? accent + "55" : theme.borderFaint}` }}>
+          {busy ? "…" : <>{present ? checkIcon : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>}{fmt.toUpperCase()}</>}
+        </motion.div>
+        {present && (
+          <motion.div whileTap={{ scale: 0.85 }} onClick={() => removeAsset(slotKey, fmt)} title="Entfernen"
+            style={{ width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </motion.div>
+        )}
+      </div>
+    );
+  };
+
   const cell = (id, wide) => {
     const c = cfg.cells[id] || {};
+    const url = cellUrl(c);
     const scale = c.scale ?? 0.7;
-    const busy = busyCell === id;
     const bg = c.bg || cfg.background;
     const dk = isDark(bg);
     const ctrlColor = dk ? "#fff" : theme.textSub;
@@ -16022,24 +16068,16 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
     const pad = cfg.variant === "stacked" ? "9% 12%" : "9%";
     return (
       <div key={id} className="logo-cell" style={{ flex: 1, minWidth: 0, ...sizing, borderRadius: 14, background: bg, boxShadow: "0 1px 2px rgba(0,0,0,0.035), 0 6px 16px rgba(0,0,0,0.035)", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", padding: pad }}>
-        {c.url ? (
-          <img src={c.url} alt={c.name || ""} style={{ maxWidth: `${scale * 100}%`, maxHeight: `${scale * 100}%`, objectFit: "contain" }} />
+        {url ? (
+          <img src={url} alt={c.name || ""} style={{ maxWidth: `${scale * 100}%`, maxHeight: `${scale * 100}%`, objectFit: "contain" }} />
         ) : editing ? (
-          <motion.div whileHover={{ scale: 1.03 }} onClick={() => !busy && cellInputRefs.current[id]?.click()}
-            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, cursor: busy ? "default" : "pointer", color: dk ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.4)" }}>
-            {busy ? <span style={{ fontSize: 12, fontFamily: FONT }}>Lädt…</span> : (
-              <>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                <span style={{ fontSize: 11.5, fontFamily: FONT, fontWeight: 600 }}>Logo</span>
-              </>
-            )}
+          <motion.div whileHover={{ scale: 1.03 }} onClick={() => setPickerCellId(id)}
+            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, cursor: "pointer", color: dk ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.4)" }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            <span style={{ fontSize: 11.5, fontFamily: FONT, fontWeight: 600 }}>Logo wählen</span>
           </motion.div>
         ) : null}
 
-        {editing && (
-          <input ref={el => { cellInputRefs.current[id] = el; }} type="file" accept="image/*" style={{ display: "none" }}
-            onChange={e => { uploadToCell(id, e.target.files?.[0]); e.target.value = ""; }} />
-        )}
         {editing && (
           /* colour-fan icon (bottom-right) → per-cell background colour */
           <motion.div whileHover={{ opacity: 1 }} whileTap={{ scale: 0.9 }} onClick={() => setColorCellId(id)} title="Hintergrundfarbe"
@@ -16047,12 +16085,12 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.555C21.965 6.012 17.461 2 12 2z"/></svg>
           </motion.div>
         )}
-        {editing && c.url && (
+        {editing && url && (
           <>
-            {/* subtle upload icon (top-right) to swap the logo */}
-            <motion.div whileHover={{ opacity: 1 }} whileTap={{ scale: 0.9 }} onClick={() => cellInputRefs.current[id]?.click()} title="Neues Logo hochladen"
+            {/* select-logo icon (top-right) → pick which uploaded logo this cell shows */}
+            <motion.div whileHover={{ opacity: 1 }} whileTap={{ scale: 0.9 }} onClick={() => setPickerCellId(id)} title="Logo auswählen"
               style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: ctrlColor, background: ctrlBg, opacity: 0.65 }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
             </motion.div>
             {/* discreet scale slider — appears on hover, bottom-centre */}
             <div className="logo-scale-wrap" style={{ position: "absolute", left: "50%", bottom: 12, transform: "translateX(-50%)", display: "flex", alignItems: "center", padding: "14px 12px", borderRadius: 999, background: dk ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.06)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
@@ -16068,9 +16106,30 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
   return (
     <div>
       {editing && (
-        <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", marginBottom: 16 }}>
+        <>
+          {/* Upload slots: actual logo files (SVG / PNG) */}
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Logo-Dateien</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+              {LOGO_ASSET_SLOTS.map(slot => {
+                const url = assetUrl(slot.key);
+                return (
+                  <div key={slot.key} style={{ display: "flex", gap: 12, alignItems: "center", padding: 12, borderRadius: 14, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)" }}>
+                    <div style={{ width: 62, height: 62, borderRadius: 10, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 8, background: slot.inv ? "#1a1a2e" : "#f4f4f6" }}>
+                      {url ? <img src={url} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                        : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={slot.inv ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.3)"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>}
+                    </div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 9 }}>{slot.label}</div>
+                      <div style={{ display: "flex", gap: 10 }}>{formatChip(slot.key, "svg")}{formatChip(slot.key, "png")}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
           {/* Layout dropdown */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
             <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}>Layout</span>
             <div style={{ position: "relative" }}>
               <div onClick={() => setLayoutOpen(o => !o)}
@@ -16095,7 +16154,7 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
               )}
             </div>
           </div>
-        </div>
+        </>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: cfg.variant === "stacked" ? 32 : 24 }}>
         {layout.rows.map((row, ri) => (
@@ -16104,6 +16163,46 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
           </div>
         ))}
       </div>
+
+      {pickerCellId && createPortal(
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setPickerCellId(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <motion.div initial={{ opacity: 0, scale: 0.95, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} onClick={e => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: 380, padding: 20, borderRadius: 18, background: darkMode ? "rgba(24,24,32,0.99)" : "#fff", border: `1px solid ${theme.border}`, boxShadow: "0 24px 60px rgba(0,0,0,0.35)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <div style={{ fontSize: 14.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Logo auswählen</div>
+              <motion.div whileTap={{ scale: 0.9 }} onClick={() => setPickerCellId(null)} style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </motion.div>
+            </div>
+            {availableSlots.length === 0 ? (
+              <div style={{ padding: "24px 8px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>Lade zuerst oben unter „Logo-Dateien" ein Logo hoch.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {availableSlots.map(slot => {
+                  const on = cfg.cells[pickerCellId]?.slot === slot.key;
+                  return (
+                    <motion.div key={slot.key} whileTap={{ scale: 0.99 }} onClick={() => { setCellSlot(pickerCellId, slot.key); setPickerCellId(null); }}
+                      style={{ display: "flex", alignItems: "center", gap: 12, padding: 10, borderRadius: 12, cursor: "pointer", border: `1px solid ${on ? accent : theme.borderFaint}`, background: on ? accent + "12" : "transparent" }}>
+                      <div style={{ width: 46, height: 46, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 7, background: slot.inv ? "#1a1a2e" : "#f4f4f6" }}>
+                        <img src={assetUrl(slot.key)} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{slot.label}</div>
+                      {on && <span style={{ color: accent }}>{checkIcon}</span>}
+                    </motion.div>
+                  );
+                })}
+                {cfg.cells[pickerCellId]?.slot && (
+                  <motion.div whileTap={{ scale: 0.99 }} onClick={() => { clearCell(pickerCellId); setPickerCellId(null); }}
+                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 12, cursor: "pointer", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    Kein Logo
+                  </motion.div>
+                )}
+              </div>
+            )}
+          </motion.div>
+        </motion.div>, document.body)}
 
       {colorCellId && createPortal(
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setColorCellId(null)}
