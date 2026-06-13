@@ -25462,7 +25462,8 @@ export default function CircularMenu() {
         /* Slash / "+" menu: cap height (~half the viewport) so it stays compact and
            scrolls. BlockNote's size middleware sets max-height to the full available
            space inline; override it. shift() keeps the (shorter) menu fully in view. */
-        .bn-suggestion-menu { max-height: min(44vh, 420px) !important; overflow-y: auto; }
+        .bn-suggestion-menu { max-height: min(44vh, 420px) !important; overflow-y: auto; border-radius: 18px !important; box-shadow: 0 18px 50px rgba(0,0,0,0.12), 0 4px 14px rgba(0,0,0,0.05) !important; border: 1px solid rgba(0,0,0,0.04) !important; }
+        [data-color-scheme="dark"] .bn-suggestion-menu { box-shadow: 0 18px 50px rgba(0,0,0,0.45), 0 4px 14px rgba(0,0,0,0.25) !important; border-color: rgba(255,255,255,0.06) !important; }
         .avatar-edit:hover .avatar-edit-overlay { opacity: 1 !important; }
         /* Brand imagery: prompt overlay fades in on hover */
         .imagery-overlay { opacity: 0; transition: opacity 0.18s ease; }
