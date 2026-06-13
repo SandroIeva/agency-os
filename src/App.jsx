@@ -13384,7 +13384,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
       {/* Toolbar: search · sort · view toggle */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
-        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, maxWidth: 340 }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "none", maxWidth: 340 }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Dokumente durchsuchen…"
             style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }} />
@@ -13440,7 +13440,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, width: 140 }}>
                 {creator?.display_name && <>{creatorAvatar(creator)}<span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{creator.display_name}</span></>}
               </div>
-              <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textFaint, flexShrink: 0, minWidth: 92, textAlign: "right", marginRight: 28 }}>{fmtDate(d.created_at)}</div>
+              <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textFaint, flexShrink: 0, minWidth: 92, textAlign: "right", marginRight: 38 }}>{fmtDate(d.created_at)}</div>
               {rowActions(d)}
             </motion.div>
           ); })}
