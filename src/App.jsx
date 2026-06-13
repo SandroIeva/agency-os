@@ -11592,7 +11592,11 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   const [sortMode, setSortMode] = useState("created"); // "created" | "name"
   const [viewMode, setViewMode] = useState("list"); // "list" | "grid"
   const [mediaFilter, setMediaFilter] = useState("all"); // "all" | "image" | "video"
+  const [confirmDel, setConfirmDel] = useState(null); // file pending deletion
   const inputRef = useRef(null);
+  const fmtDate = (ts) => { try { return new Date(ts).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" }); } catch { return ""; } };
+  const truncName = (n) => { const s = n || "—"; return s.length > 30 ? s.slice(0, 30).trimEnd() + "…" : s; };
+  const actBtnStyle = { width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: darkMode ? "#e8e8ee" : "#23232b", cursor: "pointer", flexShrink: 0 };
   // Register the file-picker trigger so the header Upload button can call it,
   // and surface uploading state upward.
   useEffect(() => { if (pickRef) pickRef.current = () => inputRef.current?.click(); }, [pickRef]);
@@ -11603,7 +11607,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     // Fetch the org's files and filter to media client-side — avoids a fragile
     // PostgREST `.or(...ilike...)` string and is robust to query quirks.
     const { data, error } = await supabase.from("user_files")
-      .select("id,name,public_url,mime_type,size_bytes,created_at,user_id")
+      .select("id,name,public_url,mime_type,size_bytes,created_at,user_id,storage_path,storage_provider")
       .eq("org_id", userOrg.id)
       .order("created_at", { ascending: false }).limit(300);
     if (error) { console.warn("[creations] load failed:", error.message); setFiles([]); return; }
@@ -11626,11 +11630,44 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
         user_id: session.user.id, org_id: userOrg.id, name: file.name,
         mime_type: file.type, size_bytes: file.size, storage_path: path,
         storage_provider: "supabase", public_url: signed?.signedUrl || null,
-      }).select("id,name,public_url,mime_type,size_bytes,created_at").single();
+      }).select("id,name,public_url,mime_type,size_bytes,created_at,user_id,storage_path,storage_provider").single();
       if (!error && data) added.push(data);
     }
     setFiles(prev => [...added, ...(prev || [])]);
     setUploading(false);
+  };
+
+  const FILE_COLS = "id,name,public_url,mime_type,size_bytes,created_at,user_id,storage_path,storage_provider";
+  const duplicateFile = async (f, e) => {
+    e?.stopPropagation?.();
+    if (!userOrg?.id || !session?.user?.id) return;
+    try {
+      let newPath = f.storage_path, publicUrl = f.public_url, provider = f.storage_provider || "supabase";
+      // Copy the underlying object for supabase-stored files so the duplicate is independent.
+      if (provider === "supabase" && f.storage_path) {
+        const ext = (f.name?.split(".").pop() || "bin").toLowerCase();
+        newPath = `${session.user.id}/creations/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const { error: copyErr } = await supabase.storage.from("user-files").copy(f.storage_path, newPath);
+        if (copyErr) { newPath = f.storage_path; }
+        else { const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(newPath, 60 * 60 * 24 * 365); publicUrl = signed?.signedUrl || publicUrl; }
+      }
+      const { data, error } = await supabase.from("user_files").insert({
+        user_id: session.user.id, org_id: userOrg.id,
+        name: (f.name || "datei").replace(/(\.[^.]+)?$/, " (Kopie)$1"),
+        mime_type: f.mime_type, size_bytes: f.size_bytes,
+        storage_path: newPath, storage_provider: provider, public_url: publicUrl,
+      }).select(FILE_COLS).single();
+      if (!error && data) setFiles(prev => [data, ...(prev || [])]);
+    } catch (_) {}
+  };
+  const requestDelete = (f, e) => { e?.stopPropagation?.(); setConfirmDel(f); };
+  const performDelete = async () => {
+    const f = confirmDel; setConfirmDel(null); if (!f) return;
+    setFiles(prev => (prev || []).filter(x => x.id !== f.id));
+    if (f.storage_provider === "supabase" && f.storage_path) {
+      try { await supabase.storage.from("user-files").remove([f.storage_path]); } catch (_) {}
+    }
+    await supabase.from("user_files").delete().eq("id", f.id);
   };
 
   const isVideo = (f) => (f.mime_type || "").startsWith("video/");
@@ -11677,9 +11714,9 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
         <>
           {allFiles.length > 0 && (
             <div style={{ padding: "16px 26px 4px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, maxWidth: 340 }}>
+              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "none", maxWidth: 340 }}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder={appLanguage === "de" ? "Kreationen durchsuchen…" : "Search creations…"}
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder={appLanguage === "de" ? "Asset eingeben" : "Search assets"}
                   style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }} />
               </div>
               <div style={{ flex: 1 }} />
@@ -11772,11 +11809,22 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                       <img src={f.public_url} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
                     )}
                   </div>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name || "—"}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{truncName(f.name)}</div>
                     <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{fmtMeta(f)}</div>
                   </div>
-                  {creatorOf(f)?.display_name && <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, maxWidth: 180 }}>{creatorAvatar(creatorOf(f))}<span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{creatorOf(f).display_name}</span></div>}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, width: 140 }}>
+                    {creatorOf(f)?.display_name && <>{creatorAvatar(creatorOf(f))}<span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{creatorOf(f).display_name}</span></>}
+                  </div>
+                  <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textFaint, flexShrink: 0, minWidth: 92, textAlign: "right", marginRight: 38 }}>{fmtDate(f.created_at)}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0 }}>
+                    <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => duplicateFile(f, e)} title="Duplizieren" style={actBtnStyle}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    </motion.div>
+                    <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => requestDelete(f, e)} title="Löschen" style={actBtnStyle}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                    </motion.div>
+                  </div>
                 </motion.div>
               ))}
             </div>
@@ -11799,6 +11847,24 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
           )
         )}
       </AnimatePresence>
+
+      {confirmDel && createPortal(
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setConfirmDel(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(10px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} onClick={(e) => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: 380, padding: 28, borderRadius: 20, background: darkMode ? "rgba(22,22,30,0.98)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.border}`, textAlign: "center" }}>
+            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>{appLanguage === "de" ? "Datei löschen?" : "Delete file?"}</div>
+            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 24, lineHeight: 1.5 }}>
+              {appLanguage === "de" ? `„${confirmDel.name || "Datei"}" wird unwiderruflich gelöscht.` : `"${confirmDel.name || "File"}" will be permanently deleted.`}
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setConfirmDel(null)}
+                style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, fontWeight: 500 }}>{appLanguage === "de" ? "Abbrechen" : "Cancel"}</motion.button>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={performDelete}
+                style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", fontSize: 13, fontFamily: FONT, color: "#EF4444", fontWeight: 600 }}>{appLanguage === "de" ? "Löschen" : "Delete"}</motion.button>
+            </div>
+          </motion.div>
+        </motion.div>, document.body)}
     </div>
   );
 }

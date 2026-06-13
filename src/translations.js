@@ -48,7 +48,7 @@ const translations = {
   // ── Assets (Brand → Assets: Moodboards / Creations / Inspirations) ──
   "assets.title":              { de: "Assets",                    en: "Assets" },
   "assets.moodboards":         { de: "Moodboards",                en: "Moodboards" },
-  "assets.creations":          { de: "Creations",                 en: "Creations" },
+  "assets.creations":          { de: "Assets",                    en: "Assets" },
   "assets.inspirations":       { de: "Inspirations",              en: "Inspirations" },
   "assets.creationsEmptyTitle":{ de: "Noch keine Kreationen",     en: "No creations yet" },
   "assets.creationsEmptyHint": { de: "Mit KI generierte Bilder erscheinen hier automatisch — oder lade eigene hoch.", en: "AI-generated images show up here automatically — or upload your own." },
