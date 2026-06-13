@@ -13362,11 +13362,11 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
   const rowActions = (d) => (
     <div style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0 }}>
       <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => duplicateDoc(d, e)} title="Duplizieren"
-        style={{ width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, cursor: "pointer" }}>
+        style={{ width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: darkMode ? "#e8e8ee" : "#23232b", cursor: "pointer" }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
       </motion.div>
       <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => deleteDoc(d.id, e)} title="Löschen"
-        style={{ width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, cursor: "pointer" }}>
+        style={{ width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: darkMode ? "#e8e8ee" : "#23232b", cursor: "pointer" }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
       </motion.div>
     </div>
@@ -13429,7 +13429,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
           ); })}
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", borderRadius: 14, border: `1px solid ${theme.borderFaint}`, overflow: "hidden" }}>
+        <div style={{ display: "flex", flexDirection: "column", borderRadius: 14, border: `1px solid ${theme.borderFaint}`, overflow: "hidden", boxShadow: "0 18px 60px rgba(0,0,0,0.06)" }}>
           {visibleDocs.map((d, i) => {
             const creator = memberById[d.created_by];
             return (
