@@ -13359,17 +13359,19 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
       {m?.avatar_url ? <img src={m.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (m?.initials || (m?.display_name || "?").trim()[0] || "?").toUpperCase()}
     </div>
   );
+  const actBtnStyle = { width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: darkMode ? "#e8e8ee" : "#23232b", cursor: "pointer", flexShrink: 0 };
+  const dupBtn = (d) => (
+    <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => duplicateDoc(d, e)} title="Duplizieren" style={actBtnStyle}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+    </motion.div>
+  );
+  const delBtn = (d) => (
+    <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => deleteDoc(d.id, e)} title="Löschen" style={actBtnStyle}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+    </motion.div>
+  );
   const rowActions = (d) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0 }}>
-      <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => duplicateDoc(d, e)} title="Duplizieren"
-        style={{ width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: darkMode ? "#e8e8ee" : "#23232b", cursor: "pointer" }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-      </motion.div>
-      <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => deleteDoc(d.id, e)} title="Löschen"
-        style={{ width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: darkMode ? "#e8e8ee" : "#23232b", cursor: "pointer" }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-      </motion.div>
-    </div>
+    <div style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0 }}>{dupBtn(d)}{delBtn(d)}</div>
   );
   const viewBtn = (mode, title, children) => {
     const on = viewMode === mode;
@@ -13414,16 +13416,17 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
             const creator = memberById[d.created_by];
             return (
             <motion.div key={d.id} whileHover={{ y: -3 }} onClick={() => { setOpenDoc(d); setTitle(d.title || ""); }}
-              style={{ position: "relative", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)", padding: 18, cursor: "pointer", minHeight: 116, display: "flex", flexDirection: "column", gap: 8 }}>
+              style={{ position: "relative", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)", boxShadow: "0 10px 28px rgba(0,0,0,0.06)", padding: 18, cursor: "pointer", minHeight: 116, display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16)}</div>
                 <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || "Unbenanntes Dokument"}</div>
-                {rowActions(d)}
+                {dupBtn(d)}
               </div>
               <div style={{ flex: 1 }} />
               <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, minWidth: 0 }}>
                 {creator?.display_name && creatorAvatar(creator, 20)}
-                <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[creator?.display_name, fmtDate(d.created_at)].filter(Boolean).join(" · ")}</span>
+                <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[creator?.display_name, fmtDate(d.created_at)].filter(Boolean).join(" · ")}</span>
+                {delBtn(d)}
               </div>
             </motion.div>
           ); })}
