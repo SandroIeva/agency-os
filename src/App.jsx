@@ -3278,6 +3278,9 @@ function tlMonthLabel(d, short = false) {
 }
 
 function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMode, t, openTaskInKanban }) {
+  // Admins see all projects; everyone else only the projects they belong to.
+  // Kept as a primitive so the data-load effect can depend on it without churn.
+  const amTlAdmin = useMemo(() => (orgMembers || []).find(m => m.user_id === session?.user?.id)?.role === "admin", [orgMembers, session?.user?.id]);
   const [items, setItems] = useState([]);
   const [projects, setProjects] = useState([]);
   const [projectMembers, setProjectMembers] = useState({}); // project_id -> [user_id]
@@ -3345,24 +3348,34 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
         if (!alive) return;
         if (iRes.error) throw iRes.error;
         const itemList = iRes.data || [];
-        const projList = pRes.data || [];
-        setItems(itemList);
-        setProjects(projList);
-        setTasks(tRes.data || []);
-        setSprintGroups(gRes.data || []);
+        const fullProjList = pRes.data || [];
+        const fullTasks = tRes.data || [];
 
         // Project members lookup
-        if (projList.length > 0) {
-          const projIds = projList.map(p => p.id);
+        const pm = {};
+        if (fullProjList.length > 0) {
+          const projIds = fullProjList.map(p => p.id);
           const { data: pmRows } = await supabase.from("project_members").select("project_id, user_id").in("project_id", projIds);
-          const pm = {};
           (pmRows || []).forEach(r => {
             if (!pm[r.project_id]) pm[r.project_id] = [];
             pm[r.project_id].push(r.user_id);
           });
-          if (!alive) return;
-          setProjectMembers(pm);
         }
+        if (!alive) return;
+
+        // Non-admins are scoped to projects they're a member of. Items/tasks tied to
+        // other projects are hidden; project-less items stay visible to everyone.
+        const myId = session?.user?.id;
+        const projList = amTlAdmin ? fullProjList : fullProjList.filter(p => (pm[p.id] || []).includes(myId));
+        const allowed = new Set(projList.map(p => p.id));
+        const scopedItems = amTlAdmin ? itemList : itemList.filter(it => !it.project_id || allowed.has(it.project_id));
+        const scopedTasks = amTlAdmin ? fullTasks : fullTasks.filter(tk => tk.project_id && allowed.has(tk.project_id));
+
+        setProjectMembers(pm);
+        setItems(scopedItems);
+        setProjects(projList);
+        setTasks(scopedTasks);
+        setSprintGroups(amTlAdmin ? (gRes.data || []) : (gRes.data || []).filter(g => !g.project_id || allowed.has(g.project_id)));
 
         // Load assignees + linked tasks for all items
         if (itemList.length > 0) {
@@ -3400,7 +3413,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
       }
     })();
     return () => { alive = false; };
-  }, [userOrg?.id]);
+  }, [userOrg?.id, amTlAdmin, session?.user?.id]);
 
   // ── Visible items (filtered by project) ───────────────
   const visibleItems = useMemo(() => items.filter(it => {
