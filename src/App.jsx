@@ -966,7 +966,10 @@ function ImageLightbox({ url, onClose, onUploadStorage, onUploadDrive, theme, da
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  return (
+  // Portal to <body> so the fixed overlay fills the REAL viewport — otherwise an
+  // ancestor with backdrop-filter (the frosted app panel) becomes the containing
+  // block for position:fixed and the lightbox only covers that panel.
+  return createPortal(
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
@@ -1024,7 +1027,8 @@ function ImageLightbox({ url, onClose, onUploadStorage, onUploadDrive, theme, da
           }}
         >{toast.text}</motion.div>
       )}
-    </motion.div>
+    </motion.div>,
+    document.body
   );
 }
 
