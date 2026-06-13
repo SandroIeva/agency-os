@@ -11595,7 +11595,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   const [confirmDel, setConfirmDel] = useState(null); // file pending deletion
   const inputRef = useRef(null);
   const fmtDate = (ts) => { try { return new Date(ts).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" }); } catch { return ""; } };
-  const truncName = (n) => { const s = n || "—"; return s.length > 30 ? s.slice(0, 30).trimEnd() + "…" : s; };
+  const truncName = (n) => { const s = n || "—"; return s.length > 45 ? s.slice(0, 45).trimEnd() + "…" : s; };
   const actBtnStyle = { width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: darkMode ? "#e8e8ee" : "#23232b", cursor: "pointer", flexShrink: 0 };
   // Register the file-picker trigger so the header Upload button can call it,
   // and surface uploading state upward.
@@ -11795,7 +11795,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
               {displayItems.map((f, i) => (
                 <motion.div key={f.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.28 }}
                   onClick={() => setZoom(f)} className="hover-row"
-                  style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 14, cursor: "pointer",
+                  style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px 10px 10px", borderRadius: 14, cursor: "pointer",
                     background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)", border: `1px solid ${theme.borderFaint}` }}>
                   <div style={{ width: 46, height: 46, borderRadius: 11, overflow: "hidden", flexShrink: 0, position: "relative", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
                     {isVideo(f) ? (
