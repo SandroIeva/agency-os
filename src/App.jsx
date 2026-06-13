@@ -931,16 +931,6 @@ function ImageLightbox({ url, onClose, onUploadStorage, onUploadDrive, theme, da
     }
   };
 
-  const openInTab = () => {
-    if (url.startsWith("data:")) {
-      const blob = dataUrlToBlob(url);
-      const objectUrl = URL.createObjectURL(blob);
-      window.open(objectUrl, "_blank");
-    } else {
-      window.open(url, "_blank");
-    }
-  };
-
   const ActionBtn = ({ icon, label, onClick, busyKey }) => (
     <motion.button onClick={onClick} whileTap={{ scale: 0.95 }} disabled={!!busyKey && busy === busyKey}
       style={{
@@ -989,7 +979,6 @@ function ImageLightbox({ url, onClose, onUploadStorage, onUploadDrive, theme, da
           <ActionBtn icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>} label={appLanguage === "de" ? "Kopieren" : "Copy"} onClick={copyImage} />
           <ActionBtn icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>} label={appLanguage === "de" ? "Link kopieren" : "Copy link"} onClick={copyLink} busyKey="link" />
           {onUploadDrive && <ActionBtn icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="14 2 6 22 22 12 14 2"/></svg>} label={appLanguage === "de" ? "Zu Drive" : "To Drive"} onClick={uploadToDrive} busyKey="drive" />}
-          <ActionBtn icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>} label={appLanguage === "de" ? "Neuer Tab" : "Open"} onClick={openInTab} />
           <motion.button onClick={onClose} whileTap={{ scale: 0.94 }}
             style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#ffffffCC", background: "rgba(255,255,255,0.06)", border: `1px solid rgba(255,255,255,0.10)`, marginLeft: 6 }}
           >
