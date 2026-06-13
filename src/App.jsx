@@ -11385,7 +11385,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           {/* ── CREATIONS tab ── */}
           {tab === "creations" && (
             <CreationsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} grad={grad} glow={glow} t={t}
-              appLanguage={appLanguage} onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive}
+              appLanguage={appLanguage} onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive} orgMembers={orgMembers}
               pickRef={creationsPick} onUploadingChange={setCreationsUploading} />
           )}
 
@@ -11419,7 +11419,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                   style={{ cursor: "pointer", borderRadius: 18, aspectRatio: "3/4", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12,
                     border: `1.5px dashed ${darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.16)"}`, color: theme.textDim,
                     background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)" }}>
-                  <div style={{ width: 52, height: 52, borderRadius: 16, background: accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ width: 52, height: 52, borderRadius: 16, background: "#23232b", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                   </div>
                   <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.new") || "Neues Board"}</div>
@@ -11575,7 +11575,11 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 // Top-level component (not inline) so framer-motion never re-mounts it per render.
 // Creations tab — gallery of the workspace's images AND videos (AI-generated +
 // user uploads). Filter by media type; upload your own via the button.
-function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, onUploadStorage, onUploadDrive, pickRef, onUploadingChange }) {
+function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, onUploadingChange }) {
+  const memberById = useMemo(() => {
+    const m = {}; (orgMembers || []).forEach(om => { if (om.user_id) m[om.user_id] = { ...(om.profiles || {}) }; }); return m;
+  }, [orgMembers]);
+  const creatorName = (f) => memberById[f.user_id]?.display_name || "";
   const [files, setFiles] = useState(null); // null = loading
   const [uploading, setUploading] = useState(false);
   const [zoom, setZoom] = useState(null); // the file object being previewed
@@ -11594,7 +11598,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     // Fetch the org's files and filter to media client-side — avoids a fragile
     // PostgREST `.or(...ilike...)` string and is robust to query quirks.
     const { data, error } = await supabase.from("user_files")
-      .select("id,name,public_url,mime_type,size_bytes,created_at")
+      .select("id,name,public_url,mime_type,size_bytes,created_at,user_id")
       .eq("org_id", userOrg.id)
       .order("created_at", { ascending: false }).limit(300);
     if (error) { console.warn("[creations] load failed:", error.message); setFiles([]); return; }
@@ -11744,13 +11748,13 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
               </div>
             </div>
           ) : (
-            // Dark glassy LIST: row = thumbnail + name + "size · TYPE"
+            // List: thumbnail + name + meta + creator, in subtly-bordered rows
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 22px 22px", display: "flex", flexDirection: "column", gap: 7 }}>
               {displayItems.map((f, i) => (
                 <motion.div key={f.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.28 }}
                   onClick={() => setZoom(f)} className="hover-row"
                   style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 14, cursor: "pointer",
-                    background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)", border: `1px solid ${theme.borderFaint}` }}>
+                    background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.04)"}` }}>
                   <div style={{ width: 46, height: 46, borderRadius: 11, overflow: "hidden", flexShrink: 0, position: "relative", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
                     {isVideo(f) ? (
                       <>
@@ -11767,6 +11771,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                     <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name || "—"}</div>
                     <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{fmtMeta(f)}</div>
                   </div>
+                  {creatorName(f) && <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, flexShrink: 0, maxWidth: 160, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{creatorName(f)}</div>}
                 </motion.div>
               ))}
             </div>
@@ -13413,12 +13418,12 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
           ); })}
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", borderRadius: 14, border: `1px solid ${theme.borderFaint}`, overflow: "hidden" }}>
+        <div style={{ display: "flex", flexDirection: "column", borderRadius: 14, border: `1px solid ${darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.04)"}`, overflow: "hidden" }}>
           {visibleDocs.map((d, i) => {
             const creator = memberById[d.created_by]?.display_name;
             return (
             <motion.div key={d.id} whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }} onClick={() => { setOpenDoc(d); setTitle(d.title || ""); }}
-              style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", cursor: "pointer", borderBottom: i < visibleDocs.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
+              style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", cursor: "pointer", borderBottom: i < visibleDocs.length - 1 ? `1px solid ${darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.04)"}` : "none" }}>
               <div style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16)}</div>
               <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || "Unbenanntes Dokument"}</div>
               {creator && <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, flexShrink: 0, maxWidth: 150, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{creator}</div>}
