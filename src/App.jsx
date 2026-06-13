@@ -11342,7 +11342,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
             )}
             {tab === "docs" && (
               <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => docsCreate.current?.()}
-                style={{ ...iconBtn, background: accent, color: "#fff", border: "none" }}>
+                style={{ ...iconBtn, background: "#23232b", color: "#fff", border: "none" }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Neues Dokument
               </motion.div>
@@ -13337,6 +13337,8 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
     .slice()
     .sort((a, b) => sortMode === "name"
       ? (a.title || "").localeCompare(b.title || "", "de")
+      : sortMode === "creator"
+      ? (memberById[a.created_by]?.display_name || "").localeCompare(memberById[b.created_by]?.display_name || "", "de")
       : new Date(b.updated_at) - new Date(a.updated_at));
   const docIcon = (size) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg>
@@ -13373,10 +13375,10 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
             style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }} />
         </div>
         <div style={{ flex: 1 }} />
-        <motion.div whileTap={{ scale: 0.96 }} onClick={() => setSortMode(m => m === "updated" ? "name" : "updated")}
+        <motion.div whileTap={{ scale: 0.96 }} onClick={() => setSortMode(m => m === "updated" ? "name" : m === "name" ? "creator" : "updated")}
           style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, whiteSpace: "nowrap" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
-          {sortMode === "name" ? "Name" : "Zuletzt geändert"}
+          {sortMode === "name" ? "Name" : sortMode === "creator" ? "Ersteller" : "Zuletzt geändert"}
         </motion.div>
         <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
           {viewBtn("grid", "Kachelansicht", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>)}
