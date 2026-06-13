@@ -11323,7 +11323,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
               )}
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{brand?.name || userOrg?.name || ""}</span>
-                <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim }}>{t("assets.title") || "Assets"}</span>
+                <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim }}>{t("assets.title") || "Files"}</span>
               </div>
             </div>
             {tab === "moodboards" && (

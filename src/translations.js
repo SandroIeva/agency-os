@@ -46,7 +46,7 @@ const translations = {
   "linearMenu.comingSoon":    { de: "Bald verfügbar",   en: "Coming soon" },
 
   // ── Assets (Brand → Assets: Moodboards / Creations / Inspirations) ──
-  "assets.title":              { de: "Assets",                    en: "Assets" },
+  "assets.title":              { de: "Dateien",                   en: "Files" },
   "assets.moodboards":         { de: "Moodboards",                en: "Moodboards" },
   "assets.creations":          { de: "Assets",                    en: "Assets" },
   "assets.inspirations":       { de: "Inspirations",              en: "Inspirations" },
