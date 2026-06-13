@@ -13106,7 +13106,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
   const [title, setTitle] = useState("");
   const [saveState, setSaveState] = useState(""); // "saving" | "saved" | ""
   const titleTimer = useRef(null);
-  const [viewMode, setViewMode] = useState("grid"); // "grid" (Kachel) | "list"
+  const [viewMode, setViewMode] = useState("list"); // "list" | "grid" (Kachel)
   const [search, setSearch] = useState("");
   const [sortMode, setSortMode] = useState("updated"); // "updated" | "name"
   const [confirmDeleteDoc, setConfirmDeleteDoc] = useState(null); // doc pending delete confirmation
