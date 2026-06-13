@@ -16067,6 +16067,8 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
   const [layoutOpen, setLayoutOpen] = useState(false);
   const [colorCellId, setColorCellId] = useState(null); // cell whose colour modal is open
   const [pickerCellId, setPickerCellId] = useState(null); // cell whose logo-picker is open
+  const [copiedCell, setCopiedCell] = useState(null); // cell that just copied its logo
+  const [dlCellId, setDlCellId] = useState(null); // cell whose SVG/PNG download chooser is open
   const assetInputRefs = useRef({});
 
   // Background presets: the brand palette if defined, else common colours —
@@ -16118,6 +16120,53 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
   const assetUrl = (slot) => { const a = cfg.assets?.[slot]; return a?.svg || a?.png || null; };
   const cellUrl = (c) => c?.slot ? assetUrl(c.slot) : (c?.url || null);
   const slotLabel = (key) => LOGO_ASSET_SLOTS.find(s => s.key === key)?.label || "";
+
+  // Resolve a cell to its available formats — works for slot-based cells and
+  // legacy direct-url cells (format inferred from the extension).
+  const cellAssets = (c) => {
+    if (c?.slot) return cfg.assets?.[c.slot] || {};
+    if (c?.url) return { [/\.svg($|\?)/i.test(c.url) ? "svg" : "png"]: c.url };
+    return {};
+  };
+  const cellFormats = (c) => ["svg", "png"].filter(f => cellAssets(c)[f]);
+  const downloadCell = async (c, fmt) => {
+    const url = cellAssets(c)[fmt]; if (!url) return;
+    try {
+      const blob = await (await fetch(url)).blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl; a.download = `${c.slot || "logo"}.${fmt}`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
+    } catch (_) {}
+  };
+  // Rasterise an SVG URL to a PNG blob so it can go on the clipboard as an image.
+  const rasterizeSvg = (url) => new Promise((resolve) => {
+    const img = new Image(); img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const w = img.naturalWidth || 600, h = img.naturalHeight || 600;
+        const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+        cv.getContext("2d").drawImage(img, 0, 0, w, h);
+        cv.toBlob(b => resolve(b), "image/png");
+      } catch (_) { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+  const copyCellImage = async (c, id) => {
+    const a = cellAssets(c);
+    if (!a.png && !a.svg) return;
+    try {
+      let blob = null;
+      if (a.png) blob = await (await fetch(a.png)).blob();
+      else if (a.svg) blob = await rasterizeSvg(a.svg);
+      if (blob && navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([new window.ClipboardItem({ "image/png": blob })]);
+        setCopiedCell(id); setTimeout(() => setCopiedCell(x => x === id ? null : x), 1400);
+      }
+    } catch (_) {}
+  };
 
   const layout = LOGO_LAYOUTS[cfg.variant] || LOGO_LAYOUTS.split;
   const hasAny = Object.values(cfg.cells).some(c => cellUrl(c));
@@ -16204,6 +16253,22 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
             </div>
           </>
         )}
+        {!editing && url && (
+          /* View mode: copy logo to clipboard + download (SVG/PNG), on hover. */
+          <div className="logo-actions" style={{ position: "absolute", bottom: 10, right: 10, display: "flex", gap: 6 }}>
+            <motion.div whileTap={{ scale: 0.9 }} onClick={() => copyCellImage(c, id)} title="Logo kopieren"
+              style={{ width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: ctrlColor, background: ctrlBg }}>
+              {copiedCell === id
+                ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}
+            </motion.div>
+            <motion.div whileTap={{ scale: 0.9 }} title="Herunterladen"
+              onClick={() => { const fmts = cellFormats(c); if (fmts.length === 1) downloadCell(c, fmts[0]); else setDlCellId(id); }}
+              style={{ width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: ctrlColor, background: ctrlBg }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </motion.div>
+          </div>
+        )}
       </div>
     );
   };
@@ -16268,6 +16333,31 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
           </div>
         ))}
       </div>
+
+      {dlCellId && createPortal(
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setDlCellId(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <motion.div initial={{ opacity: 0, scale: 0.95, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} onClick={e => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: 320, padding: 20, borderRadius: 18, background: darkMode ? "rgba(24,24,32,0.99)" : "#fff", border: `1px solid ${theme.border}`, boxShadow: "0 24px 60px rgba(0,0,0,0.35)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <div style={{ fontSize: 14.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Logo herunterladen</div>
+              <motion.div whileTap={{ scale: 0.9 }} onClick={() => setDlCellId(null)} style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </motion.div>
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              {cellFormats(cfg.cells[dlCellId] || {}).map(fmt => (
+                <motion.div key={fmt} whileTap={{ scale: 0.97 }} onClick={() => { downloadCell(cfg.cells[dlCellId] || {}, fmt); setDlCellId(null); }}
+                  style={{ flex: 1, padding: "16px 0", borderRadius: 12, cursor: "pointer", textAlign: "center", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.02)" }}>
+                  <div style={{ color: accent, marginBottom: 6, display: "flex", justifyContent: "center" }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  </div>
+                  <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{fmt.toUpperCase()}</div>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        </motion.div>, document.body)}
 
       {pickerCellId && createPortal(
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setPickerCellId(null)}
@@ -25353,9 +25443,11 @@ export default function CircularMenu() {
         /* Brand imagery: prompt overlay fades in on hover */
         .imagery-overlay { opacity: 0; transition: opacity 0.18s ease; }
         .imagery-tile:hover .imagery-overlay { opacity: 1; }
-        /* Brand logo: discreet scale slider, only on hover */
+        /* Brand logo: discreet scale slider + copy/download actions, only on hover */
         .logo-scale-wrap { opacity: 0; transition: opacity 0.18s ease; }
         .logo-cell:hover .logo-scale-wrap { opacity: 1; }
+        .logo-actions { opacity: 0; transition: opacity 0.18s ease; }
+        .logo-cell:hover .logo-actions { opacity: 1; }
         input.logo-scale { -webkit-appearance: none; appearance: none; height: 3px; border-radius: 3px; background: rgba(127,127,127,0.45); outline: none; }
         input.logo-scale::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 1px solid rgba(0,0,0,0.25); box-shadow: 0 1px 2px rgba(0,0,0,0.25); cursor: pointer; }
         input.logo-scale::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 1px solid rgba(0,0,0,0.25); cursor: pointer; }
