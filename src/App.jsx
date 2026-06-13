@@ -11328,14 +11328,14 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
             </div>
             {tab === "moodboards" && (
               <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setCreating(true)}
-                style={{ ...iconBtn, background: accent, color: "#fff", border: "none" }}>
+                style={{ ...iconBtn, background: "#23232b", color: "#fff", border: "none" }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 {t("moodboard.new") || "Neues Board"}
               </motion.div>
             )}
             {tab === "creations" && (
               <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => creationsPick.current?.()}
-                style={{ ...iconBtn, background: accent, color: "#fff", border: "none", opacity: creationsUploading ? 0.6 : 1 }}>
+                style={{ ...iconBtn, background: "#23232b", color: "#fff", border: "none", opacity: creationsUploading ? 0.6 : 1 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 {creationsUploading ? (t("common.loading") || "Lädt…") : (t("moodboard.upload") || "Hochladen")}
               </motion.div>
@@ -11358,7 +11358,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                   style={{ padding: "10px 14px 13px", cursor: "pointer", position: "relative",
                     fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: active ? theme.text : theme.textDim, transition: "color 0.2s ease" }}>
                   {tb.label}
-                  {active && <motion.div layoutId="assetsTabUnderline" style={{ position: "absolute", left: 8, right: 8, bottom: -1, height: 2.5, borderRadius: 2, background: accent }} />}
+                  {active && <motion.div layoutId="assetsTabUnderline" style={{ position: "absolute", left: 8, right: 8, bottom: -1, height: 2.5, borderRadius: 2, background: "#23232b" }} />}
                 </div>
               );
             })}
