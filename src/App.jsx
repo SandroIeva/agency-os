@@ -11579,7 +11579,12 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   const memberById = useMemo(() => {
     const m = {}; (orgMembers || []).forEach(om => { if (om.user_id) m[om.user_id] = { ...(om.profiles || {}) }; }); return m;
   }, [orgMembers]);
-  const creatorName = (f) => memberById[f.user_id]?.display_name || "";
+  const creatorOf = (f) => memberById[f.user_id];
+  const creatorAvatar = (m, size = 22) => (
+    <div style={{ width: size, height: size, borderRadius: "50%", overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", color: theme.textSub, fontSize: size * 0.4, fontWeight: 600, fontFamily: FONT }}>
+      {m?.avatar_url ? <img src={m.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (m?.initials || (m?.display_name || "?").trim()[0] || "?").toUpperCase()}
+    </div>
+  );
   const [files, setFiles] = useState(null); // null = loading
   const [uploading, setUploading] = useState(false);
   const [zoom, setZoom] = useState(null); // the file object being previewed
@@ -11754,7 +11759,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                 <motion.div key={f.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.28 }}
                   onClick={() => setZoom(f)} className="hover-row"
                   style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 14, cursor: "pointer",
-                    background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.04)"}` }}>
+                    background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)", border: `1px solid ${theme.borderFaint}` }}>
                   <div style={{ width: 46, height: 46, borderRadius: 11, overflow: "hidden", flexShrink: 0, position: "relative", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
                     {isVideo(f) ? (
                       <>
@@ -11771,7 +11776,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                     <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name || "—"}</div>
                     <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{fmtMeta(f)}</div>
                   </div>
-                  {creatorName(f) && <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, flexShrink: 0, maxWidth: 160, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{creatorName(f)}</div>}
+                  {creatorOf(f)?.display_name && <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, maxWidth: 180 }}>{creatorAvatar(creatorOf(f))}<span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{creatorOf(f).display_name}</span></div>}
                 </motion.div>
               ))}
             </div>
@@ -13349,6 +13354,11 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg>
   );
   const iconBg = darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)";
+  const creatorAvatar = (m, size = 22) => (
+    <div style={{ width: size, height: size, borderRadius: "50%", overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", color: theme.textSub, fontSize: size * 0.4, fontWeight: 600, fontFamily: FONT }}>
+      {m?.avatar_url ? <img src={m.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (m?.initials || (m?.display_name || "?").trim()[0] || "?").toUpperCase()}
+    </div>
+  );
   const rowActions = (d) => (
     <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
       <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => duplicateDoc(d, e)} title="Duplizieren"
@@ -13401,7 +13411,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
       ) : viewMode === "grid" ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
           {visibleDocs.map(d => {
-            const creator = memberById[d.created_by]?.display_name;
+            const creator = memberById[d.created_by];
             return (
             <motion.div key={d.id} whileHover={{ y: -3 }} onClick={() => { setOpenDoc(d); setTitle(d.title || ""); }}
               style={{ position: "relative", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)", padding: 18, cursor: "pointer", minHeight: 116, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -13411,22 +13421,23 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
                 {rowActions(d)}
               </div>
               <div style={{ flex: 1 }} />
-              <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {[creator, fmtDate(d.created_at)].filter(Boolean).join(" · ")}
+              <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, minWidth: 0 }}>
+                {creator?.display_name && creatorAvatar(creator, 20)}
+                <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[creator?.display_name, fmtDate(d.created_at)].filter(Boolean).join(" · ")}</span>
               </div>
             </motion.div>
           ); })}
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", borderRadius: 14, border: `1px solid ${darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.04)"}`, overflow: "hidden" }}>
+        <div style={{ display: "flex", flexDirection: "column", borderRadius: 14, border: `1px solid ${theme.borderFaint}`, overflow: "hidden" }}>
           {visibleDocs.map((d, i) => {
-            const creator = memberById[d.created_by]?.display_name;
+            const creator = memberById[d.created_by];
             return (
             <motion.div key={d.id} whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }} onClick={() => { setOpenDoc(d); setTitle(d.title || ""); }}
-              style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", cursor: "pointer", borderBottom: i < visibleDocs.length - 1 ? `1px solid ${darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.04)"}` : "none" }}>
+              style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", cursor: "pointer", borderBottom: i < visibleDocs.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
               <div style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16)}</div>
               <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || "Unbenanntes Dokument"}</div>
-              {creator && <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, flexShrink: 0, maxWidth: 150, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{creator}</div>}
+              {creator?.display_name && <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, maxWidth: 180 }}>{creatorAvatar(creator)}<span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{creator.display_name}</span></div>}
               <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textFaint, flexShrink: 0, minWidth: 92, textAlign: "right" }}>{fmtDate(d.created_at)}</div>
               {rowActions(d)}
             </motion.div>
