@@ -13360,7 +13360,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
     </div>
   );
   const rowActions = (d) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
       <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => duplicateDoc(d, e)} title="Duplizieren"
         style={{ width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, cursor: "pointer" }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
