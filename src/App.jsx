@@ -13429,7 +13429,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
           ); })}
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", borderRadius: 14, border: `1px solid ${theme.borderFaint}`, overflow: "hidden", boxShadow: "0 18px 60px rgba(0,0,0,0.06)" }}>
+        <div style={{ display: "flex", flexDirection: "column", borderRadius: 14, border: `1px solid ${theme.borderFaint}`, overflow: "hidden", boxShadow: "0 10px 28px rgba(0,0,0,0.06)" }}>
           {visibleDocs.map((d, i) => {
             const creator = memberById[d.created_by];
             return (
