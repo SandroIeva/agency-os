@@ -13241,23 +13241,18 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
     setDocs(prev => prev.filter(d => d.id !== id));
     await supabase.from("brand_documents").delete().eq("id", id);
   };
+  const duplicateDoc = async (d, e) => {
+    e?.stopPropagation?.();
+    if (!userOrg?.id) return;
+    const { data, error } = await supabase.from("brand_documents")
+      .insert({ org_id: userOrg.id, title: (d.title || "Unbenanntes Dokument") + " (Kopie)", content: d.content || "", created_by: session?.user?.id, visibility: d.visibility || "workspace" })
+      .select().single();
+    if (error) { alert("Dokument konnte nicht dupliziert werden: " + error.message); return; }
+    setDocs(prev => [data, ...prev]);
+    recordActivity("created", data.id);
+  };
 
   const fmtDate = (ts) => { try { return new Date(ts).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" }); } catch { return ""; } };
-  const snippet = (content) => {
-    if (!content) return "";
-    // BlockNote stores block JSON — extract plain text from inline content.
-    try {
-      const blocks = JSON.parse(content);
-      if (Array.isArray(blocks)) {
-        const walk = (arr) => (arr || []).map(b => {
-          const inline = (b.content || []).map(c => (typeof c === "string" ? c : (c.text || ""))).join("");
-          return inline + (b.children?.length ? " " + walk(b.children) : "");
-        }).join(" ");
-        return walk(blocks).replace(/\s+/g, " ").trim().slice(0, 120);
-      }
-    } catch (_) { /* legacy HTML */ }
-    return content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
-  };
 
   // ── EDITOR (autosaving; optional full-viewport mode) ──
   if (openDoc) {
@@ -13344,13 +13339,20 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
       ? (a.title || "").localeCompare(b.title || "", "de")
       : new Date(b.updated_at) - new Date(a.updated_at));
   const docIcon = (size) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg>
   );
-  const delBtn = (d) => (
-    <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => deleteDoc(d.id, e)} title="Löschen"
-      style={{ width: 24, height: 24, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, flexShrink: 0 }}>
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-    </motion.div>
+  const iconBg = darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)";
+  const rowActions = (d) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+      <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => duplicateDoc(d, e)} title="Duplizieren"
+        style={{ width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, cursor: "pointer" }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      </motion.div>
+      <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => deleteDoc(d.id, e)} title="Löschen"
+        style={{ width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, cursor: "pointer" }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+      </motion.div>
+    </div>
   );
   const viewBtn = (mode, title, children) => {
     const on = viewMode === mode;
@@ -13391,31 +13393,37 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
         </div>
       ) : viewMode === "grid" ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
-          {visibleDocs.map(d => (
+          {visibleDocs.map(d => {
+            const creator = memberById[d.created_by]?.display_name;
+            return (
             <motion.div key={d.id} whileHover={{ y: -3 }} onClick={() => { setOpenDoc(d); setTitle(d.title || ""); }}
-              style={{ position: "relative", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)", padding: 18, cursor: "pointer", minHeight: 132, display: "flex", flexDirection: "column", gap: 8 }}>
+              style={{ position: "relative", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)", padding: 18, cursor: "pointer", minHeight: 116, display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 9, background: accent + "1f", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16)}</div>
+                <div style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16)}</div>
                 <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || "Unbenanntes Dokument"}</div>
-                {delBtn(d)}
+                {rowActions(d)}
               </div>
-              <div style={{ flex: 1, fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, overflow: "hidden" }}>{snippet(d.content) || "Leeres Dokument"}</div>
-              <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textFaint }}>{fmtDate(d.updated_at)}</div>
+              <div style={{ flex: 1 }} />
+              <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {[creator, fmtDate(d.created_at)].filter(Boolean).join(" · ")}
+              </div>
             </motion.div>
-          ))}
+          ); })}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", borderRadius: 14, border: `1px solid ${theme.borderFaint}`, overflow: "hidden" }}>
-          {visibleDocs.map((d, i) => (
+          {visibleDocs.map((d, i) => {
+            const creator = memberById[d.created_by]?.display_name;
+            return (
             <motion.div key={d.id} whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }} onClick={() => { setOpenDoc(d); setTitle(d.title || ""); }}
-              style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", cursor: "pointer", borderBottom: i < visibleDocs.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: accent + "1f", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(15)}</div>
-              <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, flexShrink: 0, maxWidth: 240, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || "Unbenanntes Dokument"}</div>
-              <div style={{ flex: 1, minWidth: 0, fontSize: 12, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{snippet(d.content) || "Leeres Dokument"}</div>
-              <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, flexShrink: 0 }}>{fmtDate(d.updated_at)}</div>
-              {delBtn(d)}
+              style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", cursor: "pointer", borderBottom: i < visibleDocs.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
+              <div style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16)}</div>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || "Unbenanntes Dokument"}</div>
+              {creator && <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, flexShrink: 0, maxWidth: 150, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{creator}</div>}
+              <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textFaint, flexShrink: 0, minWidth: 92, textAlign: "right" }}>{fmtDate(d.created_at)}</div>
+              {rowActions(d)}
             </motion.div>
-          ))}
+          ); })}
         </div>
       )}
       {confirmDeleteDoc && createPortal(
