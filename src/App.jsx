@@ -23773,6 +23773,9 @@ export default function CircularMenu() {
               background: theme.bg,
               display: "flex", flexDirection: "column",
               overflowY: "auto",
+              // Always reserve the scrollbar gutter so switching to a short tab
+              // (Darstellung/Account) doesn't shift the centred content sideways.
+              scrollbarGutter: "stable",
             }}
           >
             {/* Top bar */}
