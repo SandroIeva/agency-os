@@ -11821,9 +11821,13 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                     <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => duplicateFile(f, e)} title="Duplizieren" style={actBtnStyle}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                     </motion.div>
-                    <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => requestDelete(f, e)} title="Löschen" style={actBtnStyle}>
+                    {(() => { const canDel = f.user_id === session?.user?.id; return (
+                    <motion.div whileTap={canDel ? { scale: 0.9 } : undefined} onClick={(e) => { e.stopPropagation(); if (canDel) requestDelete(f, e); }}
+                      title={canDel ? "Löschen" : "Nur der Ersteller kann löschen"}
+                      style={{ ...actBtnStyle, opacity: canDel ? 1 : 0.3, cursor: canDel ? "pointer" : "not-allowed" }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
                     </motion.div>
+                    ); })()}
                   </div>
                 </motion.div>
               ))}
@@ -13431,11 +13435,17 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
     </motion.div>
   );
-  const delBtn = (d) => (
-    <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => deleteDoc(d.id, e)} title="Löschen" style={actBtnStyle}>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-    </motion.div>
-  );
+  const delBtn = (d) => {
+    // Only the creator can delete; others see a dimmed, inert icon.
+    const canDel = d.created_by === session?.user?.id;
+    return (
+      <motion.div whileTap={canDel ? { scale: 0.9 } : undefined} onClick={(e) => { e.stopPropagation(); if (canDel) deleteDoc(d.id, e); }}
+        title={canDel ? "Löschen" : "Nur der Ersteller kann löschen"}
+        style={{ ...actBtnStyle, opacity: canDel ? 1 : 0.3, cursor: canDel ? "pointer" : "not-allowed" }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+      </motion.div>
+    );
+  };
   const rowActions = (d) => (
     <div style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0 }}>{dupBtn(d)}{delBtn(d)}</div>
   );
