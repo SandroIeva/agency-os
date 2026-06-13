@@ -15924,7 +15924,10 @@ Write it as ONE flowing, highly vivid and detailed prompt (about 5–8 sentences
         ta.remove();
       } catch (_) { ok = false; }
     }
-    if (ok) { setCopiedId(it.id); setTimeout(() => setCopiedId(c => c === it.id ? null : c), 1400); }
+    if (ok) { setCopiedId(it.id); setTimeout(() => setCopiedId(c => c === it.id ? null : c), 1400); return; }
+    // 3) Last resort: never leave the user with "nothing happened". Show the
+    //    prompt preselected so they can copy it manually with Cmd/Ctrl+C.
+    try { window.prompt(appLanguage === "de" ? "Prompt kopieren (Cmd/Strg + C):" : "Copy prompt (Cmd/Ctrl + C):", text); } catch (_) {}
   };
   // Cross-origin URLs ignore <a download>, so fetch the bytes and save a blob.
   const download = async (it) => {
