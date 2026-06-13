@@ -13437,8 +13437,10 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
               style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", cursor: "pointer", borderBottom: i < visibleDocs.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
               <div style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16)}</div>
               <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || "Unbenanntes Dokument"}</div>
-              {creator?.display_name && <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, maxWidth: 180 }}>{creatorAvatar(creator)}<span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{creator.display_name}</span></div>}
-              <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textFaint, flexShrink: 0, minWidth: 92, textAlign: "right" }}>{fmtDate(d.created_at)}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, width: 200 }}>
+                {creator?.display_name && <>{creatorAvatar(creator)}<span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{creator.display_name}</span></>}
+              </div>
+              <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textFaint, flexShrink: 0, minWidth: 92, textAlign: "right", marginRight: 20 }}>{fmtDate(d.created_at)}</div>
               {rowActions(d)}
             </motion.div>
           ); })}
