@@ -41,7 +41,7 @@ const translations = {
   "linearMenu.tasks":         { de: "Aufgaben",         en: "Tasks" },
   "linearMenu.calendar":      { de: "Kalender",         en: "Calendar" },
   "linearMenu.notes":         { de: "Notizen",          en: "Notes" },
-  "assets.docs":              { de: "Documents",        en: "Documents" },
+  "assets.docs":              { de: "Dokumente",        en: "Documents" },
   // Empty-state
   "linearMenu.comingSoon":    { de: "Bald verfügbar",   en: "Coming soon" },
 
