@@ -10770,6 +10770,7 @@ const BRAND_PILLAR_SUBTABS = {
     { key: "story",  label: "Brand Story" },
     { key: "values", label: "Brand Values" },
     { key: "voice",  label: "Voice & Tone" },
+    { key: "avatar", label: "Brand Avatar" },
   ],
   design: [
     { key: "logo",       label: "Logo" },
@@ -16553,6 +16554,208 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
   );
 }
 
+// ── Brand Avatar ──────────────────────────────────────────────────────────────
+// Configure a brand persona (archetype + look + personality), then let the
+// connected AI generate a portrait that becomes the face for content creation.
+const AVATAR_ARCHETYPES = [
+  { id: "hero", de: "Held", en: "Hero", hint: "mutig, leistungsstark" },
+  { id: "sage", de: "Weiser", en: "Sage", hint: "klug, vertrauenswürdig" },
+  { id: "explorer", de: "Entdecker", en: "Explorer", hint: "frei, abenteuerlustig" },
+  { id: "creator", de: "Schöpfer", en: "Creator", hint: "kreativ, visionär" },
+  { id: "ruler", de: "Herrscher", en: "Ruler", hint: "souverän, premium" },
+  { id: "magician", de: "Magier", en: "Magician", hint: "transformativ, inspirierend" },
+  { id: "innocent", de: "Unschuldige:r", en: "Innocent", hint: "optimistisch, ehrlich" },
+  { id: "everyman", de: "Jedermann", en: "Everyman", hint: "nahbar, bodenständig" },
+  { id: "lover", de: "Liebende:r", en: "Lover", hint: "sinnlich, emotional" },
+  { id: "jester", de: "Narr", en: "Jester", hint: "verspielt, humorvoll" },
+  { id: "caregiver", de: "Fürsorgliche:r", en: "Caregiver", hint: "warm, beschützend" },
+  { id: "rebel", de: "Rebell:in", en: "Rebel", hint: "unangepasst, mutig" },
+];
+const AVATAR_GENDERS = [{ id: "female", de: "Weiblich", en: "Female" }, { id: "male", de: "Männlich", en: "Male" }, { id: "nonbinary", de: "Non-binär", en: "Non-binary" }];
+const AVATAR_AGES = [{ id: "18-25", de: "18–25", en: "18–25" }, { id: "26-35", de: "26–35", en: "26–35" }, { id: "36-50", de: "36–50", en: "36–50" }, { id: "50+", de: "50+", en: "50+" }];
+const AVATAR_ETHNICITIES = [
+  { id: "european", de: "Europäisch", en: "European" }, { id: "african", de: "Afrikanisch", en: "African" },
+  { id: "asian", de: "Asiatisch", en: "Asian" }, { id: "latin", de: "Lateinamerikanisch", en: "Latin American" },
+  { id: "middleeastern", de: "Nahöstlich", en: "Middle Eastern" }, { id: "multicultural", de: "Multikulturell", en: "Multicultural" },
+];
+const AVATAR_STYLES = [
+  { id: "casual", de: "Casual", en: "Casual" }, { id: "business", de: "Business", en: "Business" },
+  { id: "creative", de: "Kreativ / Edgy", en: "Creative / Edgy" }, { id: "luxury", de: "Luxuriös", en: "Luxury" },
+  { id: "sporty", de: "Sportlich", en: "Sporty" }, { id: "minimal", de: "Minimalistisch", en: "Minimal" },
+];
+const AVATAR_SETTINGS = [
+  { id: "studio", de: "Studio", en: "Studio" }, { id: "urban", de: "Urban", en: "Urban" },
+  { id: "nature", de: "Natur", en: "Nature" }, { id: "office", de: "Office", en: "Office" }, { id: "home", de: "Zuhause", en: "Home" },
+];
+const AVATAR_TRAITS = [
+  { id: "warm", de: "warmherzig", en: "warm" }, { id: "confident", de: "selbstbewusst", en: "confident" },
+  { id: "creative", de: "kreativ", en: "creative" }, { id: "down-to-earth", de: "bodenständig", en: "down-to-earth" },
+  { id: "playful", de: "verspielt", en: "playful" }, { id: "professional", de: "professionell", en: "professional" },
+  { id: "bold", de: "mutig", en: "bold" }, { id: "caring", de: "fürsorglich", en: "caring" },
+  { id: "energetic", de: "energiegeladen", en: "energetic" }, { id: "elegant", de: "elegant", en: "elegant" },
+  { id: "approachable", de: "nahbar", en: "approachable" }, { id: "visionary", de: "visionär", en: "visionary" },
+];
+
+function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider, llmKeys, ensureValidToken, appLanguage = "de", theme, darkMode, accent }) {
+  const cfg = value && typeof value === "object" ? value : {};
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const de = appLanguage === "de";
+  const L = (o) => (de ? o.de : o.en);
+  const update = (partial) => onChange({ ...cfg, ...partial });
+  const setField = (key, id) => update({ [key]: cfg[key] === id ? "" : id });
+  const toggleTrait = (id) => {
+    const cur = Array.isArray(cfg.traits) ? cfg.traits : [];
+    update({ traits: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id] });
+  };
+  const canGenImage = llmProvider === "gemini" || llmProvider === "openai";
+
+  const buildPrompt = () => {
+    const arch = AVATAR_ARCHETYPES.find(a => a.id === cfg.archetype);
+    const gender = AVATAR_GENDERS.find(g => g.id === cfg.gender);
+    const age = AVATAR_AGES.find(a => a.id === cfg.age);
+    const eth = AVATAR_ETHNICITIES.find(e => e.id === cfg.ethnicity);
+    const style = AVATAR_STYLES.find(s => s.id === cfg.style);
+    const setting = AVATAR_SETTINGS.find(s => s.id === cfg.setting);
+    const traits = (cfg.traits || []).map(id => AVATAR_TRAITS.find(t => t.id === id)).filter(Boolean);
+    const parts = [
+      `Photorealistic portrait photo (head and shoulders, looking at camera, natural soft lighting, shallow depth of field) of a brand persona`,
+      eth ? `${eth.en.toLowerCase()} appearance` : "",
+      age ? `aged ${age.id}` : "",
+      gender ? `${gender.en.toLowerCase()}` : "person",
+      arch ? `embodying the ${arch.en} brand archetype` : "",
+      traits.length ? `personality: ${traits.map(t => t.en).join(", ")}` : "",
+      style ? `style: ${style.en}` : "",
+      setting ? `setting: ${setting.en} background` : "",
+      cfg.notes ? cfg.notes : "",
+      "ultra-detailed, high resolution, authentic, professional editorial photography",
+    ].filter(Boolean);
+    return parts.join(", ");
+  };
+
+  const generate = async () => {
+    setErr("");
+    if (!canGenImage) { setErr(de ? "Bildgenerierung benötigt OpenAI oder Gemini (Settings → KI & Modelle)." : "Image generation needs OpenAI or Gemini (Settings → AI)."); return; }
+    const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
+    let oauthToken = null;
+    if (llmProvider === "gemini" && !apiKey && ensureValidToken) { try { oauthToken = await ensureValidToken(); } catch (_) {} }
+    if (!apiKey && !oauthToken) { setErr(de ? "Kein API-Key hinterlegt (Settings → KI & Modelle)." : "No API key configured (Settings → AI)."); return; }
+    setBusy(true);
+    try {
+      const resp = await fetch("/api/chat-multi", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: buildPrompt(), provider: llmProvider, apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, wantsImage: true }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      const img = (data?.content || []).find(c => c.type === "image")?.url;
+      if (!resp.ok || !img) { setErr(data?.error || (de ? "Bildgenerierung fehlgeschlagen." : "Image generation failed.")); setBusy(false); return; }
+      // Persist the data-URL to brand-assets so we store a small URL, not raw base64.
+      let finalUrl = img;
+      try {
+        const blob = await (await fetch(img)).blob();
+        const file = new File([blob], `brand-avatar-${Date.now()}.png`, { type: blob.type || "image/png" });
+        const r = await uploadFile?.(file, "brand-avatar");
+        if (r?.url) finalUrl = r.url;
+      } catch (_) {}
+      update({ imageUrl: finalUrl });
+    } catch (e) { setErr(e?.message || (de ? "Fehler bei der Generierung." : "Generation error.")); }
+    setBusy(false);
+  };
+
+  const SL = (s) => <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{s}</div>;
+  const chip = (label, on, onClick, key) => (
+    <motion.div key={key} whileTap={canEdit ? { scale: 0.96 } : undefined} onClick={canEdit ? onClick : undefined}
+      style={{ padding: "8px 13px", borderRadius: 10, cursor: canEdit ? "pointer" : "default", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap",
+        background: on ? accent + "1f" : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)"), color: on ? accent : theme.textSub,
+        border: `1px solid ${on ? accent + "55" : theme.borderFaint}` }}>{label}</motion.div>
+  );
+  const group = (label, options, selKey) => (
+    <div>{SL(label)}<div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{options.map(o => chip(L(o), cfg[selKey] === o.id, () => setField(selKey, o.id), o.id))}</div></div>
+  );
+
+  const downloadAvatar = async () => {
+    if (!cfg.imageUrl) return;
+    try {
+      const blob = await (await fetch(cfg.imageUrl)).blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = objectUrl; a.download = `brand-avatar.${(blob.type.split("/")[1] || "png").replace("jpeg", "jpg")}`;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
+    } catch (_) {}
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, maxWidth: 620 }}>
+        {de ? "Definiere die Persönlichkeit eurer Marke als Person — Archetyp, Aussehen und Charakter. Daraus generiert die KI ein Portrait, das als Gesicht für euren Content dient."
+            : "Define your brand's personality as a person — archetype, appearance and character. The AI then generates a portrait that serves as the face for your content."}
+      </div>
+
+      {/* Configurator + preview, side by side on wide screens */}
+      <div style={{ display: "flex", gap: 26, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <div style={{ flex: "1 1 380px", minWidth: 300, display: "flex", flexDirection: "column", gap: 20 }}>
+          <div>{SL(de ? "Name (optional)" : "Name (optional)")}
+            <input value={cfg.name || ""} onChange={e => update({ name: e.target.value })} disabled={!canEdit}
+              placeholder={de ? "z. B. Mara" : "e.g. Mara"}
+              style={{ width: "100%", boxSizing: "border-box", padding: "10px 13px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.02)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none" }} />
+          </div>
+          <div>{SL(de ? "Archetyp" : "Archetype")}<div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {AVATAR_ARCHETYPES.map(a => chip(L(a), cfg.archetype === a.id, () => setField("archetype", a.id), a.id))}
+          </div></div>
+          {group(de ? "Geschlecht" : "Gender", AVATAR_GENDERS, "gender")}
+          {group(de ? "Alter" : "Age", AVATAR_AGES, "age")}
+          {group(de ? "Erscheinung" : "Appearance", AVATAR_ETHNICITIES, "ethnicity")}
+          <div>{SL(de ? "Persönlichkeit" : "Personality")}<div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {AVATAR_TRAITS.map(tr => chip(L(tr), (cfg.traits || []).includes(tr.id), () => toggleTrait(tr.id), tr.id))}
+          </div></div>
+          {group(de ? "Stil" : "Style", AVATAR_STYLES, "style")}
+          {group(de ? "Setting" : "Setting", AVATAR_SETTINGS, "setting")}
+          <div>{SL(de ? "Weitere Details" : "Extra details")}
+            <textarea value={cfg.notes || ""} onChange={e => update({ notes: e.target.value })} disabled={!canEdit} rows={2}
+              placeholder={de ? "z. B. lockige Haare, freundliches Lächeln, Brille…" : "e.g. curly hair, friendly smile, glasses…"}
+              style={{ width: "100%", boxSizing: "border-box", padding: "10px 13px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.02)", color: theme.text, fontSize: 13.5, lineHeight: 1.5, fontFamily: FONT, outline: "none", resize: "vertical" }} />
+          </div>
+        </div>
+
+        {/* Preview */}
+        <div style={{ flex: "0 0 300px", display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ width: "100%", aspectRatio: "3 / 4", borderRadius: 18, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+            {cfg.imageUrl ? (
+              <img src={cfg.imageUrl} alt={cfg.name || "Brand Avatar"} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : (
+              <div style={{ textAlign: "center", color: theme.textDim, padding: 20 }}>
+                <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ margin: "0 auto 10px", opacity: 0.7 }}><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+                <div style={{ fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>{de ? "Noch kein Avatar generiert" : "No avatar generated yet"}</div>
+              </div>
+            )}
+            {busy && (
+              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(10,10,16,0.55)", backdropFilter: "blur(4px)" }}>
+                <span style={{ color: "#fff", fontSize: 12.5, fontFamily: FONT }}>{de ? "Wird generiert…" : "Generating…"}</span>
+              </div>
+            )}
+          </div>
+          {canEdit && (
+            <>
+              <motion.div whileHover={{ scale: busy ? 1 : 1.02 }} whileTap={{ scale: busy ? 1 : 0.97 }} onClick={() => !busy && generate()}
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "11px 0", borderRadius: 12, cursor: busy ? "default" : "pointer", background: accent, color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 600, opacity: busy ? 0.7 : 1 }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/></svg>
+                {cfg.imageUrl ? (de ? "Neu generieren" : "Regenerate") : (de ? "Avatar generieren" : "Generate avatar")}
+              </motion.div>
+              {cfg.imageUrl && (
+                <motion.div whileTap={{ scale: 0.97 }} onClick={downloadAvatar}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "9px 0", borderRadius: 11, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  {de ? "Herunterladen" : "Download"}
+                </motion.div>
+              )}
+              {err && <div style={{ fontSize: 12, fontFamily: FONT, color: "#EF4444", lineHeight: 1.5 }}>{err}</div>}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, appLanguage = "de", brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true }) {
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
   const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
@@ -16865,6 +17068,22 @@ If you don't know a field, infer a plausible value. Write all text values in the
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
           .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", imagery: list })
+          .select("id").single();
+        if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
+      }
+    }, 500);
+  };
+  const avatarTimer = useRef(null);
+  const saveBrandAvatar = (cfg) => {
+    setProfile(p => ({ ...(p || {}), brand_avatar: cfg }));
+    clearTimeout(avatarTimer.current);
+    avatarTimer.current = setTimeout(async () => {
+      const cur = profileRef.current;
+      if (cur?.id) {
+        await supabase.from("brand_profile").update({ brand_avatar: cfg }).eq("id", cur.id);
+      } else if (userOrg?.id) {
+        const { data } = await supabase.from("brand_profile")
+          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", brand_avatar: cfg })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -18290,7 +18509,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                   <motion.button whileTap={{ scale: 0.97 }} onClick={() => setValuesEditing(true)}
                     style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>Bearbeiten</motion.button>
                 ) : null
-              ) : !(brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors" || brandSub === "positioning")) ? (
+              ) : !((brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors" || brandSub === "positioning")) || (brandTab === "identity" && brandSub === "avatar")) ? (
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => setEditingText(v => !v)}
                 style={{
                   padding: "8px 16px", borderRadius: 10, cursor: "pointer",
@@ -18466,6 +18685,10 @@ If you don't know a field, infer a plausible value. Write all text values in the
                           theme={theme} darkMode={darkMode} accent={theme.accent} />
                       ) : k === "design/imagery" ? (
                         <BrandImagery value={profile.imagery} editing={editingText} onChange={saveImagery}
+                          uploadFile={uploadFile} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} appLanguage={appLanguage}
+                          theme={theme} darkMode={darkMode} accent={theme.accent} />
+                      ) : k === "identity/avatar" ? (
+                        <BrandAvatar value={profile.brand_avatar} onChange={saveBrandAvatar} canEdit={canEditCurrent}
                           uploadFile={uploadFile} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} appLanguage={appLanguage}
                           theme={theme} darkMode={darkMode} accent={theme.accent} />
                       ) : k === "identity/voice" ? (
