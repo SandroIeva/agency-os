@@ -16681,11 +16681,14 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     return (
       <motion.div key={a.id} whileHover={canEdit ? { y: -3 } : undefined} whileTap={canEdit ? { scale: 0.98 } : undefined}
         onClick={canEdit ? () => setField("archetype", a.id) : undefined}
-        style={{ display: "flex", flexDirection: "column", gap: 3, padding: "14px 15px", borderRadius: 16, cursor: canEdit ? "pointer" : "default",
-          background: `linear-gradient(135deg, ${a.color}${on ? "38" : "1c"}, ${a.color}${on ? "1c" : "0d"})`,
-          border: `1.5px solid ${on ? a.color : a.color + "59"}`, boxShadow: on ? `0 8px 22px ${a.color}40` : "none", transition: "box-shadow .18s, background .15s" }}>
-        <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{L(a)}</div>
-        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{de ? a.hint : a.hintEn}</div>
+        style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 13px", borderRadius: 16, cursor: canEdit ? "pointer" : "default",
+          background: on ? `linear-gradient(135deg, ${a.color}1f, ${a.color}0a)` : (darkMode ? "rgba(255,255,255,0.03)" : "#fff"),
+          border: `1.5px solid ${on ? a.color : theme.borderFaint}`, boxShadow: on ? `0 8px 22px ${a.color}33` : "0 1px 2px rgba(0,0,0,0.03)", transition: "box-shadow .18s" }}>
+        <div style={{ width: 38, height: 38, borderRadius: 12, flexShrink: 0, background: a.color }} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{L(a)}</div>
+          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{de ? a.hint : a.hintEn}</div>
+        </div>
       </motion.div>
     );
   };
@@ -16838,13 +16841,13 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
             </div>
           </div>
         )}
-        {/* Footer pinned to the bottom of the card (marginTop:auto) — its inset
-            equals the card's left/right padding, so Back/Next sit identically on
-            every step. */}
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: "auto", paddingTop: 12 }}>
-          {stepIdx > 0 ? navBtn(de ? "Zurück" : "Back", () => setStepIdx(s => s - 1), false, false) : <div />}
-          {stepIdx < 3 ? navBtn(de ? "Weiter" : "Next", () => setStepIdx(s => s + 1), true, stepIdx === 0 && !cfg.archetype) : <div />}
-        </div>
+      </div>
+
+      {/* Footer at the bottom-right of the whole avatar view (outside the step
+          card), with a little padding. */}
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, paddingTop: 4 }}>
+        {stepIdx > 0 ? navBtn(de ? "Zurück" : "Back", () => setStepIdx(s => s - 1), false, false) : <div />}
+        {stepIdx < 3 ? navBtn(de ? "Weiter" : "Next", () => setStepIdx(s => s + 1), true, stepIdx === 0 && !cfg.archetype) : <div />}
       </div>
     </div>
   );
