@@ -16560,18 +16560,18 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
 // standard. Labels use the conventional German/English terms; the hint carries a
 // well-known brand example so each one reads as a real, recognisable archetype.
 const AVATAR_ARCHETYPES = [
-  { id: "innocent", de: "Der Unschuldige", en: "The Innocent", hint: "optimistisch, ehrlich · Dove", hintEn: "optimistic, honest · Dove", emoji: "🌿", color: "#E0876A" },
-  { id: "everyman", de: "Der Jedermann", en: "The Everyman", hint: "nahbar, bodenständig · IKEA", hintEn: "relatable, grounded · IKEA", emoji: "🤝", color: "#7E7C74" },
-  { id: "hero", de: "Der Held", en: "The Hero", hint: "mutig, leistungsstark · Nike", hintEn: "brave, driven · Nike", emoji: "🏆", color: "#E2554F" },
-  { id: "rebel", de: "Der Rebell", en: "The Rebel", hint: "unangepasst, mutig · Harley-Davidson", hintEn: "disruptive, bold · Harley-Davidson", emoji: "🔥", color: "#D85A30" },
-  { id: "explorer", de: "Der Entdecker", en: "The Explorer", hint: "frei, abenteuerlustig · Jeep", hintEn: "free, adventurous · Jeep", emoji: "🧭", color: "#1D9E75" },
-  { id: "creator", de: "Der Schöpfer", en: "The Creator", hint: "kreativ, visionär · LEGO", hintEn: "creative, visionary · LEGO", emoji: "🎨", color: "#E84393" },
-  { id: "ruler", de: "Der Herrscher", en: "The Ruler", hint: "souverän, premium · Rolex", hintEn: "authoritative, premium · Rolex", emoji: "👑", color: "#D99A14" },
-  { id: "magician", de: "Der Magier", en: "The Magician", hint: "transformativ, inspirierend · Disney", hintEn: "transformative, inspiring · Disney", emoji: "✨", color: "#6C5CE7" },
-  { id: "lover", de: "Der Liebende", en: "The Lover", hint: "sinnlich, leidenschaftlich · Chanel", hintEn: "sensual, passionate · Chanel", emoji: "❤️", color: "#D4537E" },
-  { id: "caregiver", de: "Der Fürsorgliche", en: "The Caregiver", hint: "warm, beschützend · Volvo", hintEn: "warm, protective · Volvo", emoji: "🤲", color: "#159C73" },
-  { id: "jester", de: "Der Narr", en: "The Jester", hint: "verspielt, humorvoll · Old Spice", hintEn: "playful, witty · Old Spice", emoji: "🎭", color: "#E0A21C" },
-  { id: "sage", de: "Der Weise", en: "The Sage", hint: "klug, vertrauenswürdig · Google", hintEn: "wise, trusted · Google", emoji: "🦉", color: "#3E7BD6" },
+  { id: "innocent", de: "Der Unschuldige", en: "The Innocent", hint: "optimistisch, ehrlich · Dove", hintEn: "optimistic, honest · Dove", color: "#6DA9E4" },
+  { id: "everyman", de: "Der Jedermann", en: "The Everyman", hint: "nahbar, bodenständig · IKEA", hintEn: "relatable, grounded · IKEA", color: "#B08D57" },
+  { id: "hero", de: "Der Held", en: "The Hero", hint: "mutig, leistungsstark · Nike", hintEn: "brave, driven · Nike", color: "#E2554F" },
+  { id: "rebel", de: "Der Rebell", en: "The Rebel", hint: "unangepasst, mutig · Harley-Davidson", hintEn: "disruptive, bold · Harley-Davidson", color: "#3A3A40" },
+  { id: "explorer", de: "Der Entdecker", en: "The Explorer", hint: "frei, abenteuerlustig · Jeep", hintEn: "free, adventurous · Jeep", color: "#3E9E63" },
+  { id: "creator", de: "Der Schöpfer", en: "The Creator", hint: "kreativ, visionär · LEGO", hintEn: "creative, visionary · LEGO", color: "#E8843C" },
+  { id: "ruler", de: "Der Herrscher", en: "The Ruler", hint: "souverän, premium · Rolex", hintEn: "authoritative, premium · Rolex", color: "#C9A227" },
+  { id: "magician", de: "Der Magier", en: "The Magician", hint: "transformativ, inspirierend · Disney", hintEn: "transformative, inspiring · Disney", color: "#7B5CE0" },
+  { id: "lover", de: "Der Liebende", en: "The Lover", hint: "sinnlich, leidenschaftlich · Chanel", hintEn: "sensual, passionate · Chanel", color: "#D63E78" },
+  { id: "caregiver", de: "Der Fürsorgliche", en: "The Caregiver", hint: "warm, beschützend · Volvo", hintEn: "warm, protective · Volvo", color: "#2FA39A" },
+  { id: "jester", de: "Der Narr", en: "The Jester", hint: "verspielt, humorvoll · Old Spice", hintEn: "playful, witty · Old Spice", color: "#EBB511" },
+  { id: "sage", de: "Der Weise", en: "The Sage", hint: "klug, vertrauenswürdig · Google", hintEn: "wise, trusted · Google", color: "#3E7BD6" },
 ];
 const AVATAR_GENDERS = [{ id: "female", de: "Weiblich", en: "Female" }, { id: "male", de: "Männlich", en: "Male" }, { id: "nonbinary", de: "Non-binär", en: "Non-binary" }];
 const AVATAR_AGES = [{ id: "18-25", de: "18–25", en: "18–25" }, { id: "26-35", de: "26–35", en: "26–35" }, { id: "36-50", de: "36–50", en: "36–50" }, { id: "50+", de: "50+", en: "50+" }];
@@ -16681,14 +16681,11 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     return (
       <motion.div key={a.id} whileHover={canEdit ? { y: -3 } : undefined} whileTap={canEdit ? { scale: 0.98 } : undefined}
         onClick={canEdit ? () => setField("archetype", a.id) : undefined}
-        style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 13px", borderRadius: 16, cursor: canEdit ? "pointer" : "default",
-          background: on ? `linear-gradient(135deg, ${a.color}1f, ${a.color}0a)` : (darkMode ? "rgba(255,255,255,0.03)" : "#fff"),
-          border: `1.5px solid ${on ? a.color : theme.borderFaint}`, boxShadow: on ? `0 8px 22px ${a.color}33` : "0 1px 2px rgba(0,0,0,0.03)", transition: "box-shadow .18s" }}>
-        <div style={{ width: 38, height: 38, borderRadius: 12, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, background: a.color + (on ? "2e" : "1c") }}>{a.emoji}</div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{L(a)}</div>
-          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{de ? a.hint : a.hintEn}</div>
-        </div>
+        style={{ display: "flex", flexDirection: "column", gap: 3, padding: "14px 15px", borderRadius: 16, cursor: canEdit ? "pointer" : "default",
+          background: `linear-gradient(135deg, ${a.color}${on ? "38" : "1c"}, ${a.color}${on ? "1c" : "0d"})`,
+          border: `1.5px solid ${on ? a.color : a.color + "59"}`, boxShadow: on ? `0 8px 22px ${a.color}40` : "none", transition: "box-shadow .18s, background .15s" }}>
+        <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{L(a)}</div>
+        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{de ? a.hint : a.hintEn}</div>
       </motion.div>
     );
   };
@@ -16719,7 +16716,9 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
         <img src={cfg.imageUrl} alt={cfg.name || "Brand Avatar"} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       ) : (
         <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, color: theme.textDim, textAlign: "center", padding: 24 }}>
-          <div style={{ fontSize: 44 }}>{arch?.emoji || "🪄"}</div>
+          <div style={{ width: 64, height: 64, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: (arch?.color || accent) + "33", color: arch?.color || accent }}>
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+          </div>
           <div style={{ fontSize: 13, fontFamily: FONT, lineHeight: 1.5, maxWidth: 220 }}>
             {de ? "Generiere das Portrait deiner Persona." : "Generate your persona's portrait."}
           </div>
@@ -16730,8 +16729,8 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           {cfg.name && <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 700, color: "#fff", marginBottom: 6 }}>{cfg.name}</div>}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
             {arch && (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 999, fontSize: 11.5, fontFamily: FONT, fontWeight: 600, color: "#fff", background: arch.color + "cc" }}>
-                <span>{arch.emoji}</span>{L(arch)}
+              <span style={{ padding: "4px 11px", borderRadius: 999, fontSize: 11.5, fontFamily: FONT, fontWeight: 600, color: "#fff", background: arch.color + "e6" }}>
+                {L(arch)}
               </span>
             )}
             {selTraits.slice(0, 3).map(tr => (
@@ -16839,12 +16838,13 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
             </div>
           </div>
         )}
-      </div>
-
-      {/* Footer navigation */}
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-        {stepIdx > 0 ? navBtn(de ? "Zurück" : "Back", () => setStepIdx(s => s - 1), false, false) : <div />}
-        {stepIdx < 3 ? navBtn(de ? "Weiter" : "Next", () => setStepIdx(s => s + 1), true, stepIdx === 0 && !cfg.archetype) : <div />}
+        {/* Footer pinned to the bottom of the card (marginTop:auto) — its inset
+            equals the card's left/right padding, so Back/Next sit identically on
+            every step. */}
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: "auto", paddingTop: 12 }}>
+          {stepIdx > 0 ? navBtn(de ? "Zurück" : "Back", () => setStepIdx(s => s - 1), false, false) : <div />}
+          {stepIdx < 3 ? navBtn(de ? "Weiter" : "Next", () => setStepIdx(s => s + 1), true, stepIdx === 0 && !cfg.archetype) : <div />}
+        </div>
       </div>
     </div>
   );
