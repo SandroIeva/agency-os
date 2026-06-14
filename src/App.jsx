@@ -16556,19 +16556,22 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
 // ── Brand Avatar ──────────────────────────────────────────────────────────────
 // Configure a brand persona (archetype + look + personality), then let the
 // connected AI generate a portrait that becomes the face for content creation.
+// The 12 Jungian brand archetypes (Mark & Pearson) — the branding-industry
+// standard. Labels use the conventional German/English terms; the hint carries a
+// well-known brand example so each one reads as a real, recognisable archetype.
 const AVATAR_ARCHETYPES = [
-  { id: "hero", de: "Held", en: "Hero", hint: "mutig, leistungsstark", hintEn: "brave, driven", emoji: "⚔️", color: "#E2554F" },
-  { id: "sage", de: "Weiser", en: "Sage", hint: "klug, vertrauenswürdig", hintEn: "wise, trusted", emoji: "🦉", color: "#3E7BD6" },
-  { id: "explorer", de: "Entdecker", en: "Explorer", hint: "frei, abenteuerlustig", hintEn: "free, adventurous", emoji: "🧭", color: "#1D9E75" },
-  { id: "creator", de: "Schöpfer", en: "Creator", hint: "kreativ, visionär", hintEn: "creative, visionary", emoji: "🎨", color: "#E84393" },
-  { id: "ruler", de: "Herrscher", en: "Ruler", hint: "souverän, premium", hintEn: "regal, premium", emoji: "👑", color: "#D99A14" },
-  { id: "magician", de: "Magier", en: "Magician", hint: "transformativ, inspirierend", hintEn: "transformative, inspiring", emoji: "✨", color: "#6C5CE7" },
-  { id: "innocent", de: "Unschuldige:r", en: "Innocent", hint: "optimistisch, ehrlich", hintEn: "optimistic, honest", emoji: "🌷", color: "#E0876A" },
-  { id: "everyman", de: "Jedermann", en: "Everyman", hint: "nahbar, bodenständig", hintEn: "relatable, grounded", emoji: "🤝", color: "#7E7C74" },
-  { id: "lover", de: "Liebende:r", en: "Lover", hint: "sinnlich, emotional", hintEn: "sensual, emotional", emoji: "❤️", color: "#D4537E" },
-  { id: "jester", de: "Narr", en: "Jester", hint: "verspielt, humorvoll", hintEn: "playful, witty", emoji: "🎭", color: "#E0A21C" },
-  { id: "caregiver", de: "Fürsorgliche:r", en: "Caregiver", hint: "warm, beschützend", hintEn: "warm, protective", emoji: "🤲", color: "#159C73" },
-  { id: "rebel", de: "Rebell:in", en: "Rebel", hint: "unangepasst, mutig", hintEn: "untamed, bold", emoji: "🔥", color: "#D85A30" },
+  { id: "innocent", de: "Der Unschuldige", en: "The Innocent", hint: "optimistisch, ehrlich · Dove", hintEn: "optimistic, honest · Dove", emoji: "🌿", color: "#E0876A" },
+  { id: "everyman", de: "Der Jedermann", en: "The Everyman", hint: "nahbar, bodenständig · IKEA", hintEn: "relatable, grounded · IKEA", emoji: "🤝", color: "#7E7C74" },
+  { id: "hero", de: "Der Held", en: "The Hero", hint: "mutig, leistungsstark · Nike", hintEn: "brave, driven · Nike", emoji: "🏆", color: "#E2554F" },
+  { id: "rebel", de: "Der Rebell", en: "The Rebel", hint: "unangepasst, mutig · Harley-Davidson", hintEn: "disruptive, bold · Harley-Davidson", emoji: "🔥", color: "#D85A30" },
+  { id: "explorer", de: "Der Entdecker", en: "The Explorer", hint: "frei, abenteuerlustig · Jeep", hintEn: "free, adventurous · Jeep", emoji: "🧭", color: "#1D9E75" },
+  { id: "creator", de: "Der Schöpfer", en: "The Creator", hint: "kreativ, visionär · LEGO", hintEn: "creative, visionary · LEGO", emoji: "🎨", color: "#E84393" },
+  { id: "ruler", de: "Der Herrscher", en: "The Ruler", hint: "souverän, premium · Rolex", hintEn: "authoritative, premium · Rolex", emoji: "👑", color: "#D99A14" },
+  { id: "magician", de: "Der Magier", en: "The Magician", hint: "transformativ, inspirierend · Disney", hintEn: "transformative, inspiring · Disney", emoji: "✨", color: "#6C5CE7" },
+  { id: "lover", de: "Der Liebende", en: "The Lover", hint: "sinnlich, leidenschaftlich · Chanel", hintEn: "sensual, passionate · Chanel", emoji: "❤️", color: "#D4537E" },
+  { id: "caregiver", de: "Der Fürsorgliche", en: "The Caregiver", hint: "warm, beschützend · Volvo", hintEn: "warm, protective · Volvo", emoji: "🤲", color: "#159C73" },
+  { id: "jester", de: "Der Narr", en: "The Jester", hint: "verspielt, humorvoll · Old Spice", hintEn: "playful, witty · Old Spice", emoji: "🎭", color: "#E0A21C" },
+  { id: "sage", de: "Der Weise", en: "The Sage", hint: "klug, vertrauenswürdig · Google", hintEn: "wise, trusted · Google", emoji: "🦉", color: "#3E7BD6" },
 ];
 const AVATAR_GENDERS = [{ id: "female", de: "Weiblich", en: "Female" }, { id: "male", de: "Männlich", en: "Male" }, { id: "nonbinary", de: "Non-binär", en: "Non-binary" }];
 const AVATAR_AGES = [{ id: "18-25", de: "18–25", en: "18–25" }, { id: "26-35", de: "26–35", en: "26–35" }, { id: "36-50", de: "36–50", en: "36–50" }, { id: "50+", de: "50+", en: "50+" }];
