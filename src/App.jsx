@@ -10768,7 +10768,6 @@ const BRAND_PILLAR_SUBTABS = {
   identity: [
     { key: "core",   label: "Brand Core" },
     { key: "story",  label: "Brand Story" },
-    { key: "values", label: "Brand Values" },
     { key: "voice",  label: "Voice & Tone" },
     { key: "avatar", label: "Brand Avatar" },
   ],
@@ -16836,9 +16835,8 @@ function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, a
   // Whether the Vision sub-view is in edit mode (reported by BrandVision) — controls
   // whether the content area may scroll on the Vision tab.
   const [visionEditing, setVisionEditing] = useState(false);
-  const [valuesEditing, setValuesEditing] = useState(false);
-  useEffect(() => { const s = BRAND_PILLAR_SUBTABS[brandTab] || []; setBrandSub(s[0]?.key); setEditingText(false); setVisionEditing(false); setValuesEditing(false); }, [brandTab]);
-  useEffect(() => { setEditingText(false); setVisionEditing(false); setValuesEditing(false); }, [brandSub]);
+  useEffect(() => { const s = BRAND_PILLAR_SUBTABS[brandTab] || []; setBrandSub(s[0]?.key); setEditingText(false); setVisionEditing(false); }, [brandTab]);
+  useEffect(() => { setEditingText(false); setVisionEditing(false); }, [brandSub]);
 
   const saveSection = async (key, html) => {
     setProfile(p => ({ ...p, section_content: { ...(p?.section_content || {}), [key]: html } }));
@@ -18570,12 +18568,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{BRAND_SUBVIEW_LABELS[brandTab] || ""}</span>
               </div>
               <div style={{ flex: 1 }} />
-              {!canEditCurrent ? null : (brandTab === "identity" && brandSub === "values") ? (
-                (Array.isArray(profile.brand_values) && profile.brand_values.length > 0 && !valuesEditing) ? (
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => setValuesEditing(true)}
-                    style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>Bearbeiten</motion.button>
-                ) : null
-              ) : !((brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors" || brandSub === "positioning")) || (brandTab === "identity" && brandSub === "avatar")) ? (
+              {!canEditCurrent ? null : !((brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors" || brandSub === "positioning")) || (brandTab === "identity" && brandSub === "avatar")) ? (
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => setEditingText(v => !v)}
                 style={{
                   padding: "8px 16px", borderRadius: 10, cursor: "pointer",
@@ -18679,8 +18672,6 @@ If you don't know a field, infer a plausible value. Write all text values in the
                     ) : Empty("Noch keine Competitor-Analyse vorhanden.");
                   } else if (k === "identity/story") {
                     body = profile.description ? <div>{SL("Brand Story")}{Para(profile.description)}</div> : Empty("Noch keine Brand Story hinterlegt.");
-                  } else if (k === "identity/values") {
-                    body = Empty("Brand Values — bald verfügbar. Hier kommen die Kernwerte der Marke hin.");
                   } else if (k === "identity/voice") {
                     body = <VoiceToneSection theme={theme} darkMode={darkMode} t={t} />;
                   } else if (k === "design/logo") {
@@ -18737,8 +18728,6 @@ If you don't know a field, infer a plausible value. Write all text values in the
                           cp={cp} accent={theme.accent} theme={theme} darkMode={darkMode} t={t} canEdit={canEditCurrent} />
                       ) : k === "strategy/positioning" ? (
                         <BrandVision value={profile.vision} onChange={saveVision} accent={theme.accent} theme={theme} darkMode={darkMode} onEditingChange={setVisionEditing} canEdit={canEditCurrent} />
-                      ) : k === "identity/values" ? (
-                        <BrandValues value={profile.brand_values} onChange={saveBrandValues} accent={theme.accent} theme={theme} darkMode={darkMode} editing={valuesEditing} onEditingChange={setValuesEditing} />
                       ) : k === "design/colors" ? (
                         <BrandColors cp={cp} colors={profile.colors} editing={editingText} savedHtml={savedHtml} theme={theme} darkMode={darkMode}
                           onSave={(html) => saveSection(k, html)} onCancel={() => setEditingText(false)} onSavePalette={saveColorPalette} />
@@ -18778,6 +18767,12 @@ If you don't know a field, infer a plausible value. Write all text values in the
                       )}
                       {k === "identity/core" && kMsgs.length > 0 && (
                         <div style={{ marginTop: 36 }}>{SL("Kern-Botschaften")}<div style={{ display: "flex", flexDirection: "column", gap: 11 }}>{kMsgs.map((m, i) => <div key={i} style={{ display: "flex", gap: 11, alignItems: "center", fontSize: 14, fontFamily: FONT, color: theme.text, lineHeight: 1.5 }}><span style={{ width: 22, height: 22, borderRadius: 7, background: theme.accent + "1f", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>{m}</div>)}</div></div>
+                      )}
+                      {/* Brand Values — merged into Brand Core; its picker runs in the core "Bearbeiten" mode */}
+                      {k === "identity/core" && (
+                        <div style={{ marginTop: 36 }}>{SL("Brand Values")}
+                          <BrandValues value={profile.brand_values} onChange={saveBrandValues} accent={theme.accent} theme={theme} darkMode={darkMode} editing={editingText} onEditingChange={setEditingText} />
+                        </div>
                       )}
                     </>
                   );
