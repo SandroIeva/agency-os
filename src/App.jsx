@@ -16784,8 +16784,9 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
         })}
       </div>
 
-      {/* Step content */}
-      <div style={cardStyle}>
+      {/* Step content — consistent min-height on the input steps so the
+          Back/Next footer (and the Next button) stays in the same spot. */}
+      <div style={{ ...cardStyle, minHeight: stepIdx < 3 ? 360 : undefined }}>
         {stepIdx === 0 && (
           <div>{SL(de ? "Wähle einen Archetyp" : "Choose an archetype")}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 10 }}>
