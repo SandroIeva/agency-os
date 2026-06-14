@@ -16560,18 +16560,18 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
 // standard. Labels use the conventional German/English terms; the hint carries a
 // well-known brand example so each one reads as a real, recognisable archetype.
 const AVATAR_ARCHETYPES = [
-  { id: "innocent", de: "Der Unschuldige", en: "The Innocent", hint: "optimistisch, ehrlich · Dove", hintEn: "optimistic, honest · Dove", color: "#6DA9E4" },
-  { id: "everyman", de: "Der Jedermann", en: "The Everyman", hint: "nahbar, bodenständig · IKEA", hintEn: "relatable, grounded · IKEA", color: "#B08D57" },
-  { id: "hero", de: "Der Held", en: "The Hero", hint: "mutig, leistungsstark · Nike", hintEn: "brave, driven · Nike", color: "#E2554F" },
-  { id: "rebel", de: "Der Rebell", en: "The Rebel", hint: "unangepasst, mutig · Harley-Davidson", hintEn: "disruptive, bold · Harley-Davidson", color: "#3A3A40" },
-  { id: "explorer", de: "Der Entdecker", en: "The Explorer", hint: "frei, abenteuerlustig · Jeep", hintEn: "free, adventurous · Jeep", color: "#3E9E63" },
-  { id: "creator", de: "Der Schöpfer", en: "The Creator", hint: "kreativ, visionär · LEGO", hintEn: "creative, visionary · LEGO", color: "#E8843C" },
-  { id: "ruler", de: "Der Herrscher", en: "The Ruler", hint: "souverän, premium · Rolex", hintEn: "authoritative, premium · Rolex", color: "#C9A227" },
-  { id: "magician", de: "Der Magier", en: "The Magician", hint: "transformativ, inspirierend · Disney", hintEn: "transformative, inspiring · Disney", color: "#7B5CE0" },
-  { id: "lover", de: "Der Liebende", en: "The Lover", hint: "sinnlich, leidenschaftlich · Chanel", hintEn: "sensual, passionate · Chanel", color: "#D63E78" },
-  { id: "caregiver", de: "Der Fürsorgliche", en: "The Caregiver", hint: "warm, beschützend · Volvo", hintEn: "warm, protective · Volvo", color: "#2FA39A" },
-  { id: "jester", de: "Der Narr", en: "The Jester", hint: "verspielt, humorvoll · Old Spice", hintEn: "playful, witty · Old Spice", color: "#EBB511" },
-  { id: "sage", de: "Der Weise", en: "The Sage", hint: "klug, vertrauenswürdig · Google", hintEn: "wise, trusted · Google", color: "#3E7BD6" },
+  { id: "innocent", de: "Der Unschuldige", en: "The Innocent", hint: "optimistisch, ehrlich · Dove", hintEn: "optimistic, honest · Dove", color: "#36A88E" },
+  { id: "everyman", de: "Der Jedermann", en: "The Everyman", hint: "nahbar, bodenständig · IKEA", hintEn: "relatable, grounded · IKEA", color: "#97468E" },
+  { id: "hero", de: "Der Held", en: "The Hero", hint: "mutig, leistungsstark · Nike", hintEn: "brave, driven · Nike", color: "#DE8440" },
+  { id: "rebel", de: "Der Rebell", en: "The Outlaw", hint: "unangepasst, mutig · Harley-Davidson", hintEn: "disruptive, bold · Harley-Davidson", color: "#EFC828" },
+  { id: "explorer", de: "Der Entdecker", en: "The Explorer", hint: "frei, abenteuerlustig · The North Face", hintEn: "free, adventurous · The North Face", color: "#A4C13E" },
+  { id: "creator", de: "Der Schöpfer", en: "The Creator", hint: "kreativ, visionär · Apple", hintEn: "creative, visionary · Apple", color: "#45A7DA" },
+  { id: "ruler", de: "Der Herrscher", en: "The Ruler", hint: "souverän, premium · Hugo Boss", hintEn: "authoritative, premium · Hugo Boss", color: "#2E70B2" },
+  { id: "magician", de: "Der Magier", en: "The Magician", hint: "transformativ, inspirierend · Disney", hintEn: "transformative, inspiring · Disney", color: "#EBA92F" },
+  { id: "lover", de: "Der Liebende", en: "The Lover", hint: "sinnlich, leidenschaftlich · Godiva", hintEn: "sensual, passionate · Godiva", color: "#D14A44" },
+  { id: "caregiver", de: "Der Fürsorgliche", en: "The Caregiver", hint: "warm, beschützend · UNICEF", hintEn: "warm, protective · UNICEF", color: "#474B97" },
+  { id: "jester", de: "Der Narr", en: "The Jester", hint: "verspielt, humorvoll · Old Spice", hintEn: "playful, witty · Old Spice", color: "#C0436C" },
+  { id: "sage", de: "Der Weise", en: "The Sage", hint: "klug, vertrauenswürdig · BBC", hintEn: "wise, trusted · BBC", color: "#43A65C" },
 ];
 const AVATAR_GENDERS = [{ id: "female", de: "Weiblich", en: "Female" }, { id: "male", de: "Männlich", en: "Male" }, { id: "nonbinary", de: "Non-binär", en: "Non-binary" }];
 const AVATAR_AGES = [{ id: "18-25", de: "18–25", en: "18–25" }, { id: "26-35", de: "26–35", en: "26–35" }, { id: "36-50", de: "36–50", en: "36–50" }, { id: "50+", de: "50+", en: "50+" }];
