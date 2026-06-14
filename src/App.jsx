@@ -16558,18 +16558,18 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
 // Configure a brand persona (archetype + look + personality), then let the
 // connected AI generate a portrait that becomes the face for content creation.
 const AVATAR_ARCHETYPES = [
-  { id: "hero", de: "Held", en: "Hero", hint: "mutig, leistungsstark" },
-  { id: "sage", de: "Weiser", en: "Sage", hint: "klug, vertrauenswürdig" },
-  { id: "explorer", de: "Entdecker", en: "Explorer", hint: "frei, abenteuerlustig" },
-  { id: "creator", de: "Schöpfer", en: "Creator", hint: "kreativ, visionär" },
-  { id: "ruler", de: "Herrscher", en: "Ruler", hint: "souverän, premium" },
-  { id: "magician", de: "Magier", en: "Magician", hint: "transformativ, inspirierend" },
-  { id: "innocent", de: "Unschuldige:r", en: "Innocent", hint: "optimistisch, ehrlich" },
-  { id: "everyman", de: "Jedermann", en: "Everyman", hint: "nahbar, bodenständig" },
-  { id: "lover", de: "Liebende:r", en: "Lover", hint: "sinnlich, emotional" },
-  { id: "jester", de: "Narr", en: "Jester", hint: "verspielt, humorvoll" },
-  { id: "caregiver", de: "Fürsorgliche:r", en: "Caregiver", hint: "warm, beschützend" },
-  { id: "rebel", de: "Rebell:in", en: "Rebel", hint: "unangepasst, mutig" },
+  { id: "hero", de: "Held", en: "Hero", hint: "mutig, leistungsstark", hintEn: "brave, driven", emoji: "⚔️", color: "#E2554F" },
+  { id: "sage", de: "Weiser", en: "Sage", hint: "klug, vertrauenswürdig", hintEn: "wise, trusted", emoji: "🦉", color: "#3E7BD6" },
+  { id: "explorer", de: "Entdecker", en: "Explorer", hint: "frei, abenteuerlustig", hintEn: "free, adventurous", emoji: "🧭", color: "#1D9E75" },
+  { id: "creator", de: "Schöpfer", en: "Creator", hint: "kreativ, visionär", hintEn: "creative, visionary", emoji: "🎨", color: "#E84393" },
+  { id: "ruler", de: "Herrscher", en: "Ruler", hint: "souverän, premium", hintEn: "regal, premium", emoji: "👑", color: "#D99A14" },
+  { id: "magician", de: "Magier", en: "Magician", hint: "transformativ, inspirierend", hintEn: "transformative, inspiring", emoji: "✨", color: "#6C5CE7" },
+  { id: "innocent", de: "Unschuldige:r", en: "Innocent", hint: "optimistisch, ehrlich", hintEn: "optimistic, honest", emoji: "🌷", color: "#E0876A" },
+  { id: "everyman", de: "Jedermann", en: "Everyman", hint: "nahbar, bodenständig", hintEn: "relatable, grounded", emoji: "🤝", color: "#7E7C74" },
+  { id: "lover", de: "Liebende:r", en: "Lover", hint: "sinnlich, emotional", hintEn: "sensual, emotional", emoji: "❤️", color: "#D4537E" },
+  { id: "jester", de: "Narr", en: "Jester", hint: "verspielt, humorvoll", hintEn: "playful, witty", emoji: "🎭", color: "#E0A21C" },
+  { id: "caregiver", de: "Fürsorgliche:r", en: "Caregiver", hint: "warm, beschützend", hintEn: "warm, protective", emoji: "🤲", color: "#159C73" },
+  { id: "rebel", de: "Rebell:in", en: "Rebel", hint: "unangepasst, mutig", hintEn: "untamed, bold", emoji: "🔥", color: "#D85A30" },
 ];
 const AVATAR_GENDERS = [{ id: "female", de: "Weiblich", en: "Female" }, { id: "male", de: "Männlich", en: "Male" }, { id: "nonbinary", de: "Non-binär", en: "Non-binary" }];
 const AVATAR_AGES = [{ id: "18-25", de: "18–25", en: "18–25" }, { id: "26-35", de: "26–35", en: "26–35" }, { id: "36-50", de: "36–50", en: "36–50" }, { id: "50+", de: "50+", en: "50+" }];
@@ -16662,16 +16662,34 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     setBusy(false);
   };
 
-  const SL = (s) => <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{s}</div>;
+  const SL = (s, extra) => <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 11, fontWeight: 600, ...extra }}>{s}</div>;
   const chip = (label, on, onClick, key) => (
-    <motion.div key={key} whileTap={canEdit ? { scale: 0.96 } : undefined} onClick={canEdit ? onClick : undefined}
-      style={{ padding: "8px 13px", borderRadius: 10, cursor: canEdit ? "pointer" : "default", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap",
-        background: on ? accent + "1f" : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)"), color: on ? accent : theme.textSub,
-        border: `1px solid ${on ? accent + "55" : theme.borderFaint}` }}>{label}</motion.div>
+    <motion.div key={key} whileHover={canEdit && !on ? { y: -1 } : undefined} whileTap={canEdit ? { scale: 0.95 } : undefined} onClick={canEdit ? onClick : undefined}
+      style={{ padding: "8px 14px", borderRadius: 999, cursor: canEdit ? "pointer" : "default", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap",
+        background: on ? accent : (darkMode ? "rgba(255,255,255,0.05)" : "#fff"), color: on ? "#fff" : theme.textSub,
+        border: `1px solid ${on ? accent : theme.borderFaint}`, boxShadow: on ? `0 4px 12px ${accent}40` : "none", transition: "background .15s, box-shadow .15s" }}>{label}</motion.div>
   );
   const group = (label, options, selKey) => (
     <div>{SL(label)}<div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{options.map(o => chip(L(o), cfg[selKey] === o.id, () => setField(selKey, o.id), o.id))}</div></div>
   );
+  const archCard = (a) => {
+    const on = cfg.archetype === a.id;
+    return (
+      <motion.div key={a.id} whileHover={canEdit ? { y: -3 } : undefined} whileTap={canEdit ? { scale: 0.98 } : undefined}
+        onClick={canEdit ? () => setField("archetype", a.id) : undefined}
+        style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 13px", borderRadius: 16, cursor: canEdit ? "pointer" : "default",
+          background: on ? `linear-gradient(135deg, ${a.color}1f, ${a.color}0a)` : (darkMode ? "rgba(255,255,255,0.03)" : "#fff"),
+          border: `1.5px solid ${on ? a.color : theme.borderFaint}`, boxShadow: on ? `0 8px 22px ${a.color}33` : "0 1px 2px rgba(0,0,0,0.03)", transition: "box-shadow .18s" }}>
+        <div style={{ width: 38, height: 38, borderRadius: 12, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, background: a.color + (on ? "2e" : "1c") }}>{a.emoji}</div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{L(a)}</div>
+          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{de ? a.hint : a.hintEn}</div>
+        </div>
+      </motion.div>
+    );
+  };
+  const inputStyle = { width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 11, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none" };
+  const cardStyle = { padding: "20px 20px", borderRadius: 18, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.012)", display: "flex", flexDirection: "column", gap: 20 };
 
   const downloadAvatar = async () => {
     if (!cfg.imageUrl) return;
@@ -16683,66 +16701,114 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     } catch (_) {}
   };
 
+  const arch = AVATAR_ARCHETYPES.find(a => a.id === cfg.archetype);
+  const selTraits = (cfg.traits || []).map(id => AVATAR_TRAITS.find(t => t.id === id)).filter(Boolean);
+  const accentGlow = `0 18px 50px ${accent}33`;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-      <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, maxWidth: 620 }}>
-        {de ? "Definiere die Persönlichkeit eurer Marke als Person — Archetyp, Aussehen und Charakter. Daraus generiert die KI ein Portrait, das als Gesicht für euren Content dient."
-            : "Define your brand's personality as a person — archetype, appearance and character. The AI then generates a portrait that serves as the face for your content."}
+      {/* Hero intro */}
+      <div style={{ position: "relative", overflow: "hidden", borderRadius: 20, padding: "22px 24px", border: `1px solid ${theme.borderFaint}`,
+        background: `linear-gradient(120deg, ${accent}14, ${(arch?.color || accent)}10 60%, transparent)` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ width: 46, height: 46, borderRadius: 14, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, background: `linear-gradient(135deg, ${accent}, ${accent}aa)`, boxShadow: accentGlow }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{de ? "Brand Avatar" : "Brand Avatar"}</div>
+            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.55, marginTop: 2, maxWidth: 640 }}>
+              {de ? "Erschaffe die Persönlichkeit eurer Marke als echten Menschen — Archetyp, Aussehen und Charakter. Die KI generiert daraus ein Gesicht für euren Content."
+                  : "Bring your brand's personality to life as a real person — archetype, look and character. The AI turns it into a face for your content."}
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Configurator + preview, side by side on wide screens */}
+      {/* Configurator + persona preview */}
       <div style={{ display: "flex", gap: 26, flexWrap: "wrap", alignItems: "flex-start" }}>
-        <div style={{ flex: "1 1 380px", minWidth: 300, display: "flex", flexDirection: "column", gap: 20 }}>
-          <div>{SL(de ? "Name (optional)" : "Name (optional)")}
-            <input value={cfg.name || ""} onChange={e => update({ name: e.target.value })} disabled={!canEdit}
-              placeholder={de ? "z. B. Mara" : "e.g. Mara"}
-              style={{ width: "100%", boxSizing: "border-box", padding: "10px 13px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.02)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none" }} />
+        <div style={{ flex: "1 1 420px", minWidth: 300, display: "flex", flexDirection: "column", gap: 22 }}>
+          {/* Archetype cards */}
+          <div>
+            {SL(de ? "Wähle einen Archetyp" : "Choose an archetype")}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 10 }}>
+              {AVATAR_ARCHETYPES.map(archCard)}
+            </div>
           </div>
-          <div>{SL(de ? "Archetyp" : "Archetype")}<div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {AVATAR_ARCHETYPES.map(a => chip(L(a), cfg.archetype === a.id, () => setField("archetype", a.id), a.id))}
-          </div></div>
-          {group(de ? "Geschlecht" : "Gender", AVATAR_GENDERS, "gender")}
-          {group(de ? "Alter" : "Age", AVATAR_AGES, "age")}
-          {group(de ? "Erscheinung" : "Appearance", AVATAR_ETHNICITIES, "ethnicity")}
-          <div>{SL(de ? "Persönlichkeit" : "Personality")}<div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {AVATAR_TRAITS.map(tr => chip(L(tr), (cfg.traits || []).includes(tr.id), () => toggleTrait(tr.id), tr.id))}
-          </div></div>
-          {group(de ? "Stil" : "Style", AVATAR_STYLES, "style")}
-          {group(de ? "Setting" : "Setting", AVATAR_SETTINGS, "setting")}
-          <div>{SL(de ? "Weitere Details" : "Extra details")}
-            <textarea value={cfg.notes || ""} onChange={e => update({ notes: e.target.value })} disabled={!canEdit} rows={2}
-              placeholder={de ? "z. B. lockige Haare, freundliches Lächeln, Brille…" : "e.g. curly hair, friendly smile, glasses…"}
-              style={{ width: "100%", boxSizing: "border-box", padding: "10px 13px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.02)", color: theme.text, fontSize: 13.5, lineHeight: 1.5, fontFamily: FONT, outline: "none", resize: "vertical" }} />
+
+          {/* Identity & look */}
+          <div style={cardStyle}>
+            <div>{SL(de ? "Name (optional)" : "Name (optional)")}
+              <input value={cfg.name || ""} onChange={e => update({ name: e.target.value })} disabled={!canEdit} placeholder={de ? "z. B. Mara" : "e.g. Mara"} style={inputStyle} />
+            </div>
+            {group(de ? "Geschlecht" : "Gender", AVATAR_GENDERS, "gender")}
+            {group(de ? "Alter" : "Age", AVATAR_AGES, "age")}
+            {group(de ? "Erscheinung" : "Appearance", AVATAR_ETHNICITIES, "ethnicity")}
+          </div>
+
+          {/* Character */}
+          <div style={cardStyle}>
+            <div>{SL(de ? "Persönlichkeit" : "Personality")}<div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {AVATAR_TRAITS.map(tr => chip(L(tr), (cfg.traits || []).includes(tr.id), () => toggleTrait(tr.id), tr.id))}
+            </div></div>
+            {group(de ? "Stil" : "Style", AVATAR_STYLES, "style")}
+            {group(de ? "Setting" : "Setting", AVATAR_SETTINGS, "setting")}
+            <div>{SL(de ? "Weitere Details" : "Extra details")}
+              <textarea value={cfg.notes || ""} onChange={e => update({ notes: e.target.value })} disabled={!canEdit} rows={2}
+                placeholder={de ? "z. B. lockige Haare, freundliches Lächeln, Brille…" : "e.g. curly hair, friendly smile, glasses…"}
+                style={{ ...inputStyle, fontSize: 13.5, lineHeight: 1.5, resize: "vertical" }} />
+            </div>
           </div>
         </div>
 
-        {/* Preview */}
-        <div style={{ flex: "0 0 300px", display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ width: "100%", aspectRatio: "3 / 4", borderRadius: 18, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+        {/* Persona card preview (sticky on wide screens) */}
+        <div style={{ flex: "0 0 320px", display: "flex", flexDirection: "column", gap: 14, position: "sticky", top: 8 }}>
+          <div style={{ position: "relative", width: "100%", aspectRatio: "3 / 4", borderRadius: 22, overflow: "hidden",
+            border: `1px solid ${theme.borderFaint}`, boxShadow: cfg.imageUrl ? accentGlow : "0 10px 30px rgba(0,0,0,0.06)",
+            background: cfg.imageUrl ? "#0a0a10" : `linear-gradient(160deg, ${(arch?.color || accent)}1c, ${accent}10 55%, ${darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)"})` }}>
             {cfg.imageUrl ? (
               <img src={cfg.imageUrl} alt={cfg.name || "Brand Avatar"} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             ) : (
-              <div style={{ textAlign: "center", color: theme.textDim, padding: 20 }}>
-                <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ margin: "0 auto 10px", opacity: 0.7 }}><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
-                <div style={{ fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>{de ? "Noch kein Avatar generiert" : "No avatar generated yet"}</div>
+              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, color: theme.textDim, textAlign: "center", padding: 24 }}>
+                <div style={{ fontSize: 44 }}>{arch?.emoji || "🪄"}</div>
+                <div style={{ fontSize: 13, fontFamily: FONT, lineHeight: 1.5, maxWidth: 200 }}>
+                  {de ? "Konfiguriere die Persona und generiere das Portrait." : "Configure the persona and generate the portrait."}
+                </div>
+              </div>
+            )}
+            {/* Bottom info overlay when an image exists */}
+            {cfg.imageUrl && (cfg.name || arch || selTraits.length > 0) && (
+              <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "48px 16px 16px", background: "linear-gradient(to top, rgba(6,6,12,0.9), rgba(6,6,12,0.45) 55%, rgba(6,6,12,0))" }}>
+                {cfg.name && <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 700, color: "#fff", marginBottom: 6 }}>{cfg.name}</div>}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                  {arch && (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 999, fontSize: 11.5, fontFamily: FONT, fontWeight: 600, color: "#fff", background: arch.color + "cc" }}>
+                      <span>{arch.emoji}</span>{L(arch)}
+                    </span>
+                  )}
+                  {selTraits.slice(0, 3).map(tr => (
+                    <span key={tr.id} style={{ padding: "4px 10px", borderRadius: 999, fontSize: 11.5, fontFamily: FONT, fontWeight: 500, color: "#fff", background: "rgba(255,255,255,0.18)", backdropFilter: "blur(4px)" }}>{L(tr)}</span>
+                  ))}
+                </div>
               </div>
             )}
             {busy && (
-              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(10,10,16,0.55)", backdropFilter: "blur(4px)" }}>
-                <span style={{ color: "#fff", fontSize: 12.5, fontFamily: FONT }}>{de ? "Wird generiert…" : "Generating…"}</span>
+              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, background: "rgba(8,8,14,0.6)", backdropFilter: "blur(6px)" }}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "docpulse 1.1s ease-in-out infinite" }}><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/></svg>
+                <span style={{ color: "#fff", fontSize: 12.5, fontFamily: FONT }}>{de ? "Persona wird erschaffen…" : "Creating persona…"}</span>
               </div>
             )}
           </div>
           {canEdit && (
             <>
               <motion.div whileHover={{ scale: busy ? 1 : 1.02 }} whileTap={{ scale: busy ? 1 : 0.97 }} onClick={() => !busy && generate()}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "11px 0", borderRadius: 12, cursor: busy ? "default" : "pointer", background: accent, color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 600, opacity: busy ? 0.7 : 1 }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/></svg>
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "13px 0", borderRadius: 14, cursor: busy ? "default" : "pointer",
+                  background: `linear-gradient(135deg, ${accent}, ${accent}c0)`, color: "#fff", fontSize: 14, fontFamily: FONT, fontWeight: 600, boxShadow: busy ? "none" : accentGlow, opacity: busy ? 0.7 : 1 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/></svg>
                 {cfg.imageUrl ? (de ? "Neu generieren" : "Regenerate") : (de ? "Avatar generieren" : "Generate avatar")}
               </motion.div>
               {cfg.imageUrl && (
                 <motion.div whileTap={{ scale: 0.97 }} onClick={downloadAvatar}
-                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "9px 0", borderRadius: 11, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px 0", borderRadius: 12, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                   {de ? "Herunterladen" : "Download"}
                 </motion.div>
