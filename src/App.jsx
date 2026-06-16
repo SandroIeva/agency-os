@@ -8116,7 +8116,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
         else timeStr = d.toLocaleDateString("de-DE", { day: "2-digit", month: "short" });
       }
       return {
-        id: c.id, name, avatar_url, color, initials, is_group: c.is_group,
+        id: c.id, name, avatar_url, color, initials, is_group: c.is_group, created_by: c.created_by,
         lastMsg: lastMsg?.text || "", time: timeStr,
         lastMsgAt: lastMsg?.created_at || c.created_at,
         participants, otherIds,
@@ -8300,7 +8300,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     setCreatingGroup(true);
     try {
       const { data: conv, error: convErr } = await supabase
-        .from("chat_conversations").insert({ org_id: userOrg.id, is_group: true, name }).select().single();
+        .from("chat_conversations").insert({ org_id: userOrg.id, is_group: true, name, created_by: myId }).select().single();
       if (convErr || !conv) { console.error("[Chat] create group failed:", convErr); alert("Gruppe konnte nicht erstellt werden" + (convErr ? ": " + convErr.message : "")); setCreatingGroup(false); return; }
       const memberIds = [myId, ...groupSelected.filter(id => id !== myId)];
       const { error: partErr } = await supabase.from("chat_participants").insert(
@@ -8311,7 +8311,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       setConversations(prev => [
         {
           id: conv.id, name, avatar_url: null, color: "#8B7AFF",
-          initials: name.slice(0, 2).toUpperCase(), is_group: true,
+          initials: name.slice(0, 2).toUpperCase(), is_group: true, created_by: myId,
           lastMsg: "", time: "", lastMsgAt: conv.created_at,
           participants: memberIds, otherIds: memberIds.filter(id => id !== myId),
         },
@@ -8378,6 +8378,19 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     setMemberBusy(true);
     const { error } = await supabase.from("chat_participants").delete().eq("conversation_id", convId).eq("user_id", myId);
     if (error) { console.error("[Chat] leave group failed:", error); alert("Verlassen fehlgeschlagen: " + error.message); setMemberBusy(false); return; }
+    setManageOpen(false);
+    setActiveConvId(null);
+    setConversations(prev => prev.filter(c => c.id !== convId));
+    setMemberBusy(false);
+  };
+
+  // Delete the whole group (creator only). Cascades to participants + messages.
+  const deleteGroup = async (convId) => {
+    if (!convId || memberBusy) return;
+    if (!window.confirm("Diese Gruppe für alle löschen? Das kann nicht rückgängig gemacht werden.")) return;
+    setMemberBusy(true);
+    const { error } = await supabase.from("chat_conversations").delete().eq("id", convId);
+    if (error) { console.error("[Chat] delete group failed:", error); alert("Löschen fehlgeschlagen: " + error.message); setMemberBusy(false); return; }
     setManageOpen(false);
     setActiveConvId(null);
     setConversations(prev => prev.filter(c => c.id !== convId));
@@ -8636,13 +8649,9 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                   style={{
                     flexShrink: 0, width: 34, height: 34, borderRadius: 10, cursor: "pointer",
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-                    border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
                     color: theme.textDim,
                   }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                  </svg>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="12" cy="19" r="1.7" /></svg>
                 </motion.div>
               )}
             </div>
@@ -9060,15 +9069,9 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               border: `1px solid ${theme.borderFaint}`, borderRadius: 20, overflow: "hidden",
               boxShadow: "0 24px 64px rgba(0,0,0,0.32)",
             }}>
-            {/* Header */}
-            <div style={{ padding: "18px 22px 14px", borderBottom: `1px solid ${theme.borderFaint}` }}>
-              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Gruppe verwalten</div>
-              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Name ändern, Mitglieder hinzufügen oder entfernen</div>
-            </div>
-
             <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-              {/* Rename */}
-              <div style={{ padding: "16px 22px 4px" }}>
+              {/* Group name — first thing, directly editable */}
+              <div style={{ padding: "20px 22px 6px" }}>
                 <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim, marginBottom: 8 }}>Gruppenname</div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input
@@ -9160,12 +9163,19 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               })()}
             </div>
 
-            {/* Footer */}
+            {/* Footer — creator can delete the whole group, everyone else can leave */}
             <div style={{ padding: "14px 22px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <motion.button whileTap={{ scale: 0.97 }} onClick={() => leaveGroup(activeConv.id)} disabled={memberBusy}
-                style={{ padding: "10px 18px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${darkMode ? "rgba(232,67,67,0.4)" : "rgba(232,67,67,0.35)"}`, color: "#E84343", fontSize: 13, fontWeight: 500, fontFamily: FONT }}>
-                Gruppe verlassen
-              </motion.button>
+              {activeConv.created_by === myId ? (
+                <motion.button whileTap={{ scale: 0.97 }} onClick={() => deleteGroup(activeConv.id)} disabled={memberBusy}
+                  style={{ padding: "10px 18px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${darkMode ? "rgba(232,67,67,0.4)" : "rgba(232,67,67,0.35)"}`, color: "#E84343", fontSize: 13, fontWeight: 500, fontFamily: FONT }}>
+                  Gruppe löschen
+                </motion.button>
+              ) : (
+                <motion.button whileTap={{ scale: 0.97 }} onClick={() => leaveGroup(activeConv.id)} disabled={memberBusy}
+                  style={{ padding: "10px 18px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${darkMode ? "rgba(232,67,67,0.4)" : "rgba(232,67,67,0.35)"}`, color: "#E84343", fontSize: 13, fontWeight: 500, fontFamily: FONT }}>
+                  Gruppe verlassen
+                </motion.button>
+              )}
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => setManageOpen(false)}
                 style={{ padding: "10px 22px", borderRadius: 999, cursor: "pointer", background: "#8B7AFF", border: "none", color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT }}>
                 Fertig
