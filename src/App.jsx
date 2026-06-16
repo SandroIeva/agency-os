@@ -11298,7 +11298,10 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const visibleItems = tagFilter ? items.filter(i => (i.tags || []).includes(tagFilter)) : items;
 
   const panelWrap = {
-    position: "absolute", inset: 0, display: "flex",
+    // zIndex 5 to match every other top-level view panel (Brand, Kanban, …).
+    // Without it this panel sat at z:auto, so a sibling view still finishing its
+    // exit animation (e.g. BrandView at z:5) painted on top and swallowed clicks.
+    position: "absolute", inset: 0, zIndex: 5, display: "flex",
     alignItems: "center", justifyContent: "center", padding: "20px 40px 80px",
   };
   const card = {
@@ -11320,8 +11323,8 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
       { id: "docs",         label: t("assets.docs") || "Docs" },
     ];
     return (
-      <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
+      <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0, pointerEvents: "auto" }}
+        exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)", pointerEvents: "none" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
         style={panelWrap}>
         <div style={card}>
           {/* Header + tabs — hidden while a document is open in the editor (full-screen writing) */}
@@ -18476,8 +18479,8 @@ If you don't know a field, infer a plausible value. Write all text values in the
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.97, y: 20 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }}
+      animate={{ opacity: 1, scale: 1, y: 0, pointerEvents: "auto" }}
+      exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)", pointerEvents: "none" }}
       transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
       style={{
         position: "absolute", inset: 0, display: "flex",
