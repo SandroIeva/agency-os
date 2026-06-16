@@ -7995,6 +7995,11 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
   const [groupName, setGroupName] = useState("");
   const [groupSelected, setGroupSelected] = useState([]); // user_ids to add
   const [creatingGroup, setCreatingGroup] = useState(false);
+  // Group management (rename / add / remove / leave)
+  const [manageOpen, setManageOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [savingName, setSavingName] = useState(false);
+  const [memberBusy, setMemberBusy] = useState(false);
   const recognitionRef = useRef(null);
   const fileInputRef = useRef(null);
   const scrollRef = useRef(null);
@@ -8325,6 +8330,60 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     }
   };
 
+  // Rename a group conversation
+  const renameGroup = async (convId) => {
+    const name = renameValue.trim();
+    if (!convId || !name || savingName) return;
+    const current = conversations.find(c => c.id === convId);
+    if (current && current.name === name) return;
+    setSavingName(true);
+    const { error } = await supabase.from("chat_conversations").update({ name }).eq("id", convId);
+    if (error) { console.error("[Chat] rename group failed:", error); alert("Umbenennen fehlgeschlagen: " + error.message); setSavingName(false); return; }
+    setConversations(prev => prev.map(c => c.id === convId ? { ...c, name, initials: name.slice(0, 2).toUpperCase() } : c));
+    setSavingName(false);
+  };
+
+  // Add a member to the current group
+  const addGroupMember = async (convId, userId) => {
+    if (!convId || !userId || memberBusy) return;
+    setMemberBusy(true);
+    const { error } = await supabase.from("chat_participants").insert({ conversation_id: convId, user_id: userId });
+    if (error) { console.error("[Chat] add member failed:", error); alert("Mitglied konnte nicht hinzugefügt werden: " + error.message); setMemberBusy(false); return; }
+    setConversations(prev => prev.map(c => {
+      if (c.id !== convId) return c;
+      const participants = [...new Set([...(c.participants || []), userId])];
+      return { ...c, participants, otherIds: participants.filter(id => id !== myId) };
+    }));
+    setMemberBusy(false);
+  };
+
+  // Remove a member from the current group
+  const removeGroupMember = async (convId, userId) => {
+    if (!convId || !userId || memberBusy) return;
+    setMemberBusy(true);
+    const { error } = await supabase.from("chat_participants").delete().eq("conversation_id", convId).eq("user_id", userId);
+    if (error) { console.error("[Chat] remove member failed:", error); alert("Mitglied konnte nicht entfernt werden: " + error.message); setMemberBusy(false); return; }
+    setConversations(prev => prev.map(c => {
+      if (c.id !== convId) return c;
+      const participants = (c.participants || []).filter(id => id !== userId);
+      return { ...c, participants, otherIds: participants.filter(id => id !== myId) };
+    }));
+    setMemberBusy(false);
+  };
+
+  // Leave the current group (remove myself, drop it from the list)
+  const leaveGroup = async (convId) => {
+    if (!convId || !myId || memberBusy) return;
+    if (!window.confirm("Diese Gruppe wirklich verlassen?")) return;
+    setMemberBusy(true);
+    const { error } = await supabase.from("chat_participants").delete().eq("conversation_id", convId).eq("user_id", myId);
+    if (error) { console.error("[Chat] leave group failed:", error); alert("Verlassen fehlgeschlagen: " + error.message); setMemberBusy(false); return; }
+    setManageOpen(false);
+    setActiveConvId(null);
+    setConversations(prev => prev.filter(c => c.id !== convId));
+    setMemberBusy(false);
+  };
+
   // Open conversation and mark its chat notifications as read
   const openConversation = useCallback((convId) => {
     setActiveConvId(convId);
@@ -8569,6 +8628,23 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                     : "Direkte Nachricht"}
                 </div>
               </div>
+              {activeConv.is_group && (
+                <motion.div
+                  whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                  onClick={() => { setRenameValue(activeConv.name || ""); setManageOpen(true); }}
+                  title="Gruppe verwalten"
+                  style={{
+                    flexShrink: 0, width: 34, height: 34, borderRadius: 10, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                    border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
+                    color: theme.textDim,
+                  }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                </motion.div>
+              )}
             </div>
 
             {/* Messages */}
@@ -8961,6 +9037,138 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                   fontSize: 13, fontWeight: 600, fontFamily: FONT, opacity: creatingGroup ? 0.7 : 1,
                 }}>
                 {creatingGroup ? "Erstelle…" : "Gruppe erstellen"}
+              </motion.button>
+            </div>
+          </motion.div>
+        </motion.div>,
+        document.body
+      )}
+
+      {/* ── Manage-group modal (rename / add / remove / leave) ── */}
+      {manageOpen && activeConv?.is_group && createPortal(
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={() => !memberBusy && !savingName && setManageOpen(false)}
+          style={{ position: "fixed", inset: 0, zIndex: 100001, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <motion.div
+            initial={{ scale: 0.96, y: 12, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }}
+            transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1.0] }}
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: "100%", maxWidth: 440, maxHeight: "82vh", display: "flex", flexDirection: "column",
+              background: darkMode ? "#1c1c26" : "#fff",
+              border: `1px solid ${theme.borderFaint}`, borderRadius: 20, overflow: "hidden",
+              boxShadow: "0 24px 64px rgba(0,0,0,0.32)",
+            }}>
+            {/* Header */}
+            <div style={{ padding: "18px 22px 14px", borderBottom: `1px solid ${theme.borderFaint}` }}>
+              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Gruppe verwalten</div>
+              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Name ändern, Mitglieder hinzufügen oder entfernen</div>
+            </div>
+
+            <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+              {/* Rename */}
+              <div style={{ padding: "16px 22px 4px" }}>
+                <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim, marginBottom: 8 }}>Gruppenname</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    value={renameValue} onChange={e => setRenameValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") renameGroup(activeConv.id); }}
+                    style={{
+                      flex: 1, boxSizing: "border-box", padding: "11px 14px", borderRadius: 12,
+                      background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
+                      border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
+                      outline: "none", fontSize: 14, fontFamily: FONT, color: theme.text, caretColor: "#8B7AFF",
+                    }}
+                  />
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => renameGroup(activeConv.id)}
+                    disabled={!renameValue.trim() || renameValue.trim() === activeConv.name || savingName}
+                    style={{
+                      padding: "0 18px", borderRadius: 12, border: "none",
+                      cursor: (!renameValue.trim() || renameValue.trim() === activeConv.name || savingName) ? "not-allowed" : "pointer",
+                      background: (!renameValue.trim() || renameValue.trim() === activeConv.name) ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)") : "#8B7AFF",
+                      color: (!renameValue.trim() || renameValue.trim() === activeConv.name) ? theme.textDim : "#fff",
+                      fontSize: 13, fontWeight: 600, fontFamily: FONT,
+                    }}>{savingName ? "…" : "Speichern"}</motion.button>
+                </div>
+              </div>
+
+              {/* Current members */}
+              <div style={{ padding: "16px 22px 4px" }}>
+                <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim, marginBottom: 4 }}>Mitglieder · {(activeConv.participants || []).length}</div>
+              </div>
+              <div style={{ padding: "0 14px" }}>
+                {(activeConv.participants || []).map(id => {
+                  const m = id === myId ? { display_name: "Du", color: "#8B7AFF", initials: "Du", avatar_url: null } : (memberMap[id] || { display_name: "Unbekannt", color: "#888", initials: "?" });
+                  return (
+                    <div key={id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 10px", borderRadius: 12 }}>
+                      {m.avatar_url ? (
+                        <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0 }} />
+                      ) : (
+                        <div style={{
+                          width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
+                          background: `linear-gradient(135deg, ${m.color}50, ${m.color}20)`, border: `1px solid ${m.color}40`,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 12, fontWeight: 600, fontFamily: FONT, color: m.color,
+                        }}>{m.initials}</div>
+                      )}
+                      <div style={{ flex: 1, fontSize: 13.5, fontFamily: FONT, color: theme.text, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.display_name}</div>
+                      {id !== myId && (
+                        <motion.div whileTap={{ scale: 0.9 }} onClick={() => removeGroupMember(activeConv.id, id)}
+                          title="Entfernen"
+                          style={{ flexShrink: 0, cursor: memberBusy ? "wait" : "pointer", color: theme.textDim, padding: 6, borderRadius: 8, display: "flex" }}>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                        </motion.div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add members */}
+              {(() => {
+                const addable = otherMembers.filter(m => !(activeConv.participants || []).includes(m.user_id));
+                if (addable.length === 0) return null;
+                return (
+                  <>
+                    <div style={{ padding: "16px 22px 4px" }}>
+                      <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>Hinzufügen</div>
+                    </div>
+                    <div style={{ padding: "0 14px 8px" }}>
+                      {addable.map(m => (
+                        <div key={m.user_id} onClick={() => addGroupMember(activeConv.id, m.user_id)} className="hover-row"
+                          style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 10px", borderRadius: 12, cursor: memberBusy ? "wait" : "pointer" }}>
+                          {m.avatar_url ? (
+                            <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0 }} />
+                          ) : (
+                            <div style={{
+                              width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
+                              background: `linear-gradient(135deg, ${m.color}50, ${m.color}20)`, border: `1px solid ${m.color}40`,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: 12, fontWeight: 600, fontFamily: FONT, color: m.color,
+                            }}>{m.initials}</div>
+                          )}
+                          <div style={{ flex: 1, fontSize: 13.5, fontFamily: FONT, color: theme.text, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.display_name}</div>
+                          <div style={{ flexShrink: 0, color: "#8B7AFF", display: "flex" }}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: "14px 22px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", justifyContent: "space-between", gap: 10 }}>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => leaveGroup(activeConv.id)} disabled={memberBusy}
+                style={{ padding: "10px 18px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${darkMode ? "rgba(232,67,67,0.4)" : "rgba(232,67,67,0.35)"}`, color: "#E84343", fontSize: 13, fontWeight: 500, fontFamily: FONT }}>
+                Gruppe verlassen
+              </motion.button>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setManageOpen(false)}
+                style={{ padding: "10px 22px", borderRadius: 999, cursor: "pointer", background: "#8B7AFF", border: "none", color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT }}>
+                Fertig
               </motion.button>
             </div>
           </motion.div>
