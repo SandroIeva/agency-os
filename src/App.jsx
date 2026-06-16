@@ -7990,6 +7990,11 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [emojiTab, setEmojiTab] = useState("smileys");
+  // Group-chat creation
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [groupSelected, setGroupSelected] = useState([]); // user_ids to add
+  const [creatingGroup, setCreatingGroup] = useState(false);
   const recognitionRef = useRef(null);
   const fileInputRef = useRef(null);
   const scrollRef = useRef(null);
@@ -8281,6 +8286,45 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     }
   };
 
+  // Create a group conversation: a named conversation with the current user plus
+  // every selected member. Schema (is_group + name) and RLS already support this.
+  const createGroupConversation = async () => {
+    if (!myId || !userOrg?.id) return;
+    const name = groupName.trim();
+    if (!name || groupSelected.length === 0 || creatingGroup) return;
+    setCreatingGroup(true);
+    try {
+      const { data: conv, error: convErr } = await supabase
+        .from("chat_conversations").insert({ org_id: userOrg.id, is_group: true, name }).select().single();
+      if (convErr || !conv) { console.error("[Chat] create group failed:", convErr); alert("Gruppe konnte nicht erstellt werden" + (convErr ? ": " + convErr.message : "")); setCreatingGroup(false); return; }
+      const memberIds = [myId, ...groupSelected.filter(id => id !== myId)];
+      const { error: partErr } = await supabase.from("chat_participants").insert(
+        memberIds.map(uid => ({ conversation_id: conv.id, user_id: uid }))
+      );
+      if (partErr) { console.error("[Chat] add group participants failed:", partErr); alert("Mitglieder konnten nicht hinzugefügt werden: " + partErr.message); setCreatingGroup(false); return; }
+      // Optimistically surface the new group so the panel opens right away.
+      setConversations(prev => [
+        {
+          id: conv.id, name, avatar_url: null, color: "#8B7AFF",
+          initials: name.slice(0, 2).toUpperCase(), is_group: true,
+          lastMsg: "", time: "", lastMsgAt: conv.created_at,
+          participants: memberIds, otherIds: memberIds.filter(id => id !== myId),
+        },
+        ...prev.filter(c => c.id !== conv.id),
+      ]);
+      setGroupModalOpen(false);
+      setGroupName("");
+      setGroupSelected([]);
+      setCreatingGroup(false);
+      openConversation(conv.id);
+      loadConversations();
+    } catch (err) {
+      console.error("createGroupConversation failed:", err);
+      alert("Fehler beim Erstellen der Gruppe: " + (err.message || err));
+      setCreatingGroup(false);
+    }
+  };
+
   // Open conversation and mark its chat notifications as read
   const openConversation = useCallback((convId) => {
     setActiveConvId(convId);
@@ -8351,6 +8395,22 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                   style={{ cursor: "pointer", color: theme.textDim, fontSize: 11, fontFamily: FONT }}>✕</motion.div>
               )}
             </div>
+            <motion.div
+              whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
+              onClick={() => { setGroupName(""); setGroupSelected([]); setGroupModalOpen(true); }}
+              style={{
+                marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                padding: "9px 12px", borderRadius: 12, cursor: "pointer",
+                background: darkMode ? "rgba(139,122,255,0.10)" : "rgba(139,122,255,0.08)",
+                border: `1px solid ${darkMode ? "rgba(139,122,255,0.20)" : "rgba(139,122,255,0.18)"}`,
+                color: "#8B7AFF", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
+              }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M19 8v6M22 11h-6" />
+              </svg>
+              Neue Gruppe
+            </motion.div>
           </div>
 
           {/* Conversation list — shows all team members, with existing chats on top */}
@@ -8501,9 +8561,13 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                   }}>{activeConv.initials}</div>
                 )}
               </div>
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{activeConv.name}</div>
-                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>Direkte Nachricht</div>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {activeConv.is_group
+                    ? `${(activeConv.participants || []).length} Mitglieder · ` + (activeConv.participants || []).map(id => id === myId ? "Du" : (memberMap[id]?.display_name || "?")).join(", ")
+                    : "Direkte Nachricht"}
+                </div>
               </div>
             </div>
 
@@ -8808,6 +8872,101 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
           </div>
         )}
       </div>
+
+      {/* ── New-group modal ── */}
+      {groupModalOpen && createPortal(
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={() => !creatingGroup && setGroupModalOpen(false)}
+          style={{ position: "fixed", inset: 0, zIndex: 100001, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <motion.div
+            initial={{ scale: 0.96, y: 12, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }}
+            transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1.0] }}
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: "100%", maxWidth: 440, maxHeight: "82vh", display: "flex", flexDirection: "column",
+              background: darkMode ? "#1c1c26" : "#fff",
+              border: `1px solid ${theme.borderFaint}`, borderRadius: 20, overflow: "hidden",
+              boxShadow: "0 24px 64px rgba(0,0,0,0.32)",
+            }}>
+            {/* Header */}
+            <div style={{ padding: "18px 22px 14px", borderBottom: `1px solid ${theme.borderFaint}` }}>
+              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Neue Gruppe</div>
+              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Name vergeben und Mitglieder auswählen</div>
+            </div>
+            {/* Name */}
+            <div style={{ padding: "16px 22px 8px" }}>
+              <input
+                value={groupName} onChange={e => setGroupName(e.target.value)} autoFocus
+                placeholder="Gruppenname…"
+                style={{
+                  width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 12,
+                  background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
+                  border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
+                  outline: "none", fontSize: 14, fontFamily: FONT, color: theme.text, caretColor: "#8B7AFF",
+                }}
+              />
+            </div>
+            {/* Members */}
+            <div style={{ padding: "8px 22px 4px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>Mitglieder</span>
+              <span style={{ fontSize: 12, fontFamily: FONT, color: "#8B7AFF" }}>{groupSelected.length} ausgewählt</span>
+            </div>
+            <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "4px 14px 8px" }}>
+              {otherMembers.length === 0 ? (
+                <div style={{ padding: 24, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>Keine weiteren Mitglieder im Workspace</div>
+              ) : otherMembers.map(m => {
+                const sel = groupSelected.includes(m.user_id);
+                return (
+                  <div key={m.user_id}
+                    onClick={() => setGroupSelected(prev => sel ? prev.filter(id => id !== m.user_id) : [...prev, m.user_id])}
+                    className="hover-row"
+                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 10px", borderRadius: 12, cursor: "pointer" }}>
+                    {m.avatar_url ? (
+                      <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0 }} />
+                    ) : (
+                      <div style={{
+                        width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
+                        background: `linear-gradient(135deg, ${m.color}50, ${m.color}20)`, border: `1px solid ${m.color}40`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 12, fontWeight: 600, fontFamily: FONT, color: m.color,
+                      }}>{m.initials}</div>
+                    )}
+                    <div style={{ flex: 1, fontSize: 13.5, fontFamily: FONT, color: theme.text, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.display_name}</div>
+                    <div style={{
+                      width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+                      background: sel ? "#8B7AFF" : "transparent",
+                      border: `1.5px solid ${sel ? "#8B7AFF" : (darkMode ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.25)")}`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      {sel && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* Footer */}
+            <div style={{ padding: "14px 22px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => !creatingGroup && setGroupModalOpen(false)}
+                style={{ padding: "10px 18px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.text, fontSize: 13, fontWeight: 500, fontFamily: FONT }}>
+                Abbrechen
+              </motion.button>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={createGroupConversation}
+                disabled={!groupName.trim() || groupSelected.length === 0 || creatingGroup}
+                style={{
+                  padding: "10px 22px", borderRadius: 999,
+                  cursor: (!groupName.trim() || groupSelected.length === 0 || creatingGroup) ? "not-allowed" : "pointer",
+                  background: (!groupName.trim() || groupSelected.length === 0) ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)") : "#8B7AFF",
+                  border: "none", color: (!groupName.trim() || groupSelected.length === 0) ? theme.textDim : "#fff",
+                  fontSize: 13, fontWeight: 600, fontFamily: FONT, opacity: creatingGroup ? 0.7 : 1,
+                }}>
+                {creatingGroup ? "Erstelle…" : "Gruppe erstellen"}
+              </motion.button>
+            </div>
+          </motion.div>
+        </motion.div>,
+        document.body
+      )}
     </motion.div>
   );
 }
