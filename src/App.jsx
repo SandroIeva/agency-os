@@ -18601,33 +18601,30 @@ If you don't know a field, infer a plausible value. Write all text values in the
               </div>
               <div style={{ flex: 1 }} />
               {!canEditCurrent ? null : !((brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors" || brandSub === "positioning")) || (brandTab === "identity" && brandSub === "avatar")) ? (
-              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setEditingText(v => !v)}
+              <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => setEditingText(v => !v)}
                 style={{
-                  padding: "8px 16px", borderRadius: 10, cursor: "pointer",
-                  background: editingText ? theme.accent : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"),
-                  border: `1px solid ${editingText ? "transparent" : theme.borderFaint}`,
-                  color: editingText ? "#fff" : theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT,
+                  padding: "9px 18px", borderRadius: 999, cursor: "pointer",
+                  background: editingText ? theme.accent : "#23232b", border: "none",
+                  color: "#fff", fontSize: 12.5, fontWeight: 600, fontFamily: FONT,
                 }}
-              >{editingText ? "Fertig" : "Bearbeiten"}</motion.button>
+              >{editingText ? (appLanguage === "de" ? "Fertig" : "Done") : (appLanguage === "de" ? "Bearbeiten" : "Edit")}</motion.button>
               ) : null}
             </div>
 
             {/* This view IS one pillar (Strategie / Identität / Brand Design — set from
                 the menu). The tab bar shows ONLY this pillar's sub-points; switching
                 pillars happens via the main menu, not here. */}
-            <div style={{ display: "flex", gap: 4, padding: "10px 20px 0", borderBottom: `1px solid ${theme.borderFaint}` }}>
+            <div style={{ display: "flex", gap: 4, padding: "10px 26px 0", borderBottom: `1px solid ${theme.borderFaint}` }}>
               {pillarSubs.map(({ key, label }) => {
                 const active = brandSub === key;
                 return (
-                  <motion.div key={key} whileTap={{ scale: 0.96 }} onClick={() => setBrandSub(key)}
-                    style={{
-                      padding: "8px 14px 11px", borderRadius: "10px 10px 0 0", cursor: "pointer",
-                      fontSize: 12, fontFamily: FONT, fontWeight: active ? 600 : 500,
-                      color: active ? theme.text : theme.textDim,
-                      borderBottom: active ? `2px solid ${theme.accent}` : "2px solid transparent",
-                      marginBottom: -1,
-                    }}
-                  >{label}</motion.div>
+                  <div key={key} onClick={() => setBrandSub(key)}
+                    style={{ padding: "10px 14px 13px", cursor: "pointer", position: "relative",
+                      fontSize: 13.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap",
+                      color: active ? theme.text : theme.textDim, transition: "color 0.2s ease" }}>
+                    {label}
+                    {active && <motion.div layoutId="brandSubUnderline" style={{ position: "absolute", left: 8, right: 8, bottom: -1, height: 2.5, borderRadius: 2, background: "#23232b" }} />}
+                  </div>
                 );
               })}
             </div>
