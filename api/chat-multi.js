@@ -12,6 +12,37 @@ function withTimeout(promise, ms, label) {
   ]);
 }
 
+// Upstream errors that are transient (rate-limit / server hiccup) and worth a quick
+// automatic retry rather than surfacing to the user.
+const TRANSIENT_STATUS = new Set([429, 500, 502, 503, 504]);
+
+// POST JSON with a couple of quick retries on transient upstream errors. These
+// errors come back fast, so retrying smooths over the blips that otherwise
+// surfaced as a (misleading) failure that only "worked on retry minutes later".
+// Timeouts/network errors are NOT retried — that would risk the function budget;
+// they're returned so the caller can show a clean "try again" message instead.
+async function postJSONRetry(url, headers, body, label, retries = 2) {
+  let last = { ok: false, status: 0, data: null, raw: "", timedOut: false };
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const r = await withTimeout(
+        fetch(url, { method: "POST", headers, body: JSON.stringify(body) }),
+        UPSTREAM_TIMEOUT_MS, label,
+      );
+      let d = null;
+      try { d = await r.json(); } catch { /* non-JSON body */ }
+      if (r.ok) return { ok: true, status: r.status, data: d, raw: "", timedOut: false };
+      const raw = d?.error?.message || `HTTP ${r.status}`;
+      last = { ok: false, status: r.status, data: d, raw, timedOut: false };
+      if (!TRANSIENT_STATUS.has(r.status)) return last; // hard error — don't retry
+    } catch (e) {
+      return { ok: false, status: 0, data: null, raw: e.message || "network error", timedOut: true };
+    }
+    if (attempt < retries) await new Promise(res => setTimeout(res, 500 * (attempt + 1)));
+  }
+  return last;
+}
+
 // Best-effort: translate raw provider errors into something a user can act on.
 function hintFor(provider, statusCode, raw) {
   const msg = (raw || "").toLowerCase();
@@ -289,16 +320,11 @@ export default async function handler(req, res) {
               temperature: 0.9,
             },
           };
-          let r, d;
-          try {
-            r = await withTimeout(fetch(url, { method: "POST", headers, body: JSON.stringify(body) }), UPSTREAM_TIMEOUT_MS, "Gemini-Image");
-            d = await r.json();
-          } catch (e) {
-            lastRaw = e.message || "network error";
-            continue;
-          }
-          lastStatus = r.status;
-          if (r.ok) {
+          const resp = await postJSONRetry(url, headers, body, "Gemini-Image");
+          lastStatus = resp.status;
+          if (resp.raw) lastRaw = resp.raw;
+          if (resp.ok) {
+            const d = resp.data || {};
             // Response: candidates[0].content.parts[] — may contain text + inlineData (image)
             const parts = d.candidates?.[0]?.content?.parts || [];
             const text = parts.map(p => p.text || "").join("").trim();
@@ -325,9 +351,10 @@ export default async function handler(req, res) {
             lastRaw = blockReason ? `Gemini blockierte den Prompt (${blockReason}).` : "Keine Bilddaten zurückerhalten.";
             break; // model accepted request, response is just bad — don't try others
           }
-          lastRaw = d?.error?.message || `HTTP ${r.status}`;
-          // Only try next on "not found" — otherwise bail with the real error
-          if (r.status !== 404 && !/model.*not.*found|not.*available|not.*supported/i.test(lastRaw)) {
+          // Timed out or transient even after retries, or a hard error: only advance to the
+          // next model on a genuine "model not found"; otherwise bail with the real cause.
+          if (resp.timedOut) break;
+          if (resp.status !== 404 && !/model.*not.*found|not.*available|not.*supported/i.test(lastRaw)) {
             break;
           }
         }
@@ -352,13 +379,11 @@ export default async function handler(req, res) {
               instances: [{ prompt: lastUserMsg }],
               parameters: { sampleCount: 1, aspectRatio: "1:1", personGeneration: "allow_adult" },
             };
-            let r, d;
-            try {
-              r = await withTimeout(fetch(url, { method: "POST", headers, body: JSON.stringify(body) }), UPSTREAM_TIMEOUT_MS, "Imagen");
-              d = await r.json();
-            } catch (e) { lastRaw = e.message; continue; }
-            lastStatus = r.status;
-            if (r.ok) {
+            const resp = await postJSONRetry(url, headers, body, "Imagen");
+            lastStatus = resp.status;
+            if (resp.raw) lastRaw = resp.raw;
+            if (resp.ok) {
+              const d = resp.data || {};
               const pred = d.predictions?.[0];
               const b64 = pred?.bytesBase64Encoded || pred?.image?.imageBytes;
               const mime = pred?.mimeType || pred?.image?.mimeType || "image/png";
@@ -373,44 +398,51 @@ export default async function handler(req, res) {
               lastRaw = pred?.raiFilteredReason || "Imagen lieferte keine Bilddaten zurück.";
               break;
             }
-            lastRaw = d?.error?.message || `HTTP ${r.status}`;
-            if (r.status !== 404 && !/model.*not.*found|not.*available|not.*supported/i.test(lastRaw)) break;
+            if (resp.timedOut) break;
+            if (resp.status !== 404 && !/model.*not.*found|not.*available|not.*supported/i.test(lastRaw)) break;
           }
         }
 
-        // Both strategies exhausted — ask Google which models the key actually has access to,
-        // so the error message can point at something concrete.
-        let availableImageModels = [];
-        try {
-          const listUrl = apiKey
-            ? `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}&pageSize=200`
-            : `https://generativelanguage.googleapis.com/v1beta/models?pageSize=200`;
-          const listRes = await fetch(listUrl, { headers });
-          const listData = await listRes.json();
-          if (listRes.ok && Array.isArray(listData.models)) {
-            // Pick anything that looks image-related
-            availableImageModels = listData.models
-              .filter(m => /imagen|image/i.test(m.name || m.displayName || ""))
-              .map(m => ({
-                name: (m.name || "").replace(/^models\//, ""),
-                methods: m.supportedGenerationMethods || [],
-              }))
-              .filter(m => m.name);
-          }
-        } catch { /* ignore — best-effort */ }
+        // Classify the real failure. Transient (rate-limit / server / timeout) and
+        // auth/region issues take priority — the "your key has no image model" listing
+        // is a LAST resort, only for a genuine "model not found", so we never tell the
+        // user their models don't match when the real cause was a temporary blip.
+        const isNotFound = lastStatus === 404 || /model.*not.*found|not.*available|not.*supported/i.test(lastRaw);
 
-        let friendly = lastRaw || "Bildgenerierung fehlgeschlagen.";
-        if (availableImageModels.length > 0) {
-          const list = availableImageModels.map(m => `${m.name}${m.methods.length ? ` (${m.methods.join(", ")})` : ""}`).join("\n  • ");
-          friendly = `Keiner unserer eingebauten Bild-Modellnamen passt zu deinem Key. Diese Bild-Modelle stehen dir aber zur Verfügung:\n  • ${list}\n\nSag Bescheid, welches verwendet werden soll — wir können das einbauen. Alternativ funktioniert OpenAI/DALL·E sofort ohne Setup.`;
+        // Only ask Google for the key's model list when it's actually a not-found case.
+        let availableImageModels = [];
+        if (isNotFound) {
+          try {
+            const listUrl = apiKey
+              ? `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}&pageSize=200`
+              : `https://generativelanguage.googleapis.com/v1beta/models?pageSize=200`;
+            const listRes = await fetch(listUrl, { headers });
+            const listData = await listRes.json();
+            if (listRes.ok && Array.isArray(listData.models)) {
+              availableImageModels = listData.models
+                .filter(m => /imagen|image/i.test(m.name || m.displayName || ""))
+                .map(m => ({ name: (m.name || "").replace(/^models\//, ""), methods: m.supportedGenerationMethods || [] }))
+                .filter(m => m.name);
+            }
+          } catch { /* ignore — best-effort */ }
+        }
+
+        let friendly;
+        if (lastStatus === 401 || /invalid.*api.?key|unauthor|api key not valid/i.test(lastRaw)) {
+          friendly = "Der Gemini-API-Key ist ungültig. Bitte in Settings → KI-Modelle prüfen.";
         } else if (lastStatus === 403 || /permission|forbidden|access.*denied|FAILED_PRECONDITION/i.test(lastRaw)) {
-          friendly = "Bildgenerierung mit diesem Gemini-Key ist serverseitig blockiert. Häufig: Key kommt aus einem anderen Cloud-Projekt als das mit Billing. Erzeuge einen neuen API-Key im selben Projekt wo Billing aktiv ist. Schneller: OpenAI-Key in Settings → DALL·E 3 läuft sofort ohne Cloud-Setup.";
-        } else if (lastStatus === 400 && /FAILED_PRECONDITION|location|region/i.test(lastRaw)) {
-          friendly = "Region (DE) für dieses Modell blockiert. Schneller: OpenAI/DALL·E 3 funktioniert in DE problemlos.";
-        } else if (lastStatus === 429) {
-          friendly = "Rate-limited oder Billing fehlt für dieses Projekt. Kurz warten oder OpenAI als Alternative.";
+          friendly = "Bildgenerierung mit diesem Gemini-Key ist serverseitig blockiert — meist, weil der Key aus einem Cloud-Projekt ohne aktives Billing stammt. Lege einen neuen Key im Projekt mit Billing an. Alternativ läuft OpenAI/DALL·E sofort ohne Setup.";
+        } else if (lastStatus === 400 && /location|region/i.test(lastRaw)) {
+          friendly = "Dieses Modell ist in deiner Region blockiert. OpenAI/DALL·E funktioniert in DE problemlos.";
+        } else if (lastStatus === 429 || /rate.?limit|quota|exceeded|resource.?exhausted/i.test(lastRaw)) {
+          friendly = "Gemini ist gerade ausgelastet (Rate-Limit). Bitte in einem Moment erneut versuchen.";
+        } else if (lastStatus === 0 || lastStatus >= 500) {
+          friendly = "Die Bildgenerierung war kurz nicht erreichbar. Bitte gleich noch einmal versuchen.";
+        } else if (isNotFound && availableImageModels.length > 0) {
+          const list = availableImageModels.map(m => `${m.name}${m.methods.length ? ` (${m.methods.join(", ")})` : ""}`).join("\n  • ");
+          friendly = `Dein Gemini-Key hat keinen Zugriff auf die Standard-Bildmodelle. Verfügbar wären:\n  • ${list}\n\nAlternativ funktioniert OpenAI/DALL·E sofort ohne Setup.`;
         } else {
-          friendly = `Kein Bildmodell verfügbar (HTTP ${lastStatus}). Raw: "${lastRaw}". Empfehlung: OpenAI/DALL·E nutzen.`;
+          friendly = "Bildgenerierung momentan nicht möglich. Bitte erneut versuchen oder OpenAI/DALL·E nutzen.";
         }
         return res.status(lastStatus || 502).json({
           error: friendly,
