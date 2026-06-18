@@ -44,21 +44,44 @@ wie vollem Drive oder Gmail an). Spart Zeit & Geld.
 
 ---
 
-## B. Scope-Begründungen (Textvorlage zum Anpassen)
+## B. Scope-Begründungen (fertig zum Einreichen — Englisch)
 
-Für jeden sensiblen Scope verlangt Google eine Begründung. Entwürfe:
+> Auf Englisch, weil die Prüfer auf Englisch arbeiten. Muss zum Demo-Video passen.
 
-**`drive.file`**
-> i7 OS lets users attach their own files (images/videos) from Google Drive to their
-> workspace via the Google Picker, and save generated assets back to Drive. We use
-> the per-file `drive.file` scope so the app can only access the specific files the
-> user explicitly selects — never their entire Drive.
+**App description (falls ein Feld „what does your app do" kommt):**
+> i7 OS is a workspace app for agencies and small teams to manage brand assets,
+> documents, projects, a team chat and a shared calendar. Users sign in with Google
+> and can optionally connect Google Drive (to import their own media as assets) and
+> Google Calendar (to view and manage their events inside the app).
 
-**`calendar.events`**
-> i7 OS shows the user's upcoming events inside the workspace and lets them create
-> and update meeting events. `calendar.events` is the minimal scope needed to read
-> and write the events the user works with; we do not access other calendars or
-> calendar settings.
+**`…/auth/userinfo.email`, `…/auth/userinfo.profile`, `openid`**
+> Used solely to authenticate the user (Sign in with Google) and to display their
+> name, email and profile picture inside the app. No other use.
+
+**`…/auth/drive.file`**
+> i7 OS lets users attach their own files (images and videos) from Google Drive into
+> their workspace's asset library, and save assets created in i7 OS back to Drive.
+> We use drive.file together with the Google Picker, so the app can only access the
+> specific files the user explicitly selects (or that the app itself created) — it
+> never lists, scans or accesses any other files in the user's Drive. When a user
+> imports a file, we download that single selected file and store a copy in the
+> user's workspace so it stays available in the app. drive.file is the minimal scope
+> for this per-file, user-initiated import/export; we deliberately do not request the
+> broader `drive` or `drive.readonly` scopes because we never need the whole Drive.
+
+**`…/auth/calendar.events`**
+> i7 OS shows the user's upcoming events in a calendar view and lets them create,
+> update and delete events (e.g. meetings) directly from the app — only on the
+> user's explicit action. calendar.events is the minimal scope to read and write the
+> user's events; we do not need calendar settings, sharing/ACLs or other calendars,
+> so we do not request the broader `calendar` scope.
+
+**Limited Use confirmation (so formulieren, falls abgefragt):**
+> Our use of data received from Google APIs adheres to the Google API Services User
+> Data Policy, including the Limited Use requirements. Google user data is used only
+> to provide and improve the user-facing features described above; it is never sold,
+> used for advertising, or used to train AI/ML models, and it is not shared except as
+> needed to provide the service (our processors) or with the user's consent.
 
 Grundsatz, den Google hören will: **minimale Scopes, nur was die Funktion braucht.**
 
