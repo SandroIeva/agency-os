@@ -11482,7 +11482,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, canEdit
 // a Grid (overview of everything) and a freeform Canvas (drag images around).
 // Images upload to the public brand-assets bucket so their URLs can later be
 // reused as reference inputs for image/video generation (Higgsfield etc.).
-function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, docFullscreen, setDocFullscreen }) {
+function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, docFullscreen, setDocFullscreen, getProviderToken, ensureValidToken, autoReLogin }) {
   // Assets has three tabs: Moodboards (curated boards), Creations (your generated
   // outputs) and Inspirations (saved references).
   const [tab, setTab] = useState("moodboards");
@@ -11503,7 +11503,9 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   // button), but the file input + logic live in CreationsTab — so it registers a
   // picker fn here and reports its uploading state up.
   const creationsPick = useRef(null);
+  const creationsDrivePick = useRef(null); // CreationsTab registers its "import from Drive" fn here
   const [creationsUploading, setCreationsUploading] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false); // "Hinzufügen" dropdown (creations tab)
   const docsCreate = useRef(null); // DocsTab registers its "new document" fn here
   const [boards, setBoards] = useState([]);
   const [loadingBoards, setLoadingBoards] = useState(true);
@@ -11727,11 +11729,50 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
               </motion.div>
             )}
             {tab === "creations" && (
-              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => creationsPick.current?.()}
-                style={{ ...iconBtn, background: "#23232b", color: "#fff", border: "none", opacity: creationsUploading ? 0.6 : 1 }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                {creationsUploading ? (t("common.loading") || "Lädt…") : (t("moodboard.upload") || "Hochladen")}
-              </motion.div>
+              <div style={{ position: "relative" }}>
+                <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setAddMenuOpen(o => !o)}
+                  style={{ ...iconBtn, background: "#23232b", color: "#fff", border: "none", opacity: creationsUploading ? 0.6 : 1 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  {creationsUploading ? (t("common.loading") || "Lädt…") : (appLanguage === "de" ? "Hinzufügen" : "Add")}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 1, opacity: 0.8 }}><polyline points="6 9 12 15 18 9"/></svg>
+                </motion.div>
+                <AnimatePresence>
+                  {addMenuOpen && (
+                    <>
+                      <div onClick={() => setAddMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                      <motion.div
+                        initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                        transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
+                        style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 41, minWidth: 230,
+                          background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
+                          boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden", padding: 6 }}>
+                        {[
+                          { key: "local", label: appLanguage === "de" ? "Datei hochladen" : "Upload file",
+                            sub: appLanguage === "de" ? "Vom Computer" : "From your computer",
+                            icon: <><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>,
+                            onClick: () => { setAddMenuOpen(false); creationsPick.current?.(); } },
+                          { key: "drive", label: appLanguage === "de" ? "Aus Google Drive" : "From Google Drive",
+                            sub: appLanguage === "de" ? "Datei aus Drive wählen" : "Pick a file from Drive",
+                            icon: <><path d="M8 3l-5.5 9.5L5 17h7"/><path d="M16 3H8l8 14h6l-3-5"/><path d="M2.5 12.5L6 17h12"/></>,
+                            onClick: () => { setAddMenuOpen(false); creationsDrivePick.current?.(); } },
+                        ].map(it => (
+                          <div key={it.key} onClick={it.onClick} className="hover-row"
+                            style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
+                            <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                              background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
+                              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>
+                            </div>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{it.label}</div>
+                              <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{it.sub}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
             )}
             {tab === "docs" && (
               <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => docsCreate.current?.()}
@@ -11779,7 +11820,8 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           {tab === "creations" && (
             <CreationsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} grad={grad} glow={glow} t={t}
               appLanguage={appLanguage} onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive} orgMembers={orgMembers}
-              pickRef={creationsPick} onUploadingChange={setCreationsUploading} />
+              pickRef={creationsPick} drivePickRef={creationsDrivePick} onUploadingChange={setCreationsUploading}
+              getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} />
           )}
 
           {/* ── DOCS tab ── */}
@@ -11968,7 +12010,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 // Top-level component (not inline) so framer-motion never re-mounts it per render.
 // Creations tab — gallery of the workspace's images AND videos (AI-generated +
 // user uploads). Filter by media type; upload your own via the button.
-function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, onUploadingChange }) {
+function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, drivePickRef, onUploadingChange, getProviderToken, ensureValidToken, autoReLogin }) {
   const memberById = useMemo(() => {
     const m = {}; (orgMembers || []).forEach(om => { if (om.user_id) m[om.user_id] = { ...(om.profiles || {}) }; }); return m;
   }, [orgMembers]);
@@ -12031,6 +12073,62 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   };
 
   const FILE_COLS = "id,name,public_url,mime_type,size_bytes,created_at,user_id,storage_path,storage_provider";
+
+  // Import media from Google Drive via the Google Picker (works with the drive.file
+  // scope the app already holds): the user picks file(s), we download the bytes and
+  // store them as normal assets — identical to a local upload, so they render and
+  // behave the same and don't depend on Drive permissions later.
+  const importFromDrive = async () => {
+    if (!userOrg?.id || !session?.user?.id || uploading) return;
+    let token;
+    try { token = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token); } catch { token = null; }
+    if (!token) { alert(appLanguage === "de" ? "Kein Google-Drive-Zugriff. Bitte in Settings mit Google neu verbinden." : "No Google Drive access. Please reconnect Google in Settings."); return; }
+    let picked = [];
+    try {
+      picked = await openGooglePicker({ accessToken: token, locale: appLanguage === "de" ? "de" : "en", multi: true });
+    } catch (e) {
+      alert((appLanguage === "de" ? "Google-Picker konnte nicht geöffnet werden: " : "Could not open Google Picker: ") + (e?.message || e));
+      return;
+    }
+    const media = (picked || []).filter(p => /^(image|video)\//.test(p.mimeType || ""));
+    if (media.length === 0) {
+      if ((picked || []).length > 0) alert(appLanguage === "de" ? "Bitte ein Bild oder Video auswählen." : "Please pick an image or video file.");
+      return;
+    }
+    setUploading(true);
+    const added = [];
+    for (const p of media) {
+      try {
+        const dlUrl = `https://www.googleapis.com/drive/v3/files/${p.id}?alt=media&supportsAllDrives=true`;
+        let r = await fetch(dlUrl, { headers: { Authorization: `Bearer ${token}` } });
+        if (r.status === 401 && autoReLogin) {
+          const nt = await autoReLogin();
+          if (nt) { token = nt; r = await fetch(dlUrl, { headers: { Authorization: `Bearer ${token}` } }); }
+        }
+        if (!r.ok) continue;
+        const blob = await r.blob();
+        const mime = p.mimeType || blob.type || "application/octet-stream";
+        const ext = (p.name?.split(".").pop() || (mime.split("/")[1] || "bin")).toLowerCase();
+        const path = `${session.user.id}/creations/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const { error: upErr } = await supabase.storage.from("user-files").upload(path, blob, { contentType: mime, upsert: false });
+        if (upErr) continue;
+        const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(path, 60 * 60 * 24 * 365);
+        const { data, error } = await supabase.from("user_files").insert({
+          user_id: session.user.id, org_id: userOrg.id, name: p.name || `drive.${ext}`,
+          mime_type: mime, size_bytes: blob.size, storage_path: path,
+          storage_provider: "supabase", public_url: signed?.signedUrl || null,
+        }).select(FILE_COLS).single();
+        if (!error && data) added.push(data);
+      } catch (_) { /* skip individual file */ }
+    }
+    if (added.length) setFiles(prev => [...added, ...(prev || [])]);
+    setUploading(false);
+    if (!added.length) alert(appLanguage === "de" ? "Import aus Google Drive fehlgeschlagen." : "Import from Google Drive failed.");
+  };
+  const importFromDriveRef = useRef(null);
+  importFromDriveRef.current = importFromDrive;
+  useEffect(() => { if (drivePickRef) drivePickRef.current = () => importFromDriveRef.current?.(); }, [drivePickRef]);
+
   const duplicateFile = async (f, e) => {
     e?.stopPropagation?.();
     if (!userOrg?.id || !session?.user?.id) return;
@@ -23093,7 +23191,7 @@ export default function CircularMenu() {
         {/* ASSETS VIEW (Brand → Assets): Moodboards / Creations / Inspirations */}
         <AnimatePresence>
           {currentView === "assets" && (
-            <AssetsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive} orgMembers={orgMembers} createNotification={createNotification} docDeepLink={docDeepLink} docFullscreen={docFullscreen} setDocFullscreen={setDocFullscreen} onBack={() => setCurrentView("dashboard")} />
+            <AssetsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive} orgMembers={orgMembers} createNotification={createNotification} docDeepLink={docDeepLink} docFullscreen={docFullscreen} setDocFullscreen={setDocFullscreen} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
