@@ -46,7 +46,8 @@ Freigabe des Pickers (sonst gibt der Drive-Download `404 File not found`).
 - Typ: **Webanwendung**.
 - **Autorisierte JavaScript-Quellen:**
   - `https://app.i7os.com`
-  - `http://localhost:5173` (für lokale Entwicklung)
+  - `http://localhost:5173` (Vite-Dev)
+  - `http://localhost:3000` (Testumgebung)
 - **Autorisierte Weiterleitungs-URIs** (das ist die **Supabase**-Callback-URL,
   NICHT die App):
   - `https://oidbemeetiawiahpweyg.supabase.co/auth/v1/callback`
@@ -56,8 +57,8 @@ Freigabe des Pickers (sonst gibt der Drive-Download `404 File not found`).
 „Anmeldedaten" → „Anmeldedaten erstellen" → **API-Schlüssel**:
 - Den Schlüssel **einschränken**:
   - „API-Einschränkungen" → nur **Google Picker API** (+ ggf. Google Drive API).
-  - „Anwendungseinschränkungen" → **HTTP-Verweis-URLs**: `https://app.i7os.com/*`
-    (und für lokal `http://localhost:5173/*`).
+  - „Anwendungseinschränkungen" → **HTTP-Verweis-URLs**: `https://app.i7os.com/*`,
+    `http://localhost:5173/*` (Vite-Dev) und `http://localhost:3000/*` (Testumgebung).
 - → dieser Schlüssel wird `VITE_GOOGLE_API_KEY`.
 
 ## 6. Supabase auf den neuen Client umstellen
