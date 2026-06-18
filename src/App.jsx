@@ -978,7 +978,7 @@ function ImageLightbox({ url, onClose, onUploadStorage, onUploadDrive, theme, da
           <ActionBtn icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>} label={appLanguage === "de" ? "Download" : "Download"} onClick={download} />
           <ActionBtn icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>} label={appLanguage === "de" ? "Kopieren" : "Copy"} onClick={copyImage} />
           <ActionBtn icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>} label={appLanguage === "de" ? "Link kopieren" : "Copy link"} onClick={copyLink} busyKey="link" />
-          {onUploadDrive && <ActionBtn icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="14 2 6 22 22 12 14 2"/></svg>} label={appLanguage === "de" ? "Zu Drive" : "To Drive"} onClick={uploadToDrive} busyKey="drive" />}
+          {onUploadDrive && <ActionBtn icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/></svg>} label={appLanguage === "de" ? "Zu Drive" : "To Drive"} onClick={uploadToDrive} busyKey="drive" />}
           <motion.button onClick={onClose} whileTap={{ scale: 0.94 }}
             style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#ffffffCC", background: "rgba(255,255,255,0.06)", border: `1px solid rgba(255,255,255,0.10)`, marginLeft: 6 }}
           >
@@ -11753,7 +11753,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             onClick: () => { setAddMenuOpen(false); creationsPick.current?.(); } },
                           { key: "drive", label: appLanguage === "de" ? "Aus Google Drive" : "From Google Drive",
                             sub: appLanguage === "de" ? "Datei aus Drive wählen" : "Pick a file from Drive",
-                            icon: <><path d="M8 3l-5.5 9.5L5 17h7"/><path d="M16 3H8l8 14h6l-3-5"/><path d="M2.5 12.5L6 17h12"/></>,
+                            icon: <><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="8 17 12 21 16 17"/><line x1="12" y1="15" x2="12" y2="21"/></>,
                             onClick: () => { setAddMenuOpen(false); creationsDrivePick.current?.(); } },
                         ].map(it => (
                           <div key={it.key} onClick={it.onClick} className="hover-row"
