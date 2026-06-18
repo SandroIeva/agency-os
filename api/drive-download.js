@@ -23,7 +23,8 @@ export default async function handler(req) {
   try {
     const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!r.ok) {
-      const detail = (await r.text().catch(() => "")).slice(0, 300);
+      const detail = (await r.text().catch(() => "")).slice(0, 500);
+      console.error("[drive-download] drive returned", r.status, "for", fileId, "→", detail);
       return new Response(`drive ${r.status}: ${detail}`, { status: r.status === 401 ? 401 : 502 });
     }
     return new Response(r.body, {

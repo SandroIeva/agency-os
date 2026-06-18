@@ -12109,7 +12109,11 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
           const nt = await autoReLogin();
           if (nt) { token = nt; r = await fetch(proxyUrl, { headers: { "x-drive-token": token } }); }
         }
-        if (!r.ok) { failures.push(`${label}: Download fehlgeschlagen (${r.status})`); continue; }
+        if (!r.ok) {
+          let detail = ""; try { detail = (await r.text()).slice(0, 220); } catch {}
+          failures.push(`${label}: Download fehlgeschlagen (${r.status})${detail ? " – " + detail : ""}`);
+          continue;
+        }
         const blob = await r.blob();
         if (!blob || blob.size === 0) { failures.push(`${label}: leere Datei erhalten`); continue; }
         const mime = p.mimeType || blob.type || "application/octet-stream";
