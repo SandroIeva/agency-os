@@ -25,7 +25,9 @@ export default async function handler(req) {
     if (!r.ok) {
       const detail = (await r.text().catch(() => "")).slice(0, 500);
       console.error("[drive-download] drive returned", r.status, "for", fileId, "→", detail);
-      return new Response(`drive ${r.status}: ${detail}`, { status: r.status === 401 ? 401 : 502 });
+      // Pass the real Drive status through (404/403/…) so the client can show a
+      // precise, friendly reason instead of a generic 502.
+      return new Response(`drive ${r.status}: ${detail}`, { status: r.status });
     }
     return new Response(r.body, {
       status: 200,

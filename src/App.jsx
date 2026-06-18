@@ -12098,8 +12098,17 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     setUploading(true);
     const added = [];
     const failures = [];
+    const de = appLanguage === "de";
+    // Map a failure to a short, human reason. Raw provider detail is logged to the
+    // console for debugging, never shown to the user.
+    const reasonForStatus = (status) => {
+      if (status === 401 || status === 403) return de ? "Google-Drive-Zugriff abgelaufen – bitte neu mit Google anmelden" : "Google Drive access expired – please sign in with Google again";
+      if (status === 404) return de ? "Datei nicht zugänglich" : "file not accessible";
+      if (status === 0) return de ? "Netzwerkfehler" : "network error";
+      return de ? "konnte nicht von Google Drive geladen werden" : "couldn't be loaded from Google Drive";
+    };
     for (const p of media) {
-      const label = p.name || "Datei";
+      const label = p.name || (de ? "Datei" : "file");
       try {
         // Download via our edge proxy (server-side fetch → no browser CORS issue,
         // which is what broke large files / videos that redirect off googleapis.com).
@@ -12110,34 +12119,37 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
           if (nt) { token = nt; r = await fetch(proxyUrl, { headers: { "x-drive-token": token } }); }
         }
         if (!r.ok) {
-          let detail = ""; try { detail = (await r.text()).slice(0, 220); } catch {}
-          failures.push(`${label}: Download fehlgeschlagen (${r.status})${detail ? " – " + detail : ""}`);
+          let raw = ""; try { raw = await r.text(); } catch {}
+          console.error("[drive-import]", label, "download failed", r.status, raw);
+          failures.push({ label, reason: reasonForStatus(r.status) });
           continue;
         }
         const blob = await r.blob();
-        if (!blob || blob.size === 0) { failures.push(`${label}: leere Datei erhalten`); continue; }
+        if (!blob || blob.size === 0) { console.error("[drive-import]", label, "empty blob"); failures.push({ label, reason: de ? "leere Datei erhalten" : "received an empty file" }); continue; }
         const mime = p.mimeType || blob.type || "application/octet-stream";
         const ext = (p.name?.split(".").pop() || (mime.split("/")[1] || "bin")).toLowerCase();
         const path = `${session.user.id}/creations/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
         const { error: upErr } = await supabase.storage.from("user-files").upload(path, blob, { contentType: mime, upsert: false });
-        if (upErr) { failures.push(`${label}: Speichern fehlgeschlagen (${upErr.message})`); continue; }
+        if (upErr) { console.error("[drive-import]", label, "storage upload failed", upErr); failures.push({ label, reason: de ? "konnte nicht gespeichert werden" : "couldn't be saved" }); continue; }
         const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(path, 60 * 60 * 24 * 365);
         const { data, error } = await supabase.from("user_files").insert({
           user_id: session.user.id, org_id: userOrg.id, name: p.name || `drive.${ext}`,
           mime_type: mime, size_bytes: blob.size, storage_path: path,
           storage_provider: "supabase", public_url: signed?.signedUrl || null,
         }).select(FILE_COLS).single();
-        if (error) { failures.push(`${label}: ${error.message}`); continue; }
+        if (error) { console.error("[drive-import]", label, "db insert failed", error); failures.push({ label, reason: de ? "konnte nicht gespeichert werden" : "couldn't be saved" }); continue; }
         if (data) added.push(data);
-      } catch (e) { failures.push(`${label}: ${e?.message || "Fehler"}`); }
+      } catch (e) { console.error("[drive-import]", label, e); failures.push({ label, reason: de ? "unerwarteter Fehler" : "unexpected error" }); }
     }
     if (added.length) setFiles(prev => [...added, ...(prev || [])]);
     setUploading(false);
     if (failures.length) {
+      const lines = failures.slice(0, 6).map(f => `•  ${f.label}: ${f.reason}`);
+      const more = failures.length > 6 ? `\n…${de ? " und weitere" : " and more"}` : "";
       const head = added.length
-        ? (appLanguage === "de" ? `${added.length} importiert, ${failures.length} fehlgeschlagen:\n` : `${added.length} imported, ${failures.length} failed:\n`)
-        : (appLanguage === "de" ? "Import aus Google Drive fehlgeschlagen:\n" : "Import from Google Drive failed:\n");
-      alert(head + failures.slice(0, 5).join("\n"));
+        ? (de ? `${added.length} importiert, ${failures.length} konnten nicht hinzugefügt werden:` : `${added.length} imported, ${failures.length} couldn't be added:`)
+        : (de ? "Konnte nicht aus Google Drive importieren:" : "Couldn't import from Google Drive:");
+      alert(head + "\n" + lines.join("\n") + more);
     }
   };
   const importFromDriveRef = useRef(null);
