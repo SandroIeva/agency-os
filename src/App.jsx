@@ -12097,33 +12097,44 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     }
     setUploading(true);
     const added = [];
+    const failures = [];
     for (const p of media) {
+      const label = p.name || "Datei";
       try {
-        const dlUrl = `https://www.googleapis.com/drive/v3/files/${p.id}?alt=media&supportsAllDrives=true`;
-        let r = await fetch(dlUrl, { headers: { Authorization: `Bearer ${token}` } });
+        // Download via our edge proxy (server-side fetch → no browser CORS issue,
+        // which is what broke large files / videos that redirect off googleapis.com).
+        const proxyUrl = `/api/drive-download?id=${encodeURIComponent(p.id)}`;
+        let r = await fetch(proxyUrl, { headers: { "x-drive-token": token } });
         if (r.status === 401 && autoReLogin) {
           const nt = await autoReLogin();
-          if (nt) { token = nt; r = await fetch(dlUrl, { headers: { Authorization: `Bearer ${token}` } }); }
+          if (nt) { token = nt; r = await fetch(proxyUrl, { headers: { "x-drive-token": token } }); }
         }
-        if (!r.ok) continue;
+        if (!r.ok) { failures.push(`${label}: Download fehlgeschlagen (${r.status})`); continue; }
         const blob = await r.blob();
+        if (!blob || blob.size === 0) { failures.push(`${label}: leere Datei erhalten`); continue; }
         const mime = p.mimeType || blob.type || "application/octet-stream";
         const ext = (p.name?.split(".").pop() || (mime.split("/")[1] || "bin")).toLowerCase();
         const path = `${session.user.id}/creations/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
         const { error: upErr } = await supabase.storage.from("user-files").upload(path, blob, { contentType: mime, upsert: false });
-        if (upErr) continue;
+        if (upErr) { failures.push(`${label}: Speichern fehlgeschlagen (${upErr.message})`); continue; }
         const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(path, 60 * 60 * 24 * 365);
         const { data, error } = await supabase.from("user_files").insert({
           user_id: session.user.id, org_id: userOrg.id, name: p.name || `drive.${ext}`,
           mime_type: mime, size_bytes: blob.size, storage_path: path,
           storage_provider: "supabase", public_url: signed?.signedUrl || null,
         }).select(FILE_COLS).single();
-        if (!error && data) added.push(data);
-      } catch (_) { /* skip individual file */ }
+        if (error) { failures.push(`${label}: ${error.message}`); continue; }
+        if (data) added.push(data);
+      } catch (e) { failures.push(`${label}: ${e?.message || "Fehler"}`); }
     }
     if (added.length) setFiles(prev => [...added, ...(prev || [])]);
     setUploading(false);
-    if (!added.length) alert(appLanguage === "de" ? "Import aus Google Drive fehlgeschlagen." : "Import from Google Drive failed.");
+    if (failures.length) {
+      const head = added.length
+        ? (appLanguage === "de" ? `${added.length} importiert, ${failures.length} fehlgeschlagen:\n` : `${added.length} imported, ${failures.length} failed:\n`)
+        : (appLanguage === "de" ? "Import aus Google Drive fehlgeschlagen:\n" : "Import from Google Drive failed:\n");
+      alert(head + failures.slice(0, 5).join("\n"));
+    }
   };
   const importFromDriveRef = useRef(null);
   importFromDriveRef.current = importFromDrive;
