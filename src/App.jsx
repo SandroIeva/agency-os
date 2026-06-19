@@ -11705,6 +11705,31 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
   };
 
+  // ── Canvas resize (Figma-style corner handle) — proportional: changing the tile
+  // width scales the image (width:100%, auto height), so it never distorts. ──
+  const resizeState = useRef(null);
+  const onResizeDown = (e, item) => {
+    e.preventDefault();
+    e.stopPropagation(); // don't start a move-drag
+    setFrontTileId(item.id);
+    resizeState.current = { id: item.id, startX: e.clientX, startW: item.w || 240 };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+  };
+  const onResizeMove = (e) => {
+    const r = resizeState.current;
+    if (!r) return;
+    const w = Math.max(80, Math.min(1400, Math.round(r.startW + (e.clientX - r.startX) / zoom)));
+    setItems(prev => prev.map(i => i.id === r.id ? { ...i, w } : i));
+  };
+  const onResizeUp = (e) => {
+    const r = resizeState.current;
+    if (!r) return;
+    const it = items.find(i => i.id === r.id);
+    if (it) updateItem(it.id, { w: it.w });
+    resizeState.current = null;
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
+  };
+
   // All tags present across the active board's items
   const allTags = Array.from(new Set(items.flatMap(i => i.tags || []))).sort();
   const visibleItems = tagFilter ? items.filter(i => (i.tags || []).includes(tagFilter)) : items;
@@ -12071,17 +12096,23 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                 {/* inner box at native size, visually scaled from the top-left */}
                 <div style={{ position: "relative", width: 2000, height: 1400, transform: `scale(${zoom})`, transformOrigin: "0 0" }}>
                   {visibleItems.map(item => (
-                    <div key={item.id}
+                    <div key={item.id} className="mb-canvas-tile"
                       onPointerDown={e => onTilePointerDown(e, item)} onPointerMove={onTilePointerMove} onPointerUp={onTilePointerUp}
                       onDoubleClick={() => setSelectedItem(item)}
                       style={{ position: "absolute", left: item.x, top: item.y, width: item.w || 240, touchAction: "none", cursor: "grab",
-                        zIndex: item.id === frontTileId ? 30 : 1,
-                        borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.18)", border: `1px solid ${theme.borderFaint}`, background: theme.cardBg }}>
-                      {item.type === "image" ? (
-                        <img src={item.thumb_url || item.url} alt="" draggable={false} style={{ width: "100%", display: "block", pointerEvents: "none" }} />
-                      ) : (
-                        <div style={{ padding: 14, fontSize: 12, fontFamily: FONT, color: theme.text, wordBreak: "break-all" }}>🔗 {item.url}</div>
-                      )}
+                        zIndex: item.id === frontTileId ? 30 : 1 }}>
+                      {/* clipped content (rounded corners on the image) */}
+                      <div style={{ borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.18)", border: `1px solid ${theme.borderFaint}`, background: theme.cardBg }}>
+                        {item.type === "image" ? (
+                          <img src={item.thumb_url || item.url} alt="" draggable={false} style={{ width: "100%", display: "block", pointerEvents: "none" }} />
+                        ) : (
+                          <div style={{ padding: 14, fontSize: 12, fontFamily: FONT, color: theme.text, wordBreak: "break-all" }}>🔗 {item.url}</div>
+                        )}
+                      </div>
+                      {/* resize handle (bottom-right) — proportional scale, like Figma */}
+                      <div className="mb-resize-handle" onPointerDown={e => onResizeDown(e, item)} onPointerMove={onResizeMove} onPointerUp={onResizeUp}
+                        title={appLanguage === "de" ? "Größe ändern" : "Resize"}
+                        style={{ position: "absolute", right: -7, bottom: -7, width: 16, height: 16, borderRadius: 5, background: "#fff", border: `2px solid ${accent}`, boxShadow: "0 1px 4px rgba(0,0,0,0.35)", cursor: "nwse-resize", touchAction: "none" }} />
                     </div>
                   ))}
                 </div>
@@ -26489,6 +26520,9 @@ export default function CircularMenu() {
         /* Brand imagery: prompt overlay fades in on hover */
         .imagery-overlay { opacity: 0; transition: opacity 0.18s ease; }
         .imagery-tile:hover .imagery-overlay { opacity: 1; }
+        /* Moodboard canvas: corner resize handle appears on hover (Figma-style) */
+        .mb-resize-handle { opacity: 0; transition: opacity 0.15s ease; }
+        .mb-canvas-tile:hover .mb-resize-handle { opacity: 1; }
         /* Brand logo: discreet scale slider + copy/download actions, only on hover */
         .logo-scale-wrap { opacity: 0; transition: opacity 0.18s ease; }
         .logo-cell:hover .logo-scale-wrap { opacity: 1; }
