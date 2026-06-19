@@ -11658,11 +11658,13 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 
   // ── Canvas drag ──
   const dragState = useRef(null);
+  const [frontTileId, setFrontTileId] = useState(null); // last-clicked canvas tile → stacked on top
   const onTilePointerDown = (e, item) => {
     if (view !== "canvas") return;
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     e.preventDefault();
+    setFrontTileId(item.id); // bring the clicked tile to the front
     dragState.current = { id: item.id, offsetX: e.clientX - rect.left - (item.x || 0), offsetY: e.clientY - rect.top - (item.y || 0) };
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
   };
@@ -12052,6 +12054,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                     onPointerDown={e => onTilePointerDown(e, item)} onPointerMove={onTilePointerMove} onPointerUp={onTilePointerUp}
                     onDoubleClick={() => setSelectedItem(item)}
                     style={{ position: "absolute", left: item.x, top: item.y, width: item.w || 240, touchAction: "none", cursor: "grab",
+                      zIndex: item.id === frontTileId ? 30 : 1,
                       borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.18)", border: `1px solid ${theme.borderFaint}`, background: theme.cardBg }}>
                     {item.type === "image" ? (
                       <img src={item.thumb_url || item.url} alt="" draggable={false} style={{ width: "100%", display: "block", pointerEvents: "none" }} />
