@@ -12845,9 +12845,12 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
         )}
       </div>
 
-      {/* Details panel */}
+      {/* Details panel — semi-transparent frosted glass */}
       <div onClick={e => e.stopPropagation()}
-        style={{ width: 360, flexShrink: 0, display: "flex", flexDirection: "column", background: darkMode ? "rgba(20,18,30,0.96)" : "rgba(255,255,255,0.98)", borderLeft: `1px solid ${theme.borderFaint}` }}>
+        style={{ width: 360, flexShrink: 0, display: "flex", flexDirection: "column",
+          background: darkMode ? "rgba(28,26,44,0.45)" : "rgba(250,250,255,0.55)",
+          backdropFilter: "blur(36px)", WebkitBackdropFilter: "blur(36px)",
+          borderLeft: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"}` }}>
         {/* scrollable content */}
         <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 22px", display: "flex", flexDirection: "column", gap: 20 }}>
           {/* Header: Details + download */}
