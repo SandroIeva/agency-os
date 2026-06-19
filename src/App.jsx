@@ -11938,8 +11938,8 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 
   // ════════════════════════ BOARD DETAIL ════════════════════════
   const boardDetail = (
-    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
+    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0, pointerEvents: "auto" }}
+      exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)", pointerEvents: "none" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
       style={boardFullscreen ? { position: "fixed", inset: 0, zIndex: 200, display: "flex" } : panelWrap}>
       <div style={boardFullscreen ? { ...card, maxWidth: "none", width: "100%", height: "100%", borderRadius: 0, border: "none", boxShadow: "none", background: darkMode ? "#16161e" : "#ffffff" } : card}>
         {/* Header */}
@@ -12143,20 +12143,20 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
         </div>
       </div>
 
-      {/* Item detail / lightbox */}
-      <AnimatePresence>
-        {selectedItem && (
-          <MoodboardItemDetail item={selectedItem} items={visibleItems} boards={boards} currentBoardId={activeBoard?.id} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken}
-            onClose={() => setSelectedItem(null)} onDelete={() => deleteItem(selectedItem)} onSelect={(it) => setSelectedItem(it)}
-            onSave={(id, patch) => { updateItem(id, patch); setSelectedItem(prev => prev && prev.id === id ? { ...prev, ...patch } : prev); }}
-            onMove={async (boardId) => {
-              if (!selectedItem || boardId === activeBoard?.id) return;
-              await supabase.from("moodboard_items").update({ board_id: boardId }).eq("id", selectedItem.id);
-              setItems(prev => prev.filter(i => i.id !== selectedItem.id));
-              setSelectedItem(null);
-            }} />
-        )}
-      </AnimatePresence>
+      {/* Item detail / lightbox — rendered WITHOUT AnimatePresence on purpose: the
+          viewer returns a createPortal, and AnimatePresence + portal can leave an
+          orphaned full-screen overlay on <body> that blocks clicks app-wide. */}
+      {selectedItem && (
+        <MoodboardItemDetail item={selectedItem} items={visibleItems} boards={boards} currentBoardId={activeBoard?.id} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken}
+          onClose={() => setSelectedItem(null)} onDelete={() => deleteItem(selectedItem)} onSelect={(it) => setSelectedItem(it)}
+          onSave={(id, patch) => { updateItem(id, patch); setSelectedItem(prev => prev && prev.id === id ? { ...prev, ...patch } : prev); }}
+          onMove={async (boardId) => {
+            if (!selectedItem || boardId === activeBoard?.id) return;
+            await supabase.from("moodboard_items").update({ board_id: boardId }).eq("id", selectedItem.id);
+            setItems(prev => prev.filter(i => i.id !== selectedItem.id));
+            setSelectedItem(null);
+          }} />
+      )}
     </motion.div>
   );
   // In fullscreen, portal to <body> so the fixed overlay fills the real viewport
