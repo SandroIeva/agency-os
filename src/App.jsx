@@ -11506,6 +11506,14 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const creationsDrivePick = useRef(null); // CreationsTab registers its "import from Drive" fn here
   const [creationsUploading, setCreationsUploading] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false); // "Hinzufügen" dropdown (creations tab)
+  const [boardAddOpen, setBoardAddOpen] = useState(false); // "Hinzufügen" dropdown (inside an open board)
+  const [boardFullscreen, setBoardFullscreen] = useState(false); // board detail in true fullscreen (like the doc editor)
+  useEffect(() => {
+    if (!boardFullscreen) return;
+    const onKey = (e) => { if (e.key === "Escape") setBoardFullscreen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [boardFullscreen]);
   const docsCreate = useRef(null); // DocsTab registers its "new document" fn here
   const [boards, setBoards] = useState([]);
   const [loadingBoards, setLoadingBoards] = useState(true);
@@ -11549,7 +11557,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     setLoadingItems(false);
   };
 
-  const closeBoard = () => { setActiveBoard(null); setItems([]); setSelectedItem(null); loadBoards(); };
+  const closeBoard = () => { setBoardFullscreen(false); setActiveBoard(null); setItems([]); setSelectedItem(null); loadBoards(); };
 
   // ── Board CRUD ──
   const createBoard = async () => {
@@ -11875,35 +11883,93 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   }
 
   // ════════════════════════ BOARD DETAIL ════════════════════════
-  return (
+  const boardDetail = (
     <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
-      style={panelWrap}>
-      <div style={card}>
+      style={boardFullscreen ? { position: "fixed", inset: 0, zIndex: 200, display: "flex" } : panelWrap}>
+      <div style={boardFullscreen ? { ...card, maxWidth: "none", width: "100%", height: "100%", borderRadius: 0, border: "none", boxShadow: "none", background: darkMode ? "#16161e" : "#ffffff" } : card}>
         {/* Header */}
-        <div style={{ padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderBottom: `1px solid ${theme.borderFaint}`, flexWrap: "wrap" }}>
+        <div style={{ position: "relative", padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderBottom: `1px solid ${theme.borderFaint}` }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
             <motion.div whileTap={{ scale: 0.92 }} onClick={closeBoard} style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
             </motion.div>
             <input value={activeBoard.title} onChange={e => renameBoard(e.target.value)}
-              style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, background: "transparent", border: "none", outline: "none", letterSpacing: -0.2, minWidth: 0, maxWidth: 320 }} />
+              style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, background: "transparent", border: "none", outline: "none", letterSpacing: -0.2, minWidth: 0, maxWidth: 240 }} />
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            {/* View toggle */}
-            <div style={{ display: "inline-flex", padding: 3, borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}` }}>
-              {[["grid", t("moodboard.grid") || "Raster"], ["canvas", t("moodboard.canvas") || "Canvas"]].map(([m, label]) => (
-                <div key={m} onClick={() => setBoardView(m)} style={{ padding: "6px 14px", borderRadius: 999, cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 500, color: view === m ? "#fff" : theme.textDim, background: view === m ? accent : "transparent", transition: "all 0.2s ease" }}>{label}</div>
-              ))}
+
+          {/* Center: view toggle (same icon segmented style as Files/Assets).
+              List icon → tile gallery (grid); 4-square icon → free canvas. */}
+          <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}>
+            <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+              {[
+                ["grid", t("moodboard.grid") || "Kachelansicht", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>],
+                ["canvas", t("moodboard.canvas") || "Freemode", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>],
+              ].map(([m, label, icon]) => {
+                const on = view === m;
+                return (
+                  <motion.div key={m} whileTap={{ scale: 0.92 }} onClick={() => setBoardView(m)} title={label}
+                    style={{ width: 34, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                      background: on ? (darkMode ? "rgba(255,255,255,0.10)" : "#fff") : "transparent", color: on ? theme.text : theme.textDim,
+                      boxShadow: on ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>{icon}</motion.div>
+                );
+              })}
             </div>
-            <motion.div whileTap={{ scale: 0.96 }} onClick={() => fileInputRef.current?.click()} style={{ ...iconBtn, opacity: busy ? 0.6 : 1 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              {t("moodboard.upload") || "Hochladen"}
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {/* Fullscreen toggle — same button + behaviour as the document editor */}
+            <motion.div whileTap={{ scale: 0.92 }} onClick={() => setBoardFullscreen(f => !f)}
+              title={boardFullscreen ? (appLanguage === "de" ? "Vollbild beenden" : "Exit fullscreen") : (appLanguage === "de" ? "Vollbild" : "Fullscreen")}
+              style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${boardFullscreen ? accent : theme.borderFaint}`, background: boardFullscreen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent", color: boardFullscreen ? accent : theme.textDim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              {boardFullscreen ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+              )}
             </motion.div>
-            <motion.div whileTap={{ scale: 0.96 }} onClick={() => setShowUrlInput(v => !v)} style={iconBtn}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-              URL
-            </motion.div>
+            {/* Add dropdown — Upload / URL behind one button, like the Assets header */}
+            <div style={{ position: "relative" }}>
+              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setBoardAddOpen(o => !o)}
+                style={{ ...iconBtn, background: "#23232b", color: "#fff", border: "none", opacity: busy ? 0.6 : 1 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                {appLanguage === "de" ? "Hinzufügen" : "Add"}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 1, opacity: 0.8 }}><polyline points="6 9 12 15 18 9"/></svg>
+              </motion.div>
+              <AnimatePresence>
+                {boardAddOpen && (
+                  <>
+                    <div onClick={() => setBoardAddOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                    <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                      transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
+                      style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 41, minWidth: 230,
+                        background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
+                        boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden", padding: 6 }}>
+                      {[
+                        { key: "upload", label: appLanguage === "de" ? "Hochladen" : "Upload", sub: appLanguage === "de" ? "Vom Computer" : "From your computer",
+                          icon: <><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>,
+                          onClick: () => { setBoardAddOpen(false); fileInputRef.current?.click(); } },
+                        { key: "url", label: "URL", sub: appLanguage === "de" ? "Bild- oder Website-URL" : "Image or website URL",
+                          icon: <><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></>,
+                          onClick: () => { setBoardAddOpen(false); setShowUrlInput(true); } },
+                      ].map(it => (
+                        <div key={it.key} onClick={it.onClick} className="hover-row"
+                          style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
+                          <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                            background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{it.label}</div>
+                            <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{it.sub}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
             <input ref={fileInputRef} type="file" accept="image/*" multiple style={{ display: "none" }}
               onChange={e => { addImageFiles(Array.from(e.target.files || [])); e.target.value = ""; }} />
           </div>
@@ -12004,6 +12070,9 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
       </AnimatePresence>
     </motion.div>
   );
+  // In fullscreen, portal to <body> so the fixed overlay fills the real viewport
+  // (escapes any ancestor transform/backdrop-filter containing block), like the doc editor.
+  return boardFullscreen ? createPortal(boardDetail, document.body) : boardDetail;
 }
 
 // One Creations folder tile (Images / Videos) — preview collage + name + count.
