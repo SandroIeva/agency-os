@@ -12924,7 +12924,7 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
               {colors.length > 0 && (
                 <motion.div whileTap={{ scale: 0.9 }} onClick={() => setEditingColors(v => !v)} title={de ? "Farben bearbeiten" : "Edit colours"}
                   style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", border: `1.5px solid ${editingColors ? accent : theme.borderFaint}`, color: editingColors ? accent : theme.textDim, cursor: "pointer" }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="9" r="1.7" /><circle cx="12" cy="15" r="1.7" /></svg>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="12" cy="19" r="1.7" /></svg>
                 </motion.div>
               )}
             </div>
