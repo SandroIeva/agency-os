@@ -11929,7 +11929,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
             {/* Fullscreen toggle — same button + behaviour as the document editor */}
             <motion.div whileTap={{ scale: 0.92 }} onClick={() => setBoardFullscreen(f => !f)}
               title={boardFullscreen ? (appLanguage === "de" ? "Vollbild beenden" : "Exit fullscreen") : (appLanguage === "de" ? "Vollbild" : "Fullscreen")}
-              style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${boardFullscreen ? accent : theme.borderFaint}`, background: boardFullscreen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent", color: boardFullscreen ? accent : theme.textDim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              style={{ width: 34, height: 34, marginRight: 10, borderRadius: "50%", border: `1px solid ${boardFullscreen ? accent : theme.borderFaint}`, background: boardFullscreen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent", color: boardFullscreen ? accent : theme.textDim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               {boardFullscreen ? (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
               ) : (
