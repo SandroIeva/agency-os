@@ -11660,21 +11660,27 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const dragState = useRef(null);
   const onTilePointerDown = (e, item) => {
     if (view !== "canvas") return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
     e.preventDefault();
-    const rect = canvasRef.current.getBoundingClientRect();
-    dragState.current = { id: item.id, offsetX: e.clientX - rect.left - item.x, offsetY: e.clientY - rect.top - item.y };
-    e.currentTarget.setPointerCapture(e.pointerId);
+    dragState.current = { id: item.id, offsetX: e.clientX - rect.left - (item.x || 0), offsetY: e.clientY - rect.top - (item.y || 0) };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
   };
   const onTilePointerMove = (e) => {
-    if (!dragState.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = Math.max(0, e.clientX - rect.left - dragState.current.offsetX);
-    const y = Math.max(0, e.clientY - rect.top - dragState.current.offsetY);
-    setItems(prev => prev.map(i => i.id === dragState.current.id ? { ...i, x, y } : i));
+    // Capture the drag target up-front: the setItems updater runs on a later render,
+    // by which point dragState.current may already be null (pointer-up raced in) —
+    // reading `.id` off it then would throw. Use the local snapshot instead.
+    const d = dragState.current;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!d || !rect) return;
+    const x = Math.max(0, e.clientX - rect.left - d.offsetX);
+    const y = Math.max(0, e.clientY - rect.top - d.offsetY);
+    setItems(prev => prev.map(i => i.id === d.id ? { ...i, x, y } : i));
   };
   const onTilePointerUp = (e) => {
-    if (!dragState.current) return;
-    const it = items.find(i => i.id === dragState.current.id);
+    const d = dragState.current;
+    if (!d) return;
+    const it = items.find(i => i.id === d.id);
     if (it) updateItem(it.id, { x: it.x, y: it.y });
     dragState.current = null;
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
