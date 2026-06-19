@@ -12845,11 +12845,11 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
         )}
       </div>
 
-      {/* Details panel — semi-transparent frosted glass */}
+      {/* Details panel — frosted glass, kept opaque enough to stay readable */}
       <div onClick={e => e.stopPropagation()}
         style={{ width: 360, flexShrink: 0, display: "flex", flexDirection: "column",
-          background: darkMode ? "rgba(28,26,44,0.45)" : "rgba(250,250,255,0.55)",
-          backdropFilter: "blur(36px)", WebkitBackdropFilter: "blur(36px)",
+          background: darkMode ? "rgba(24,22,38,0.86)" : "rgba(252,252,255,0.92)",
+          backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
           borderLeft: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"}` }}>
         {/* scrollable content */}
         <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 22px", display: "flex", flexDirection: "column", gap: 20 }}>
