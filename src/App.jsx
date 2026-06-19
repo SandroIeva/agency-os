@@ -11522,6 +11522,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const [loadingItems, setLoadingItems] = useState(false);
   const [view, setView] = useState("grid");          // grid | canvas
   const [tagFilter, setTagFilter] = useState(null);
+  const [colorFilter, setColorFilter] = useState(null); // filter board items by a palette colour
   const [urlInput, setUrlInput] = useState("");
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -11551,13 +11552,14 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     setActiveBoard(board);
     setView(board.view_mode || "grid");
     setTagFilter(null);
+    setColorFilter(null);
     setLoadingItems(true);
     const { data } = await supabase.from("moodboard_items").select("*").eq("board_id", board.id).order("position", { ascending: true });
     setItems(data || []);
     setLoadingItems(false);
   };
 
-  const closeBoard = () => { setBoardFullscreen(false); setZoom(1); setActiveBoard(null); setItems([]); setSelectedItem(null); loadBoards(); };
+  const closeBoard = () => { setBoardFullscreen(false); setZoom(1); setTagFilter(null); setColorFilter(null); setActiveBoard(null); setItems([]); setSelectedItem(null); loadBoards(); };
 
   // ── Board CRUD ──
   const createBoard = async () => {
@@ -11732,7 +11734,9 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 
   // All tags present across the active board's items
   const allTags = Array.from(new Set(items.flatMap(i => i.tags || []))).sort();
-  const visibleItems = tagFilter ? items.filter(i => (i.tags || []).includes(tagFilter)) : items;
+  const visibleItems = items.filter(i =>
+    (!tagFilter || (i.tags || []).includes(tagFilter)) &&
+    (!colorFilter || (i.colors || []).includes(colorFilter)));
 
   const panelWrap = {
     // zIndex 5 to match every other top-level view panel (Brand, Kanban, …).
@@ -12046,16 +12050,22 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1 }}>{t("moodboard.palette") || "Palette"}</span>
                 <div style={{ display: "flex", gap: 4 }}>
-                  {activeBoard.color_palette.slice(0, 8).map((c, i) => (
-                    <div key={i} title={c} onClick={() => navigator.clipboard?.writeText(c)} style={{ width: 18, height: 18, borderRadius: 5, background: c, border: `1px solid ${theme.borderFaint}`, cursor: "pointer" }} />
-                  ))}
+                  {activeBoard.color_palette.slice(0, 8).map((c, i) => {
+                    const on = colorFilter === c;
+                    return (
+                      <div key={i} title={on ? (t("moodboard.allTags") || "Alle anzeigen") : c} onClick={() => setColorFilter(f => f === c ? null : c)}
+                        style={{ width: 18, height: 18, borderRadius: 5, background: c, cursor: "pointer", border: `1px solid ${theme.borderFaint}`,
+                          boxShadow: on ? `0 0 0 2px ${theme.cardBg}, 0 0 0 4px ${accent}` : "none",
+                          transform: on ? "scale(1.1)" : "none", transition: "transform 0.15s ease, box-shadow 0.15s ease" }} />
+                    );
+                  })}
                 </div>
               </div>
             )}
             {allTags.length > 0 && (
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                 {[null, ...allTags].map((tg, i) => (
-                  <div key={i} onClick={() => setTagFilter(tg)} style={{ padding: "3px 10px", borderRadius: 999, cursor: "pointer", fontSize: 11, fontFamily: FONT, fontWeight: 500, background: tagFilter === tg ? accent : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"), color: tagFilter === tg ? "#fff" : theme.textDim }}>{tg === null ? (t("moodboard.allTags") || "Alle") : "#" + tg}</div>
+                  <div key={i} onClick={() => { setTagFilter(tg); if (tg === null) setColorFilter(null); }} style={{ padding: "3px 10px", borderRadius: 999, cursor: "pointer", fontSize: 11, fontFamily: FONT, fontWeight: 500, background: tagFilter === tg ? accent : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"), color: tagFilter === tg ? "#fff" : theme.textDim }}>{tg === null ? (t("moodboard.allTags") || "Alle") : "#" + tg}</div>
                 ))}
               </div>
             )}
