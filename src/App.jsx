@@ -11482,7 +11482,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, canEdit
 // a Grid (overview of everything) and a freeform Canvas (drag images around).
 // Images upload to the public brand-assets bucket so their URLs can later be
 // reused as reference inputs for image/video generation (Higgsfield etc.).
-function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, docFullscreen, setDocFullscreen, getProviderToken, ensureValidToken, autoReLogin }) {
+function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, docFullscreen, setDocFullscreen, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys }) {
   // Assets has three tabs: Moodboards (curated boards), Creations (your generated
   // outputs) and Inspirations (saved references).
   const [tab, setTab] = useState("moodboards");
@@ -12136,7 +12136,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
       {/* Item detail / lightbox */}
       <AnimatePresence>
         {selectedItem && (
-          <MoodboardItemDetail item={selectedItem} items={visibleItems} boards={boards} currentBoardId={activeBoard?.id} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage}
+          <MoodboardItemDetail item={selectedItem} items={visibleItems} boards={boards} currentBoardId={activeBoard?.id} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken}
             onClose={() => setSelectedItem(null)} onDelete={() => deleteItem(selectedItem)} onSelect={(it) => setSelectedItem(it)}
             onSave={(id, patch) => { updateItem(id, patch); setSelectedItem(prev => prev && prev.id === id ? { ...prev, ...patch } : prev); }}
             onMove={async (boardId) => {
@@ -12645,7 +12645,7 @@ function MoodboardGridTile({ item, i, theme, darkMode, accent, onOpen }) {
 
 // Item detail — full-screen viewer: large image left, live-saving details panel
 // right (palette + eyedropper, note, tag chips, download), with prev/next nav.
-function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, theme, darkMode, accent, t, appLanguage = "de", onClose, onDelete, onSelect, onSave, onMove }) {
+function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, theme, darkMode, accent, t, appLanguage = "de", llmProvider, llmKeys, ensureValidToken, onClose, onDelete, onSelect, onSave, onMove }) {
   const de = appLanguage === "de";
   const [name, setName] = useState(item.name || "");
   const [note, setNote] = useState(item.note || "");
@@ -12654,14 +12654,18 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
   const [editingColors, setEditingColors] = useState(false);
   const [copied, setCopied] = useState(null);
   const [recording, setRecording] = useState(false);
+  const [genLoading, setGenLoading] = useState(false);
+  const [promptCopied, setPromptCopied] = useState(false);
   const recognitionRef = useRef(null);
+  const prompt = item.metadata?.prompt || "";
+  const aiConnected = !!((llmKeys && llmProvider && llmKeys[llmProvider]) || llmProvider === "gemini");
   const colorInputRef = useRef(null);
   const colors = item.colors || [];
   const tags = item.tags || [];
   const currentBoard = boards.find(b => b.id === currentBoardId);
 
   // Re-sync the editable fields when navigating to another item.
-  useEffect(() => { setName(item.name || ""); setNote(item.note || ""); setMoveOpen(false); setEditingColors(false); }, [item.id]); // eslint-disable-line
+  useEffect(() => { setName(item.name || ""); setNote(item.note || ""); setMoveOpen(false); setEditingColors(false); setGenLoading(false); setPromptCopied(false); }, [item.id]); // eslint-disable-line
   useEffect(() => () => { try { recognitionRef.current?.stop(); } catch (_) {} }, []);
   // Auto-save name + note shortly after typing stops (no save button anywhere).
   useEffect(() => {
@@ -12697,6 +12701,48 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
     try { await navigator.clipboard.writeText(hex); }
     catch (_) { try { const ta = document.createElement("textarea"); ta.value = hex; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); } catch (_) {} }
     setCopied(hex); setTimeout(() => setCopied(c => c === hex ? null : c), 1400);
+  };
+
+  // Generate a reusable image-generation prompt from the image (same as Brand → Bildsprache).
+  const generatePrompt = async () => {
+    if (item.type !== "image" || genLoading) return;
+    const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
+    let oauthToken = null;
+    if (llmProvider === "gemini" && !apiKey && ensureValidToken) { try { oauthToken = await ensureValidToken(); } catch (_) {} }
+    if (!apiKey && !oauthToken) { alert(de ? "Kein KI-Modell verbunden. Bitte in Settings einen Key hinterlegen." : "No AI model connected. Add a key in Settings."); return; }
+    setGenLoading(true);
+    try {
+      const sys = de
+        ? "Du bist ein erfahrener Art Director und Prompt-Engineer für KI-Bildgeneratoren (Midjourney, DALL·E, Gemini). Du analysierst Bilder extrem genau und übersetzt ihre visuelle DNA in reichhaltige, produktionsreife Prompts."
+        : "You are a senior art director and prompt engineer for AI image generators (Midjourney, DALL·E, Gemini). You analyse images with great precision and translate their visual DNA into rich, production-ready prompts.";
+      const msg = de
+        ? "Analysiere dieses Bild sehr gründlich und schreibe daraus EINEN ausführlichen, wiederverwendbaren Bildgenerierungs-Prompt auf Deutsch, mit dem eine KI ein neues Bild in exakt derselben Ästhetik erzeugen kann. Erfasse Motiv, Umgebung, Komposition, Licht, Farbpalette/Stimmung, Stil/Medium, Texturen und (bei Fotos) Kamera-Anmutung. Schreibe EINEN flüssigen, bildhaften Prompt (ca. 5–8 Sätze), keine Stichpunkte. Antworte NUR mit dem Prompt, ohne Einleitung, Überschrift oder Anführungszeichen."
+        : "Analyse this image very thoroughly and turn it into ONE detailed, reusable image-generation prompt in English that lets an AI produce a new image in exactly the same aesthetic. Capture subject, environment, composition, lighting, colour palette/mood, style/medium, textures and (for photos) camera character. Write ONE flowing, vivid prompt (about 5–8 sentences), not bullet points. Reply with ONLY the prompt — no preamble, heading or quotation marks.";
+      const resp = await fetch("/api/chat-multi", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg, systemPrompt: sys, image: item.url, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 3000 }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      const text = ((data?.content || []).find(c => c.type === "text")?.text || data?.content?.[0]?.text || "").trim();
+      if (resp.ok && text) onSave(item.id, { metadata: { ...(item.metadata || {}), prompt: text } });
+      else alert((de ? "Prompt-Generierung fehlgeschlagen: " : "Prompt generation failed: ") + (data?.error || `HTTP ${resp.status}`));
+    } catch (e) { alert((de ? "Fehler: " : "Error: ") + (e?.message || e)); }
+    setGenLoading(false);
+  };
+  const copyPrompt = async () => {
+    if (!prompt) return;
+    let ok = false;
+    try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(prompt); ok = true; } } catch (_) { ok = false; }
+    if (!ok) {
+      try {
+        const ta = document.createElement("textarea"); ta.value = prompt; ta.setAttribute("readonly", "");
+        ta.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;";
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        try { ta.setSelectionRange(0, prompt.length); } catch (_) {}
+        document.execCommand("copy"); ta.remove(); ok = true;
+      } catch (_) {}
+    }
+    if (ok) { setPromptCopied(true); setTimeout(() => setPromptCopied(false), 1600); }
   };
   const pickColor = async () => {
     if (typeof window !== "undefined" && window.EyeDropper) {
@@ -12898,6 +12944,43 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
             <textarea value={note} onChange={e => setNote(e.target.value)} onBlur={flush} placeholder={t("moodboard.notePlaceholder") || (de ? "Notiz hinzufügen…" : "Add a note…")} rows={5}
               style={{ width: "100%", boxSizing: "border-box", padding: "11px 13px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13.5, fontFamily: FONT, lineHeight: 1.55, outline: "none", resize: "vertical", minHeight: 92 }} />
           </div>
+
+          {/* Image prompt — generate a reusable AI prompt from the image, with copy */}
+          {item.type === "image" && (
+            <div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <span style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1 }}>{de ? "Bild-Prompt" : "Image prompt"}</span>
+                {prompt && !genLoading && (
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <motion.div whileTap={{ scale: 0.92 }} onClick={copyPrompt} title={de ? "Prompt kopieren" : "Copy prompt"}
+                      style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${promptCopied ? accent : theme.borderFaint}`, color: promptCopied ? accent : theme.textDim, cursor: "pointer" }}>
+                      {promptCopied
+                        ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                        : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>}
+                    </motion.div>
+                    <motion.div whileTap={{ scale: 0.92 }} onClick={generatePrompt} title={de ? "Neu generieren" : "Regenerate"}
+                      style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, cursor: "pointer" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6M1 20v-6h6" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" /></svg>
+                    </motion.div>
+                  </div>
+                )}
+              </div>
+              {genLoading ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 13px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+                  <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }} style={{ width: 15, height: 15, borderRadius: "50%", border: `2px solid ${accent}`, borderTopColor: "transparent" }} />
+                  <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>{de ? "Bild wird analysiert…" : "Analysing image…"}</span>
+                </div>
+              ) : prompt ? (
+                <div className="no-scrollbar" style={{ maxHeight: 150, overflowY: "auto", padding: "11px 13px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 12.5, fontFamily: FONT, lineHeight: 1.55, whiteSpace: "pre-wrap", userSelect: "text" }}>{prompt}</div>
+              ) : (
+                <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }} onClick={generatePrompt}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 9, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: accent + "1f", border: `1px solid ${accent}33`, color: accent, fontSize: 13, fontFamily: FONT, fontWeight: 600 }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z" /></svg>
+                  {de ? "Prompt generieren" : "Generate prompt"}
+                </motion.div>
+              )}
+            </div>
+          )}
 
           {/* Tags as chips */}
           <div>
@@ -23607,7 +23690,7 @@ export default function CircularMenu() {
         {/* ASSETS VIEW (Brand → Assets): Moodboards / Creations / Inspirations */}
         <AnimatePresence>
           {currentView === "assets" && (
-            <AssetsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive} orgMembers={orgMembers} createNotification={createNotification} docDeepLink={docDeepLink} docFullscreen={docFullscreen} setDocFullscreen={setDocFullscreen} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} onBack={() => setCurrentView("dashboard")} />
+            <AssetsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive} orgMembers={orgMembers} createNotification={createNotification} docDeepLink={docDeepLink} docFullscreen={docFullscreen} setDocFullscreen={setDocFullscreen} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} llmProvider={llmProvider} llmKeys={llmKeys} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
