@@ -12651,13 +12651,18 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
   const [note, setNote] = useState(item.note || "");
   const [tagInput, setTagInput] = useState("");
   const [moveOpen, setMoveOpen] = useState(false);
+  const [editingColors, setEditingColors] = useState(false);
+  const [copied, setCopied] = useState(null);
+  const [recording, setRecording] = useState(false);
+  const recognitionRef = useRef(null);
   const colorInputRef = useRef(null);
   const colors = item.colors || [];
   const tags = item.tags || [];
   const currentBoard = boards.find(b => b.id === currentBoardId);
 
   // Re-sync the editable fields when navigating to another item.
-  useEffect(() => { setName(item.name || ""); setNote(item.note || ""); setMoveOpen(false); }, [item.id]); // eslint-disable-line
+  useEffect(() => { setName(item.name || ""); setNote(item.note || ""); setMoveOpen(false); setEditingColors(false); }, [item.id]); // eslint-disable-line
+  useEffect(() => () => { try { recognitionRef.current?.stop(); } catch (_) {} }, []);
   // Auto-save name + note shortly after typing stops (no save button anywhere).
   useEffect(() => {
     const id = item.id;
@@ -12688,6 +12693,11 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
   // Colours: pick from the image with the eyedropper (fallback: native colour input).
   const addColor = (hex) => { if (hex && !colors.includes(hex)) onSave(item.id, { colors: [...colors, hex] }); };
   const removeColor = (hex) => onSave(item.id, { colors: colors.filter(c => c !== hex) });
+  const copyColor = async (hex) => {
+    try { await navigator.clipboard.writeText(hex); }
+    catch (_) { try { const ta = document.createElement("textarea"); ta.value = hex; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); } catch (_) {} }
+    setCopied(hex); setTimeout(() => setCopied(c => c === hex ? null : c), 1400);
+  };
   const pickColor = async () => {
     if (typeof window !== "undefined" && window.EyeDropper) {
       try { const res = await new window.EyeDropper().open(); addColor(res.sRGBHex); } catch (_) { /* cancelled */ }
@@ -12706,6 +12716,29 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     } catch (_) { window.open(item.url, "_blank", "noopener"); }
+  };
+
+  // Dictation for the note (voice-to-text), matching the rest of the app.
+  const startDictation = () => {
+    const SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (!SR) { alert(de ? "Spracherkennung wird in diesem Browser nicht unterstützt." : "Speech recognition isn't supported in this browser."); return; }
+    if (recording) { try { recognitionRef.current?.stop(); } catch (_) {} return; }
+    const rec = new SR();
+    rec.lang = de ? "de-DE" : "en-US";
+    rec.continuous = true; rec.interimResults = true;
+    let base = note; let needsSpace = base.length > 0 && !base.endsWith(" ");
+    rec.onresult = (event) => {
+      let working = base;
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const tr = event.results[i][0].transcript;
+        if (event.results[i].isFinal) { working += (needsSpace ? " " : "") + tr.trim(); base = working; needsSpace = true; }
+        else { working = base + (needsSpace ? " " : "") + tr; }
+        setNote(working);
+      }
+    };
+    rec.onerror = (e) => { if (e.error !== "no-speech") console.error("[dictation]", e.error); };
+    rec.onend = () => { setRecording(false); recognitionRef.current = null; };
+    rec.start(); recognitionRef.current = rec; setRecording(true);
   };
 
   // Prev / next within the current (filtered) item list.
@@ -12823,25 +12856,45 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
             </AnimatePresence>
           </div>
 
-          {/* Colours + eyedropper */}
+          {/* Colours: click a swatch to copy its hex; + adds via eyedropper; edit toggles delete mode */}
           <div>
             {label(t("moodboard.colors") || (de ? "Farben" : "Colors"))}
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               {colors.map((c, i) => (
-                <div key={i} title={c} onClick={() => removeColor(c)}
-                  style={{ width: 26, height: 26, borderRadius: 8, background: c, border: `1px solid ${darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.12)"}`, cursor: "pointer" }} />
+                <div key={i} title={editingColors ? (de ? "Entfernen" : "Remove") : c}
+                  onClick={() => editingColors ? removeColor(c) : copyColor(c)}
+                  style={{ position: "relative", width: 26, height: 26, borderRadius: 8, background: c, border: `1px solid ${darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.12)"}`, cursor: "pointer" }}>
+                  {editingColors && (
+                    <div style={{ position: "absolute", inset: 0, borderRadius: 8, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                    </div>
+                  )}
+                </div>
               ))}
               <motion.div whileTap={{ scale: 0.9 }} onClick={pickColor} title={de ? "Farbe aus Bild wählen" : "Pick a colour from the image"}
                 style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", border: `1.5px dashed ${theme.borderFaint}`, color: theme.textDim, cursor: "pointer" }}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
               </motion.div>
+              {colors.length > 0 && (
+                <motion.div whileTap={{ scale: 0.9 }} onClick={() => setEditingColors(v => !v)} title={de ? "Farben bearbeiten" : "Edit colours"}
+                  style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", border: `1.5px solid ${editingColors ? accent : theme.borderFaint}`, color: editingColors ? accent : theme.textDim, cursor: "pointer" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                </motion.div>
+              )}
             </div>
-            <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textFaint, marginTop: 6 }}>{de ? "Plus klicken, dann eine Farbe im Bild picken. Swatch anklicken zum Entfernen." : "Click + then pick a colour in the image. Click a swatch to remove."}</div>
+            {copied && <div style={{ fontSize: 11, fontFamily: FONT, color: accent, marginTop: 7 }}>{copied} {de ? "kopiert" : "copied"}</div>}
           </div>
 
           {/* Note */}
           <div>
-            {label(t("moodboard.note") || (de ? "Notiz" : "Note"))}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <span style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1 }}>{t("moodboard.note") || (de ? "Notiz" : "Note")}</span>
+              <motion.div whileTap={{ scale: 0.92 }} onClick={startDictation} title={recording ? (de ? "Diktat stoppen" : "Stop dictation") : (de ? "Diktieren" : "Dictate")}
+                style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                  border: `1px solid ${recording ? "rgba(239,68,68,0.4)" : theme.borderFaint}`, background: recording ? "rgba(239,68,68,0.12)" : "transparent", color: recording ? "#EF4444" : theme.textDim }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
+              </motion.div>
+            </div>
             <textarea value={note} onChange={e => setNote(e.target.value)} onBlur={flush} placeholder={t("moodboard.notePlaceholder") || (de ? "Notiz hinzufügen…" : "Add a note…")} rows={5}
               style={{ width: "100%", boxSizing: "border-box", padding: "11px 13px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13.5, fontFamily: FONT, lineHeight: 1.55, outline: "none", resize: "vertical", minHeight: 92 }} />
           </div>
