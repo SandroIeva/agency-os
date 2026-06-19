@@ -12136,9 +12136,15 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
       {/* Item detail / lightbox */}
       <AnimatePresence>
         {selectedItem && (
-          <MoodboardItemDetail item={selectedItem} items={visibleItems} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage}
+          <MoodboardItemDetail item={selectedItem} items={visibleItems} boards={boards} currentBoardId={activeBoard?.id} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage}
             onClose={() => setSelectedItem(null)} onDelete={() => deleteItem(selectedItem)} onSelect={(it) => setSelectedItem(it)}
-            onSave={(id, patch) => { updateItem(id, patch); setSelectedItem(prev => prev && prev.id === id ? { ...prev, ...patch } : prev); }} />
+            onSave={(id, patch) => { updateItem(id, patch); setSelectedItem(prev => prev && prev.id === id ? { ...prev, ...patch } : prev); }}
+            onMove={async (boardId) => {
+              if (!selectedItem || boardId === activeBoard?.id) return;
+              await supabase.from("moodboard_items").update({ board_id: boardId }).eq("id", selectedItem.id);
+              setItems(prev => prev.filter(i => i.id !== selectedItem.id));
+              setSelectedItem(null);
+            }} />
         )}
       </AnimatePresence>
     </motion.div>
@@ -12639,25 +12645,36 @@ function MoodboardGridTile({ item, i, theme, darkMode, accent, onOpen }) {
 
 // Item detail — full-screen viewer: large image left, live-saving details panel
 // right (palette + eyedropper, note, tag chips, download), with prev/next nav.
-function MoodboardItemDetail({ item, items = [], theme, darkMode, accent, t, appLanguage = "de", onClose, onDelete, onSelect, onSave }) {
+function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, theme, darkMode, accent, t, appLanguage = "de", onClose, onDelete, onSelect, onSave, onMove }) {
   const de = appLanguage === "de";
+  const [name, setName] = useState(item.name || "");
   const [note, setNote] = useState(item.note || "");
   const [tagInput, setTagInput] = useState("");
+  const [moveOpen, setMoveOpen] = useState(false);
   const colorInputRef = useRef(null);
   const colors = item.colors || [];
   const tags = item.tags || [];
+  const currentBoard = boards.find(b => b.id === currentBoardId);
 
-  // Re-sync the note when navigating to another item.
-  useEffect(() => { setNote(item.note || ""); }, [item.id]); // eslint-disable-line
-  // Auto-save the note shortly after typing stops (no save button anywhere).
+  // Re-sync the editable fields when navigating to another item.
+  useEffect(() => { setName(item.name || ""); setNote(item.note || ""); setMoveOpen(false); }, [item.id]); // eslint-disable-line
+  // Auto-save name + note shortly after typing stops (no save button anywhere).
   useEffect(() => {
-    if (note === (item.note || "")) return;
-    const id = item.id, val = note;
-    const tid = setTimeout(() => onSave(id, { note: val }), 600);
+    const id = item.id;
+    const patch = {};
+    if (note !== (item.note || "")) patch.note = note;
+    if (name !== (item.name || "")) patch.name = name;
+    if (!Object.keys(patch).length) return;
+    const tid = setTimeout(() => onSave(id, patch), 600);
     return () => clearTimeout(tid);
-  }, [note, item.id]); // eslint-disable-line
-  const flushNote = () => { if (note !== (item.note || "")) onSave(item.id, { note }); };
-  const close = () => { flushNote(); onClose(); };
+  }, [name, note, item.id]); // eslint-disable-line
+  const flush = () => {
+    const patch = {};
+    if (note !== (item.note || "")) patch.note = note;
+    if (name !== (item.name || "")) patch.name = name;
+    if (Object.keys(patch).length) onSave(item.id, patch);
+  };
+  const close = () => { flush(); onClose(); };
 
   // Tags as chips: comma or Enter commits the current word.
   const addTag = (raw) => {
@@ -12695,7 +12712,7 @@ function MoodboardItemDetail({ item, items = [], theme, darkMode, accent, t, app
   const idx = items.findIndex(i => i.id === item.id);
   const prevItem = idx > 0 ? items[idx - 1] : null;
   const nextItem = idx >= 0 && idx < items.length - 1 ? items[idx + 1] : null;
-  const goTo = (it) => { if (!it) return; flushNote(); onSelect?.(it); };
+  const goTo = (it) => { if (!it) return; flush(); onSelect?.(it); };
 
   // Keyboard: Esc closes, ←/→ navigate (unless typing in a field).
   useEffect(() => {
@@ -12722,9 +12739,9 @@ function MoodboardItemDetail({ item, items = [], theme, darkMode, accent, t, app
     </motion.div>
   );
 
-  return (
+  return createPortal((
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={close}
-      style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(8,8,12,0.82)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", display: "flex" }}>
+      style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(8,8,12,0.82)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", display: "flex" }}>
       <input ref={colorInputRef} type="color" onChange={e => addColor(e.target.value)} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
 
       {/* Image area */}
@@ -12750,24 +12767,60 @@ function MoodboardItemDetail({ item, items = [], theme, darkMode, accent, t, app
       </div>
 
       {/* Details panel */}
-      <div onClick={e => e.stopPropagation()} className="no-scrollbar"
-        style={{ width: 360, flexShrink: 0, overflowY: "auto", background: darkMode ? "rgba(20,18,30,0.96)" : "rgba(255,255,255,0.98)", borderLeft: `1px solid ${theme.borderFaint}`, display: "flex", flexDirection: "column" }}>
-        <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 22 }}>
-          {/* Header */}
+      <div onClick={e => e.stopPropagation()}
+        style={{ width: 360, flexShrink: 0, display: "flex", flexDirection: "column", background: darkMode ? "rgba(20,18,30,0.96)" : "rgba(255,255,255,0.98)", borderLeft: `1px solid ${theme.borderFaint}` }}>
+        {/* scrollable content */}
+        <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 22px", display: "flex", flexDirection: "column", gap: 20 }}>
+          {/* Header: Details + download */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.details") || "Details"}</div>
-            <div style={{ display: "flex", gap: 6 }}>
-              {item.type === "image" && (
-                <motion.div whileTap={{ scale: 0.92 }} onClick={download} title={de ? "Herunterladen" : "Download"}
-                  style={{ width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, cursor: "pointer" }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                </motion.div>
-              )}
-              <motion.div whileTap={{ scale: 0.92 }} onClick={onDelete} title={t("common.delete") || "Löschen"}
-                style={{ width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${theme.borderFaint}`, color: "#e5484d", cursor: "pointer" }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></svg>
+            {item.type === "image" && (
+              <motion.div whileTap={{ scale: 0.92 }} onClick={download} title={de ? "Herunterladen" : "Download"}
+                style={{ width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, cursor: "pointer" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
               </motion.div>
+            )}
+          </div>
+
+          {/* Name */}
+          <div>
+            {label(de ? "Name" : "Name")}
+            <input value={name} onChange={e => setName(e.target.value)} onBlur={flush} placeholder={de ? "Bildname…" : "Image name…"}
+              style={{ width: "100%", boxSizing: "border-box", padding: "10px 13px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, fontWeight: 500, outline: "none" }} />
+          </div>
+
+          {/* Moodboard — shows the current board, click to move to another */}
+          <div style={{ position: "relative" }}>
+            {label(de ? "Moodboard" : "Moodboard")}
+            <div onClick={() => setMoveOpen(o => !o)}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "10px 13px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", cursor: "pointer" }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, fontFamily: FONT, color: theme.text, minWidth: 0 }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+                <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentBoard?.title || "—"}</span>
+              </span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
             </div>
+            <AnimatePresence>
+              {moveOpen && (
+                <>
+                  <div onClick={() => setMoveOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 1 }} />
+                  <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }}
+                    className="no-scrollbar" style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 2, maxHeight: 240, overflowY: "auto", background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 12, boxShadow: "0 16px 44px rgba(0,0,0,0.22)", padding: 5 }}>
+                    {boards.map(b => {
+                      const cur = b.id === currentBoardId;
+                      return (
+                        <div key={b.id} onClick={() => { if (!cur) onMove?.(b.id); setMoveOpen(false); }} className="hover-row"
+                          style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", borderRadius: 8, cursor: "pointer" }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={cur ? accent : theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+                          <span style={{ flex: 1, fontSize: 13, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.title}</span>
+                          {cur && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>}
+                        </div>
+                      );
+                    })}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Colours + eyedropper */}
@@ -12775,21 +12828,21 @@ function MoodboardItemDetail({ item, items = [], theme, darkMode, accent, t, app
             {label(t("moodboard.colors") || (de ? "Farben" : "Colors"))}
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               {colors.map((c, i) => (
-                <div key={i} className="mb-swatch" title={c} onClick={() => removeColor(c)}
-                  style={{ position: "relative", width: 26, height: 26, borderRadius: 8, background: c, border: `1px solid ${darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.12)"}`, cursor: "pointer" }} />
+                <div key={i} title={c} onClick={() => removeColor(c)}
+                  style={{ width: 26, height: 26, borderRadius: 8, background: c, border: `1px solid ${darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.12)"}`, cursor: "pointer" }} />
               ))}
               <motion.div whileTap={{ scale: 0.9 }} onClick={pickColor} title={de ? "Farbe aus Bild wählen" : "Pick a colour from the image"}
                 style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", border: `1.5px dashed ${theme.borderFaint}`, color: theme.textDim, cursor: "pointer" }}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
               </motion.div>
             </div>
-            <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textFaint, marginTop: 6 }}>{de ? "Klick auf das Plus, dann eine Farbe im Bild picken. Swatch anklicken zum Entfernen." : "Click + then pick a colour in the image. Click a swatch to remove."}</div>
+            <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textFaint, marginTop: 6 }}>{de ? "Plus klicken, dann eine Farbe im Bild picken. Swatch anklicken zum Entfernen." : "Click + then pick a colour in the image. Click a swatch to remove."}</div>
           </div>
 
           {/* Note */}
           <div>
             {label(t("moodboard.note") || (de ? "Notiz" : "Note"))}
-            <textarea value={note} onChange={e => setNote(e.target.value)} onBlur={flushNote} placeholder={t("moodboard.notePlaceholder") || (de ? "Notiz hinzufügen…" : "Add a note…")} rows={5}
+            <textarea value={note} onChange={e => setNote(e.target.value)} onBlur={flush} placeholder={t("moodboard.notePlaceholder") || (de ? "Notiz hinzufügen…" : "Add a note…")} rows={5}
               style={{ width: "100%", boxSizing: "border-box", padding: "11px 13px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13.5, fontFamily: FONT, lineHeight: 1.55, outline: "none", resize: "vertical", minHeight: 92 }} />
           </div>
 
@@ -12815,9 +12868,18 @@ function MoodboardItemDetail({ item, items = [], theme, darkMode, accent, t, app
               style={{ width: "100%", boxSizing: "border-box", marginTop: tags.length ? 8 : 0, padding: "10px 12px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none" }} />
           </div>
         </div>
+
+        {/* Footer: delete bottom-right */}
+        <div style={{ padding: "14px 22px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", justifyContent: "flex-end" }}>
+          <motion.div whileTap={{ scale: 0.96 }} onClick={onDelete} title={t("common.delete") || "Löschen"}
+            style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 14px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(232,72,77,0.4)" : "rgba(232,72,77,0.35)"}`, color: "#e5484d", cursor: "pointer", fontSize: 13, fontFamily: FONT, fontWeight: 500 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></svg>
+            {t("common.delete") || (de ? "Löschen" : "Delete")}
+          </motion.div>
+        </div>
       </div>
     </motion.div>
-  );
+  ), document.body);
 }
 
 // Lightweight rich-text editor (no deps) for editing Brand section text. Uses a
