@@ -11557,7 +11557,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     setLoadingItems(false);
   };
 
-  const closeBoard = () => { setBoardFullscreen(false); setActiveBoard(null); setItems([]); setSelectedItem(null); loadBoards(); };
+  const closeBoard = () => { setBoardFullscreen(false); setZoom(1); setActiveBoard(null); setItems([]); setSelectedItem(null); loadBoards(); };
 
   // ── Board CRUD ──
   const createBoard = async () => {
@@ -11659,13 +11659,29 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   // ── Canvas drag ──
   const dragState = useRef(null);
   const [frontTileId, setFrontTileId] = useState(null); // last-clicked canvas tile → stacked on top
+  const [zoom, setZoom] = useState(1); // canvas zoom (freemode)
+  const clampZoom = (z) => Math.min(2, Math.max(0.4, Math.round(z * 100) / 100));
+  const zoomBtn = { width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim };
+  // Ctrl/⌘ + wheel (and trackpad pinch) zooms the canvas. Native non-passive
+  // listener so preventDefault actually stops the browser's page-zoom.
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el || view !== "canvas") return;
+    const onWheelZoom = (e) => { if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault(); setZoom(z => Math.min(2, Math.max(0.4, Math.round((z - e.deltaY * 0.002) * 100) / 100))); };
+    el.addEventListener("wheel", onWheelZoom, { passive: false });
+    return () => el.removeEventListener("wheel", onWheelZoom);
+  }, [view, activeBoard?.id]);
   const onTilePointerDown = (e, item) => {
     if (view !== "canvas") return;
-    const rect = canvasRef.current?.getBoundingClientRect();
+    const el = canvasRef.current;
+    const rect = el?.getBoundingClientRect();
     if (!rect) return;
     e.preventDefault();
     setFrontTileId(item.id); // bring the clicked tile to the front
-    dragState.current = { id: item.id, offsetX: e.clientX - rect.left - (item.x || 0), offsetY: e.clientY - rect.top - (item.y || 0) };
+    // Convert pointer → unscaled canvas coords (account for scroll + zoom).
+    const cx = (e.clientX - rect.left + el.scrollLeft) / zoom;
+    const cy = (e.clientY - rect.top + el.scrollTop) / zoom;
+    dragState.current = { id: item.id, offsetX: cx - (item.x || 0), offsetY: cy - (item.y || 0) };
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
   };
   const onTilePointerMove = (e) => {
@@ -11673,10 +11689,11 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     // by which point dragState.current may already be null (pointer-up raced in) —
     // reading `.id` off it then would throw. Use the local snapshot instead.
     const d = dragState.current;
-    const rect = canvasRef.current?.getBoundingClientRect();
+    const el = canvasRef.current;
+    const rect = el?.getBoundingClientRect();
     if (!d || !rect) return;
-    const x = Math.max(0, e.clientX - rect.left - d.offsetX);
-    const y = Math.max(0, e.clientY - rect.top - d.offsetY);
+    const x = Math.max(0, (e.clientX - rect.left + el.scrollLeft) / zoom - d.offsetX);
+    const y = Math.max(0, (e.clientY - rect.top + el.scrollTop) / zoom - d.offsetY);
     setItems(prev => prev.map(i => i.id === d.id ? { ...i, x, y } : i));
   };
   const onTilePointerUp = (e) => {
@@ -12045,26 +12062,42 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
               ))}
             </div>
           ) : (
-            // ── CANVAS (freeform drag) ──
+            // ── CANVAS (freeform drag + zoom) ──
+            <>
             <div ref={canvasRef} style={{ position: "absolute", inset: 0, overflow: "auto",
-              backgroundImage: `radial-gradient(${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"} 1px, transparent 1px)`, backgroundSize: "22px 22px" }}>
-              <div style={{ position: "relative", width: 2000, height: 1400 }}>
-                {visibleItems.map(item => (
-                  <div key={item.id}
-                    onPointerDown={e => onTilePointerDown(e, item)} onPointerMove={onTilePointerMove} onPointerUp={onTilePointerUp}
-                    onDoubleClick={() => setSelectedItem(item)}
-                    style={{ position: "absolute", left: item.x, top: item.y, width: item.w || 240, touchAction: "none", cursor: "grab",
-                      zIndex: item.id === frontTileId ? 30 : 1,
-                      borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.18)", border: `1px solid ${theme.borderFaint}`, background: theme.cardBg }}>
-                    {item.type === "image" ? (
-                      <img src={item.thumb_url || item.url} alt="" draggable={false} style={{ width: "100%", display: "block", pointerEvents: "none" }} />
-                    ) : (
-                      <div style={{ padding: 14, fontSize: 12, fontFamily: FONT, color: theme.text, wordBreak: "break-all" }}>🔗 {item.url}</div>
-                    )}
-                  </div>
-                ))}
+              backgroundImage: `radial-gradient(${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"} 1px, transparent 1px)`, backgroundSize: `${22 * zoom}px ${22 * zoom}px` }}>
+              {/* outer box sized to the scaled content so scrollbars match the zoom */}
+              <div style={{ position: "relative", width: 2000 * zoom, height: 1400 * zoom }}>
+                {/* inner box at native size, visually scaled from the top-left */}
+                <div style={{ position: "relative", width: 2000, height: 1400, transform: `scale(${zoom})`, transformOrigin: "0 0" }}>
+                  {visibleItems.map(item => (
+                    <div key={item.id}
+                      onPointerDown={e => onTilePointerDown(e, item)} onPointerMove={onTilePointerMove} onPointerUp={onTilePointerUp}
+                      onDoubleClick={() => setSelectedItem(item)}
+                      style={{ position: "absolute", left: item.x, top: item.y, width: item.w || 240, touchAction: "none", cursor: "grab",
+                        zIndex: item.id === frontTileId ? 30 : 1,
+                        borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.18)", border: `1px solid ${theme.borderFaint}`, background: theme.cardBg }}>
+                      {item.type === "image" ? (
+                        <img src={item.thumb_url || item.url} alt="" draggable={false} style={{ width: "100%", display: "block", pointerEvents: "none" }} />
+                      ) : (
+                        <div style={{ padding: 14, fontSize: 12, fontFamily: FONT, color: theme.text, wordBreak: "break-all" }}>🔗 {item.url}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
+            {/* Zoom control */}
+            <div style={{ position: "absolute", right: 16, bottom: 16, zIndex: 40, display: "flex", alignItems: "center", gap: 2, padding: 4, borderRadius: 12, background: darkMode ? "rgba(28,28,38,0.92)" : "rgba(255,255,255,0.94)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 8px 24px rgba(0,0,0,0.15)" }}>
+              <motion.div whileTap={{ scale: 0.9 }} onClick={() => setZoom(z => clampZoom(z - 0.1))} title={appLanguage === "de" ? "Verkleinern" : "Zoom out"} style={zoomBtn}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </motion.div>
+              <div onClick={() => setZoom(1)} title={appLanguage === "de" ? "Zurücksetzen" : "Reset"} style={{ minWidth: 46, textAlign: "center", fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.text, cursor: "pointer", userSelect: "none" }}>{Math.round(zoom * 100)}%</div>
+              <motion.div whileTap={{ scale: 0.9 }} onClick={() => setZoom(z => clampZoom(z + 0.1))} title={appLanguage === "de" ? "Vergrößern" : "Zoom in"} style={zoomBtn}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </motion.div>
+            </div>
+            </>
           )}
         </div>
       </div>
