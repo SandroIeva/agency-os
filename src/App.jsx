@@ -12112,7 +12112,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                       {/* resize handle (bottom-right) — proportional scale, like Figma */}
                       <div className="mb-resize-handle" onPointerDown={e => onResizeDown(e, item)} onPointerMove={onResizeMove} onPointerUp={onResizeUp}
                         title={appLanguage === "de" ? "Größe ändern" : "Resize"}
-                        style={{ position: "absolute", right: -7, bottom: -7, width: 16, height: 16, borderRadius: 5, background: "#fff", border: `2px solid ${accent}`, boxShadow: "0 1px 4px rgba(0,0,0,0.35)", cursor: "nwse-resize", touchAction: "none" }} />
+                        style={{ position: "absolute", right: -7, bottom: -7, width: 16, height: 16, borderRadius: "50%", background: "#fff", border: `2px solid ${accent}`, boxShadow: "0 1px 4px rgba(0,0,0,0.35)", cursor: "nwse-resize", touchAction: "none" }} />
                     </div>
                   ))}
                 </div>
