@@ -12820,11 +12820,16 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
 
   return createPortal((
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={close}
-      style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(8,8,12,0.82)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", display: "flex" }}>
+      style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", overflow: "hidden", background: darkMode ? "rgba(10,8,18,0.55)" : "rgba(238,238,248,0.55)", backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)" }}>
+      {/* Ambient colour pulled from the image so the frosted sidebar picks up its hues */}
+      {item.type === "image" && (
+        <div aria-hidden style={{ position: "absolute", inset: 0, zIndex: 0, backgroundImage: `url("${item.url}")`, backgroundSize: "cover", backgroundPosition: "center", filter: "blur(80px) saturate(1.5)", transform: "scale(1.25)", opacity: darkMode ? 0.5 : 0.4, pointerEvents: "none" }} />
+      )}
+      <div aria-hidden style={{ position: "absolute", inset: 0, zIndex: 0, background: darkMode ? "rgba(8,7,16,0.42)" : "rgba(250,250,255,0.3)", pointerEvents: "none" }} />
       <input ref={colorInputRef} type="color" onChange={e => addColor(e.target.value)} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
 
       {/* Image area */}
-      <div onClick={close} style={{ flex: 1, minWidth: 0, position: "relative", display: "flex", alignItems: "center", justifyContent: "center", padding: "56px 40px" }}>
+      <div onClick={close} style={{ flex: 1, minWidth: 0, position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "56px 40px" }}>
         {item.type === "image"
           ? <img src={item.url} alt="" onClick={e => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }} />
           : <a href={item.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ padding: 40, color: "#fff", fontFamily: FONT, wordBreak: "break-all" }}>{item.url}</a>}
@@ -12845,12 +12850,12 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
         )}
       </div>
 
-      {/* Details panel — frosted glass, kept opaque enough to stay readable */}
+      {/* Details panel — translucent frosted glass that picks up the ambient colour */}
       <div onClick={e => e.stopPropagation()}
-        style={{ width: 360, flexShrink: 0, display: "flex", flexDirection: "column",
-          background: darkMode ? "rgba(24,22,38,0.86)" : "rgba(252,252,255,0.92)",
-          backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
-          borderLeft: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"}` }}>
+        style={{ width: 360, flexShrink: 0, position: "relative", zIndex: 1, display: "flex", flexDirection: "column",
+          background: darkMode ? "rgba(22,20,40,0.6)" : "rgba(255,255,255,0.66)",
+          backdropFilter: "blur(40px) saturate(1.3)", WebkitBackdropFilter: "blur(40px) saturate(1.3)",
+          borderLeft: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}` }}>
         {/* scrollable content */}
         <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 22px", display: "flex", flexDirection: "column", gap: 20 }}>
           {/* Header: Details + download */}
