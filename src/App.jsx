@@ -12428,7 +12428,7 @@ function MoodboardCard({ board, theme, darkMode, accent, grad, glow, onOpen, onD
         border: `1px solid ${hover ? "transparent" : theme.borderFaint}`,
         boxShadow: hover ? glow : "0 4px 14px rgba(0,0,0,0.06)", transition: "box-shadow 0.3s ease, border-color 0.3s ease" }}>
       {/* Cover collage */}
-      <div style={{ position: "absolute", inset: 0, display: "grid", gridTemplateColumns: covers.length > 1 ? "1fr 1fr" : "1fr", gridAutoRows: "1fr", gap: 2, background: covers.length ? "transparent" : grad }}>
+      <div style={{ position: "absolute", inset: 0, display: "grid", gridTemplateColumns: covers.length > 1 ? "1fr 1fr" : "1fr", gridAutoRows: "1fr", gap: 0, background: covers.length ? "transparent" : grad }}>
         {covers.length === 0 ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
