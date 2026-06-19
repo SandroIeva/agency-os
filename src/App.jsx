@@ -12136,9 +12136,9 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
       {/* Item detail / lightbox */}
       <AnimatePresence>
         {selectedItem && (
-          <MoodboardItemDetail item={selectedItem} theme={theme} darkMode={darkMode} accent={accent} t={t}
-            onClose={() => setSelectedItem(null)} onDelete={() => deleteItem(selectedItem)}
-            onSave={(patch) => { updateItem(selectedItem.id, patch); setSelectedItem(prev => ({ ...prev, ...patch })); }} />
+          <MoodboardItemDetail item={selectedItem} items={visibleItems} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage}
+            onClose={() => setSelectedItem(null)} onDelete={() => deleteItem(selectedItem)} onSelect={(it) => setSelectedItem(it)}
+            onSave={(id, patch) => { updateItem(id, patch); setSelectedItem(prev => prev && prev.id === id ? { ...prev, ...patch } : prev); }} />
         )}
       </AnimatePresence>
     </motion.div>
@@ -12637,53 +12637,185 @@ function MoodboardGridTile({ item, i, theme, darkMode, accent, onOpen }) {
   );
 }
 
-// Item detail overlay — large preview + note + tags + delete.
-function MoodboardItemDetail({ item, theme, darkMode, accent, t, onClose, onDelete, onSave }) {
+// Item detail — full-screen viewer: large image left, live-saving details panel
+// right (palette + eyedropper, note, tag chips, download), with prev/next nav.
+function MoodboardItemDetail({ item, items = [], theme, darkMode, accent, t, appLanguage = "de", onClose, onDelete, onSelect, onSave }) {
+  const de = appLanguage === "de";
   const [note, setNote] = useState(item.note || "");
-  const [tagsText, setTagsText] = useState((item.tags || []).join(", "));
-  const save = () => {
-    const tags = tagsText.split(",").map(s => s.trim().replace(/^#/, "")).filter(Boolean);
-    onSave({ note, tags });
-    onClose();
+  const [tagInput, setTagInput] = useState("");
+  const colorInputRef = useRef(null);
+  const colors = item.colors || [];
+  const tags = item.tags || [];
+
+  // Re-sync the note when navigating to another item.
+  useEffect(() => { setNote(item.note || ""); }, [item.id]); // eslint-disable-line
+  // Auto-save the note shortly after typing stops (no save button anywhere).
+  useEffect(() => {
+    if (note === (item.note || "")) return;
+    const id = item.id, val = note;
+    const tid = setTimeout(() => onSave(id, { note: val }), 600);
+    return () => clearTimeout(tid);
+  }, [note, item.id]); // eslint-disable-line
+  const flushNote = () => { if (note !== (item.note || "")) onSave(item.id, { note }); };
+  const close = () => { flushNote(); onClose(); };
+
+  // Tags as chips: comma or Enter commits the current word.
+  const addTag = (raw) => {
+    const tag = (raw || "").trim().replace(/^#/, "");
+    setTagInput("");
+    if (!tag || tags.some(x => x.toLowerCase() === tag.toLowerCase())) return;
+    onSave(item.id, { tags: [...tags, tag] });
   };
+  const removeTag = (tag) => onSave(item.id, { tags: tags.filter(x => x !== tag) });
+
+  // Colours: pick from the image with the eyedropper (fallback: native colour input).
+  const addColor = (hex) => { if (hex && !colors.includes(hex)) onSave(item.id, { colors: [...colors, hex] }); };
+  const removeColor = (hex) => onSave(item.id, { colors: colors.filter(c => c !== hex) });
+  const pickColor = async () => {
+    if (typeof window !== "undefined" && window.EyeDropper) {
+      try { const res = await new window.EyeDropper().open(); addColor(res.sRGBHex); } catch (_) { /* cancelled */ }
+    } else { colorInputRef.current?.click(); }
+  };
+
+  // Download the image.
+  const download = async () => {
+    try {
+      const res = await fetch(item.url);
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      const ext = blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : blob.type.includes("gif") ? "gif" : "jpg";
+      a.download = `${(item.name || "moodboard").replace(/[^\w.-]+/g, "_")}.${ext}`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    } catch (_) { window.open(item.url, "_blank", "noopener"); }
+  };
+
+  // Prev / next within the current (filtered) item list.
+  const idx = items.findIndex(i => i.id === item.id);
+  const prevItem = idx > 0 ? items[idx - 1] : null;
+  const nextItem = idx >= 0 && idx < items.length - 1 ? items[idx + 1] : null;
+  const goTo = (it) => { if (!it) return; flushNote(); onSelect?.(it); };
+
+  // Keyboard: Esc closes, ←/→ navigate (unless typing in a field).
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") { close(); return; }
+      const typing = /^(INPUT|TEXTAREA)$/.test(e.target?.tagName || "");
+      if (typing) return;
+      if (e.key === "ArrowLeft") goTo(prevItem);
+      else if (e.key === "ArrowRight") goTo(nextItem);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }); // eslint-disable-line
+
+  const label = (txt) => <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>{txt}</div>;
+  const navBtn = (dir, it) => (
+    <motion.div whileTap={{ scale: 0.9 }} onClick={() => goTo(it)}
+      style={{ width: 42, height: 42, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+        background: "rgba(255,255,255,0.12)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.18)",
+        color: "#fff", cursor: it ? "pointer" : "not-allowed", opacity: it ? 1 : 0.3 }}>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        {dir === "prev" ? <path d="M15 18l-6-6 6-6" /> : <path d="M9 18l6-6-6-6" />}
+      </svg>
+    </motion.div>
+  );
+
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      onClick={onClose}
-      style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 30 }}>
-      <motion.div initial={{ scale: 0.94, y: 12 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 8 }} onClick={e => e.stopPropagation()}
-        style={{ display: "flex", gap: 0, maxWidth: 900, maxHeight: "84vh", background: theme.cardBg, borderRadius: 18, overflow: "hidden", border: `1px solid ${theme.borderFaint}` }}>
-        <div style={{ flex: "1 1 auto", display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "#0c0c12" : "#f0f0f3", minWidth: 360 }}>
-          {item.type === "image"
-            ? <img src={item.url} alt="" style={{ maxWidth: "100%", maxHeight: "84vh", display: "block", objectFit: "contain" }} />
-            : <a href={item.url} target="_blank" rel="noreferrer" style={{ padding: 40, color: accent, fontFamily: FONT, wordBreak: "break-all" }}>{item.url}</a>}
-        </div>
-        <div style={{ width: 280, flexShrink: 0, padding: 20, display: "flex", flexDirection: "column", gap: 16, borderLeft: `1px solid ${theme.borderFaint}` }}>
-          <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.details") || "Details"}</div>
-          {item.colors?.length > 0 && (
-            <div>
-              <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{t("moodboard.colors") || "Farben"}</div>
-              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>{item.colors.map((c, i) => <div key={i} title={c} onClick={() => navigator.clipboard?.writeText(c)} style={{ width: 24, height: 24, borderRadius: 6, background: c, border: `1px solid ${theme.borderFaint}`, cursor: "pointer" }} />)}</div>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={close}
+      style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(8,8,12,0.82)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", display: "flex" }}>
+      <input ref={colorInputRef} type="color" onChange={e => addColor(e.target.value)} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
+
+      {/* Image area */}
+      <div onClick={close} style={{ flex: 1, minWidth: 0, position: "relative", display: "flex", alignItems: "center", justifyContent: "center", padding: "56px 40px" }}>
+        {item.type === "image"
+          ? <img src={item.url} alt="" onClick={e => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }} />
+          : <a href={item.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ padding: 40, color: "#fff", fontFamily: FONT, wordBreak: "break-all" }}>{item.url}</a>}
+
+        {/* Close */}
+        <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); close(); }} title={de ? "Schließen" : "Close"}
+          style={{ position: "absolute", top: 18, left: 18, width: 38, height: 38, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.12)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.18)", color: "#fff", cursor: "pointer" }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+        </motion.div>
+
+        {/* Prev / next */}
+        {items.length > 1 && (
+          <div onClick={e => e.stopPropagation()} style={{ position: "absolute", bottom: 22, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 14 }}>
+            {navBtn("prev", prevItem)}
+            <span style={{ fontSize: 12.5, fontFamily: FONT, color: "rgba(255,255,255,0.7)", minWidth: 54, textAlign: "center" }}>{idx + 1} / {items.length}</span>
+            {navBtn("next", nextItem)}
+          </div>
+        )}
+      </div>
+
+      {/* Details panel */}
+      <div onClick={e => e.stopPropagation()} className="no-scrollbar"
+        style={{ width: 360, flexShrink: 0, overflowY: "auto", background: darkMode ? "rgba(20,18,30,0.96)" : "rgba(255,255,255,0.98)", borderLeft: `1px solid ${theme.borderFaint}`, display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 22 }}>
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.details") || "Details"}</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {item.type === "image" && (
+                <motion.div whileTap={{ scale: 0.92 }} onClick={download} title={de ? "Herunterladen" : "Download"}
+                  style={{ width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, cursor: "pointer" }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                </motion.div>
+              )}
+              <motion.div whileTap={{ scale: 0.92 }} onClick={onDelete} title={t("common.delete") || "Löschen"}
+                style={{ width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${theme.borderFaint}`, color: "#e5484d", cursor: "pointer" }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></svg>
+              </motion.div>
             </div>
-          )}
-          <div>
-            <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{t("moodboard.note") || "Notiz"}</div>
-            <textarea value={note} onChange={e => setNote(e.target.value)} placeholder={t("moodboard.notePlaceholder") || "Notiz hinzufügen…"} rows={3}
-              style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none", resize: "vertical" }} />
           </div>
+
+          {/* Colours + eyedropper */}
           <div>
-            <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{t("moodboard.tags") || "Tags"}</div>
-            <input value={tagsText} onChange={e => setTagsText(e.target.value)} placeholder="minimal, warm, typo…"
-              style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none" }} />
+            {label(t("moodboard.colors") || (de ? "Farben" : "Colors"))}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              {colors.map((c, i) => (
+                <div key={i} className="mb-swatch" title={c} onClick={() => removeColor(c)}
+                  style={{ position: "relative", width: 26, height: 26, borderRadius: 8, background: c, border: `1px solid ${darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.12)"}`, cursor: "pointer" }} />
+              ))}
+              <motion.div whileTap={{ scale: 0.9 }} onClick={pickColor} title={de ? "Farbe aus Bild wählen" : "Pick a colour from the image"}
+                style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", border: `1.5px dashed ${theme.borderFaint}`, color: theme.textDim, cursor: "pointer" }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+              </motion.div>
+            </div>
+            <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textFaint, marginTop: 6 }}>{de ? "Klick auf das Plus, dann eine Farbe im Bild picken. Swatch anklicken zum Entfernen." : "Click + then pick a colour in the image. Click a swatch to remove."}</div>
           </div>
-          <div style={{ flex: 1 }} />
-          <div style={{ display: "flex", gap: 8 }}>
-            <motion.div whileTap={{ scale: 0.96 }} onClick={save} style={{ flex: 1, textAlign: "center", padding: "9px 0", borderRadius: 10, background: accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>{t("common.save") || "Speichern"}</motion.div>
-            <motion.div whileTap={{ scale: 0.96 }} onClick={onDelete} title={t("common.delete") || "Löschen"} style={{ padding: "9px 12px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, color: "#e5484d", cursor: "pointer", display: "flex", alignItems: "center" }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-            </motion.div>
+
+          {/* Note */}
+          <div>
+            {label(t("moodboard.note") || (de ? "Notiz" : "Note"))}
+            <textarea value={note} onChange={e => setNote(e.target.value)} onBlur={flushNote} placeholder={t("moodboard.notePlaceholder") || (de ? "Notiz hinzufügen…" : "Add a note…")} rows={5}
+              style={{ width: "100%", boxSizing: "border-box", padding: "11px 13px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13.5, fontFamily: FONT, lineHeight: 1.55, outline: "none", resize: "vertical", minHeight: 92 }} />
+          </div>
+
+          {/* Tags as chips */}
+          <div>
+            {label(t("moodboard.tags") || "Tags")}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", padding: tags.length ? "6px 6px 2px" : 0 }}>
+              {tags.map((tg) => (
+                <div key={tg} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 6px 5px 11px", borderRadius: 999, background: accent + "1f", color: accent, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
+                  {tg}
+                  <span onClick={() => removeTag(tg)} style={{ cursor: "pointer", display: "flex", opacity: 0.8 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                  </span>
+                </div>
+              ))}
+            </div>
+            <input value={tagInput} onChange={e => setTagInput(e.target.value)} onBlur={() => addTag(tagInput)}
+              onKeyDown={e => {
+                if (e.key === "," || e.key === "Enter") { e.preventDefault(); addTag(tagInput); }
+                else if (e.key === "Backspace" && !tagInput && tags.length) removeTag(tags[tags.length - 1]);
+              }}
+              placeholder={de ? "Tag eingeben, Komma trennt…" : "Type a tag, comma to add…"}
+              style={{ width: "100%", boxSizing: "border-box", marginTop: tags.length ? 8 : 0, padding: "10px 12px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none" }} />
           </div>
         </div>
-      </motion.div>
+      </div>
     </motion.div>
   );
 }
