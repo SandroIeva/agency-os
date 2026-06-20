@@ -12955,7 +12955,7 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
           <div>
             {label(de ? "Name" : "Name")}
             <input className="mb-field" value={name} onChange={e => setName(e.target.value)} onBlur={flush} placeholder={de ? "Bildname…" : "Image name…"}
-              style={{ width: "100%", boxSizing: "border-box", padding: "10px 13px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none" }} />
+              style={{ width: "100%", boxSizing: "border-box", padding: "10px 13px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none" }} />
           </div>
 
           {/* Moodboard — shows the current board, click to move to another */}
@@ -13032,7 +13032,7 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
               </motion.div>
             </div>
             <textarea className="mb-field" value={note} onChange={e => setNote(e.target.value)} onBlur={flush} placeholder={t("moodboard.notePlaceholder") || (de ? "Notiz hinzufügen…" : "Add a note…")} rows={5}
-              style={{ width: "100%", boxSizing: "border-box", padding: "11px 13px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, lineHeight: 1.55, outline: "none", resize: "vertical", minHeight: 92 }} />
+              style={{ width: "100%", boxSizing: "border-box", padding: "11px 13px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, lineHeight: 1.55, outline: "none", resize: "vertical", minHeight: 92 }} />
           </div>
 
           {/* Image prompt — generate a reusable AI prompt from the image, with copy */}
@@ -13091,7 +13091,7 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
                 else if (e.key === "Backspace" && !tagInput && tags.length) removeTag(tags[tags.length - 1]);
               }}
               placeholder={de ? "Tag eingeben, Komma trennt…" : "Type a tag, comma to add…"}
-              style={{ width: "100%", boxSizing: "border-box", marginTop: tags.length ? 8 : 0, padding: "10px 12px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none" }} />
+              style={{ width: "100%", boxSizing: "border-box", marginTop: tags.length ? 8 : 0, padding: "10px 12px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none" }} />
           </div>
         </div>
 
