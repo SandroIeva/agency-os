@@ -12913,7 +12913,7 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
             {item.type === "image" && (
               <div style={{ position: "relative" }}>
                 <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} onClick={() => setShareOpen(o => !o)} title={de ? "Teilen" : "Share"}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 13px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: shareOpen ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") : "transparent", color: theme.text, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
+                  style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 13px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: shareOpen ? (darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.09)") : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)"), color: theme.text, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></svg>
                   {de ? "Teilen" : "Share"}
                 </motion.div>
@@ -13094,8 +13094,8 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
 
         {/* Footer: delete bottom-right */}
         <div style={{ padding: "14px 22px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", justifyContent: "flex-end" }}>
-          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} onClick={onDelete} title={t("common.delete") || "Löschen"}
-            style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 13px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.text, cursor: "pointer", fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
+          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96, backgroundColor: darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.09)" }} onClick={onDelete} title={t("common.delete") || "Löschen"}
+            style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 13px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)", color: theme.text, cursor: "pointer", fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></svg>
             {t("common.delete") || (de ? "Löschen" : "Delete")}
           </motion.div>
