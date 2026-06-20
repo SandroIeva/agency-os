@@ -12147,7 +12147,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           viewer returns a createPortal, and AnimatePresence + portal can leave an
           orphaned full-screen overlay on <body> that blocks clicks app-wide. */}
       {selectedItem && (
-        <MoodboardItemDetail item={selectedItem} items={visibleItems} boards={boards} currentBoardId={activeBoard?.id} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken}
+        <MoodboardItemDetail item={selectedItem} items={visibleItems} boards={boards} currentBoardId={activeBoard?.id} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} onUploadDrive={onUploadDrive}
           onClose={() => setSelectedItem(null)} onDelete={() => deleteItem(selectedItem)} onSelect={(it) => setSelectedItem(it)}
           onSave={(id, patch) => { updateItem(id, patch); setSelectedItem(prev => prev && prev.id === id ? { ...prev, ...patch } : prev); }}
           onMove={async (boardId) => {
@@ -12655,7 +12655,7 @@ function MoodboardGridTile({ item, i, theme, darkMode, accent, onOpen }) {
 
 // Item detail — full-screen viewer: large image left, live-saving details panel
 // right (palette + eyedropper, note, tag chips, download), with prev/next nav.
-function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, theme, darkMode, accent, t, appLanguage = "de", llmProvider, llmKeys, ensureValidToken, onClose, onDelete, onSelect, onSave, onMove }) {
+function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, theme, darkMode, accent, t, appLanguage = "de", llmProvider, llmKeys, ensureValidToken, onUploadDrive, onClose, onDelete, onSelect, onSave, onMove }) {
   const de = appLanguage === "de";
   const [name, setName] = useState(item.name || "");
   const [note, setNote] = useState(item.note || "");
@@ -12666,8 +12666,11 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
   const [recording, setRecording] = useState(false);
   const [genLoading, setGenLoading] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
-  const [imgCopied, setImgCopied] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareMsg, setShareMsg] = useState(null);
+  const [driveBusy, setDriveBusy] = useState(false);
   const recognitionRef = useRef(null);
+  const flashShare = (msg) => { setShareMsg(msg); setTimeout(() => setShareMsg(m => m === msg ? null : m), 1900); };
   const prompt = item.metadata?.prompt || "";
   const aiConnected = !!((llmKeys && llmProvider && llmKeys[llmProvider]) || llmProvider === "gemini");
   const colorInputRef = useRef(null);
@@ -12676,7 +12679,7 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
   const currentBoard = boards.find(b => b.id === currentBoardId);
 
   // Re-sync the editable fields when navigating to another item.
-  useEffect(() => { setName(item.name || ""); setNote(item.note || ""); setMoveOpen(false); setEditingColors(false); setGenLoading(false); setPromptCopied(false); setImgCopied(false); }, [item.id]); // eslint-disable-line
+  useEffect(() => { setName(item.name || ""); setNote(item.note || ""); setMoveOpen(false); setEditingColors(false); setGenLoading(false); setPromptCopied(false); setShareOpen(false); }, [item.id]); // eslint-disable-line
   useEffect(() => () => { try { recognitionRef.current?.stop(); } catch (_) {} }, []);
   // Auto-save name + note shortly after typing stops (no save button anywhere).
   useEffect(() => {
@@ -12789,12 +12792,25 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
         });
       }
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      setImgCopied(true); setTimeout(() => setImgCopied(false), 1500);
+      flashShare(de ? "In Zwischenablage kopiert" : "Copied to clipboard");
     } catch (_) {
       // Fallback: copy the image URL as text.
-      try { await navigator.clipboard.writeText(item.url); setImgCopied(true); setTimeout(() => setImgCopied(false), 1500); }
-      catch (_) { alert(de ? "Kopieren in die Zwischenablage nicht möglich." : "Couldn't copy to clipboard."); }
+      try { await navigator.clipboard.writeText(item.url); flashShare(de ? "Link kopiert" : "Link copied"); }
+      catch (_) { flashShare(de ? "Kopieren nicht möglich" : "Couldn't copy"); }
     }
+  };
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(item.url); }
+    catch (_) { try { const ta = document.createElement("textarea"); ta.value = item.url; ta.style.cssText = "position:fixed;top:0;left:0;opacity:0;"; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); } catch (_) {} }
+    flashShare(de ? "Link kopiert" : "Link copied");
+  };
+  const uploadToDrive = async () => {
+    if (!onUploadDrive || driveBusy) return;
+    setDriveBusy(true);
+    setShareMsg(de ? "Lädt zu Google Drive hoch…" : "Uploading to Google Drive…");
+    try { await onUploadDrive(item.url); flashShare(de ? "Auf Google Drive hochgeladen" : "Uploaded to Google Drive"); }
+    catch (e) { flashShare((de ? "Drive-Upload fehlgeschlagen: " : "Drive upload failed: ") + (e?.message || "")); }
+    setDriveBusy(false);
   };
 
   // Dictation for the note (voice-to-text), matching the rest of the app.
@@ -12891,24 +12907,46 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
           borderLeft: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}` }}>
         {/* scrollable content */}
         <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 22px", display: "flex", flexDirection: "column", gap: 20 }}>
-          {/* Header: Details + download */}
+          {/* Header: Details + share menu (download / copy / Drive / link) */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.details") || "Details"}</div>
             {item.type === "image" && (
-              <div style={{ display: "flex", gap: 6 }}>
-                <motion.div whileTap={{ scale: 0.92 }} onClick={copyImage} title={de ? "In Zwischenablage kopieren" : "Copy to clipboard"}
-                  style={{ width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${imgCopied ? accent : theme.borderFaint}`, color: imgCopied ? accent : theme.textDim, cursor: "pointer" }}>
-                  {imgCopied
-                    ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
-                    : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>}
+              <div style={{ position: "relative" }}>
+                <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} onClick={() => setShareOpen(o => !o)} title={de ? "Teilen" : "Share"}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 13px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: shareOpen ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") : "transparent", color: theme.text, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></svg>
+                  {de ? "Teilen" : "Share"}
                 </motion.div>
-                <motion.div whileTap={{ scale: 0.92 }} onClick={download} title={de ? "Herunterladen" : "Download"}
-                  style={{ width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, cursor: "pointer" }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                </motion.div>
+                <AnimatePresence>
+                  {shareOpen && (
+                    <>
+                      <div onClick={() => setShareOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 1 }} />
+                      <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.15 }}
+                        style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 2, minWidth: 234, background: darkMode ? "#1c1a2a" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 12, boxShadow: "0 16px 44px rgba(0,0,0,0.22)", overflow: "hidden", padding: 5 }}>
+                        {[
+                          { key: "download", label: de ? "Herunterladen" : "Download", icon: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></>, onClick: () => { setShareOpen(false); download(); } },
+                          { key: "copy", label: de ? "In Zwischenablage kopieren" : "Copy to clipboard", icon: <><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></>, onClick: () => { setShareOpen(false); copyImage(); } },
+                          ...(onUploadDrive ? [{ key: "drive", label: de ? "Auf Google Drive hochladen" : "Upload to Google Drive", icon: <><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" /><polyline points="16 16 12 12 8 16" /><line x1="12" y1="12" x2="12" y2="21" /></>, onClick: () => { setShareOpen(false); uploadToDrive(); } }] : []),
+                          { key: "link", label: de ? "Link kopieren" : "Copy link", icon: <><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></>, onClick: () => { setShareOpen(false); copyLink(); } },
+                        ].map(it => (
+                          <div key={it.key} onClick={it.onClick} className="hover-row" style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 11px", borderRadius: 9, cursor: "pointer" }}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ color: theme.textDim, flexShrink: 0 }}>{it.icon}</svg>
+                            <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap" }}>{it.label}</span>
+                          </div>
+                        ))}
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
               </div>
             )}
           </div>
+          {shareMsg && (
+            <div style={{ marginTop: -10, fontSize: 12, fontFamily: FONT, color: accent, display: "flex", alignItems: "center", gap: 7 }}>
+              {driveBusy && <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }} style={{ width: 12, height: 12, borderRadius: "50%", border: `2px solid ${accent}`, borderTopColor: "transparent" }} />}
+              {shareMsg}
+            </div>
+          )}
 
           {/* Name */}
           <div>
