@@ -12206,6 +12206,8 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   const [mediaFilter, setMediaFilter] = useState("all"); // "all" | "image" | "video"
   const [confirmDel, setConfirmDel] = useState(null); // file pending deletion
   const [folders, setFolders] = useState([]); // user_folders for this org
+  const [currentFolder, setCurrentFolder] = useState(null); // null = root (folders + unfiled files)
+  const [folderMenu, setFolderMenu] = useState(null); // folder id whose kebab menu is open
   const inputRef = useRef(null);
   const fmtDate = (ts) => { try { return new Date(ts).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" }); } catch { return ""; } };
   const truncName = (n) => { const s = n || "—"; return s.length > 45 ? s.slice(0, 45).trimEnd() + "…" : s; };
@@ -12407,12 +12409,44 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     folder_id: f.folder_id ?? null,
   });
   const allFiles = files || [];
+  const searching = !!search.trim();
+  // Count files per folder (for the folder cards' badge).
+  const folderCounts = {};
+  for (const f of allFiles) { const k = f.folder_id; if (k) folderCounts[k] = (folderCounts[k] || 0) + 1; }
+  const currentFolderObj = folders.find(fo => fo.id === currentFolder) || null;
   const displayItems = allFiles
     .filter(f => mediaFilter === "all" || (mediaFilter === "video" ? isVideo(f) : !isVideo(f)))
-    .filter(f => !search.trim() || (f.name || "").toLowerCase().includes(search.trim().toLowerCase()))
+    // Folder scope: while searching, span all folders; otherwise show only the
+    // current folder's files (root = unfiled, folder_id null).
+    .filter(f => searching || (f.folder_id ?? null) === (currentFolder ?? null))
+    .filter(f => !searching || (f.name || "").toLowerCase().includes(search.trim().toLowerCase()))
     .sort((a, b) => sortMode === "name"
       ? (a.name || "").localeCompare(b.name || "")
       : new Date(b.created_at) - new Date(a.created_at));
+  // Folders are only shown at the root level and when not searching.
+  const showFolders = !searching && currentFolder == null && folders.length > 0;
+
+  const renameFolder = async (fo) => {
+    const de = appLanguage === "de";
+    const name = (window.prompt(de ? "Ordner umbenennen:" : "Rename folder:", fo.name || "") || "").trim();
+    if (!name || name === fo.name) return;
+    await supabase.from("user_folders").update({ name }).eq("id", fo.id);
+    setFolders(prev => prev.map(x => x.id === fo.id ? { ...x, name } : x).sort((a, b) => (a.name || "").localeCompare(b.name || "")));
+  };
+  const deleteFolder = async (fo) => {
+    const de = appLanguage === "de";
+    const n = folderCounts[fo.id] || 0;
+    const ok = window.confirm(de
+      ? `Ordner „${fo.name}" löschen?${n ? ` Die ${n} enthaltenen Assets bleiben erhalten und landen unter „Kein Ordner".` : ""}`
+      : `Delete folder “${fo.name}”?${n ? ` Its ${n} asset(s) are kept and moved to “No folder”.` : ""}`);
+    if (!ok) return;
+    // Detach files first (keep the assets), then remove the folder.
+    await supabase.from("user_files").update({ folder_id: null }).eq("folder_id", fo.id);
+    await supabase.from("user_folders").delete().eq("id", fo.id);
+    setFiles(prev => (prev || []).map(f => f.folder_id === fo.id ? { ...f, folder_id: null } : f));
+    setFolders(prev => prev.filter(x => x.id !== fo.id));
+    if (currentFolder === fo.id) setCurrentFolder(null);
+  };
   const fmtMeta = (f) => {
     const ext = ((f.name || "").split(".").pop() || (f.mime_type || "").split("/")[1] || "").toUpperCase();
     const mb = f.size_bytes ? `${Math.max(1, Math.round(f.size_bytes / 1e6))}MB` : null;
@@ -12485,49 +12519,115 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                 {t("moodboard.upload") || "Hochladen"}
               </motion.div>
             </div>
-          ) : displayItems.length === 0 ? (
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "40px 20px" }}>
-              <div style={{ fontSize: 15.5, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 6 }}>{appLanguage === "de" ? "Keine Treffer" : "No matches"}</div>
-              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>
-                {search.trim()
-                  ? (appLanguage === "de" ? "Versuche einen anderen Suchbegriff." : "Try a different search term.")
-                  : mediaFilter === "video"
-                    ? (appLanguage === "de" ? "Noch keine Videos." : "No videos yet.")
-                    : (appLanguage === "de" ? "Noch keine Bilder." : "No images yet.")}
-              </div>
-            </div>
-          ) : viewMode === "grid" ? (
-            // Gallery grid: square thumbnail tiles
-            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 22px 22px" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 14 }}>
-                {displayItems.map((f, i) => (
-                  <motion.div key={f.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.28 }}
-                    whileHover={{ y: -3 }} onClick={() => setZoom(f)}
-                    style={{ borderRadius: 14, overflow: "hidden", cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
-                    <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
-                      {isVideo(f) ? (
-                        <>
-                          <video src={f.public_url} muted playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.22)" }}>
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
-                          </div>
-                        </>
-                      ) : (
-                        <img src={f.public_url} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
-                      )}
-                    </div>
-                    <div style={{ padding: "10px 12px" }}>
-                      <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name || "—"}</div>
-                      <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{fmtMeta(f)}</div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
           ) : (
-            // List: thumbnail + name + meta + creator, in subtly-bordered rows
-            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 22px 22px", display: "flex", flexDirection: "column", gap: 7 }}>
-              {displayItems.map((f, i) => (
+            <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 22px 22px" }}>
+              {/* Breadcrumb when inside a folder */}
+              {currentFolder != null && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                  <motion.div whileTap={{ scale: 0.96 }} onClick={() => { setCurrentFolder(null); setFolderMenu(null); }}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12.5, fontFamily: FONT }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                    {appLanguage === "de" ? "Alle Assets" : "All assets"}
+                  </motion.div>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, minWidth: 0 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                    <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentFolderObj?.name || (appLanguage === "de" ? "Ordner" : "Folder")}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 400, color: theme.textDim, flexShrink: 0 }}>· {displayItems.length}</span>
+                  </span>
+                </div>
+              )}
+
+              {/* Folders (root level only) */}
+              {showFolders && (
+                <div style={{ marginBottom: 22 }}>
+                  <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>{appLanguage === "de" ? "Ordner" : "Folders"}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+                    {folders.map(fo => (
+                      <motion.div key={fo.id} whileHover={{ y: -2 }} onClick={() => { setCurrentFolder(fo.id); setFolderMenu(null); }}
+                        style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, padding: "14px", borderRadius: 14, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 11, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fo.name}</div>
+                          <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{(folderCounts[fo.id] || 0)} {appLanguage === "de" ? "Assets" : "assets"}</div>
+                        </div>
+                        <div style={{ position: "relative", flexShrink: 0 }}>
+                          <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); setFolderMenu(m => m === fo.id ? null : fo.id); }} title={appLanguage === "de" ? "Optionen" : "Options"} style={actBtnStyle}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>
+                          </motion.div>
+                          <AnimatePresence>
+                            {folderMenu === fo.id && (
+                              <>
+                                <div onClick={(e) => { e.stopPropagation(); setFolderMenu(null); }} style={{ position: "fixed", inset: 0, zIndex: 60 }} />
+                                <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.14 }} onClick={(e) => e.stopPropagation()}
+                                  style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 61, minWidth: 168, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 11, boxShadow: "0 16px 44px rgba(0,0,0,0.2)", overflow: "hidden", padding: 5 }}>
+                                  <div onClick={() => { setFolderMenu(null); renameFolder(fo); }} className="hover-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 8, cursor: "pointer" }}>
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                                    <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>{appLanguage === "de" ? "Umbenennen" : "Rename"}</span>
+                                  </div>
+                                  <div onClick={() => { setFolderMenu(null); deleteFolder(fo); }} className="hover-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 8, cursor: "pointer" }}>
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#e5484d" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                                    <span style={{ fontSize: 13, fontFamily: FONT, color: "#e5484d" }}>{appLanguage === "de" ? "Löschen" : "Delete"}</span>
+                                  </div>
+                                </motion.div>
+                              </>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Files in the current scope */}
+              {displayItems.length === 0 ? (
+                (searching || currentFolder != null || !showFolders) ? (
+                  <div style={{ padding: "34px 20px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>
+                    {searching
+                      ? (appLanguage === "de" ? "Keine Treffer. Versuche einen anderen Suchbegriff." : "No matches. Try a different search term.")
+                      : currentFolder != null
+                        ? (appLanguage === "de" ? "Dieser Ordner ist leer." : "This folder is empty.")
+                        : mediaFilter === "video"
+                          ? (appLanguage === "de" ? "Noch keine Videos." : "No videos yet.")
+                          : (appLanguage === "de" ? "Noch keine Bilder." : "No images yet.")}
+                  </div>
+                ) : null
+              ) : viewMode === "grid" ? (
+                // Gallery grid: square thumbnail tiles
+                <div>
+                  {showFolders && <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>{appLanguage === "de" ? "Assets" : "Assets"}</div>}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 14 }}>
+                    {displayItems.map((f, i) => (
+                      <motion.div key={f.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.28 }}
+                        whileHover={{ y: -3 }} onClick={() => setZoom(f)}
+                        style={{ borderRadius: 14, overflow: "hidden", cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
+                        <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
+                          {isVideo(f) ? (
+                            <>
+                              <video src={f.public_url} muted playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.22)" }}>
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
+                              </div>
+                            </>
+                          ) : (
+                            <img src={f.public_url} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
+                          )}
+                        </div>
+                        <div style={{ padding: "10px 12px" }}>
+                          <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name || "—"}</div>
+                          <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{fmtMeta(f)}</div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                // List: thumbnail + name + meta + creator, in subtly-bordered rows
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  {showFolders && <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 3 }}>{appLanguage === "de" ? "Assets" : "Assets"}</div>}
+                  {displayItems.map((f, i) => (
                 <motion.div key={f.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.28 }}
                   onClick={() => setZoom(f)} className="hover-row"
                   style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px 10px 10px", borderRadius: 14, cursor: "pointer",
@@ -12566,6 +12666,8 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                   </div>
                 </motion.div>
               ))}
+                </div>
+              )}
             </div>
           )}
         </>
