@@ -13094,8 +13094,8 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
 
         {/* Footer: delete bottom-right */}
         <div style={{ padding: "14px 22px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", justifyContent: "flex-end" }}>
-          <motion.div whileTap={{ scale: 0.96 }} onClick={onDelete} title={t("common.delete") || "Löschen"}
-            style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 14px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(232,72,77,0.4)" : "rgba(232,72,77,0.35)"}`, color: "#e5484d", cursor: "pointer", fontSize: 13, fontFamily: FONT, fontWeight: 500 }}>
+          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} onClick={onDelete} title={t("common.delete") || "Löschen"}
+            style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 13px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.text, cursor: "pointer", fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></svg>
             {t("common.delete") || (de ? "Löschen" : "Delete")}
           </motion.div>
