@@ -12901,7 +12901,7 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
 
       {/* Details panel — floating translucent frosted-glass card */}
       <div onClick={e => e.stopPropagation()}
-        style={{ width: 360, flexShrink: 0, position: "relative", zIndex: 1, margin: 25, borderRadius: 20, overflow: "hidden", display: "flex", flexDirection: "column",
+        style={{ width: 360, flexShrink: 0, position: "relative", zIndex: 1, margin: 18, borderRadius: 20, overflow: "hidden", display: "flex", flexDirection: "column",
           background: darkMode ? "rgba(22,20,40,0.6)" : "rgba(255,255,255,0.66)",
           backdropFilter: "blur(40px) saturate(1.3)", WebkitBackdropFilter: "blur(40px) saturate(1.3)",
           border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}` }}>
