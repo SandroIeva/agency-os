@@ -11504,6 +11504,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   // picker fn here and reports its uploading state up.
   const creationsPick = useRef(null);
   const creationsDrivePick = useRef(null); // CreationsTab registers its "import from Drive" fn here
+  const creationsNewFolder = useRef(null); // CreationsTab registers its "create folder" fn here
   const [creationsUploading, setCreationsUploading] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false); // "Hinzufügen" dropdown (creations tab)
   const [boardAddOpen, setBoardAddOpen] = useState(false); // "Hinzufügen" dropdown (inside an open board)
@@ -11817,6 +11818,10 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             sub: appLanguage === "de" ? "Datei aus Drive wählen" : "Pick a file from Drive",
                             icon: <><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="8 17 12 21 16 17"/><line x1="12" y1="15" x2="12" y2="21"/></>,
                             onClick: () => { setAddMenuOpen(false); creationsDrivePick.current?.(); } },
+                          { key: "folder", label: appLanguage === "de" ? "Ordner erstellen" : "Create folder",
+                            sub: appLanguage === "de" ? "Assets gruppieren" : "Group your assets",
+                            icon: <><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></>,
+                            onClick: () => { setAddMenuOpen(false); creationsNewFolder.current?.(); } },
                         ].map(it => (
                           <div key={it.key} onClick={it.onClick} className="hover-row"
                             style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
@@ -11882,8 +11887,9 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           {tab === "creations" && (
             <CreationsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} grad={grad} glow={glow} t={t}
               appLanguage={appLanguage} onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive} orgMembers={orgMembers}
-              pickRef={creationsPick} drivePickRef={creationsDrivePick} onUploadingChange={setCreationsUploading}
-              getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} />
+              pickRef={creationsPick} drivePickRef={creationsDrivePick} newFolderRef={creationsNewFolder} onUploadingChange={setCreationsUploading}
+              getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin}
+              llmProvider={llmProvider} llmKeys={llmKeys} />
           )}
 
           {/* ── DOCS tab ── */}
@@ -12147,7 +12153,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           viewer returns a createPortal, and AnimatePresence + portal can leave an
           orphaned full-screen overlay on <body> that blocks clicks app-wide. */}
       {selectedItem && (
-        <MoodboardItemDetail item={selectedItem} items={visibleItems} boards={boards} currentBoardId={activeBoard?.id} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} onUploadDrive={onUploadDrive}
+        <MoodboardItemDetail item={selectedItem} items={visibleItems} containers={boards} currentContainerId={activeBoard?.id} containerLabel={appLanguage === "de" ? "Moodboard" : "Moodboard"} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} onUploadDrive={onUploadDrive}
           onClose={() => setSelectedItem(null)} onDelete={() => deleteItem(selectedItem)} onSelect={(it) => setSelectedItem(it)}
           onSave={(id, patch) => { updateItem(id, patch); setSelectedItem(prev => prev && prev.id === id ? { ...prev, ...patch } : prev); }}
           onMove={async (boardId) => {
@@ -12168,7 +12174,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 // Top-level component (not inline) so framer-motion never re-mounts it per render.
 // Creations tab — gallery of the workspace's images AND videos (AI-generated +
 // user uploads). Filter by media type; upload your own via the button.
-function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, drivePickRef, onUploadingChange, getProviderToken, ensureValidToken, autoReLogin }) {
+function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, drivePickRef, newFolderRef, onUploadingChange, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys }) {
   const memberById = useMemo(() => {
     const m = {}; (orgMembers || []).forEach(om => { if (om.user_id) m[om.user_id] = { ...(om.profiles || {}) }; }); return m;
   }, [orgMembers]);
@@ -12186,6 +12192,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   const [viewMode, setViewMode] = useState("list"); // "list" | "grid"
   const [mediaFilter, setMediaFilter] = useState("all"); // "all" | "image" | "video"
   const [confirmDel, setConfirmDel] = useState(null); // file pending deletion
+  const [folders, setFolders] = useState([]); // user_folders for this org
   const inputRef = useRef(null);
   const fmtDate = (ts) => { try { return new Date(ts).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" }); } catch { return ""; } };
   const truncName = (n) => { const s = n || "—"; return s.length > 45 ? s.slice(0, 45).trimEnd() + "…" : s; };
@@ -12200,13 +12207,40 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     // Fetch the org's files and filter to media client-side — avoids a fragile
     // PostgREST `.or(...ilike...)` string and is robust to query quirks.
     const { data, error } = await supabase.from("user_files")
-      .select("id,name,public_url,mime_type,size_bytes,created_at,user_id,storage_path,storage_provider")
+      .select("id,name,public_url,mime_type,size_bytes,created_at,user_id,storage_path,storage_provider,folder_id,note,tags,colors,metadata")
       .eq("org_id", userOrg.id)
       .order("created_at", { ascending: false }).limit(300);
     if (error) { console.warn("[creations] load failed:", error.message); setFiles([]); return; }
     setFiles((data || []).filter(f => { const m = f.mime_type || ""; return m.startsWith("image/") || m.startsWith("video/"); }));
   }, [userOrg?.id]);
   useEffect(() => { load(); }, [load]);
+
+  // Folders (user_folders) for the move-to-folder dropdown in the large view.
+  const loadFolders = useCallback(async () => {
+    if (!userOrg?.id) { setFolders([]); return; }
+    const { data, error } = await supabase.from("user_folders")
+      .select("id,name,created_at").eq("org_id", userOrg.id)
+      .order("name", { ascending: true });
+    if (error) { console.warn("[creations] folders load failed:", error.message); setFolders([]); return; }
+    setFolders(data || []);
+  }, [userOrg?.id]);
+  useEffect(() => { loadFolders(); }, [loadFolders]);
+
+  // Create a folder (wired to the AssetsView "Hinzufügen → Ordner erstellen" item).
+  const createFolder = useCallback(async () => {
+    if (!userOrg?.id || !session?.user?.id) return;
+    const de = appLanguage === "de";
+    const name = (window.prompt(de ? "Name des Ordners:" : "Folder name:") || "").trim();
+    if (!name) return;
+    const { data, error } = await supabase.from("user_folders")
+      .insert({ name, org_id: userOrg.id, user_id: session.user.id })
+      .select("id,name,created_at").single();
+    if (error) { alert((de ? "Ordner konnte nicht erstellt werden: " : "Couldn't create folder: ") + error.message); return; }
+    if (data) setFolders(prev => [...prev, data].sort((a, b) => (a.name || "").localeCompare(b.name || "")));
+  }, [userOrg?.id, session?.user?.id, appLanguage]);
+  const createFolderRef = useRef(null);
+  createFolderRef.current = createFolder;
+  useEffect(() => { if (newFolderRef) newFolderRef.current = () => createFolderRef.current?.(); }, [newFolderRef]);
 
   const upload = async (fileList) => {
     const arr = Array.from(fileList || []).filter(f => f.type.startsWith("image/") || f.type.startsWith("video/"));
@@ -12223,14 +12257,14 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
         user_id: session.user.id, org_id: userOrg.id, name: file.name,
         mime_type: file.type, size_bytes: file.size, storage_path: path,
         storage_provider: "supabase", public_url: signed?.signedUrl || null,
-      }).select("id,name,public_url,mime_type,size_bytes,created_at,user_id,storage_path,storage_provider").single();
+      }).select(FILE_COLS).single();
       if (!error && data) added.push(data);
     }
     setFiles(prev => [...added, ...(prev || [])]);
     setUploading(false);
   };
 
-  const FILE_COLS = "id,name,public_url,mime_type,size_bytes,created_at,user_id,storage_path,storage_provider";
+  const FILE_COLS = "id,name,public_url,mime_type,size_bytes,created_at,user_id,storage_path,storage_provider,folder_id,note,tags,colors,metadata";
 
   // Import media from Google Drive via the Google Picker (works with the drive.file
   // scope the app already holds): the user picks file(s), we download the bytes and
@@ -12347,6 +12381,18 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   };
 
   const isVideo = (f) => (f.mime_type || "").startsWith("video/");
+  // Map a user_files row → the shape MoodboardItemDetail (the shared large view) expects.
+  const fileToItem = (f) => f && ({
+    id: f.id,
+    name: f.name || "",
+    note: f.note || "",
+    tags: f.tags || [],
+    colors: f.colors || [],
+    metadata: f.metadata || {},
+    type: (f.mime_type || "").startsWith("video/") ? "video" : "image",
+    url: f.public_url,
+    folder_id: f.folder_id ?? null,
+  });
   const allFiles = files || [];
   const displayItems = allFiles
     .filter(f => mediaFilter === "all" || (mediaFilter === "video" ? isVideo(f) : !isVideo(f)))
@@ -12512,21 +12558,34 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
         </>
       )}
 
-      <AnimatePresence>
-        {zoom && (
-          isVideo(zoom) ? (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setZoom(null)}
-              style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(8,8,12,0.92)", backdropFilter: "blur(20px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 30 }}>
-              <motion.video initial={{ scale: 0.94 }} animate={{ scale: 1 }} src={zoom.public_url} controls autoPlay onClick={e => e.stopPropagation()} style={{ maxWidth: "92%", maxHeight: "88vh", borderRadius: 14 }} />
-            </motion.div>
-          ) : (
-            // Same full-screen lightbox as the AI chat (Download / Kopieren / Link / Drive / Neuer Tab)
-            <ImageLightbox url={zoom.public_url} onClose={() => setZoom(null)}
-              onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive}
-              theme={theme} darkMode={darkMode} appLanguage={appLanguage} />
-          )
-        )}
-      </AnimatePresence>
+      {/* Large view — same component as the Moodboard large view (frosted sidebar,
+          autosave, tags, colours/eyedropper, prompt, share, prev/next), plus a
+          folder selector instead of a moodboard. Rendered WITHOUT AnimatePresence
+          on purpose: the viewer returns a createPortal, and AnimatePresence + portal
+          can leave an orphaned full-screen overlay on <body> that blocks clicks. */}
+      {zoom && (
+        <MoodboardItemDetail
+          item={fileToItem(zoom)} items={displayItems.map(fileToItem)}
+          containers={folders} currentContainerId={zoom.folder_id ?? null}
+          containerLabel={appLanguage === "de" ? "Ordner" : "Folder"} allowClear
+          theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage}
+          llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} onUploadDrive={onUploadDrive}
+          onClose={() => setZoom(null)}
+          onSelect={(it) => { const f = displayItems.find(x => x.id === it.id); if (f) setZoom(f); }}
+          onSave={async (id, patch) => {
+            await supabase.from("user_files").update(patch).eq("id", id);
+            setFiles(prev => (prev || []).map(f => f.id === id ? { ...f, ...patch } : f));
+            setZoom(z => z && z.id === id ? { ...z, ...patch } : z);
+          }}
+          onMove={async (folderId) => {
+            const cur = zoom; if (!cur) return;
+            await supabase.from("user_files").update({ folder_id: folderId }).eq("id", cur.id);
+            setFiles(prev => (prev || []).map(f => f.id === cur.id ? { ...f, folder_id: folderId } : f));
+            setZoom(z => z && z.id === cur.id ? { ...z, folder_id: folderId } : z);
+          }}
+          onDelete={() => { const f = zoom; setZoom(null); requestDelete(f); }}
+        />
+      )}
 
       {confirmDel && createPortal(
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setConfirmDel(null)}
@@ -12655,7 +12714,7 @@ function MoodboardGridTile({ item, i, theme, darkMode, accent, onOpen }) {
 
 // Item detail — full-screen viewer: large image left, live-saving details panel
 // right (palette + eyedropper, note, tag chips, download), with prev/next nav.
-function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, theme, darkMode, accent, t, appLanguage = "de", llmProvider, llmKeys, ensureValidToken, onUploadDrive, onClose, onDelete, onSelect, onSave, onMove }) {
+function MoodboardItemDetail({ item, items = [], containers = [], currentContainerId, containerLabel = "Moodboard", allowClear = false, theme, darkMode, accent, t, appLanguage = "de", llmProvider, llmKeys, ensureValidToken, onUploadDrive, onClose, onDelete, onSelect, onSave, onMove }) {
   const de = appLanguage === "de";
   const [name, setName] = useState(item.name || "");
   const [note, setNote] = useState(item.note || "");
@@ -12681,11 +12740,23 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
   const colorInputRef = useRef(null);
   const colors = item.colors || [];
   const tags = item.tags || [];
-  const currentBoard = boards.find(b => b.id === currentBoardId);
+  const containerName = (c) => c ? (c.title || c.name || "—") : "—";
+  const currentContainer = containers.find(c => c.id === currentContainerId);
 
   // Re-sync the editable fields when navigating to another item.
   useEffect(() => { setName(item.name || ""); setNote(item.note || ""); setMoveOpen(false); setEditingColors(false); setGenLoading(false); setPromptCopied(false); setShareOpen(false); }, [item.id]); // eslint-disable-line
   useEffect(() => () => { try { recognitionRef.current?.stop(); } catch (_) {} }, []);
+  // Auto-build the colour palette from the image the first time it has none
+  // (so the FARBEN section isn't empty). The eyedropper "+" still adds more.
+  const triedColorsRef = useRef(new Set());
+  useEffect(() => {
+    if (item.type !== "image" || (item.colors || []).length > 0) return;
+    if (triedColorsRef.current.has(item.id)) return;
+    triedColorsRef.current.add(item.id);
+    let cancelled = false;
+    extractColors(item.url, 5).then(cols => { if (!cancelled && cols && cols.length) onSave(item.id, { colors: cols }); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [item.id]); // eslint-disable-line
   // Auto-save name + note shortly after typing stops (no save button anywhere).
   useEffect(() => {
     const id = item.id;
@@ -12776,8 +12847,9 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
       const blob = await res.blob();
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      const ext = blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : blob.type.includes("gif") ? "gif" : "jpg";
-      a.download = `${(item.name || "moodboard").replace(/[^\w.-]+/g, "_")}.${ext}`;
+      const ext = blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : blob.type.includes("gif") ? "gif"
+        : blob.type.includes("mp4") ? "mp4" : blob.type.includes("webm") ? "webm" : blob.type.includes("quicktime") ? "mov" : blob.type.startsWith("video/") ? "mp4" : "jpg";
+      a.download = `${(item.name || "asset").replace(/[^\w.-]+/g, "_")}.${ext}`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     } catch (_) { window.open(item.url, "_blank", "noopener"); }
@@ -12886,7 +12958,9 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
       <div onClick={close} style={{ flex: 1, minWidth: 0, position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "56px 40px" }}>
         {item.type === "image"
           ? <img src={item.url} alt="" onClick={e => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }} />
-          : <a href={item.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ padding: 40, color: "#fff", fontFamily: FONT, wordBreak: "break-all" }}>{item.url}</a>}
+          : item.type === "video"
+            ? <video src={item.url} controls autoPlay onClick={e => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8 }} />
+            : <a href={item.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ padding: 40, color: "#fff", fontFamily: FONT, wordBreak: "break-all" }}>{item.url}</a>}
 
         {/* Close */}
         <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); close(); }} title={de ? "Schließen" : "Close"}
@@ -12917,7 +12991,7 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
           {/* Header: Details + share menu (download / copy / Drive / link) */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.details") || "Details"}</div>
-            {item.type === "image" && (
+            {(item.type === "image" || item.type === "video") && (
               <div style={{ position: "relative" }}>
                 <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} onClick={() => setShareOpen(o => !o)} title={de ? "Teilen" : "Share"}
                   style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 13px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: shareOpen ? (darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.09)") : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)"), color: theme.text, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
@@ -12932,7 +13006,7 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
                         style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 2, minWidth: 234, background: darkMode ? "#1c1a2a" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 12, boxShadow: "0 16px 44px rgba(0,0,0,0.22)", overflow: "hidden", padding: 5 }}>
                         {[
                           { key: "download", label: de ? "Herunterladen" : "Download", icon: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></>, onClick: () => { setShareOpen(false); download(); } },
-                          { key: "copy", label: de ? "In Zwischenablage kopieren" : "Copy to clipboard", icon: <><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></>, onClick: () => { setShareOpen(false); copyImage(); } },
+                          ...(item.type === "image" ? [{ key: "copy", label: de ? "In Zwischenablage kopieren" : "Copy to clipboard", icon: <><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></>, onClick: () => { setShareOpen(false); copyImage(); } }] : []),
                           ...(onUploadDrive ? [{ key: "drive", label: de ? "Auf Google Drive hochladen" : "Upload to Google Drive", icon: <><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" /><polyline points="16 16 12 12 8 16" /><line x1="12" y1="12" x2="12" y2="21" /></>, onClick: () => { setShareOpen(false); uploadToDrive(); } }] : []),
                           { key: "link", label: de ? "Link kopieren" : "Copy link", icon: <><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></>, onClick: () => { setShareOpen(false); copyLink(); } },
                         ].map(it => (
@@ -12962,14 +13036,15 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
               style={{ width: "100%", boxSizing: "border-box", padding: "10px 13px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: fieldBg("name"), color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none" }} />
           </div>
 
-          {/* Moodboard — shows the current board, click to move to another */}
+          {/* Container — shows the current Moodboard / Ordner, click to move to another */}
+          {onMove && (
           <div style={{ position: "relative" }}>
-            {label(de ? "Moodboard" : "Moodboard")}
+            {label(containerLabel)}
             <div onClick={() => setMoveOpen(o => !o)}
               style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "10px 13px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", cursor: "pointer" }}>
               <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, fontFamily: FONT, color: theme.text, minWidth: 0 }}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
-                <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentBoard?.title || "—"}</span>
+                <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{containerName(currentContainer)}</span>
               </span>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
             </div>
@@ -12979,13 +13054,21 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
                   <div onClick={() => setMoveOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 1 }} />
                   <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }}
                     className="no-scrollbar" style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 2, maxHeight: 240, overflowY: "auto", background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 12, boxShadow: "0 16px 44px rgba(0,0,0,0.22)", padding: 5 }}>
-                    {boards.map(b => {
-                      const cur = b.id === currentBoardId;
+                    {/* Optional "no folder" entry when the container can be cleared */}
+                    {allowClear && currentContainerId != null && (
+                      <div onClick={() => { onMove?.(null); setMoveOpen(false); }} className="hover-row"
+                        style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", borderRadius: 8, cursor: "pointer" }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M18 6L6 18M6 6l12 12" /></svg>
+                        <span style={{ flex: 1, fontSize: 13, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap" }}>{de ? "Kein Ordner" : "No folder"}</span>
+                      </div>
+                    )}
+                    {containers.map(c => {
+                      const cur = c.id === currentContainerId;
                       return (
-                        <div key={b.id} onClick={() => { if (!cur) onMove?.(b.id); setMoveOpen(false); }} className="hover-row"
+                        <div key={c.id} onClick={() => { if (!cur) onMove?.(c.id); setMoveOpen(false); }} className="hover-row"
                           style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", borderRadius: 8, cursor: "pointer" }}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={cur ? accent : theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
-                          <span style={{ flex: 1, fontSize: 13, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.title}</span>
+                          <span style={{ flex: 1, fontSize: 13, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{containerName(c)}</span>
                           {cur && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>}
                         </div>
                       );
@@ -12995,6 +13078,7 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
               )}
             </AnimatePresence>
           </div>
+          )}
 
           {/* Colours: click a swatch to copy its hex; + adds via eyedropper; edit toggles delete mode */}
           <div>
