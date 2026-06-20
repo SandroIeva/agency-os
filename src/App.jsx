@@ -12880,7 +12880,7 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
       {/* Image area */}
       <div onClick={close} style={{ flex: 1, minWidth: 0, position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "56px 40px" }}>
         {item.type === "image"
-          ? <img src={item.url} alt="" onClick={e => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }} />
+          ? <img src={item.url} alt="" onClick={e => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }} />
           : <a href={item.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ padding: 40, color: "#fff", fontFamily: FONT, wordBreak: "break-all" }}>{item.url}</a>}
 
         {/* Close */}
@@ -12904,8 +12904,7 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
         style={{ width: 360, flexShrink: 0, position: "relative", zIndex: 1, margin: 25, borderRadius: 20, overflow: "hidden", display: "flex", flexDirection: "column",
           background: darkMode ? "rgba(22,20,40,0.6)" : "rgba(255,255,255,0.66)",
           backdropFilter: "blur(40px) saturate(1.3)", WebkitBackdropFilter: "blur(40px) saturate(1.3)",
-          border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}`,
-          boxShadow: "0 20px 60px rgba(0,0,0,0.28)" }}>
+          border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}` }}>
         {/* scrollable content */}
         <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 22px", display: "flex", flexDirection: "column", gap: 20 }}>
           {/* Header: Details + share menu (download / copy / Drive / link) */}
