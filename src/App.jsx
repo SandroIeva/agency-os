@@ -13060,8 +13060,8 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
               ) : prompt ? (
                 <div className="no-scrollbar" style={{ maxHeight: 150, overflowY: "auto", padding: "11px 13px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 12.5, fontFamily: FONT, lineHeight: 1.55, whiteSpace: "pre-wrap", userSelect: "text" }}>{prompt}</div>
               ) : (
-                <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }} onClick={generatePrompt}
-                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 9, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: accent + "1f", border: `1px solid ${accent}33`, color: accent, fontSize: 13, fontFamily: FONT, fontWeight: 600 }}>
+                <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98, backgroundColor: darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.09)" }} onClick={generatePrompt}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 9, padding: "11px 0", borderRadius: 999, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)", border: `1px solid ${theme.borderFaint}`, color: theme.text, fontSize: 13, fontFamily: FONT, fontWeight: 500 }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z" /></svg>
                   {de ? "Prompt generieren" : "Generate prompt"}
                 </motion.div>
