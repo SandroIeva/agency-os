@@ -12766,9 +12766,12 @@ function MoodboardItemDetail({ item, items = [], containers = [], currentContain
     if (item.type !== "image" || (item.colors || []).length > 0) return;
     if (triedColorsRef.current.has(item.id)) return;
     triedColorsRef.current.add(item.id);
-    let cancelled = false;
-    extractColors(item.url, 5).then(cols => { if (!cancelled && cols && cols.length) onSave(item.id, { colors: cols }); }).catch(() => {});
-    return () => { cancelled = true; };
+    // No cancel-on-cleanup guard on purpose: onSave updates the *parent's* state
+    // (still mounted), so it's safe to fire after this viewer unmounts — and a
+    // cancel guard would silently drop the result under React StrictMode's
+    // mount→cleanup→mount double-invoke in dev (palette would never appear).
+    const id = item.id;
+    extractColors(item.url, 5).then(cols => { if (cols && cols.length) onSave(id, { colors: cols }); }).catch(() => {});
   }, [item.id]); // eslint-disable-line
   // Auto-save name + note shortly after typing stops (no save button anywhere).
   useEffect(() => {
