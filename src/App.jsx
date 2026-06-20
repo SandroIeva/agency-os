@@ -12669,6 +12669,7 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
   const [shareOpen, setShareOpen] = useState(false);
   const [shareMsg, setShareMsg] = useState(null);
   const [driveBusy, setDriveBusy] = useState(false);
+  const [panelHover, setPanelHover] = useState(false); // soft opacity bump on hover
   const recognitionRef = useRef(null);
   const flashShare = (msg) => { setShareMsg(msg); setTimeout(() => setShareMsg(m => m === msg ? null : m), 1900); };
   const prompt = item.metadata?.prompt || "";
@@ -12899,10 +12900,12 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
         )}
       </div>
 
-      {/* Details panel — floating translucent frosted-glass card */}
-      <div onClick={e => e.stopPropagation()}
+      {/* Details panel — floating translucent frosted-glass card; gets a touch more
+          opaque on hover with a soft transition */}
+      <div onClick={e => e.stopPropagation()} onMouseEnter={() => setPanelHover(true)} onMouseLeave={() => setPanelHover(false)}
         style={{ width: 360, flexShrink: 0, position: "relative", zIndex: 1, margin: 18, borderRadius: 18, overflow: "hidden", display: "flex", flexDirection: "column",
-          background: darkMode ? "rgba(22,20,40,0.6)" : "rgba(255,255,255,0.66)",
+          background: darkMode ? (panelHover ? "rgba(22,20,40,0.82)" : "rgba(22,20,40,0.6)") : (panelHover ? "rgba(255,255,255,0.84)" : "rgba(255,255,255,0.66)"),
+          transition: "background-color 0.4s ease",
           backdropFilter: "blur(40px) saturate(1.3)", WebkitBackdropFilter: "blur(40px) saturate(1.3)",
           border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}` }}>
         {/* scrollable content */}
