@@ -12670,6 +12670,10 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
   const [shareMsg, setShareMsg] = useState(null);
   const [driveBusy, setDriveBusy] = useState(false);
   const [panelHover, setPanelHover] = useState(false); // soft opacity bump on hover
+  const [focusField, setFocusField] = useState(null); // which input is focused → bg a tick darker
+  const fieldBg = (id) => focusField === id
+    ? (darkMode ? "rgba(255,255,255,0.11)" : "rgba(0,0,0,0.07)")
+    : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)");
   const recognitionRef = useRef(null);
   const flashShare = (msg) => { setShareMsg(msg); setTimeout(() => setShareMsg(m => m === msg ? null : m), 1900); };
   const prompt = item.metadata?.prompt || "";
@@ -12954,8 +12958,8 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
           {/* Name */}
           <div>
             {label(de ? "Name" : "Name")}
-            <input className="mb-field" value={name} onChange={e => setName(e.target.value)} onBlur={flush} placeholder={de ? "Bildname…" : "Image name…"}
-              style={{ width: "100%", boxSizing: "border-box", padding: "10px 13px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none" }} />
+            <input className="mb-field" value={name} onChange={e => setName(e.target.value)} onFocus={() => setFocusField("name")} onBlur={() => { setFocusField(null); flush(); }} placeholder={de ? "Bildname…" : "Image name…"}
+              style={{ width: "100%", boxSizing: "border-box", padding: "10px 13px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: fieldBg("name"), color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none" }} />
           </div>
 
           {/* Moodboard — shows the current board, click to move to another */}
@@ -13031,8 +13035,8 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
               </motion.div>
             </div>
-            <textarea className="mb-field" value={note} onChange={e => setNote(e.target.value)} onBlur={flush} placeholder={t("moodboard.notePlaceholder") || (de ? "Notiz hinzufügen…" : "Add a note…")} rows={5}
-              style={{ width: "100%", boxSizing: "border-box", padding: "11px 13px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, lineHeight: 1.55, outline: "none", resize: "vertical", minHeight: 92 }} />
+            <textarea className="mb-field" value={note} onChange={e => setNote(e.target.value)} onFocus={() => setFocusField("note")} onBlur={() => { setFocusField(null); flush(); }} placeholder={t("moodboard.notePlaceholder") || (de ? "Notiz hinzufügen…" : "Add a note…")} rows={5}
+              style={{ width: "100%", boxSizing: "border-box", padding: "11px 13px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: fieldBg("note"), color: theme.text, fontSize: 13, fontFamily: FONT, lineHeight: 1.55, outline: "none", resize: "vertical", minHeight: 92 }} />
           </div>
 
           {/* Image prompt — generate a reusable AI prompt from the image, with copy */}
@@ -13085,13 +13089,13 @@ function MoodboardItemDetail({ item, items = [], boards = [], currentBoardId, th
                 </div>
               ))}
             </div>
-            <input className="mb-field" value={tagInput} onChange={e => setTagInput(e.target.value)} onBlur={() => addTag(tagInput)}
+            <input className="mb-field" value={tagInput} onChange={e => setTagInput(e.target.value)} onFocus={() => setFocusField("tags")} onBlur={() => { setFocusField(null); addTag(tagInput); }}
               onKeyDown={e => {
                 if (e.key === "," || e.key === "Enter") { e.preventDefault(); addTag(tagInput); }
                 else if (e.key === "Backspace" && !tagInput && tags.length) removeTag(tags[tags.length - 1]);
               }}
               placeholder={de ? "Tag eingeben, Komma trennt…" : "Type a tag, comma to add…"}
-              style={{ width: "100%", boxSizing: "border-box", marginTop: tags.length ? 8 : 0, padding: "10px 12px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none" }} />
+              style={{ width: "100%", boxSizing: "border-box", marginTop: tags.length ? 8 : 0, padding: "10px 12px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: fieldBg("tags"), color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none" }} />
           </div>
         </div>
 
@@ -26943,7 +26947,8 @@ export default function CircularMenu() {
         /* Moodboard canvas: corner resize handle appears on hover (Figma-style) */
         .mb-resize-handle { opacity: 0; transition: opacity 0.15s ease; }
         .mb-canvas-tile:hover .mb-resize-handle { opacity: 1; }
-        /* Moodboard detail fields: placeholder softly fades + slides out on focus */
+        /* Moodboard detail fields: bg fades a touch darker on focus; placeholder softly slides out */
+        .mb-field { transition: background-color 0.28s ease; }
         .mb-field::placeholder { transition: opacity 0.25s ease, transform 0.25s ease; opacity: 1; }
         .mb-field:focus::placeholder { opacity: 0; transform: translateX(8px); }
         /* Brand logo: discreet scale slider + copy/download actions, only on hover */
