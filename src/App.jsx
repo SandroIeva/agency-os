@@ -11196,9 +11196,20 @@ const BRAND_NEXT_STEPS = [
 // return the most frequent ones as hex. Used to auto-build a board's palette.
 // Fails gracefully (returns []) if the image taints the canvas (no CORS).
 async function extractColors(url, count = 5) {
-  return new Promise((resolve) => {
+  if (!url) return [];
+  // Prefer fetching the bytes and reading from a blob: object URL. A blob URL is
+  // same-origin, so the canvas is NEVER tainted — even when a plain <img> thumbnail
+  // already cached a non-CORS copy of this URL (which would taint a crossOrigin load
+  // and make the palette come back empty). Falls back to a direct crossOrigin load.
+  let objectUrl = null;
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    if (res.ok) { const blob = await res.blob(); if (blob && blob.size) objectUrl = URL.createObjectURL(blob); }
+  } catch (_) { /* fall back to direct load below */ }
+  const src = objectUrl || url;
+  const hex = await new Promise((resolve) => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    if (!objectUrl) img.crossOrigin = "anonymous"; // blob: is same-origin → no flag needed
     img.onload = () => {
       try {
         const w = 48, h = 48;
@@ -11214,15 +11225,17 @@ async function extractColors(url, count = 5) {
           (buckets[key] || (buckets[key] = { c: 0, r: 0, g: 0, b: 0 }));
           const bk = buckets[key]; bk.c++; bk.r += r; bk.g += g; bk.b += b;
         }
-        const hex = Object.values(buckets)
+        const out = Object.values(buckets)
           .sort((a, b) => b.c - a.c).slice(0, count)
           .map(bk => "#" + [bk.r, bk.g, bk.b].map(x => Math.round(x / bk.c).toString(16).padStart(2, "0")).join(""));
-        resolve(hex);
+        resolve(out);
       } catch (e) { resolve([]); }
     };
     img.onerror = () => resolve([]);
-    img.src = url;
+    img.src = src;
   });
+  if (objectUrl) { try { URL.revokeObjectURL(objectUrl); } catch (_) {} }
+  return hex;
 }
 
 // ── Touchpoints (Brand → Touchpoints) ───────────────────────────────────────
