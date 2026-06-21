@@ -8,7 +8,7 @@ import { openGooglePicker, openGoogleFolderPicker } from "./googlePicker";
 import { useCreateBlockNote, getDefaultReactSlashMenuItems, SuggestionMenuController, createReactBlockSpec, FormattingToolbar, FormattingToolbarController, getFormattingToolbarItems, useComponentsContext } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { de as blockNoteDe } from "@blocknote/core/locales";
-import { BlockNoteSchema, defaultBlockSpecs, filterSuggestionItems } from "@blocknote/core";
+import { BlockNoteSchema, defaultBlockSpecs, filterSuggestionItems, BlockNoteEditor } from "@blocknote/core";
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 
@@ -11542,6 +11542,9 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const creationsNewFolder = useRef(null); // CreationsTab registers its "create folder" fn here
   const [creationsUploading, setCreationsUploading] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false); // "Hinzufügen" dropdown (creations tab)
+  const [docsAddOpen, setDocsAddOpen] = useState(false); // "Hinzufügen" dropdown (docs tab)
+  const [docsImporting, setDocsImporting] = useState(false); // Google-Docs import in progress
+  const docsImport = useRef(null); // DocsTab registers its "import from Drive" fn here
   const [boardAddOpen, setBoardAddOpen] = useState(false); // "Hinzufügen" dropdown (inside an open board)
   const [boardFullscreen, setBoardFullscreen] = useState(false); // board detail in true fullscreen (like the doc editor)
   useEffect(() => {
@@ -11995,11 +11998,50 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
               </div>
             )}
             {tab === "docs" && (
-              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => docsCreate.current?.()}
-                style={{ ...iconBtn, background: "#23232b", color: "#fff", border: "none" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Neues Dokument
-              </motion.div>
+              <div style={{ position: "relative" }}>
+                <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setDocsAddOpen(o => !o)}
+                  style={{ ...iconBtn, background: "#23232b", color: "#fff", border: "none", opacity: docsImporting ? 0.6 : 1 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  {docsImporting ? (appLanguage === "de" ? "Importiert…" : "Importing…") : (appLanguage === "de" ? "Hinzufügen" : "Add")}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 1, opacity: 0.8 }}><polyline points="6 9 12 15 18 9"/></svg>
+                </motion.div>
+                <AnimatePresence>
+                  {docsAddOpen && (
+                    <>
+                      <div onClick={() => setDocsAddOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                      <motion.div
+                        initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                        transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
+                        style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 41, minWidth: 248,
+                          background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
+                          boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden", padding: 6 }}>
+                        {[
+                          { key: "new", label: appLanguage === "de" ? "Neues Dokument" : "New document",
+                            sub: appLanguage === "de" ? "Leeres Dokument erstellen" : "Create a blank document",
+                            icon: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></>,
+                            onClick: () => { setDocsAddOpen(false); docsCreate.current?.(); } },
+                          { key: "drive", label: appLanguage === "de" ? "Aus Google Drive importieren" : "Import from Google Drive",
+                            sub: appLanguage === "de" ? "Google-Doc als Dokument übernehmen" : "Bring a Google Doc in as a document",
+                            icon: <><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="8 17 12 21 16 17"/><line x1="12" y1="15" x2="12" y2="21"/></>,
+                            onClick: () => { setDocsAddOpen(false); docsImport.current?.(); } },
+                        ].map(it => (
+                          <div key={it.key} onClick={it.onClick} className="hover-row"
+                            style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
+                            <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                              background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
+                              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>
+                            </div>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{it.label}</div>
+                              <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{it.sub}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
             )}
           </div>
 
@@ -12047,7 +12089,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 
           {/* ── DOCS tab ── */}
           {tab === "docs" && (
-            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} orgMembers={orgMembers} createNotification={createNotification} deepLink={docDeepLink} fullscreen={docFullscreen} setFullscreen={setDocFullscreen} createRef={docsCreate} onOpenChange={setDocOpen} />
+            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} orgMembers={orgMembers} createNotification={createNotification} deepLink={docDeepLink} fullscreen={docFullscreen} setFullscreen={setDocFullscreen} createRef={docsCreate} importRef={docsImport} onImportingChange={setDocsImporting} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} onOpenChange={setDocOpen} />
           )}
 
           {/* ── MOODBOARDS tab (boards grid) ── */}
@@ -14529,7 +14571,7 @@ function InfoPopover({ doc, memberById, activity, projectName, theme, darkMode, 
 
 // Docs tab — Google-Docs-style: a list of workspace documents + a rich-text
 // editor. Documents are stored in brand_documents (org-scoped).
-function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, createNotification, deepLink, fullscreen, setFullscreen, createRef, onOpenChange }) {
+function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "de", orgMembers, createNotification, deepLink, fullscreen, setFullscreen, createRef, importRef, onImportingChange, getProviderToken, ensureValidToken, autoReLogin, onOpenChange }) {
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openDoc, setOpenDoc] = useState(null);
@@ -14722,6 +14764,87 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, orgMembers, cre
   // Expose create to the AssetsView header (keeps the action in the same slot
   // as Moodboards/Creations for consistency).
   if (createRef) createRef.current = createDoc;
+
+  // Best-effort: re-host Google's exported image URLs into our storage so they
+  // persist (the original googleusercontent links expire). On any failure, keep
+  // the original URL so text/structure still imports.
+  const rehostDocImages = async (html) => {
+    try {
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const imgs = Array.from(doc.querySelectorAll("img")).filter(img => /^https?:\/\//.test(img.getAttribute("src") || ""));
+      for (const img of imgs) {
+        const src = img.getAttribute("src");
+        try {
+          const res = await fetch(src);
+          if (!res.ok) continue;
+          const blob = await res.blob();
+          if (!blob || blob.size === 0 || !(blob.type || "").startsWith("image/")) continue;
+          const ext = (blob.type.split("/")[1] || "png").split("+")[0];
+          const url = await uploadDocImage(new File([blob], `import.${ext}`, { type: blob.type }));
+          if (url) img.setAttribute("src", url);
+        } catch (_) { /* keep original src */ }
+      }
+      return doc.body.innerHTML;
+    } catch (_) { return html; }
+  };
+
+  // Import one or more Google Docs: pick via the Picker, export each as HTML
+  // (drive.file is enough — the user picked it), convert HTML → BlockNote blocks,
+  // and save as native documents. One-time copy (no live sync back to Google).
+  const importFromDrive = async () => {
+    if (!userOrg?.id || !session?.user?.id) return;
+    const de = appLanguage === "de";
+    let token;
+    try { token = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token); } catch { token = null; }
+    if (!token) { alert(de ? "Kein Google-Drive-Zugriff. Bitte in den Einstellungen erneut mit Google verbinden." : "No Google Drive access. Reconnect Google in Settings."); return; }
+    let picked = [];
+    try {
+      picked = await openGooglePicker({ accessToken: token, locale: de ? "de" : "en", multi: true, mimeTypes: ["application/vnd.google-apps.document"] });
+    } catch (e) {
+      alert((de ? "Google-Picker konnte nicht geöffnet werden: " : "Could not open Google Picker: ") + (e?.message || e));
+      return;
+    }
+    const gdocs = (picked || []).filter(p => p.mimeType === "application/vnd.google-apps.document");
+    if (!gdocs.length) {
+      if ((picked || []).length > 0) alert(de ? "Bitte ein Google-Doc auswählen." : "Please pick a Google Doc.");
+      return;
+    }
+    onImportingChange?.(true);
+    // Headless BlockNote editor, purely to convert HTML → block JSON. Default
+    // schema (Google Docs have no custom blocks; default types are a subset of
+    // docSchema, so the result loads fine in the editor).
+    let parser = null;
+    try { parser = BlockNoteEditor.create(); } catch (_) {}
+    const added = [], failures = [];
+    for (const p of gdocs) {
+      const label = p.name || (de ? "Dokument" : "Document");
+      try {
+        const exportUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(p.id)}/export?mimeType=text%2Fhtml`;
+        let r = await fetch(exportUrl, { headers: { Authorization: `Bearer ${token}` } });
+        if (r.status === 401 && autoReLogin) { const nt = await autoReLogin(); if (nt) { token = nt; r = await fetch(exportUrl, { headers: { Authorization: `Bearer ${token}` } }); } }
+        if (!r.ok) { console.error("[doc-import]", label, "export failed", r.status); failures.push(label); continue; }
+        let html = await r.text();
+        html = await rehostDocImages(html);
+        let blocks = [];
+        if (parser) { try { blocks = await parser.tryParseHTMLToBlocks(html); } catch (e) { console.error("[doc-import] HTML parse failed", e); } }
+        const content = (Array.isArray(blocks) && blocks.length) ? JSON.stringify(blocks) : "";
+        const { data, error } = await supabase.from("brand_documents")
+          .insert({ org_id: userOrg.id, title: p.name || (de ? "Importiertes Dokument" : "Imported document"), content, created_by: session?.user?.id, visibility: "workspace" })
+          .select().single();
+        if (error) { console.error("[doc-import]", label, "insert failed", error); failures.push(label); continue; }
+        if (data) { added.push(data); recordActivity("created", data.id); }
+      } catch (e) { console.error("[doc-import]", label, e); failures.push(label); }
+    }
+    if (added.length) setDocs(prev => [...added, ...prev]);
+    onImportingChange?.(false);
+    if (added.length === 1) { setOpenDoc(added[0]); setTitle(added[0].title || ""); } // open a single import right away
+    if (failures.length) {
+      alert((de ? "Konnte nicht importieren:\n" : "Couldn't import:\n") + failures.map(f => "•  " + f).join("\n"));
+    }
+  };
+  const importFromDriveRef = useRef(null);
+  importFromDriveRef.current = importFromDrive;
+  useEffect(() => { if (importRef) importRef.current = () => importFromDriveRef.current?.(); }, [importRef]);
 
   const persist = async (patch) => {
     if (!openDoc) return;
