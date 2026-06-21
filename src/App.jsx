@@ -16,7 +16,7 @@ import "@blocknote/mantine/style.css";
 import skillSignalMine from "../docs/docs-skillz/signal-mine/SKILL.md?raw";
 import skillStoryMine from "../docs/docs-skillz/story-mine/SKILL.md?raw";
 import skillAudienceGaps from "../docs/docs-skillz/audience-gaps/SKILL.md?raw";
-import skillGoalLock from "../docs/docs-skillz/goal-lock/SKILL.md?raw";
+import skillReelScripter from "../docs/docs-skillz/reel-scripter/SKILL.md?raw";
 import skillNewsletter from "../docs/docs-skillz/newsletter-drafter/SKILL.md?raw";
 
 // Error Boundary to prevent black screen — shows error info in production
@@ -14612,12 +14612,12 @@ const DOC_SKILLS = [
     system: stripFrontmatter(skillAudienceGaps),
   },
   {
-    id: "goal-lock",
-    name: { de: "Goal Lock", en: "Goal Lock" },
-    subline: { de: "Prüft jede Idee gegen dein wichtigstes Ziel.", en: "Filters every idea through your primary goal." },
-    description: { de: "Lege dein primäres Ziel fest und prüfe jede Idee, jeden Entwurf oder Plan dagegen — Goal Lock sagt dir, ob es aufs Ziel einzahlt, und wenn nicht, was stattdessen.", en: "Lock your primary goal and run any idea, draft or plan through it — Goal Lock tells you whether it moves you toward the goal, and if not, what would." },
-    inputPlaceholder: { de: "Nenne dein Ziel (z. B. 1.000 Newsletter-Abos bis Q3) und die Idee, die du prüfen willst…", en: "State your goal (e.g. 1,000 newsletter signups by Q3) and the idea you want to check…" },
-    system: stripFrontmatter(skillGoalLock),
+    id: "reel-scripter",
+    name: { de: "Reel Scripter", en: "Reel Scripter" },
+    subline: { de: "Schreibt das komplette Short-Form-Skript.", en: "Writes the full short-form script." },
+    description: { de: "Aus deiner Reel-/Short-/TikTok-Idee — Reel Scripter schreibt das komplette Skript: climax-led Opener, knappe Beats mit Visual-Cues, On-Screen-Text und CTA, in deiner Stimme.", en: "From your Reel/Short/TikTok idea — Reel Scripter writes the full script: climax-led opener, tight beats with visual cues, on-screen text and a CTA, in your voice." },
+    inputPlaceholder: { de: "Beschreibe deine Reel-/Short-Idee oder das Thema…", en: "Describe your Reel/Short idea or topic…" },
+    system: stripFrontmatter(skillReelScripter),
   },
   {
     id: "newsletter-drafter",
