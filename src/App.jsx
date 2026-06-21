@@ -11419,36 +11419,30 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
               </motion.div>
             ))}
           </div>
-        ) : PEOPLE_SECTIONS.map(sec => {
-          const items = people.filter(p => p.section === sec.key);
-          if (!items.length) return null;
-          return (
-            <div key={sec.key} style={{ marginBottom: 18 }}>
-              {sectionHeader(L(sec.label))}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: 14 }}>
-                {items.map(p => (
-                  <motion.div key={p.id} whileHover={{ y: -2 }}
-                    style={{ borderRadius: 18, padding: 16, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", display: "flex", flexDirection: "column", gap: 16 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                      {avatar(p, 52)}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
-                        <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{L(p.note)}</div>
-                      </div>
-                      {actionBtn(p)}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      {tag(p.status)}
-                      <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>{p.date}</span>
-                      <div style={{ flex: 1 }} />
-                      {scoreBadge(p.score)}
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
+        ) : (
+          // Cards view — flat grid, no time sections
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: 14 }}>
+            {people.map(p => (
+              <motion.div key={p.id} whileHover={{ y: -2 }}
+                style={{ borderRadius: 18, padding: 16, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  {avatar(p, 52)}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+                    <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{L(p.note)}</div>
+                  </div>
+                  {actionBtn(p)}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {tag(p.status)}
+                  <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>{p.date}</span>
+                  <div style={{ flex: 1 }} />
+                  {scoreBadge(p.score)}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
