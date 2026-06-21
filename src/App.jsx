@@ -11329,12 +11329,29 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
     .filter(p => filter === "all" || p.status === filter)
     .filter(p => { const s = search.trim().toLowerCase(); return !s || p.name.toLowerCase().includes(s) || L(p.note).toLowerCase().includes(s); });
 
+  // Date helpers: the stored `date` is a display string ("DD.MM.YYYY HH:MM");
+  // editing uses native date + time pickers, so we parse to/from ISO.
+  const parsePersonDate = (str) => {
+    const [d = "", t = ""] = (str || "").trim().split(/\s+/);
+    const dm = d.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    const tm = t.match(/^(\d{1,2}):(\d{2})$/);
+    return { iso: dm ? `${dm[3]}-${dm[2].padStart(2, "0")}-${dm[1].padStart(2, "0")}` : "", time: tm ? `${tm[1].padStart(2, "0")}:${tm[2]}` : "" };
+  };
+  const formatPersonDate = (iso, time) => {
+    let out = "";
+    if (iso) { const [y, mo, da] = iso.split("-"); out = `${da}.${mo}.${y}`; }
+    if (time) out += (out ? " " : "") + time;
+    return out;
+  };
+
   const openPerson = (p) => { setSelected(p); setEditing(false); setDraft(null); };
   const closeDetail = () => { setSelected(null); setEditing(false); setDraft(null); };
-  const startEdit = () => { setDraft({ ...selected, note: L(selected.note), channels: [...(selected.channels || [])] }); setEditing(true); };
+  const startEdit = () => { const { iso, time } = parsePersonDate(selected.date); setDraft({ ...selected, note: L(selected.note), channels: [...(selected.channels || [])], _dateISO: iso, _time: time }); setEditing(true); };
   const cancelEdit = () => { setEditing(false); setDraft(null); };
   const saveEdit = () => {
-    const updated = { ...draft, name: (draft.name || "").trim() || (de ? "Unbenannt" : "Unnamed"), score: Math.max(0, Math.min(100, parseInt(draft.score, 10) || 0)), email: (draft.email || "").trim() || null };
+    const date = formatPersonDate(draft._dateISO, draft._time) || draft.date || "";
+    const updated = { ...draft, date, name: (draft.name || "").trim() || (de ? "Unbenannt" : "Unnamed"), score: Math.max(0, Math.min(100, parseInt(draft.score, 10) || 0)), email: (draft.email || "").trim() || null };
+    delete updated._dateISO; delete updated._time;
     setAllPeople(prev => prev.map(x => x.id === updated.id ? updated : x));
     setSelected(updated); setEditing(false); setDraft(null);
   };
@@ -11408,7 +11425,7 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
   if (selected) {
     const p = editing ? draft : selected;
     const sc = scoreStyle(p.score || 0);
-    const inp = { width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13.5, fontFamily: FONT, outline: "none" };
+    const inp = { width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13.5, fontFamily: FONT, outline: "none", colorScheme: darkMode ? "dark" : "light" };
     const CH_KEYS = ["linkedin", "instagram", "x", "threads", "youtube", "tiktok", "facebook"];
     const toggleChannel = (k) => setDraft(d => ({ ...d, channels: (d.channels || []).includes(k) ? d.channels.filter(c => c !== k) : [...(d.channels || []), k] }));
     const infoRow = (label, value) => (
@@ -11502,9 +11519,10 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
                   </div>
                 ))}
                 {field(de ? "Aktivität" : "Activity", <input value={draft.note || ""} onChange={e => setDraft(d => ({ ...d, note: e.target.value }))} placeholder={de ? "z. B. Erstgespräch" : "e.g. First call"} style={inp} />)}
-                {field(de ? "Datum" : "Date", <input value={draft.date || ""} onChange={e => setDraft(d => ({ ...d, date: e.target.value }))} placeholder="24.08.2026 7:24" style={inp} />)}
+                {field(de ? "Datum" : "Date", <input type="date" value={draft._dateISO || ""} onChange={e => setDraft(d => ({ ...d, _dateISO: e.target.value }))} style={inp} />)}
+                {field(de ? "Uhrzeit" : "Time", <input type="time" value={draft._time || ""} onChange={e => setDraft(d => ({ ...d, _time: e.target.value }))} style={inp} />)}
                 {field("Score", <input type="number" min="0" max="100" value={draft.score ?? ""} onChange={e => setDraft(d => ({ ...d, score: e.target.value }))} style={inp} />)}
-                {field("E-Mail", <input value={draft.email || ""} onChange={e => setDraft(d => ({ ...d, email: e.target.value }))} placeholder="name@example.com" style={inp} />, 2)}
+                {field("E-Mail", <input value={draft.email || ""} onChange={e => setDraft(d => ({ ...d, email: e.target.value }))} placeholder="name@example.com" style={inp} />)}
                 {field(de ? "Kanäle" : "Channels", (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                     {CH_KEYS.map(k => {
