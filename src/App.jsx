@@ -7976,7 +7976,24 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   );
 }
 
-const CHAT_COLORS = ["#E88D67", "#5B8DEF", "#8B7AFF", "#6BC5A0", "#F59E0B", "#E84393", "#00B894", "#FD79A8"];
+// Cool, saturated avatar colours — solid fills with enough contrast for white
+// initials (no gradients, no borders). Used for member + group default avatars.
+const CHAT_COLORS = ["#4F46E5", "#2563EB", "#7C3AED", "#0D9488", "#0891B2", "#6366F1", "#0E7490", "#8B5CF6"];
+// Palette offered when creating a group (same cool family, a few more options).
+const GROUP_COLORS = ["#4F46E5", "#2563EB", "#7C3AED", "#0D9488", "#0891B2", "#6366F1", "#0E7490", "#8B5CF6", "#3B82F6", "#14B8A6", "#5B6CFF", "#9333EA"];
+
+// Default initials avatar: solid fill, white text, no border, no gradient.
+function InitialsAvatar({ color = "#5B6CFF", initials = "?", size = 42, fontSize, style }) {
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: "50%", flexShrink: 0,
+      background: color, color: "#fff",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: fontSize || Math.round(size * 0.34), fontWeight: 600, fontFamily: FONT,
+      ...style,
+    }}>{initials}</div>
+  );
+}
 
 function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t, session, userOrg, orgMembers, darkMode, theme, createNotification, notifications = [], markNotifRead }) {
   const [search, setSearch] = useState("");
@@ -7994,6 +8011,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [groupSelected, setGroupSelected] = useState([]); // user_ids to add
+  const [groupColor, setGroupColor] = useState(GROUP_COLORS[0]); // chosen group avatar colour
   const [creatingGroup, setCreatingGroup] = useState(false);
   // Group management (rename / add / remove / leave)
   const [manageOpen, setManageOpen] = useState(false);
@@ -8103,7 +8121,9 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       const lastMsg = msgs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
       const name = c.is_group ? (c.name || "Gruppenchat") : (other?.display_name || "Unbekannt");
       const avatar_url = !c.is_group ? other?.avatar_url : null;
-      const color = !c.is_group ? (other?.color || "#8B7AFF") : "#8B7AFF";
+      const color = !c.is_group
+        ? (other?.color || "#5B6CFF")
+        : (c.color || CHAT_COLORS[Math.abs((c.id || "x").charCodeAt(0)) % CHAT_COLORS.length]);
       const initials = !c.is_group ? (other?.initials || "?") : (c.name || "G").slice(0, 2).toUpperCase();
       // Time formatting
       let timeStr = "";
@@ -8300,7 +8320,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     setCreatingGroup(true);
     try {
       const { data: conv, error: convErr } = await supabase
-        .from("chat_conversations").insert({ org_id: userOrg.id, is_group: true, name, created_by: myId }).select().single();
+        .from("chat_conversations").insert({ org_id: userOrg.id, is_group: true, name, created_by: myId, color: groupColor }).select().single();
       if (convErr || !conv) { console.error("[Chat] create group failed:", convErr); alert("Gruppe konnte nicht erstellt werden" + (convErr ? ": " + convErr.message : "")); setCreatingGroup(false); return; }
       const memberIds = [myId, ...groupSelected.filter(id => id !== myId)];
       const { error: partErr } = await supabase.from("chat_participants").insert(
@@ -8310,7 +8330,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       // Optimistically surface the new group so the panel opens right away.
       setConversations(prev => [
         {
-          id: conv.id, name, avatar_url: null, color: "#8B7AFF",
+          id: conv.id, name, avatar_url: null, color: groupColor,
           initials: name.slice(0, 2).toUpperCase(), is_group: true, created_by: myId,
           lastMsg: "", time: "", lastMsgAt: conv.created_at,
           participants: memberIds, otherIds: memberIds.filter(id => id !== myId),
@@ -8469,7 +8489,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
             </div>
             <motion.div
               whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98, backgroundColor: darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.09)" }}
-              onClick={() => { setGroupName(""); setGroupSelected([]); setGroupModalOpen(true); }}
+              onClick={() => { setGroupName(""); setGroupSelected([]); setGroupColor(GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)]); setGroupModalOpen(true); }}
               style={{
                 marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 9,
                 padding: "11px 12px", borderRadius: 999, cursor: "pointer",
@@ -8533,13 +8553,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                         {item.avatar_url ? (
                           <img src={item.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 42, height: 42, borderRadius: "50%" }} />
                         ) : (
-                          <div style={{
-                            width: 42, height: 42, borderRadius: "50%",
-                            background: `linear-gradient(135deg, ${item.color}50, ${item.color}20)`,
-                            border: `1px solid ${item.color}40`,
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 14, fontWeight: 600, fontFamily: FONT, color: item.color,
-                          }}>{item.initials}</div>
+                          <InitialsAvatar color={item.color} initials={item.initials} size={42} fontSize={14} />
                         )}
                       </div>
                       {(() => {
@@ -8590,13 +8604,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                       {item.avatar_url ? (
                         <img src={item.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 42, height: 42, borderRadius: "50%" }} />
                       ) : (
-                        <div style={{
-                          width: 42, height: 42, borderRadius: "50%",
-                          background: `linear-gradient(135deg, ${item.color}50, ${item.color}20)`,
-                          border: `1px solid ${item.color}40`,
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 14, fontWeight: 600, fontFamily: FONT, color: item.color,
-                        }}>{item.initials}</div>
+                        <InitialsAvatar color={item.color} initials={item.initials} size={42} fontSize={14} />
                       )}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -8624,13 +8632,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                 {activeConv.avatar_url ? (
                   <img src={activeConv.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 38, height: 38, borderRadius: "50%" }} />
                 ) : (
-                  <div style={{
-                    width: 38, height: 38, borderRadius: "50%",
-                    background: `linear-gradient(135deg, ${activeConv.color}50, ${activeConv.color}20)`,
-                    border: `1px solid ${activeConv.color}40`,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 13, fontWeight: 600, fontFamily: FONT, color: activeConv.color,
-                  }}>{activeConv.initials}</div>
+                  <InitialsAvatar color={activeConv.color} initials={activeConv.initials} size={38} fontSize={13} />
                 )}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -8683,13 +8685,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                       sender.avatar_url ? (
                         <img src={sender.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 32, height: 32, borderRadius: "50%", flexShrink: 0, marginTop: 2 }} />
                       ) : (
-                        <div style={{
-                          width: 32, height: 32, borderRadius: "50%", flexShrink: 0, marginTop: 2,
-                          background: `linear-gradient(135deg, ${sender.color}50, ${sender.color}20)`,
-                          border: `1px solid ${sender.color}30`,
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 11, fontWeight: 600, fontFamily: FONT, color: sender.color,
-                        }}>{sender.initials}</div>
+                        <InitialsAvatar color={sender.color} initials={sender.initials} size={32} fontSize={11} style={{ marginTop: 2 }} />
                       )
                     )}
                     <div style={{ maxWidth: "65%" }}>
@@ -8992,6 +8988,24 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                 }}
               />
             </div>
+            {/* Avatar colour — pick from a cool palette; preview on the left */}
+            <div style={{ padding: "8px 22px 4px" }}>
+              <span style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>Farbe</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10 }}>
+                <InitialsAvatar color={groupColor} initials={(groupName.trim() || "G").slice(0, 2).toUpperCase()} size={40} fontSize={14} />
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 9, flex: 1 }}>
+                  {GROUP_COLORS.map(c => {
+                    const on = groupColor === c;
+                    return (
+                      <div key={c} onClick={() => setGroupColor(c)} title={c}
+                        style={{ width: 24, height: 24, borderRadius: "50%", background: c, cursor: "pointer",
+                          boxShadow: on ? `0 0 0 2px ${darkMode ? "#1c1c26" : "#fff"}, 0 0 0 4px ${c}` : "none",
+                          transform: on ? "scale(1.08)" : "none", transition: "transform 0.15s ease, box-shadow 0.15s ease" }} />
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
             {/* Members */}
             <div style={{ padding: "8px 22px 4px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>Mitglieder</span>
@@ -9010,12 +9024,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                     {m.avatar_url ? (
                       <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0 }} />
                     ) : (
-                      <div style={{
-                        width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
-                        background: `linear-gradient(135deg, ${m.color}50, ${m.color}20)`, border: `1px solid ${m.color}40`,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 12, fontWeight: 600, fontFamily: FONT, color: m.color,
-                      }}>{m.initials}</div>
+                      <InitialsAvatar color={m.color} initials={m.initials} size={34} fontSize={12} />
                     )}
                     <div style={{ flex: 1, fontSize: 13.5, fontFamily: FONT, color: theme.text, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.display_name}</div>
                     <div style={{
@@ -9108,12 +9117,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                       {m.avatar_url ? (
                         <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0 }} />
                       ) : (
-                        <div style={{
-                          width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
-                          background: `linear-gradient(135deg, ${m.color}50, ${m.color}20)`, border: `1px solid ${m.color}40`,
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 12, fontWeight: 600, fontFamily: FONT, color: m.color,
-                        }}>{m.initials}</div>
+                        <InitialsAvatar color={m.color} initials={m.initials} size={34} fontSize={12} />
                       )}
                       <div style={{ flex: 1, fontSize: 13.5, fontFamily: FONT, color: theme.text, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.display_name}</div>
                       {id !== myId && (
@@ -9144,12 +9148,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                           {m.avatar_url ? (
                             <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0 }} />
                           ) : (
-                            <div style={{
-                              width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
-                              background: `linear-gradient(135deg, ${m.color}50, ${m.color}20)`, border: `1px solid ${m.color}40`,
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              fontSize: 12, fontWeight: 600, fontFamily: FONT, color: m.color,
-                            }}>{m.initials}</div>
+                            <InitialsAvatar color={m.color} initials={m.initials} size={34} fontSize={12} />
                           )}
                           <div style={{ flex: 1, fontSize: 13.5, fontFamily: FONT, color: theme.text, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.display_name}</div>
                           <div style={{ flexShrink: 0, color: "#8B7AFF", display: "flex" }}>
