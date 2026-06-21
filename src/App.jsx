@@ -14655,6 +14655,8 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   const [skillSel, setSkillSel] = useState(null);    // selected skill object (stage 2)
   const [skillInput, setSkillInput] = useState("");
   const [skillBusy, setSkillBusy] = useState(false);
+  const [skillRecording, setSkillRecording] = useState(false); // dictation into the skill input
+  const skillRecRef = useRef(null);
   const L = (o) => (o && (o[appLanguage === "de" ? "de" : "en"] ?? o.de)) || ""; // pick localized string
 
   // Open a document from a notification deep-link (mention). Fetch by id so it
@@ -14916,6 +14918,33 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   const openSkillsRef = useRef(null);
   openSkillsRef.current = () => { setSkillSel(null); setSkillInput(""); setSkillBusy(false); setSkillsOpen(true); };
   useEffect(() => { if (skillsRef) skillsRef.current = () => openSkillsRef.current?.(); }, [skillsRef]);
+
+  // Dictate into the skill input (same behaviour as the Moodboard note mic).
+  const startSkillDictation = () => {
+    const de = appLanguage === "de";
+    const SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (!SR) { alert(de ? "Spracherkennung wird in diesem Browser nicht unterstützt." : "Speech recognition isn't supported in this browser."); return; }
+    if (skillRecording) { try { skillRecRef.current?.stop(); } catch (_) {} return; }
+    const rec = new SR();
+    rec.lang = de ? "de-DE" : "en-US";
+    rec.continuous = true; rec.interimResults = true;
+    let base = skillInput; let needsSpace = base.length > 0 && !base.endsWith(" ");
+    rec.onresult = (event) => {
+      let working = base;
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const tr = event.results[i][0].transcript;
+        if (event.results[i].isFinal) { working += (needsSpace ? " " : "") + tr.trim(); base = working; needsSpace = true; }
+        else { working = base + (needsSpace ? " " : "") + tr; }
+        setSkillInput(working);
+      }
+    };
+    rec.onerror = (e) => { if (e.error !== "no-speech") console.error("[skill dictation]", e.error); };
+    rec.onend = () => { setSkillRecording(false); skillRecRef.current = null; };
+    rec.start(); skillRecRef.current = rec; setSkillRecording(true);
+  };
+  // Stop dictation when the modal closes or the component unmounts.
+  useEffect(() => { if (!skillsOpen && skillRecRef.current) { try { skillRecRef.current.stop(); } catch (_) {} } }, [skillsOpen]);
+  useEffect(() => () => { try { skillRecRef.current?.stop(); } catch (_) {} }, []);
 
   // Generate a document from the selected skill + the user's input.
   const aiConnected = !!((llmKeys && llmProvider && llmKeys[llmProvider]) || llmProvider === "gemini");
@@ -15230,7 +15259,14 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
             ) : (
               <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "18px 22px 8px" }}>
                 <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.55, marginBottom: 16 }}>{L(skillSel.description)}</div>
-                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>{appLanguage === "de" ? "Deine Informationen" : "Your input"}</div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1 }}>{appLanguage === "de" ? "Deine Informationen" : "Your input"}</span>
+                  <motion.div whileTap={{ scale: 0.92 }} onClick={startSkillDictation} title={skillRecording ? (appLanguage === "de" ? "Diktat stoppen" : "Stop dictation") : (appLanguage === "de" ? "Diktieren" : "Dictate")}
+                    style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                      border: `1px solid ${skillRecording ? "rgba(239,68,68,0.4)" : theme.borderFaint}`, background: skillRecording ? "rgba(239,68,68,0.12)" : "transparent", color: skillRecording ? "#EF4444" : theme.textDim }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
+                  </motion.div>
+                </div>
                 <textarea value={skillInput} onChange={e => setSkillInput(e.target.value)} autoFocus
                   placeholder={L(skillSel.inputPlaceholder)}
                   style={{ width: "100%", boxSizing: "border-box", minHeight: 150, resize: "vertical", padding: "12px 14px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13.5, fontFamily: FONT, lineHeight: 1.55, outline: "none" }} />
