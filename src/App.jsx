@@ -11322,6 +11322,7 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
   const [selected, setSelected] = useState(null); // open person → detail view
   const [editing, setEditing] = useState(false);  // detail edit mode
   const [draft, setDraft] = useState(null);        // editable copy while editing
+  const avatarFileRef = useRef(null);
   const L = (o) => typeof o === "string" ? o : ((o && (o[de ? "de" : "en"] ?? o.de)) || "");
 
   const people = allPeople
@@ -11337,6 +11338,19 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
     setAllPeople(prev => prev.map(x => x.id === updated.id ? updated : x));
     setSelected(updated); setEditing(false); setDraft(null);
   };
+  const deletePerson = () => {
+    if (!selected) return;
+    if (!window.confirm(de ? `„${selected.name}" wirklich löschen?` : `Delete “${selected.name}”?`)) return;
+    setAllPeople(prev => prev.filter(x => x.id !== selected.id));
+    closeDetail();
+  };
+  const onPickAvatar = (e) => {
+    const file = e.target.files?.[0]; e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setDraft(d => ({ ...d, avatar_url: reader.result }));
+    reader.readAsDataURL(file);
+  };
 
   // Score → soft badge colour (top tier is solid anthracite, like the design).
   const scoreStyle = (s) =>
@@ -11347,7 +11361,9 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
     : { bg: "#F3C8D0", fg: "#9a3b53" };
   const initials = (n) => (n || "?").split(" ").map(w => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
   const statusLabel = (st) => st === "customer" ? (de ? "Kunde" : "Customer") : (de ? "Explorer" : "Explorer");
-  const avatar = (p, size) => (
+  const avatar = (p, size) => p.avatar_url ? (
+    <img src={p.avatar_url} alt="" style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+  ) : (
     <div style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: p.color + "2e", color: p.color, fontSize: size * 0.36, fontWeight: 600, fontFamily: FONT }}>{initials(p.name)}</div>
   );
   const tag = (st) => (
@@ -11408,10 +11424,16 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
       </div>
     );
     const editAction = editing ? (
-      <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={saveEdit}
-        style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 16px", borderRadius: 999, cursor: "pointer", background: "#23232b", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600 }}>
-        {de ? "Speichern" : "Save"}
-      </motion.div>
+      <>
+        <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={cancelEdit}
+          style={{ display: "inline-flex", alignItems: "center", padding: "8px 14px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
+          {de ? "Abbrechen" : "Cancel"}
+        </motion.div>
+        <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={saveEdit}
+          style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 16px", borderRadius: 999, cursor: "pointer", background: "#23232b", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600 }}>
+          {de ? "Speichern" : "Save"}
+        </motion.div>
+      </>
     ) : (
       <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={startEdit}
         style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", color: theme.text, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
@@ -11424,19 +11446,29 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         {/* Edit/Save lives in the page's top-right header slot (consistent with other pages) */}
         {slot && createPortal(editAction, slot)}
-        <div style={{ padding: "16px 26px 4px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-          <motion.div whileTap={{ scale: 0.96 }} onClick={editing ? cancelEdit : closeDetail}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12.5, fontFamily: FONT }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-            {editing ? (de ? "Abbrechen" : "Cancel") : (de ? "Alle Personen" : "All people")}
-          </motion.div>
-          {!slot && editAction}
+        <div style={{ padding: "16px 26px 4px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 34 }}>
+          {!editing ? (
+            <motion.div whileTap={{ scale: 0.96 }} onClick={closeDetail}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12.5, fontFamily: FONT }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+              {de ? "Alle Personen" : "All people"}
+            </motion.div>
+          ) : <span />}
+          {!slot && <div style={{ display: "flex", gap: 10 }}>{editAction}</div>}
         </div>
         <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "14px 26px 26px" }}>
-          <div>
+          <div style={{ maxWidth: 760, margin: "0 auto" }}>
             {/* Header */}
             <div style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 24 }}>
-              {avatar(p, 72)}
+              {editing ? (
+                <div onClick={() => avatarFileRef.current?.click()} title={de ? "Bild hochladen" : "Upload photo"} style={{ position: "relative", cursor: "pointer", flexShrink: 0 }}>
+                  {avatar(p, 72)}
+                  <div style={{ position: "absolute", right: -2, bottom: -2, width: 26, height: 26, borderRadius: "50%", background: "#23232b", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${darkMode ? "#1c1c26" : "#fff"}` }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                  </div>
+                  <input ref={avatarFileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={onPickAvatar} />
+                </div>
+              ) : avatar(p, 72)}
               <div style={{ flex: 1, minWidth: 0 }}>
                 {editing ? (
                   <input value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} placeholder={de ? "Name" : "Name"}
@@ -11471,7 +11503,7 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
                 ))}
                 {field(de ? "Aktivität" : "Activity", <input value={draft.note || ""} onChange={e => setDraft(d => ({ ...d, note: e.target.value }))} placeholder={de ? "z. B. Erstgespräch" : "e.g. First call"} style={inp} />)}
                 {field(de ? "Datum" : "Date", <input value={draft.date || ""} onChange={e => setDraft(d => ({ ...d, date: e.target.value }))} placeholder="24.08.2026 7:24" style={inp} />)}
-                {field("Score", <input type="number" min="0" max="100" value={draft.score ?? ""} onChange={e => setDraft(d => ({ ...d, score: e.target.value }))} style={{ ...inp, maxWidth: 120 }} />)}
+                {field("Score", <input type="number" min="0" max="100" value={draft.score ?? ""} onChange={e => setDraft(d => ({ ...d, score: e.target.value }))} style={inp} />)}
                 {field("E-Mail", <input value={draft.email || ""} onChange={e => setDraft(d => ({ ...d, email: e.target.value }))} placeholder="name@example.com" style={inp} />, 2)}
                 {field(de ? "Kanäle" : "Channels", (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -11485,6 +11517,13 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
                     })}
                   </div>
                 ), 2)}
+                <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
+                  <motion.div whileTap={{ scale: 0.97 }} onClick={deletePerson}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 16px", borderRadius: 999, cursor: "pointer", border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.08)", color: "#EF4444", fontSize: 13, fontFamily: FONT, fontWeight: 500 }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                    {de ? "Person löschen" : "Delete person"}
+                  </motion.div>
+                </div>
               </div>
             ) : (
               /* Read-only info */
