@@ -11349,9 +11349,9 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
     </motion.div>
   ) : null;
   // Social channel chip(s) — replaces the score number on cards/list.
-  const channelChip = (key, size = 28) => { const c = CHANNEL_META[key]; if (!c) return null; const bump = (key === "linkedin" || key === "threads") ? 1.3 : 1; const g = tpGlyphSize(key, Math.round(size * 0.6 * bump)); return (
+  const channelChip = (key, size = 28) => { const c = CHANNEL_META[key]; if (!c) return null; const bump = (key === "linkedin" || key === "threads") ? 1.3 : 1; const g = tpGlyphSize(key, Math.round(size * 0.6 * bump)); const shift = key === "threads" ? 2 : 0; return (
     <div key={key} title={c.label} style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: c.color }}>
-      <svg width={g} height={g} viewBox="0 0 24 24">{touchpointGlyph(key)}</svg>
+      <svg width={g} height={g} viewBox="0 0 24 24" style={shift ? { transform: `translateY(${shift}px)` } : undefined}>{touchpointGlyph(key)}</svg>
     </div>
   ); };
   const channelRow = (p, size = 28) => (
