@@ -11,6 +11,13 @@ import { de as blockNoteDe } from "@blocknote/core/locales";
 import { BlockNoteSchema, defaultBlockSpecs, filterSuggestionItems, BlockNoteEditor } from "@blocknote/core";
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
+// Document skills — the instruction body of each comes straight from its SKILL.md
+// (single source of truth; edit the .md + rebuild to change a skill).
+import skillSignalMine from "../docs/docs-skillz/signal-mine/SKILL.md?raw";
+import skillStoryMine from "../docs/docs-skillz/story-mine/SKILL.md?raw";
+import skillAudienceGaps from "../docs/docs-skillz/audience-gaps/SKILL.md?raw";
+import skillGoalLock from "../docs/docs-skillz/goal-lock/SKILL.md?raw";
+import skillNewsletter from "../docs/docs-skillz/newsletter-drafter/SKILL.md?raw";
 
 // Error Boundary to prevent black screen — shows error info in production
 export class AppErrorBoundary extends Component {
@@ -14575,49 +14582,50 @@ function InfoPopover({ doc, memberById, activity, projectName, theme, darkMode, 
 }
 
 // Document skills — pick a skill, type in your info, and the AI drafts a full
-// document for you. Placeholder set of 5 (real skills will be swapped in from
-// the provided .md files). `system` is the instruction the model follows; we
-// append the language + "return Markdown" rule at call time.
+// document for you. `system` is the instruction the model follows (the body of
+// the skill's SKILL.md, frontmatter stripped); we append language + Markdown
+// rules at call time. Display labels are bilingual; the skill body stays as-is.
+const stripFrontmatter = (md) => (md || "").replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim();
 const DOC_SKILLS = [
   {
-    id: "brand-brief",
-    name: { de: "Marken-Briefing", en: "Brand brief" },
-    subline: { de: "Strukturiertes Marken-Briefing aus deinen Eckdaten.", en: "A structured brand brief from your key facts." },
-    description: { de: "Verwandelt grobe Angaben zu Marke, Zielgruppe und Zielen in ein sauber gegliedertes Briefing-Dokument.", en: "Turns rough notes about brand, audience and goals into a cleanly structured brief." },
-    inputPlaceholder: { de: "z. B. Marke, Branche, Zielgruppe, Ziele, Tonalität, Wettbewerber…", en: "e.g. brand, industry, audience, goals, tone, competitors…" },
-    system: { de: "Du bist ein erfahrener Brand-Stratege. Erstelle aus den Angaben des Nutzers ein vollständiges, professionelles Marken-Briefing mit klaren Abschnitten (z. B. Ausgangslage, Zielgruppe, Markenkern, Tonalität, Botschaften, Do's & Don'ts, nächste Schritte).", en: "You are a senior brand strategist. From the user's input, write a complete, professional brand brief with clear sections (e.g. context, audience, brand core, tone, messaging, do's & don'ts, next steps)." },
+    id: "signal-mine",
+    name: { de: "Signal Mine", en: "Signal Mine" },
+    subline: { de: "Findet aus rohen Inputs die postbaren Content-Ideen.", en: "Finds the postable content ideas in a pile of raw input." },
+    description: { de: "Füge News, Tweets, Reddit-Threads oder Recherche ein — Signal Mine extrahiert die Content-Winkel, die zu deiner Nische passen, je mit Format und Hook.", en: "Paste news, tweets, Reddit threads or research — Signal Mine extracts the content angles worth posting, each with format and hook." },
+    inputPlaceholder: { de: "Füge deine rohen Inputs ein (Artikel, Tweets, Threads, Recherche…) und nenne deine Nische/Pillars.", en: "Paste your raw inputs (articles, tweets, threads, research…) and name your niche/pillars." },
+    system: stripFrontmatter(skillSignalMine),
   },
   {
-    id: "content-strategy",
-    name: { de: "Content-Strategie", en: "Content strategy" },
-    subline: { de: "Content-Strategie für einen Kanal oder eine Kampagne.", en: "A content strategy for a channel or campaign." },
-    description: { de: "Entwickelt eine Content-Strategie inkl. Zielen, Säulen, Formaten und einem groben Plan.", en: "Develops a content strategy incl. goals, pillars, formats and a rough plan." },
-    inputPlaceholder: { de: "z. B. Kanal, Zielgruppe, Ziele, Themen, Frequenz…", en: "e.g. channel, audience, goals, topics, frequency…" },
-    system: { de: "Du bist ein Content-Stratege. Erstelle aus den Angaben eine konkrete Content-Strategie mit Zielen, Content-Säulen, Formaten/Ideen und einem groben Redaktionsplan.", en: "You are a content strategist. From the input, create a concrete content strategy with goals, content pillars, formats/ideas and a rough editorial plan." },
+    id: "story-mine",
+    name: { de: "Story Mine", en: "Story Mine" },
+    subline: { de: "Macht aus einer Story mehrere Content-Winkel.", en: "Turns one story into several content angles." },
+    description: { de: "Beschreibe eine Erfahrung oder Kunden-Story — Story Mine holt die 3–5 Winkel heraus (Lektion, Contrarian, Framework, Proof, Moment), je mit Format und Hook.", en: "Describe an experience or client story — Story Mine surfaces the 3–5 angles (lesson, contrarian, framework, proof, moment), each with format and hook." },
+    inputPlaceholder: { de: "Erzähl die Story, so wie sie passiert ist (ruhig unstrukturiert)…", en: "Tell the story the way it happened (messy is fine)…" },
+    system: stripFrontmatter(skillStoryMine),
   },
   {
-    id: "proposal",
-    name: { de: "Angebot / Proposal", en: "Proposal" },
-    subline: { de: "Professionelles Angebot für einen Kunden.", en: "A professional client proposal." },
-    description: { de: "Formuliert ein überzeugendes Angebot mit Leistungen, Vorgehen, Zeitplan und Investition.", en: "Drafts a persuasive proposal with scope, approach, timeline and investment." },
-    inputPlaceholder: { de: "z. B. Kunde, Projekt, Leistungen, Budget/Rahmen, Timeline…", en: "e.g. client, project, scope, budget/range, timeline…" },
-    system: { de: "Du bist ein erfahrener Agentur-Berater. Erstelle aus den Angaben ein professionelles Angebot mit Abschnitten wie Ausgangslage, Lösung/Leistungen, Vorgehen, Zeitplan, Investition und nächste Schritte.", en: "You are a senior agency consultant. From the input, create a professional proposal with sections like context, solution/scope, approach, timeline, investment and next steps." },
+    id: "audience-gaps",
+    name: { de: "Audience Gaps", en: "Audience Gaps" },
+    subline: { de: "Die 3 Fragen, die deine Audience still stellt.", en: "The 3 questions your audience is silently asking." },
+    description: { de: "Füge ein Content-Stück ein (Reel, Carousel, Skript, Idee) — Audience Gaps zeigt die 3 Fragen, die deine Audience still stellt, und was du je damit tust.", en: "Paste a piece of content (Reel, carousel, script, idea) — Audience Gaps surfaces the 3 questions your audience silently asks and what to do with each." },
+    inputPlaceholder: { de: "Füge deinen Content ein (Reel-Skript, Carousel, Idee…)", en: "Paste your content (Reel script, carousel, idea…)" },
+    system: stripFrontmatter(skillAudienceGaps),
   },
   {
-    id: "meeting-notes",
-    name: { de: "Meeting-Protokoll", en: "Meeting notes" },
-    subline: { de: "Macht aus Stichpunkten ein sauberes Protokoll.", en: "Turns rough points into clean meeting notes." },
-    description: { de: "Strukturiert deine Notizen zu einem klaren Protokoll mit Entscheidungen und To-dos.", en: "Structures your notes into clear minutes with decisions and action items." },
-    inputPlaceholder: { de: "Füge deine Meeting-Notizen / Stichpunkte ein…", en: "Paste your meeting notes / bullet points…" },
-    system: { de: "Du bist Assistenz für Protokolle. Mache aus den Stichpunkten ein klar gegliedertes Meeting-Protokoll mit Teilnehmern (falls genannt), besprochenen Punkten, Entscheidungen und To-dos (mit Verantwortlichen, falls erkennbar).", en: "You are a meeting-notes assistant. Turn the bullet points into a clearly structured meeting record with attendees (if given), topics discussed, decisions and action items (with owners where identifiable)." },
+    id: "goal-lock",
+    name: { de: "Goal Lock", en: "Goal Lock" },
+    subline: { de: "Prüft jede Idee gegen dein wichtigstes Ziel.", en: "Filters every idea through your primary goal." },
+    description: { de: "Lege dein primäres Ziel fest und prüfe jede Idee, jeden Entwurf oder Plan dagegen — Goal Lock sagt dir, ob es aufs Ziel einzahlt, und wenn nicht, was stattdessen.", en: "Lock your primary goal and run any idea, draft or plan through it — Goal Lock tells you whether it moves you toward the goal, and if not, what would." },
+    inputPlaceholder: { de: "Nenne dein Ziel (z. B. 1.000 Newsletter-Abos bis Q3) und die Idee, die du prüfen willst…", en: "State your goal (e.g. 1,000 newsletter signups by Q3) and the idea you want to check…" },
+    system: stripFrontmatter(skillGoalLock),
   },
   {
-    id: "social-plan",
-    name: { de: "Social-Media-Plan", en: "Social media plan" },
-    subline: { de: "Redaktionsplan mit Post-Ideen.", en: "An editorial plan with post ideas." },
-    description: { de: "Erstellt einen Redaktionsplan mit konkreten Post-Ideen, Formaten und Captions-Ansätzen.", en: "Creates an editorial plan with concrete post ideas, formats and caption angles." },
-    inputPlaceholder: { de: "z. B. Marke, Plattform(en), Zeitraum, Themen, Tonalität…", en: "e.g. brand, platform(s), timeframe, topics, tone…" },
-    system: { de: "Du bist ein Social-Media-Manager. Erstelle aus den Angaben einen Redaktionsplan mit konkreten Post-Ideen (Format, Kernaussage, Caption-Ansatz, ggf. CTA), sinnvoll gruppiert.", en: "You are a social media manager. From the input, create an editorial plan with concrete post ideas (format, key message, caption angle, CTA where useful), sensibly grouped." },
+    id: "newsletter-drafter",
+    name: { de: "Newsletter Drafter", en: "Newsletter Drafter" },
+    subline: { de: "Schreibt einen kompletten Newsletter-Entwurf.", en: "Writes a complete newsletter draft." },
+    description: { de: "Aus einem Thema oder bestehendem Content — Newsletter Drafter schreibt Betreffzeilen, Preview-Text, Body und CTA in deiner Struktur.", en: "From a topic or existing content — Newsletter Drafter writes subject lines, preview text, body and CTA in your structure." },
+    inputPlaceholder: { de: "Thema + 2–3 Stichpunkte, oder füge einen Post/ein Video zum Repurposen ein…", en: "Topic + 2–3 bullets, or paste a post/video to repurpose…" },
+    system: stripFrontmatter(skillNewsletter),
   },
 ];
 
@@ -14921,10 +14929,10 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
     if (!apiKey && !oauthToken) { alert(de ? "Kein KI-Modell verbunden. Bitte in den Einstellungen einen Key hinterlegen." : "No AI model connected. Add a key in Settings."); return; }
     setSkillBusy(true);
     try {
-      const base = skillSel.system?.[de ? "de" : "en"] || skillSel.system?.de || "";
+      const base = (typeof skillSel.system === "string" ? skillSel.system : (skillSel.system?.[de ? "de" : "en"] || skillSel.system?.de || ""));
       const sys = base + (de
-        ? "\n\nGib AUSSCHLIESSLICH das fertige Dokument als Markdown zurück (Überschriften, Listen, Fett etc.) — keine Einleitung, keine Erklärungen, keine Code-Fences. Schreibe auf Deutsch."
-        : "\n\nReturn ONLY the finished document as Markdown (headings, lists, bold, etc.) — no preamble, no explanations, no code fences. Write in English.");
+        ? "\n\n---\nWichtig: Befolge die obige Skill-Anweisung und ihre Output-Struktur genau. Gib AUSSCHLIESSLICH das fertige Dokument als Markdown zurück (Überschriften, Listen, Fett etc.) — keine Einleitung, keine Erklärungen, keine Code-Fences. Schreibe auf Deutsch."
+        : "\n\n---\nImportant: Follow the skill instruction above and its output structure exactly. Return ONLY the finished document as Markdown (headings, lists, bold, etc.) — no preamble, no explanations, no code fences. Write in English.");
       const resp = await fetch("/api/chat-multi", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: skillInput.trim(), systemPrompt: sys, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 4000 }),
