@@ -11706,6 +11706,42 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     }));
   };
   const zoomBtn = { width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim };
+  // ── Remember the canvas viewport (zoom + scroll) per board, restore on re-entry ──
+  const VIEW_KEY = (id) => `mb-canvas-view:${id}`;
+  const viewReadyRef = useRef(false);   // saves allowed only after restore positioning
+  const restoredForRef = useRef(null);  // board id already restored this mount
+  const viewSaveTimer = useRef(null);
+  const saveCanvasView = () => {
+    if (!activeBoard?.id) return;
+    const el = canvasRef.current; if (!el) return;
+    try { localStorage.setItem(VIEW_KEY(activeBoard.id), JSON.stringify({ zoom, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop })); } catch (_) {}
+  };
+  const onCanvasScroll = () => {
+    if (!viewReadyRef.current) return;
+    clearTimeout(viewSaveTimer.current);
+    viewSaveTimer.current = setTimeout(saveCanvasView, 250);
+  };
+  // Restore once per board-open, after items are in the DOM (so scroll targets exist).
+  useEffect(() => {
+    if (view !== "canvas" || !activeBoard?.id) { restoredForRef.current = null; viewReadyRef.current = false; return; }
+    if (loadingItems) return;
+    if (restoredForRef.current === activeBoard.id) return;
+    restoredForRef.current = activeBoard.id;
+    viewReadyRef.current = false;
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(VIEW_KEY(activeBoard.id)) || "null"); } catch (_) {}
+    if (saved && typeof saved.zoom === "number") setZoom(clampZoom(saved.zoom));
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const el = canvasRef.current;
+      if (el && saved) { el.scrollLeft = saved.scrollLeft || 0; el.scrollTop = saved.scrollTop || 0; }
+      viewReadyRef.current = true;
+    }));
+  }, [view, activeBoard?.id, loadingItems]); // eslint-disable-line
+  // Persist zoom changes (buttons / zoom-to-fit / pinch) once restore is done.
+  useEffect(() => {
+    if (view !== "canvas" || !activeBoard?.id || !viewReadyRef.current) return;
+    saveCanvasView();
+  }, [zoom]); // eslint-disable-line
   // Ctrl/⌘ + wheel (and trackpad pinch) zooms the canvas. Native non-passive
   // listener so preventDefault actually stops the browser's page-zoom.
   useEffect(() => {
@@ -12184,7 +12220,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           ) : (
             // ── CANVAS (freeform drag + zoom) ──
             <>
-            <div ref={canvasRef} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp}
+            <div ref={canvasRef} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onScroll={onCanvasScroll}
               style={{ position: "absolute", inset: 0, overflow: "auto",
               cursor: spaceHeld ? (panning ? "grabbing" : "grab") : "default",
               backgroundImage: `radial-gradient(${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"} 1px, transparent 1px)`, backgroundSize: `${22 * zoom}px ${22 * zoom}px` }}>
