@@ -11299,6 +11299,162 @@ const frostedPanelStyle = (darkMode) => ({
     : "0 22px 60px rgba(0,0,0,0.09), inset 0 1px 0 rgba(255,255,255,0.7)",
 });
 
+// ── Audience → People — contact cards (cards / list views, search, filters) ──
+// Placeholder sample data for now; the shape is easy to swap for a real table.
+const SAMPLE_PEOPLE = [
+  { id: "p1", name: "Gabriela Christiansen", note: { de: "Erstgespräch", en: "First customer call" }, status: "lead",     date: "24.08.2026 7:24", score: 90, action: "mail", section: "today",   color: "#E0B84B" },
+  { id: "p2", name: "Halle Griffiths",       note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "lead",     date: "24.08.2026 7:24", score: 83, action: "call", section: "today",   color: "#E8728C" },
+  { id: "p3", name: "Josiah Love",           note: { de: "Erstgespräch", en: "First customer call" }, status: "lead",     date: "23.08.2026 7:24", score: 72, action: "call", section: "today",   color: "#4FAE7B" },
+  { id: "p4", name: "Wyatt Wetmore",         note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "customer", date: "01.08.2026 7:24", score: 62, action: "mail", section: "earlier", color: "#E0A06A" },
+  { id: "p5", name: "Jaclyn Moses",          note: { de: "Erstgespräch", en: "First customer call" }, status: "customer", date: "01.08.2026 7:24", score: 32, action: "call", section: "earlier", color: "#6C8BE0" },
+  { id: "p6", name: "Marcus Chen",           note: { de: "Angebot gesendet", en: "Proposal sent" },   status: "lead",     date: "28.07.2026 7:24", score: 54, action: "mail", section: "earlier", color: "#9B6CE0" },
+];
+const PEOPLE_SECTIONS = [
+  { key: "today",   label: { de: "Heute", en: "Today" } },
+  { key: "earlier", label: { de: "Früher", en: "Earlier" } },
+];
+
+function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
+  const de = appLanguage === "de";
+  const [view, setView] = useState("cards"); // "cards" | "list"
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all"); // "all" | "lead" | "customer"
+  const L = (o) => (o && (o[de ? "de" : "en"] ?? o.de)) || "";
+
+  const people = SAMPLE_PEOPLE
+    .filter(p => filter === "all" || p.status === filter)
+    .filter(p => { const s = search.trim().toLowerCase(); return !s || p.name.toLowerCase().includes(s) || L(p.note).toLowerCase().includes(s); });
+
+  // Score → soft badge colour (top tier is solid anthracite, like the design).
+  const scoreStyle = (s) =>
+    s >= 88 ? { bg: darkMode ? "#0f0f16" : "#1b1b1b", fg: "#fff" }
+    : s >= 78 ? { bg: "#D7F0C2", fg: "#3f6b2e" }
+    : s >= 66 ? { bg: "#F3E7A8", fg: "#7a6a1f" }
+    : s >= 50 ? { bg: "#F4D7C0", fg: "#8a5a32" }
+    : { bg: "#F3C8D0", fg: "#9a3b53" };
+  const initials = (n) => (n || "?").split(" ").map(w => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
+  const statusLabel = (st) => st === "customer" ? (de ? "Kunde" : "Customer") : "Lead";
+  const ActionIcon = ({ kind }) => kind === "call"
+    ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+    : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>;
+  const avatar = (p, size) => (
+    <div style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: p.color + "2e", color: p.color, fontSize: size * 0.36, fontWeight: 600, fontFamily: FONT }}>{initials(p.name)}</div>
+  );
+  const tag = (st) => (
+    <span style={{ fontSize: 11, fontFamily: FONT, fontWeight: 500, color: theme.textSub, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", padding: "3px 10px", borderRadius: 999 }}>{statusLabel(st)}</span>
+  );
+  const actionBtn = (p, size = 38) => (
+    <motion.div whileTap={{ scale: 0.9 }} title={p.action === "call" ? (de ? "Anrufen" : "Call") : (de ? "Mail" : "Mail")}
+      style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, cursor: "pointer" }}>
+      <ActionIcon kind={p.action} />
+    </motion.div>
+  );
+  const scoreBadge = (s, size = 38) => { const c = scoreStyle(s); return (
+    <div style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: c.bg, color: c.fg, fontSize: 13, fontWeight: 700, fontFamily: FONT }}>{s}</div>
+  ); };
+
+  const viewBtn = (mode, title, children) => {
+    const on = view === mode;
+    return (
+      <motion.div whileTap={{ scale: 0.92 }} onClick={() => setView(mode)} title={title}
+        style={{ width: 32, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+          background: on ? (darkMode ? "rgba(255,255,255,0.10)" : "#fff") : "transparent", color: on ? theme.text : theme.textDim, boxShadow: on ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>{children}</motion.div>
+    );
+  };
+  const filterBtn = (mode, label) => {
+    const on = filter === mode;
+    return (
+      <motion.div whileTap={{ scale: 0.95 }} onClick={() => setFilter(mode)}
+        style={{ padding: "6px 13px", borderRadius: 8, cursor: "pointer", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap",
+          background: on ? (darkMode ? "rgba(255,255,255,0.10)" : "#fff") : "transparent", color: on ? theme.text : theme.textDim, boxShadow: on ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>{label}</motion.div>
+    );
+  };
+  const sectionHeader = (label) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "10px 0 14px" }}>
+      <div style={{ flex: 1, height: 1, background: theme.borderFaint }} />
+      <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{label}</span>
+      <div style={{ flex: 1, height: 1, background: theme.borderFaint }} />
+    </div>
+  );
+
+  return (
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      {/* Toolbar — search · filter · view (mirrors Assets) */}
+      <div style={{ padding: "16px 26px 4px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", maxWidth: 340 }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={de ? "Kontakt suchen" : "Search contacts"}
+            style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }} />
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+          {filterBtn("all", de ? "Alle" : "All")}
+          {filterBtn("lead", de ? "Leads" : "Leads")}
+          {filterBtn("customer", de ? "Kunden" : "Customers")}
+        </div>
+        <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+          {viewBtn("cards", de ? "Karten" : "Cards", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>)}
+          {viewBtn("list", de ? "Liste" : "List", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>)}
+        </div>
+      </div>
+
+      <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 26px 26px" }}>
+        {people.length === 0 ? (
+          <div style={{ padding: "60px 20px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Keine Kontakte gefunden." : "No contacts found."}</div>
+        ) : PEOPLE_SECTIONS.map(sec => {
+          const items = people.filter(p => p.section === sec.key);
+          if (!items.length) return null;
+          return (
+            <div key={sec.key} style={{ marginBottom: 18 }}>
+              {sectionHeader(L(sec.label))}
+              {view === "cards" ? (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: 14 }}>
+                  {items.map(p => (
+                    <motion.div key={p.id} whileHover={{ y: -2 }}
+                      style={{ borderRadius: 18, padding: 16, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", display: "flex", flexDirection: "column", gap: 16 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                        {avatar(p, 52)}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+                          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{L(p.note)}</div>
+                        </div>
+                        {actionBtn(p)}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        {tag(p.status)}
+                        <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>{p.date}</span>
+                        <div style={{ flex: 1 }} />
+                        {scoreBadge(p.score)}
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  {items.map(p => (
+                    <motion.div key={p.id} className="hover-row"
+                      style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 14, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)" }}>
+                      {avatar(p, 40)}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14.5, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+                        <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{L(p.note)}</div>
+                      </div>
+                      <div style={{ flexShrink: 0 }}>{tag(p.status)}</div>
+                      <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textFaint, flexShrink: 0, minWidth: 120, textAlign: "right" }}>{p.date}</div>
+                      {actionBtn(p, 34)}
+                      {scoreBadge(p.score, 34)}
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", canEdit = true }) {
   const [audTab, setAudTab] = useState("touchpoints"); // "touchpoints" | "people"
   const [profile, setProfile] = useState(null);
@@ -11376,17 +11532,12 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
           })}
         </div>
 
+        {audTab === "people" ? (
+          <PeopleTab theme={theme} darkMode={darkMode} accent={accent} appLanguage={appLanguage} />
+        ) : (
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
           {loading ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
-          ) : audTab === "people" ? (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", height: "100%", minHeight: 280, gap: 12, color: theme.textDim }}>
-              <div style={{ width: 64, height: 64, borderRadius: 18, background: accent + "18", color: accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-              </div>
-              <div style={{ fontSize: 15.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>People</div>
-              <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 340, lineHeight: 1.55 }}>{appLanguage === "de" ? "Hier kommt deine Audience hin. Dieser Bereich wird als Nächstes gebaut." : "Your audience will live here. This section is coming next."}</div>
-            </div>
           ) : (
             <>
               {(() => {
@@ -11515,6 +11666,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
             </>
           )}
         </div>
+        )}
       </div>
     </motion.div>
   );
