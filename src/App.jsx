@@ -11401,8 +11401,8 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
         <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.text, textAlign: "right", minWidth: 0 }}>{value}</div>
       </div>
     );
-    const field = (label, node) => (
-      <div style={{ marginBottom: 16 }}>
+    const field = (label, node, span = 1) => (
+      <div style={{ gridColumn: span === 2 ? "1 / -1" : "auto" }}>
         <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 7 }}>{label}</div>
         {node}
       </div>
@@ -11458,8 +11458,8 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
               )}
             </div>
             {editing ? (
-              /* Edit form */
-              <div>
+              /* Edit form — two columns so fields aren't overly wide */
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", columnGap: 18, rowGap: 18, maxWidth: 760 }}>
                 {field(de ? "Status" : "Status", (
                   <div style={{ display: "flex", gap: 8 }}>
                     {[["explorer", "Explorer"], ["customer", de ? "Kunde" : "Customer"]].map(([v, lab]) => {
@@ -11472,7 +11472,7 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
                 {field(de ? "Aktivität" : "Activity", <input value={draft.note || ""} onChange={e => setDraft(d => ({ ...d, note: e.target.value }))} placeholder={de ? "z. B. Erstgespräch" : "e.g. First call"} style={inp} />)}
                 {field(de ? "Datum" : "Date", <input value={draft.date || ""} onChange={e => setDraft(d => ({ ...d, date: e.target.value }))} placeholder="24.08.2026 7:24" style={inp} />)}
                 {field("Score", <input type="number" min="0" max="100" value={draft.score ?? ""} onChange={e => setDraft(d => ({ ...d, score: e.target.value }))} style={{ ...inp, maxWidth: 120 }} />)}
-                {field("E-Mail", <input value={draft.email || ""} onChange={e => setDraft(d => ({ ...d, email: e.target.value }))} placeholder="name@example.com" style={inp} />)}
+                {field("E-Mail", <input value={draft.email || ""} onChange={e => setDraft(d => ({ ...d, email: e.target.value }))} placeholder="name@example.com" style={inp} />, 2)}
                 {field(de ? "Kanäle" : "Channels", (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                     {CH_KEYS.map(k => {
@@ -11484,7 +11484,7 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
                       </div>;
                     })}
                   </div>
-                ))}
+                ), 2)}
               </div>
             ) : (
               /* Read-only info */
