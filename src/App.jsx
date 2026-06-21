@@ -11676,17 +11676,33 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const dragState = useRef(null);
   const [frontTileId, setFrontTileId] = useState(null); // last-clicked canvas tile → stacked on top
   const [zoom, setZoom] = useState(1); // canvas zoom (freemode)
+  const [pan, setPan] = useState({ x: 0, y: 0 }); // canvas pan offset (px, screen space) — infinite canvas
   const [spaceHeld, setSpaceHeld] = useState(false); // Space held → pan the whole canvas (Figma-style)
   const [panning, setPanning] = useState(false); // actively dragging to pan
   const panState = useRef(null);
+  // Live refs so the (once-attached) wheel listener can read the current view.
+  const zoomRef = useRef(zoom); zoomRef.current = zoom;
+  const panRef = useRef(pan); panRef.current = pan;
   const clampZoom = (z) => Math.min(2, Math.max(0.4, Math.round(z * 100) / 100));
+  // Zoom keeping the given screen point fixed (cursor for wheel, centre for buttons).
+  const zoomToScreenPoint = (nz, sx, sy) => {
+    const z2 = clampZoom(nz), oz = zoomRef.current, p = panRef.current;
+    const worldX = (sx - p.x) / oz, worldY = (sy - p.y) / oz;
+    setZoom(z2);
+    setPan({ x: sx - worldX * z2, y: sy - worldY * z2 });
+  };
+  const zoomCentered = (nz) => {
+    const el = canvasRef.current;
+    if (!el) { setZoom(clampZoom(nz)); return; }
+    zoomToScreenPoint(nz, el.clientWidth / 2, el.clientHeight / 2);
+  };
   // Zoom the canvas so every tile fits in the viewport, then centre the content.
   // Image heights aren't stored, so measure the actual rendered tiles from the DOM
   // (offset* values are in native canvas units, unaffected by the CSS scale).
   const zoomToFit = () => {
     const el = canvasRef.current; if (!el) return;
     const tiles = el.querySelectorAll(".mb-canvas-tile");
-    if (!tiles.length) { setZoom(1); el.scrollTo({ left: 0, top: 0 }); return; }
+    if (!tiles.length) { setZoom(1); setPan({ x: 0, y: 0 }); return; }
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     tiles.forEach(t => {
       const x = t.offsetLeft, y = t.offsetTop, w = t.offsetWidth, h = t.offsetHeight;
@@ -11694,16 +11710,14 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
       if (x + w > maxX) maxX = x + w; if (y + h > maxY) maxY = y + h;
     });
     const contentW = Math.max(1, maxX - minX), contentH = Math.max(1, maxY - minY);
-    const pad = 60; // viewport-px breathing room around the content
+    const pad = 80; // viewport-px breathing room around the content
     const vw = Math.max(1, el.clientWidth - pad * 2), vh = Math.max(1, el.clientHeight - pad * 2);
     const z = clampZoom(Math.min(vw / contentW, vh / contentH));
+    // Centre the content's midpoint in the viewport (translate-based → works even
+    // when the content is smaller than the viewport).
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
     setZoom(z);
-    // Centre after the new zoom has been laid out (outer box resizes with zoom).
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      const e2 = canvasRef.current; if (!e2) return;
-      e2.scrollLeft = ((minX + maxX) / 2) * z - e2.clientWidth / 2;
-      e2.scrollTop = ((minY + maxY) / 2) * z - e2.clientHeight / 2;
-    }));
+    setPan({ x: el.clientWidth / 2 - cx * z, y: el.clientHeight / 2 - cy * z });
   };
   const zoomBtn = { width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim };
   // ── Remember the canvas viewport (zoom + scroll) per board, restore on re-entry ──
@@ -11713,15 +11727,9 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const viewSaveTimer = useRef(null);
   const saveCanvasView = () => {
     if (!activeBoard?.id) return;
-    const el = canvasRef.current; if (!el) return;
-    try { localStorage.setItem(VIEW_KEY(activeBoard.id), JSON.stringify({ zoom, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop })); } catch (_) {}
+    try { localStorage.setItem(VIEW_KEY(activeBoard.id), JSON.stringify({ zoom, panX: pan.x, panY: pan.y })); } catch (_) {}
   };
-  const onCanvasScroll = () => {
-    if (!viewReadyRef.current) return;
-    clearTimeout(viewSaveTimer.current);
-    viewSaveTimer.current = setTimeout(saveCanvasView, 250);
-  };
-  // Restore once per board-open, after items are in the DOM (so scroll targets exist).
+  // Restore once per board-open, after items are in the DOM. No saved view → fit all.
   useEffect(() => {
     if (view !== "canvas" || !activeBoard?.id) { restoredForRef.current = null; viewReadyRef.current = false; return; }
     if (loadingItems) return;
@@ -11730,27 +11738,39 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     viewReadyRef.current = false;
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(VIEW_KEY(activeBoard.id)) || "null"); } catch (_) {}
-    if (saved && typeof saved.zoom === "number") setZoom(clampZoom(saved.zoom));
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      const el = canvasRef.current;
-      if (el && saved) { el.scrollLeft = saved.scrollLeft || 0; el.scrollTop = saved.scrollTop || 0; }
-      viewReadyRef.current = true;
-    }));
+    if (saved && typeof saved.zoom === "number") {
+      setZoom(clampZoom(saved.zoom));
+      setPan({ x: saved.panX || 0, y: saved.panY || 0 });
+    } else {
+      // First time on this board → frame everything centred.
+      requestAnimationFrame(() => requestAnimationFrame(() => zoomToFit()));
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => { viewReadyRef.current = true; }));
   }, [view, activeBoard?.id, loadingItems]); // eslint-disable-line
-  // Persist zoom changes (buttons / zoom-to-fit / pinch) once restore is done.
+  // Persist zoom + pan (debounced) once restore is done.
   useEffect(() => {
     if (view !== "canvas" || !activeBoard?.id || !viewReadyRef.current) return;
-    saveCanvasView();
-  }, [zoom]); // eslint-disable-line
-  // Ctrl/⌘ + wheel (and trackpad pinch) zooms the canvas. Native non-passive
-  // listener so preventDefault actually stops the browser's page-zoom.
+    clearTimeout(viewSaveTimer.current);
+    viewSaveTimer.current = setTimeout(saveCanvasView, 250);
+  }, [zoom, pan, view, activeBoard?.id]); // eslint-disable-line
+  // Trackpad/wheel: Ctrl/⌘ + wheel (and pinch) zooms toward the cursor; a plain
+  // two-finger scroll pans the canvas. Native non-passive listener so
+  // preventDefault stops the browser's page-zoom/scroll.
   useEffect(() => {
     const el = canvasRef.current;
     if (!el || view !== "canvas") return;
-    const onWheelZoom = (e) => { if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault(); setZoom(z => Math.min(2, Math.max(0.4, Math.round((z - e.deltaY * 0.002) * 100) / 100))); };
-    el.addEventListener("wheel", onWheelZoom, { passive: false });
-    return () => el.removeEventListener("wheel", onWheelZoom);
-  }, [view, activeBoard?.id]);
+    const onWheel = (e) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      if (e.ctrlKey || e.metaKey) {
+        zoomToScreenPoint(zoomRef.current * (1 - e.deltaY * 0.0015), e.clientX - rect.left, e.clientY - rect.top);
+      } else {
+        setPan(p => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [view, activeBoard?.id]); // eslint-disable-line
   // Hold Space to pan the canvas (Figma-style): cursor turns into a hand and
   // drag scrolls the whole board. Disabled while typing or when a detail is open.
   useEffect(() => {
@@ -11771,9 +11791,9 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     if (!rect) return;
     e.preventDefault();
     setFrontTileId(item.id); // bring the clicked tile to the front
-    // Convert pointer → unscaled canvas coords (account for scroll + zoom).
-    const cx = (e.clientX - rect.left + el.scrollLeft) / zoom;
-    const cy = (e.clientY - rect.top + el.scrollTop) / zoom;
+    // Convert pointer → world coords (account for pan + zoom).
+    const cx = (e.clientX - rect.left - pan.x) / zoom;
+    const cy = (e.clientY - rect.top - pan.y) / zoom;
     dragState.current = { id: item.id, offsetX: cx - (item.x || 0), offsetY: cy - (item.y || 0) };
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
   };
@@ -11785,8 +11805,8 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     const el = canvasRef.current;
     const rect = el?.getBoundingClientRect();
     if (!d || !rect) return;
-    const x = Math.max(0, (e.clientX - rect.left + el.scrollLeft) / zoom - d.offsetX);
-    const y = Math.max(0, (e.clientY - rect.top + el.scrollTop) / zoom - d.offsetY);
+    const x = (e.clientX - rect.left - pan.x) / zoom - d.offsetX;
+    const y = (e.clientY - rect.top - pan.y) / zoom - d.offsetY;
     setItems(prev => prev.map(i => i.id === d.id ? { ...i, x, y } : i));
   };
   const onTilePointerUp = (e) => {
@@ -11798,20 +11818,19 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
   };
 
-  // ── Pan the whole canvas while Space is held (drag to scroll) ──
+  // ── Pan the whole canvas while Space is held (Figma-style hand drag) ──
   const onCanvasPointerDown = (e) => {
     if (!spaceHeld) return;
     const el = canvasRef.current; if (!el) return;
     e.preventDefault();
-    panState.current = { x: e.clientX, y: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop };
+    panState.current = { x: e.clientX, y: e.clientY, panX: panRef.current.x, panY: panRef.current.y };
     setPanning(true);
     try { el.setPointerCapture(e.pointerId); } catch (_) {}
   };
   const onCanvasPointerMove = (e) => {
-    const p = panState.current; const el = canvasRef.current;
-    if (!p || !el) return;
-    el.scrollLeft = p.scrollLeft - (e.clientX - p.x);
-    el.scrollTop = p.scrollTop - (e.clientY - p.y);
+    const p = panState.current;
+    if (!p) return;
+    setPan({ x: p.panX + (e.clientX - p.x), y: p.panY + (e.clientY - p.y) });
   };
   const onCanvasPointerUp = (e) => {
     if (!panState.current) return;
@@ -12220,15 +12239,14 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           ) : (
             // ── CANVAS (freeform drag + zoom) ──
             <>
-            <div ref={canvasRef} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onScroll={onCanvasScroll}
-              style={{ position: "absolute", inset: 0, overflow: "auto",
+            <div ref={canvasRef} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp}
+              style={{ position: "absolute", inset: 0, overflow: "hidden",
               cursor: spaceHeld ? (panning ? "grabbing" : "grab") : "default",
-              backgroundImage: `radial-gradient(${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"} 1px, transparent 1px)`, backgroundSize: `${22 * zoom}px ${22 * zoom}px` }}>
-              {/* outer box sized to the scaled content so scrollbars match the zoom */}
-              <div style={{ position: "relative", width: 2000 * zoom, height: 1400 * zoom }}>
-                {/* inner box at native size, visually scaled from the top-left */}
-                <div style={{ position: "relative", width: 2000, height: 1400, transform: `scale(${zoom})`, transformOrigin: "0 0" }}>
-                  {visibleItems.map(item => (
+              backgroundImage: `radial-gradient(${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"} 1px, transparent 1px)`,
+              backgroundSize: `${22 * zoom}px ${22 * zoom}px`, backgroundPosition: `${pan.x}px ${pan.y}px` }}>
+              {/* infinite world layer — translated + scaled (transformOrigin 0 0) */}
+              <div style={{ position: "absolute", left: 0, top: 0, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0" }}>
+                {visibleItems.map(item => (
                     <div key={item.id} className="mb-canvas-tile"
                       onPointerDown={e => onTilePointerDown(e, item)} onPointerMove={onTilePointerMove} onPointerUp={onTilePointerUp}
                       onDoubleClick={() => setSelectedItem(item)}
@@ -12247,8 +12265,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                         title={appLanguage === "de" ? "Größe ändern" : "Resize"}
                         style={{ position: "absolute", right: -7, bottom: -7, width: 16, height: 16, borderRadius: "50%", background: "#fff", border: `2px solid ${accent}`, boxShadow: "0 1px 4px rgba(0,0,0,0.35)", cursor: "nwse-resize", touchAction: "none" }} />
                     </div>
-                  ))}
-                </div>
+                ))}
               </div>
             </div>
             {/* Zoom to fit — bottom left */}
@@ -12259,11 +12276,11 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
             </motion.div>
             {/* Zoom control */}
             <div style={{ position: "absolute", right: 16, bottom: 16, zIndex: 40, display: "flex", alignItems: "center", gap: 2, padding: 4, borderRadius: 12, background: darkMode ? "rgba(28,28,38,0.92)" : "rgba(255,255,255,0.94)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 8px 24px rgba(0,0,0,0.15)" }}>
-              <motion.div whileTap={{ scale: 0.9 }} onClick={() => setZoom(z => clampZoom(z - 0.1))} title={appLanguage === "de" ? "Verkleinern" : "Zoom out"} style={zoomBtn}>
+              <motion.div whileTap={{ scale: 0.9 }} onClick={() => zoomCentered(zoom - 0.1)} title={appLanguage === "de" ? "Verkleinern" : "Zoom out"} style={zoomBtn}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
               </motion.div>
-              <div onClick={() => setZoom(1)} title={appLanguage === "de" ? "Zurücksetzen" : "Reset"} style={{ minWidth: 46, textAlign: "center", fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.text, cursor: "pointer", userSelect: "none" }}>{Math.round(zoom * 100)}%</div>
-              <motion.div whileTap={{ scale: 0.9 }} onClick={() => setZoom(z => clampZoom(z + 0.1))} title={appLanguage === "de" ? "Vergrößern" : "Zoom in"} style={zoomBtn}>
+              <div onClick={() => zoomCentered(1)} title={appLanguage === "de" ? "Zurücksetzen" : "Reset"} style={{ minWidth: 46, textAlign: "center", fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.text, cursor: "pointer", userSelect: "none" }}>{Math.round(zoom * 100)}%</div>
+              <motion.div whileTap={{ scale: 0.9 }} onClick={() => zoomCentered(zoom + 0.1)} title={appLanguage === "de" ? "Vergrößern" : "Zoom in"} style={zoomBtn}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               </motion.div>
             </div>
