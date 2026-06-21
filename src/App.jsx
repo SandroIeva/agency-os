@@ -11545,6 +11545,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const [docsAddOpen, setDocsAddOpen] = useState(false); // "Hinzufügen" dropdown (docs tab)
   const [docsImporting, setDocsImporting] = useState(false); // Google-Docs import in progress
   const docsImport = useRef(null); // DocsTab registers its "import from Drive" fn here
+  const docsSkills = useRef(null); // DocsTab registers its "open skills" fn here
   const [boardAddOpen, setBoardAddOpen] = useState(false); // "Hinzufügen" dropdown (inside an open board)
   const [boardFullscreen, setBoardFullscreen] = useState(false); // board detail in true fullscreen (like the doc editor)
   useEffect(() => {
@@ -12024,6 +12025,10 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             sub: appLanguage === "de" ? "Google-Doc als Dokument übernehmen" : "Bring a Google Doc in as a document",
                             icon: <><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="8 17 12 21 16 17"/><line x1="12" y1="15" x2="12" y2="21"/></>,
                             onClick: () => { setDocsAddOpen(false); docsImport.current?.(); } },
+                          { key: "skills", label: appLanguage === "de" ? "Dokument mit Skills erstellen" : "Create document with Skills",
+                            sub: appLanguage === "de" ? "Mit einem KI-Skill generieren" : "Generate with an AI skill",
+                            icon: <><path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z"/><path d="M19 14l.9 2.2L22 17l-2.1.8L19 20l-.9-2.2L16 17l2.1-.8z"/></>,
+                            onClick: () => { setDocsAddOpen(false); docsSkills.current?.(); } },
                         ].map(it => (
                           <div key={it.key} onClick={it.onClick} className="hover-row"
                             style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
@@ -12089,7 +12094,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 
           {/* ── DOCS tab ── */}
           {tab === "docs" && (
-            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} orgMembers={orgMembers} createNotification={createNotification} deepLink={docDeepLink} fullscreen={docFullscreen} setFullscreen={setDocFullscreen} createRef={docsCreate} importRef={docsImport} onImportingChange={setDocsImporting} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} onOpenChange={setDocOpen} />
+            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} orgMembers={orgMembers} createNotification={createNotification} deepLink={docDeepLink} fullscreen={docFullscreen} setFullscreen={setDocFullscreen} createRef={docsCreate} importRef={docsImport} onImportingChange={setDocsImporting} skillsRef={docsSkills} llmProvider={llmProvider} llmKeys={llmKeys} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} onOpenChange={setDocOpen} />
           )}
 
           {/* ── MOODBOARDS tab (boards grid) ── */}
@@ -14569,9 +14574,56 @@ function InfoPopover({ doc, memberById, activity, projectName, theme, darkMode, 
   );
 }
 
+// Document skills — pick a skill, type in your info, and the AI drafts a full
+// document for you. Placeholder set of 5 (real skills will be swapped in from
+// the provided .md files). `system` is the instruction the model follows; we
+// append the language + "return Markdown" rule at call time.
+const DOC_SKILLS = [
+  {
+    id: "brand-brief",
+    name: { de: "Marken-Briefing", en: "Brand brief" },
+    subline: { de: "Strukturiertes Marken-Briefing aus deinen Eckdaten.", en: "A structured brand brief from your key facts." },
+    description: { de: "Verwandelt grobe Angaben zu Marke, Zielgruppe und Zielen in ein sauber gegliedertes Briefing-Dokument.", en: "Turns rough notes about brand, audience and goals into a cleanly structured brief." },
+    inputPlaceholder: { de: "z. B. Marke, Branche, Zielgruppe, Ziele, Tonalität, Wettbewerber…", en: "e.g. brand, industry, audience, goals, tone, competitors…" },
+    system: { de: "Du bist ein erfahrener Brand-Stratege. Erstelle aus den Angaben des Nutzers ein vollständiges, professionelles Marken-Briefing mit klaren Abschnitten (z. B. Ausgangslage, Zielgruppe, Markenkern, Tonalität, Botschaften, Do's & Don'ts, nächste Schritte).", en: "You are a senior brand strategist. From the user's input, write a complete, professional brand brief with clear sections (e.g. context, audience, brand core, tone, messaging, do's & don'ts, next steps)." },
+  },
+  {
+    id: "content-strategy",
+    name: { de: "Content-Strategie", en: "Content strategy" },
+    subline: { de: "Content-Strategie für einen Kanal oder eine Kampagne.", en: "A content strategy for a channel or campaign." },
+    description: { de: "Entwickelt eine Content-Strategie inkl. Zielen, Säulen, Formaten und einem groben Plan.", en: "Develops a content strategy incl. goals, pillars, formats and a rough plan." },
+    inputPlaceholder: { de: "z. B. Kanal, Zielgruppe, Ziele, Themen, Frequenz…", en: "e.g. channel, audience, goals, topics, frequency…" },
+    system: { de: "Du bist ein Content-Stratege. Erstelle aus den Angaben eine konkrete Content-Strategie mit Zielen, Content-Säulen, Formaten/Ideen und einem groben Redaktionsplan.", en: "You are a content strategist. From the input, create a concrete content strategy with goals, content pillars, formats/ideas and a rough editorial plan." },
+  },
+  {
+    id: "proposal",
+    name: { de: "Angebot / Proposal", en: "Proposal" },
+    subline: { de: "Professionelles Angebot für einen Kunden.", en: "A professional client proposal." },
+    description: { de: "Formuliert ein überzeugendes Angebot mit Leistungen, Vorgehen, Zeitplan und Investition.", en: "Drafts a persuasive proposal with scope, approach, timeline and investment." },
+    inputPlaceholder: { de: "z. B. Kunde, Projekt, Leistungen, Budget/Rahmen, Timeline…", en: "e.g. client, project, scope, budget/range, timeline…" },
+    system: { de: "Du bist ein erfahrener Agentur-Berater. Erstelle aus den Angaben ein professionelles Angebot mit Abschnitten wie Ausgangslage, Lösung/Leistungen, Vorgehen, Zeitplan, Investition und nächste Schritte.", en: "You are a senior agency consultant. From the input, create a professional proposal with sections like context, solution/scope, approach, timeline, investment and next steps." },
+  },
+  {
+    id: "meeting-notes",
+    name: { de: "Meeting-Protokoll", en: "Meeting notes" },
+    subline: { de: "Macht aus Stichpunkten ein sauberes Protokoll.", en: "Turns rough points into clean meeting notes." },
+    description: { de: "Strukturiert deine Notizen zu einem klaren Protokoll mit Entscheidungen und To-dos.", en: "Structures your notes into clear minutes with decisions and action items." },
+    inputPlaceholder: { de: "Füge deine Meeting-Notizen / Stichpunkte ein…", en: "Paste your meeting notes / bullet points…" },
+    system: { de: "Du bist Assistenz für Protokolle. Mache aus den Stichpunkten ein klar gegliedertes Meeting-Protokoll mit Teilnehmern (falls genannt), besprochenen Punkten, Entscheidungen und To-dos (mit Verantwortlichen, falls erkennbar).", en: "You are a meeting-notes assistant. Turn the bullet points into a clearly structured meeting record with attendees (if given), topics discussed, decisions and action items (with owners where identifiable)." },
+  },
+  {
+    id: "social-plan",
+    name: { de: "Social-Media-Plan", en: "Social media plan" },
+    subline: { de: "Redaktionsplan mit Post-Ideen.", en: "An editorial plan with post ideas." },
+    description: { de: "Erstellt einen Redaktionsplan mit konkreten Post-Ideen, Formaten und Captions-Ansätzen.", en: "Creates an editorial plan with concrete post ideas, formats and caption angles." },
+    inputPlaceholder: { de: "z. B. Marke, Plattform(en), Zeitraum, Themen, Tonalität…", en: "e.g. brand, platform(s), timeframe, topics, tone…" },
+    system: { de: "Du bist ein Social-Media-Manager. Erstelle aus den Angaben einen Redaktionsplan mit konkreten Post-Ideen (Format, Kernaussage, Caption-Ansatz, ggf. CTA), sinnvoll gruppiert.", en: "You are a social media manager. From the input, create an editorial plan with concrete post ideas (format, key message, caption angle, CTA where useful), sensibly grouped." },
+  },
+];
+
 // Docs tab — Google-Docs-style: a list of workspace documents + a rich-text
 // editor. Documents are stored in brand_documents (org-scoped).
-function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "de", orgMembers, createNotification, deepLink, fullscreen, setFullscreen, createRef, importRef, onImportingChange, getProviderToken, ensureValidToken, autoReLogin, onOpenChange }) {
+function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "de", orgMembers, createNotification, deepLink, fullscreen, setFullscreen, createRef, importRef, onImportingChange, skillsRef, llmProvider, llmKeys, getProviderToken, ensureValidToken, autoReLogin, onOpenChange }) {
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openDoc, setOpenDoc] = useState(null);
@@ -14590,6 +14642,12 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   const [activity, setActivity] = useState([]);      // document_activity entries (newest first)
   const [infoOpen, setInfoOpen] = useState(false);   // info popover open
   const editLogRef = useRef(0);                      // throttle "edited" activity logging
+  // ── Skills (generate a document with an AI skill) ──
+  const [skillsOpen, setSkillsOpen] = useState(false);
+  const [skillSel, setSkillSel] = useState(null);    // selected skill object (stage 2)
+  const [skillInput, setSkillInput] = useState("");
+  const [skillBusy, setSkillBusy] = useState(false);
+  const L = (o) => (o && (o[appLanguage === "de" ? "de" : "en"] ?? o.de)) || ""; // pick localized string
 
   // Open a document from a notification deep-link (mention). Fetch by id so it
   // works even before the list has loaded; then auto-open the mentioned block's
@@ -14846,6 +14904,53 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   importFromDriveRef.current = importFromDrive;
   useEffect(() => { if (importRef) importRef.current = () => importFromDriveRef.current?.(); }, [importRef]);
 
+  // Open the skills picker (registered for the AssetsView "Hinzufügen" dropdown).
+  const openSkillsRef = useRef(null);
+  openSkillsRef.current = () => { setSkillSel(null); setSkillInput(""); setSkillBusy(false); setSkillsOpen(true); };
+  useEffect(() => { if (skillsRef) skillsRef.current = () => openSkillsRef.current?.(); }, [skillsRef]);
+
+  // Generate a document from the selected skill + the user's input.
+  const aiConnected = !!((llmKeys && llmProvider && llmKeys[llmProvider]) || llmProvider === "gemini");
+  const runSkill = async () => {
+    if (!skillSel || skillBusy) return;
+    const de = appLanguage === "de";
+    if (!skillInput.trim()) { alert(de ? "Bitte gib ein paar Informationen ein." : "Please enter some information."); return; }
+    const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
+    let oauthToken = null;
+    if (llmProvider === "gemini" && !apiKey && ensureValidToken) { try { oauthToken = await ensureValidToken(); } catch (_) {} }
+    if (!apiKey && !oauthToken) { alert(de ? "Kein KI-Modell verbunden. Bitte in den Einstellungen einen Key hinterlegen." : "No AI model connected. Add a key in Settings."); return; }
+    setSkillBusy(true);
+    try {
+      const base = skillSel.system?.[de ? "de" : "en"] || skillSel.system?.de || "";
+      const sys = base + (de
+        ? "\n\nGib AUSSCHLIESSLICH das fertige Dokument als Markdown zurück (Überschriften, Listen, Fett etc.) — keine Einleitung, keine Erklärungen, keine Code-Fences. Schreibe auf Deutsch."
+        : "\n\nReturn ONLY the finished document as Markdown (headings, lists, bold, etc.) — no preamble, no explanations, no code fences. Write in English.");
+      const resp = await fetch("/api/chat-multi", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: skillInput.trim(), systemPrompt: sys, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 4000 }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      let md = ((data?.content || []).find(c => c.type === "text")?.text || data?.content?.[0]?.text || "").trim();
+      if (!resp.ok || !md) { alert((de ? "Erstellung fehlgeschlagen: " : "Generation failed: ") + (data?.error || `HTTP ${resp.status}`)); setSkillBusy(false); return; }
+      md = md.replace(/^```(?:markdown|md)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim(); // strip stray fences
+      // Markdown → BlockNote blocks (headless editor), like the Drive import.
+      let blocks = [];
+      try { const parser = BlockNoteEditor.create(); blocks = await parser.tryParseMarkdownToBlocks(md); } catch (e) { console.error("[skill] md parse failed", e); }
+      const content = (Array.isArray(blocks) && blocks.length) ? JSON.stringify(blocks) : "";
+      // Derive a title from the first heading/line, fall back to the skill name.
+      const firstLine = (md.split("\n").find(l => l.trim()) || "").replace(/^#+\s*/, "").trim();
+      const title = (firstLine || skillSel.name?.[de ? "de" : "en"] || "Dokument").slice(0, 120);
+      const { data: doc, error } = await supabase.from("brand_documents")
+        .insert({ org_id: userOrg.id, title, content, created_by: session?.user?.id, visibility: "workspace" })
+        .select().single();
+      if (error) { alert((de ? "Dokument konnte nicht gespeichert werden: " : "Couldn't save document: ") + error.message); setSkillBusy(false); return; }
+      setDocs(prev => [doc, ...prev]);
+      recordActivity("created", doc.id);
+      setSkillBusy(false); setSkillsOpen(false);
+      setOpenDoc(doc); setTitle(doc.title || "");
+    } catch (e) { alert((appLanguage === "de" ? "Fehler: " : "Error: ") + (e?.message || e)); setSkillBusy(false); }
+  };
+
   const persist = async (patch) => {
     if (!openDoc) return;
     setSaveState("saving");
@@ -15078,6 +15183,66 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
           ); })}
         </div>
       )}
+      {skillsOpen && createPortal(
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { if (!skillBusy) setSkillsOpen(false); }}
+          style={{ position: "fixed", inset: 0, zIndex: 100001, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <motion.div initial={{ scale: 0.96, y: 12, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1.0] }}
+            onClick={e => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: 480, maxHeight: "82vh", display: "flex", flexDirection: "column", background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 20, overflow: "hidden", boxShadow: "0 24px 64px rgba(0,0,0,0.32)" }}>
+            {/* Header */}
+            <div style={{ padding: "18px 22px 14px", borderBottom: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", gap: 12 }}>
+              {skillSel && (
+                <motion.div whileTap={{ scale: 0.9 }} onClick={() => { if (!skillBusy) { setSkillSel(null); setSkillInput(""); } }}
+                  style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                </motion.div>
+              )}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{skillSel ? L(skillSel.name) : (appLanguage === "de" ? "Dokument mit Skills erstellen" : "Create document with Skills")}</div>
+                <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{skillSel ? (appLanguage === "de" ? "Infos eingeben und erstellen" : "Add info and generate") : (appLanguage === "de" ? "Wähle einen Skill" : "Pick a skill")}</div>
+              </div>
+            </div>
+            {/* Body */}
+            {!skillSel ? (
+              <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 12px 12px" }}>
+                {DOC_SKILLS.map(sk => (
+                  <div key={sk.id} onClick={() => setSkillSel(sk)} className="hover-row"
+                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 12px", borderRadius: 12, cursor: "pointer" }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: accent + "18", color: accent }}>
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z"/></svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{L(sk.name)}</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{L(sk.subline)}</div>
+                    </div>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.textFaint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M9 18l6-6-6-6"/></svg>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "18px 22px 8px" }}>
+                <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.55, marginBottom: 16 }}>{L(skillSel.description)}</div>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>{appLanguage === "de" ? "Deine Informationen" : "Your input"}</div>
+                <textarea value={skillInput} onChange={e => setSkillInput(e.target.value)} autoFocus
+                  placeholder={L(skillSel.inputPlaceholder)}
+                  style={{ width: "100%", boxSizing: "border-box", minHeight: 150, resize: "vertical", padding: "12px 14px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13.5, fontFamily: FONT, lineHeight: 1.55, outline: "none" }} />
+              </div>
+            )}
+            {/* Footer (stage 2 only) */}
+            {skillSel && (
+              <div style={{ padding: "14px 22px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                <motion.button whileTap={{ scale: 0.97 }} onClick={() => { if (!skillBusy) setSkillsOpen(false); }}
+                  style={{ padding: "10px 18px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.text, fontSize: 13, fontWeight: 500, fontFamily: FONT }}>{appLanguage === "de" ? "Abbrechen" : "Cancel"}</motion.button>
+                <motion.button whileTap={{ scale: 0.97 }} onClick={runSkill} disabled={skillBusy || !skillInput.trim()}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 22px", borderRadius: 999, cursor: (skillBusy || !skillInput.trim()) ? "not-allowed" : "pointer", background: (skillBusy || !skillInput.trim()) ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)") : accent, border: "none", color: (skillBusy || !skillInput.trim()) ? theme.textDim : "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT }}>
+                  {skillBusy && <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }} style={{ width: 13, height: 13, borderRadius: "50%", border: "2px solid currentColor", borderTopColor: "transparent" }} />}
+                  {skillBusy ? (appLanguage === "de" ? "Erstellt…" : "Creating…") : (appLanguage === "de" ? "Erstellen" : "Create")}
+                </motion.button>
+              </div>
+            )}
+          </motion.div>
+        </motion.div>, document.body)}
+
       {confirmDeleteDoc && createPortal(
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setConfirmDeleteDoc(null)}
           style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(10px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
