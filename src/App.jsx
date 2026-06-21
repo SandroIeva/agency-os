@@ -11680,6 +11680,31 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const [panning, setPanning] = useState(false); // actively dragging to pan
   const panState = useRef(null);
   const clampZoom = (z) => Math.min(2, Math.max(0.4, Math.round(z * 100) / 100));
+  // Zoom the canvas so every tile fits in the viewport, then centre the content.
+  // Image heights aren't stored, so measure the actual rendered tiles from the DOM
+  // (offset* values are in native canvas units, unaffected by the CSS scale).
+  const zoomToFit = () => {
+    const el = canvasRef.current; if (!el) return;
+    const tiles = el.querySelectorAll(".mb-canvas-tile");
+    if (!tiles.length) { setZoom(1); el.scrollTo({ left: 0, top: 0 }); return; }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    tiles.forEach(t => {
+      const x = t.offsetLeft, y = t.offsetTop, w = t.offsetWidth, h = t.offsetHeight;
+      if (x < minX) minX = x; if (y < minY) minY = y;
+      if (x + w > maxX) maxX = x + w; if (y + h > maxY) maxY = y + h;
+    });
+    const contentW = Math.max(1, maxX - minX), contentH = Math.max(1, maxY - minY);
+    const pad = 60; // viewport-px breathing room around the content
+    const vw = Math.max(1, el.clientWidth - pad * 2), vh = Math.max(1, el.clientHeight - pad * 2);
+    const z = clampZoom(Math.min(vw / contentW, vh / contentH));
+    setZoom(z);
+    // Centre after the new zoom has been laid out (outer box resizes with zoom).
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const e2 = canvasRef.current; if (!e2) return;
+      e2.scrollLeft = ((minX + maxX) / 2) * z - e2.clientWidth / 2;
+      e2.scrollTop = ((minY + maxY) / 2) * z - e2.clientHeight / 2;
+    }));
+  };
   const zoomBtn = { width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim };
   // Ctrl/⌘ + wheel (and trackpad pinch) zooms the canvas. Native non-passive
   // listener so preventDefault actually stops the browser's page-zoom.
@@ -12190,6 +12215,13 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                 </div>
               </div>
             </div>
+            {/* Zoom to fit — bottom left */}
+            <motion.div whileTap={{ scale: 0.95 }} onClick={zoomToFit}
+              title={appLanguage === "de" ? "Alles einpassen" : "Zoom to fit"}
+              style={{ position: "absolute", left: 16, bottom: 16, zIndex: 40, display: "flex", alignItems: "center", gap: 8, padding: "8px 13px", borderRadius: 12, cursor: "pointer", background: darkMode ? "rgba(28,28,38,0.92)" : "rgba(255,255,255,0.94)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 8px 24px rgba(0,0,0,0.15)", color: theme.text, fontSize: 12, fontFamily: FONT, fontWeight: 500, userSelect: "none" }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+              {appLanguage === "de" ? "Einpassen" : "Fit"}
+            </motion.div>
             {/* Zoom control */}
             <div style={{ position: "absolute", right: 16, bottom: 16, zIndex: 40, display: "flex", alignItems: "center", gap: 2, padding: 4, borderRadius: 12, background: darkMode ? "rgba(28,28,38,0.92)" : "rgba(255,255,255,0.94)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 8px 24px rgba(0,0,0,0.15)" }}>
               <motion.div whileTap={{ scale: 0.9 }} onClick={() => setZoom(z => clampZoom(z - 0.1))} title={appLanguage === "de" ? "Verkleinern" : "Zoom out"} style={zoomBtn}>
