@@ -11676,6 +11676,9 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const dragState = useRef(null);
   const [frontTileId, setFrontTileId] = useState(null); // last-clicked canvas tile → stacked on top
   const [zoom, setZoom] = useState(1); // canvas zoom (freemode)
+  const [spaceHeld, setSpaceHeld] = useState(false); // Space held → pan the whole canvas (Figma-style)
+  const [panning, setPanning] = useState(false); // actively dragging to pan
+  const panState = useRef(null);
   const clampZoom = (z) => Math.min(2, Math.max(0.4, Math.round(z * 100) / 100));
   const zoomBtn = { width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim };
   // Ctrl/⌘ + wheel (and trackpad pinch) zooms the canvas. Native non-passive
@@ -11687,8 +11690,21 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     el.addEventListener("wheel", onWheelZoom, { passive: false });
     return () => el.removeEventListener("wheel", onWheelZoom);
   }, [view, activeBoard?.id]);
+  // Hold Space to pan the canvas (Figma-style): cursor turns into a hand and
+  // drag scrolls the whole board. Disabled while typing or when a detail is open.
+  useEffect(() => {
+    if (view !== "canvas" || selectedItem) { setSpaceHeld(false); return; }
+    const isTyping = (t) => /^(INPUT|TEXTAREA|SELECT)$/.test(t?.tagName || "") || t?.isContentEditable;
+    const onKeyDown = (e) => { if (e.code === "Space" && !isTyping(e.target)) { e.preventDefault(); setSpaceHeld(true); } };
+    const onKeyUp = (e) => { if (e.code === "Space") { setSpaceHeld(false); panState.current = null; setPanning(false); } };
+    const onBlur = () => { setSpaceHeld(false); panState.current = null; setPanning(false); };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); window.removeEventListener("blur", onBlur); };
+  }, [view, selectedItem]);
   const onTilePointerDown = (e, item) => {
-    if (view !== "canvas") return;
+    if (view !== "canvas" || spaceHeld) return; // Space held → let the canvas pan instead of moving the tile
     const el = canvasRef.current;
     const rect = el?.getBoundingClientRect();
     if (!rect) return;
@@ -11721,10 +11737,32 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
   };
 
+  // ── Pan the whole canvas while Space is held (drag to scroll) ──
+  const onCanvasPointerDown = (e) => {
+    if (!spaceHeld) return;
+    const el = canvasRef.current; if (!el) return;
+    e.preventDefault();
+    panState.current = { x: e.clientX, y: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop };
+    setPanning(true);
+    try { el.setPointerCapture(e.pointerId); } catch (_) {}
+  };
+  const onCanvasPointerMove = (e) => {
+    const p = panState.current; const el = canvasRef.current;
+    if (!p || !el) return;
+    el.scrollLeft = p.scrollLeft - (e.clientX - p.x);
+    el.scrollTop = p.scrollTop - (e.clientY - p.y);
+  };
+  const onCanvasPointerUp = (e) => {
+    if (!panState.current) return;
+    panState.current = null; setPanning(false);
+    try { canvasRef.current?.releasePointerCapture(e.pointerId); } catch (_) {}
+  };
+
   // ── Canvas resize (Figma-style corner handle) — proportional: changing the tile
   // width scales the image (width:100%, auto height), so it never distorts. ──
   const resizeState = useRef(null);
   const onResizeDown = (e, item) => {
+    if (spaceHeld) return; // Space held → pan, don't resize
     e.preventDefault();
     e.stopPropagation(); // don't start a move-drag
     setFrontTileId(item.id);
@@ -12121,7 +12159,9 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           ) : (
             // ── CANVAS (freeform drag + zoom) ──
             <>
-            <div ref={canvasRef} style={{ position: "absolute", inset: 0, overflow: "auto",
+            <div ref={canvasRef} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp}
+              style={{ position: "absolute", inset: 0, overflow: "auto",
+              cursor: spaceHeld ? (panning ? "grabbing" : "grab") : "default",
               backgroundImage: `radial-gradient(${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"} 1px, transparent 1px)`, backgroundSize: `${22 * zoom}px ${22 * zoom}px` }}>
               {/* outer box sized to the scaled content so scrollbars match the zoom */}
               <div style={{ position: "relative", width: 2000 * zoom, height: 1400 * zoom }}>
@@ -12131,7 +12171,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                     <div key={item.id} className="mb-canvas-tile"
                       onPointerDown={e => onTilePointerDown(e, item)} onPointerMove={onTilePointerMove} onPointerUp={onTilePointerUp}
                       onDoubleClick={() => setSelectedItem(item)}
-                      style={{ position: "absolute", left: item.x, top: item.y, width: item.w || 240, touchAction: "none", cursor: "grab",
+                      style={{ position: "absolute", left: item.x, top: item.y, width: item.w || 240, touchAction: "none", cursor: spaceHeld ? "inherit" : "default",
                         zIndex: item.id === frontTileId ? 30 : 1 }}>
                       {/* clipped content (rounded corners on the image) */}
                       <div style={{ borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.18)", border: `1px solid ${theme.borderFaint}`, background: theme.cardBg }}>
