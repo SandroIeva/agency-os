@@ -11493,14 +11493,13 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
                 </div>
               ) : avatar(p, 72)}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
-                  {editing ? (`${draft._firstName || ""} ${draft._lastName || ""}`.trim() || (de ? "Neue Person" : "New person")) : p.name}
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
-                  {!editing && tag(p.status)}
-                  {!editing && channelRow(p, 24)}
-                  {editing && draft.username ? <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>@{draft.username}</span> : null}
-                </div>
+                {!editing && <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{p.name}</div>}
+                {!editing && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+                    {tag(p.status)}
+                    {channelRow(p, 24)}
+                  </div>
+                )}
               </div>
               {!editing && p.email && (
                 <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => { window.location.href = `mailto:${p.email}`; }}
