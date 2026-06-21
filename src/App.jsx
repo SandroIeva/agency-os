@@ -11301,24 +11301,29 @@ const frostedPanelStyle = (darkMode) => ({
 
 // ── Audience → People — contact cards (cards / list views, search, filters) ──
 // Placeholder sample data for now; the shape is easy to swap for a real table.
+// `channels` = the social platforms the person came in / engaged through.
 const SAMPLE_PEOPLE = [
-  { id: "p1", name: "Gabriela Christiansen", note: { de: "Erstgespräch", en: "First customer call" }, status: "lead",     date: "24.08.2026 7:24", score: 90, action: "mail", section: "today",   color: "#E0B84B" },
-  { id: "p2", name: "Halle Griffiths",       note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "lead",     date: "24.08.2026 7:24", score: 83, action: "call", section: "today",   color: "#E8728C" },
-  { id: "p3", name: "Josiah Love",           note: { de: "Erstgespräch", en: "First customer call" }, status: "lead",     date: "23.08.2026 7:24", score: 72, action: "call", section: "today",   color: "#4FAE7B" },
-  { id: "p4", name: "Wyatt Wetmore",         note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "customer", date: "01.08.2026 7:24", score: 62, action: "mail", section: "earlier", color: "#E0A06A" },
-  { id: "p5", name: "Jaclyn Moses",          note: { de: "Erstgespräch", en: "First customer call" }, status: "customer", date: "01.08.2026 7:24", score: 32, action: "call", section: "earlier", color: "#6C8BE0" },
-  { id: "p6", name: "Marcus Chen",           note: { de: "Angebot gesendet", en: "Proposal sent" },   status: "lead",     date: "28.07.2026 7:24", score: 54, action: "mail", section: "earlier", color: "#9B6CE0" },
+  { id: "p1", name: "Gabriela Christiansen", note: { de: "Erstgespräch", en: "First customer call" }, status: "explorer", date: "24.08.2026 7:24", score: 90, email: "gabriela@example.com", channels: ["linkedin"],                       color: "#E0B84B" },
+  { id: "p2", name: "Halle Griffiths",       note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "explorer", date: "24.08.2026 7:24", score: 83, email: null,                  channels: ["instagram", "x"],            color: "#E8728C" },
+  { id: "p3", name: "Josiah Love",           note: { de: "Erstgespräch", en: "First customer call" }, status: "explorer", date: "23.08.2026 7:24", score: 72, email: "josiah@example.com",   channels: ["x"],                         color: "#4FAE7B" },
+  { id: "p4", name: "Wyatt Wetmore",         note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "customer", date: "01.08.2026 7:24", score: 62, email: "wyatt@example.com",    channels: ["linkedin", "instagram", "threads"], color: "#E0A06A" },
+  { id: "p5", name: "Jaclyn Moses",          note: { de: "Erstgespräch", en: "First customer call" }, status: "customer", date: "01.08.2026 7:24", score: 32, email: null,                  channels: ["threads"],                   color: "#6C8BE0" },
+  { id: "p6", name: "Marcus Chen",           note: { de: "Angebot gesendet", en: "Proposal sent" },   status: "explorer", date: "28.07.2026 7:24", score: 54, email: "marcus@example.com",   channels: ["instagram"],                 color: "#9B6CE0" },
 ];
-const PEOPLE_SECTIONS = [
-  { key: "today",   label: { de: "Heute", en: "Today" } },
-  { key: "earlier", label: { de: "Früher", en: "Earlier" } },
-];
+// Social channel chips — brand colour + white glyph.
+const CHANNEL_META = {
+  linkedin:  { label: "LinkedIn",  color: "#0A66C2", glyph: (s) => <svg width={s} height={s} viewBox="0 0 24 24" fill="#fff"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.03-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.63-1.85 3.36-1.85 3.6 0 4.27 2.37 4.27 5.45v6.29zM5.34 7.43a2.07 2.07 0 1 1 0-4.13 2.07 2.07 0 0 1 0 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z"/></svg> },
+  instagram: { label: "Instagram", color: "#E1306C", glyph: (s) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><rect x="2.5" y="2.5" width="19" height="19" rx="5.5"/><circle cx="12" cy="12" r="4.3"/><circle cx="17.4" cy="6.6" r="1.1" fill="#fff" stroke="none"/></svg> },
+  x:         { label: "X",         color: "#111111", glyph: (s) => <svg width={s} height={s} viewBox="0 0 24 24" fill="#fff"><path d="M18.9 1.9h3.3l-7.2 8.2L23.7 21.3h-6.6l-5.2-6.8-5.9 6.8H1.7l7.7-8.8L1.3 1.9H8l4.7 6.2 6.2-6.2zm-1.2 17.5h1.8L7.1 3.6H5.1l12.6 15.8z"/></svg> },
+  threads:   { label: "Threads",   color: "#000000", glyph: (s) => <svg width={s} height={s} viewBox="0 0 24 24" fill="#fff"><path d="M17.3 11.1c-.1-.05-.2-.1-.3-.14-.18-3.27-1.97-5.15-4.98-5.17h-.04c-1.8 0-3.3.77-4.22 2.17l1.65 1.13c.69-1.04 1.77-1.26 2.57-1.26h.03c1 .01 1.75.3 2.24.86.35.41.59.98.71 1.7-.86-.14-1.78-.18-2.76-.12-2.76.16-4.53 1.77-4.41 4 .06 1.13.62 2.1 1.59 2.74.82.54 1.87.8 2.97.74 1.45-.08 2.59-.63 3.38-1.65.6-.77.98-1.77 1.15-3.03.69.42 1.2.97 1.49 1.63.48 1.12.51 2.96-1 4.46-1.32 1.32-2.91 1.89-5.31 1.91-2.66-.02-4.67-.87-5.98-2.53C5.6 16.71 5 14.9 4.98 12.5v-.02c.02-2.4.62-4.2 1.79-5.38C8.08 5.46 10.09 4.6 12.75 4.58h.01c2.67.02 4.71.88 6.06 2.55.66.82 1.16 1.85 1.49 3.06l1.72-.46c-.4-1.49-1.03-2.78-1.88-3.84C18.42 3.78 15.89 2.68 12.76 2.66h-.02c-3.13.02-5.54 1.12-7.16 3.27C4.13 7.94 3.4 10.13 3.38 12.49v.02c.02 2.36.75 4.55 2.21 6.56 1.62 2.15 4.03 3.25 7.16 3.27h.02c2.78-.02 4.74-.75 6.36-2.37 2.12-2.12 2.06-4.78 1.36-6.41-.5-1.17-1.46-2.12-2.77-2.76zm-5.13 4.65c-1.22.07-2.49-.48-2.55-1.66-.04-.88.63-1.85 2.62-1.97.23-.01.45-.02.67-.02.72 0 1.4.07 2.02.21-.23 2.89-1.59 3.37-2.76 3.44z"/></svg> },
+};
 
 function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
   const de = appLanguage === "de";
   const [view, setView] = useState("cards"); // "cards" | "list"
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("all"); // "all" | "lead" | "customer"
+  const [filter, setFilter] = useState("all"); // "all" | "explorer" | "customer"
+  const [selected, setSelected] = useState(null); // open person → detail view
   const L = (o) => (o && (o[de ? "de" : "en"] ?? o.de)) || "";
 
   const people = SAMPLE_PEOPLE
@@ -11333,25 +11338,28 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
     : s >= 50 ? { bg: "#F4D7C0", fg: "#8a5a32" }
     : { bg: "#F3C8D0", fg: "#9a3b53" };
   const initials = (n) => (n || "?").split(" ").map(w => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
-  const statusLabel = (st) => st === "customer" ? (de ? "Kunde" : "Customer") : "Lead";
-  const ActionIcon = ({ kind }) => kind === "call"
-    ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-    : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>;
+  const statusLabel = (st) => st === "customer" ? (de ? "Kunde" : "Customer") : (de ? "Explorer" : "Explorer");
   const avatar = (p, size) => (
     <div style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: p.color + "2e", color: p.color, fontSize: size * 0.36, fontWeight: 600, fontFamily: FONT }}>{initials(p.name)}</div>
   );
   const tag = (st) => (
     <span style={{ fontSize: 11, fontFamily: FONT, fontWeight: 500, color: theme.textSub, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", padding: "3px 10px", borderRadius: 999 }}>{statusLabel(st)}</span>
   );
-  const actionBtn = (p, size = 38) => (
-    <motion.div whileTap={{ scale: 0.9 }} title={p.action === "call" ? (de ? "Anrufen" : "Call") : (de ? "Mail" : "Mail")}
+  // Mail action — only when the person has an email (no phone/call action).
+  const mailBtn = (p, size = 38) => p.email ? (
+    <motion.div whileTap={{ scale: 0.9 }} title={de ? "E-Mail schreiben" : "Send email"}
+      onClick={(e) => { e.stopPropagation(); window.location.href = `mailto:${p.email}`; }}
       style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, cursor: "pointer" }}>
-      <ActionIcon kind={p.action} />
+      <svg width={Math.round(size * 0.45)} height={Math.round(size * 0.45)} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>
     </motion.div>
-  );
-  const scoreBadge = (s, size = 38) => { const c = scoreStyle(s); return (
-    <div style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: c.bg, color: c.fg, fontSize: 13, fontWeight: 700, fontFamily: FONT }}>{s}</div>
+  ) : null;
+  // Social channel chip(s) — replaces the score number on cards/list.
+  const channelChip = (key, size = 28) => { const c = CHANNEL_META[key]; if (!c) return null; return (
+    <div key={key} title={c.label} style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: c.color }}>{c.glyph(Math.round(size * 0.56))}</div>
   ); };
+  const channelRow = (p, size = 28) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>{(p.channels || []).map(k => channelChip(k, size))}</div>
+  );
 
   const viewBtn = (mode, title, children) => {
     const on = view === mode;
@@ -11369,13 +11377,62 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
           background: on ? (darkMode ? "rgba(255,255,255,0.10)" : "#fff") : "transparent", color: on ? theme.text : theme.textDim, boxShadow: on ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>{label}</motion.div>
     );
   };
-  const sectionHeader = (label) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "10px 0 14px" }}>
-      <div style={{ flex: 1, height: 1, background: theme.borderFaint }} />
-      <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{label}</span>
-      <div style={{ flex: 1, height: 1, background: theme.borderFaint }} />
-    </div>
-  );
+
+  // ── Detail view (click a card/row) ──
+  if (selected) {
+    const p = selected;
+    const sc = scoreStyle(p.score);
+    const infoRow = (label, value) => (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "13px 0", borderBottom: `1px solid ${theme.borderFaint}` }}>
+        <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>{label}</span>
+        <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.text, textAlign: "right", minWidth: 0 }}>{value}</div>
+      </div>
+    );
+    return (
+      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "16px 26px 4px" }}>
+          <motion.div whileTap={{ scale: 0.96 }} onClick={() => setSelected(null)}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12.5, fontFamily: FONT }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            {de ? "Alle Personen" : "All people"}
+          </motion.div>
+        </div>
+        <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "14px 26px 26px" }}>
+          <div style={{ maxWidth: 620 }}>
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 24 }}>
+              {avatar(p, 72)}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{p.name}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+                  {tag(p.status)}
+                  {channelRow(p, 24)}
+                </div>
+              </div>
+              {p.email && (
+                <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => { window.location.href = `mailto:${p.email}`; }}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 16px", borderRadius: 999, cursor: "pointer", background: "#23232b", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 500 }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>
+                  {de ? "E-Mail" : "Email"}
+                </motion.div>
+              )}
+            </div>
+            {/* Info */}
+            <div>
+              {infoRow(de ? "Letzte Aktivität" : "Last activity", L(p.note))}
+              {infoRow(de ? "Datum" : "Date", p.date)}
+              {infoRow("Score", <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><span style={{ width: 10, height: 10, borderRadius: "50%", background: sc.bg }} />{p.score}</span>)}
+              {infoRow(de ? "Kanäle" : "Channels", <div style={{ display: "flex", justifyContent: "flex-end" }}>{channelRow(p, 24)}</div>)}
+              {infoRow("E-Mail", p.email || "—")}
+            </div>
+            <div style={{ marginTop: 22, fontSize: 12.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
+              {de ? "Weitere Details (Verlauf, Notizen) folgen." : "More details (history, notes) coming soon."}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
@@ -11383,13 +11440,13 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
       <div style={{ padding: "16px 26px 4px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", maxWidth: 340 }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={de ? "Kontakt suchen" : "Search contacts"}
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={de ? "Person eingeben" : "Search people"}
             style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }} />
         </div>
         <div style={{ flex: 1 }} />
         <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
           {filterBtn("all", de ? "Alle" : "All")}
-          {filterBtn("lead", de ? "Leads" : "Leads")}
+          {filterBtn("explorer", "Explorer")}
           {filterBtn("customer", de ? "Kunden" : "Customers")}
         </div>
         <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
@@ -11400,12 +11457,11 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
 
       <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 26px 26px" }}>
         {people.length === 0 ? (
-          <div style={{ padding: "60px 20px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Keine Kontakte gefunden." : "No contacts found."}</div>
+          <div style={{ padding: "60px 20px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Keine Personen gefunden." : "No people found."}</div>
         ) : view === "list" ? (
-          // List view — flat, no time sections
           <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
             {people.map(p => (
-              <motion.div key={p.id} className="hover-row"
+              <motion.div key={p.id} className="hover-row" onClick={() => setSelected(p)}
                 style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 14, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)" }}>
                 {avatar(p, 40)}
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -11414,16 +11470,15 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
                 </div>
                 <div style={{ flexShrink: 0 }}>{tag(p.status)}</div>
                 <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textFaint, flexShrink: 0, minWidth: 120, textAlign: "right" }}>{p.date}</div>
-                {actionBtn(p, 34)}
-                {scoreBadge(p.score, 34)}
+                {mailBtn(p, 34)}
+                {channelRow(p, 26)}
               </motion.div>
             ))}
           </div>
         ) : (
-          // Cards view — flat grid, no time sections
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: 14 }}>
             {people.map(p => (
-              <motion.div key={p.id} whileHover={{ y: -2 }}
+              <motion.div key={p.id} whileHover={{ y: -2 }} onClick={() => setSelected(p)}
                 style={{ borderRadius: 18, padding: 16, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", display: "flex", flexDirection: "column", gap: 16 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                   {avatar(p, 52)}
@@ -11431,13 +11486,13 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
                     <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
                     <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{L(p.note)}</div>
                   </div>
-                  {actionBtn(p)}
+                  {mailBtn(p)}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   {tag(p.status)}
                   <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>{p.date}</span>
                   <div style={{ flex: 1 }} />
-                  {scoreBadge(p.score)}
+                  {channelRow(p)}
                 </div>
               </motion.div>
             ))}
