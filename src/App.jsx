@@ -11457,7 +11457,7 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
           {!slot && <div style={{ display: "flex", gap: 10 }}>{editAction}</div>}
         </div>
         <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "14px 26px 26px" }}>
-          <div style={{ maxWidth: 760, margin: "0 auto" }}>
+          <div>
             {/* Header */}
             <div style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 24 }}>
               {editing ? (
@@ -11491,7 +11491,7 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
             </div>
             {editing ? (
               /* Edit form — two columns so fields aren't overly wide */
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", columnGap: 18, rowGap: 18, maxWidth: 760 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", columnGap: 18, rowGap: 18 }}>
                 {field(de ? "Status" : "Status", (
                   <div style={{ display: "flex", gap: 8 }}>
                     {[["explorer", "Explorer"], ["customer", de ? "Kunde" : "Customer"]].map(([v, lab]) => {
