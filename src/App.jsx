@@ -14592,7 +14592,7 @@ const DOC_SKILLS = [
     name: { de: "Signal Mine", en: "Signal Mine" },
     subline: { de: "Findet aus rohen Inputs die postbaren Content-Ideen.", en: "Finds the postable content ideas in a pile of raw input." },
     description: { de: "Füge News, Tweets, Reddit-Threads oder Recherche ein — Signal Mine extrahiert die Content-Winkel, die zu deiner Nische passen, je mit Format und Hook.", en: "Paste news, tweets, Reddit threads or research — Signal Mine extracts the content angles worth posting, each with format and hook." },
-    inputPlaceholder: { de: "Füge deine rohen Inputs ein (Artikel, Tweets, Threads, Recherche…) und nenne deine Nische/Pillars.", en: "Paste your raw inputs (articles, tweets, threads, research…) and name your niche/pillars." },
+    inputPlaceholder: { de: "Kopiere den Text aus News-Artikeln, Tweets, Reddit-Threads usw. hier rein (keine Links) und nenne deine Nische/Pillars.", en: "Copy the text from news articles, tweets, Reddit threads etc. in here (no links) and name your niche/pillars." },
     system: stripFrontmatter(skillSignalMine),
   },
   {
