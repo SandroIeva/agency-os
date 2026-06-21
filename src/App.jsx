@@ -12218,9 +12218,8 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
             {/* Zoom to fit — bottom left */}
             <motion.div whileTap={{ scale: 0.95 }} onClick={zoomToFit}
               title={appLanguage === "de" ? "Alles einpassen" : "Zoom to fit"}
-              style={{ position: "absolute", left: 16, bottom: 16, zIndex: 40, display: "flex", alignItems: "center", gap: 8, padding: "8px 13px", borderRadius: 12, cursor: "pointer", background: darkMode ? "rgba(28,28,38,0.92)" : "rgba(255,255,255,0.94)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 8px 24px rgba(0,0,0,0.15)", color: theme.text, fontSize: 12, fontFamily: FONT, fontWeight: 500, userSelect: "none" }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
-              {appLanguage === "de" ? "Einpassen" : "Fit"}
+              style={{ position: "absolute", left: 16, bottom: 16, zIndex: 40, display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, borderRadius: 12, cursor: "pointer", background: darkMode ? "rgba(28,28,38,0.92)" : "rgba(255,255,255,0.94)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 8px 24px rgba(0,0,0,0.15)", color: theme.text }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
             </motion.div>
             {/* Zoom control */}
             <div style={{ position: "absolute", right: 16, bottom: 16, zIndex: 40, display: "flex", alignItems: "center", gap: 2, padding: 4, borderRadius: 12, background: darkMode ? "rgba(28,28,38,0.92)" : "rgba(255,255,255,0.94)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 8px 24px rgba(0,0,0,0.15)" }}>
