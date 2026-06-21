@@ -11310,13 +11310,8 @@ const SAMPLE_PEOPLE = [
   { id: "p5", name: "Jaclyn Moses",          note: { de: "Erstgespräch", en: "First customer call" }, status: "customer", date: "01.08.2026 7:24", score: 32, email: null,                  channels: ["threads"],                   color: "#6C8BE0" },
   { id: "p6", name: "Marcus Chen",           note: { de: "Angebot gesendet", en: "Proposal sent" },   status: "explorer", date: "28.07.2026 7:24", score: 54, email: "marcus@example.com",   channels: ["instagram"],                 color: "#9B6CE0" },
 ];
-// Social channel chips — brand colour + white glyph.
-const CHANNEL_META = {
-  linkedin:  { label: "LinkedIn",  color: "#0A66C2", glyph: (s) => <svg width={s} height={s} viewBox="0 0 24 24" fill="#fff"><path d="M3.5 8.6h3.1V21H3.5V8.6zM5.05 3a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6zM9 8.6h2.97v1.69h.04c.41-.78 1.42-1.6 2.93-1.6 3.13 0 3.71 2.06 3.71 4.74V21h-3.1v-5.96c0-1.42-.03-3.25-1.98-3.25-1.98 0-2.28 1.55-2.28 3.15V21H9V8.6z"/></svg> },
-  instagram: { label: "Instagram", color: "#E1306C", glyph: (s) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><rect x="2.5" y="2.5" width="19" height="19" rx="5.5"/><circle cx="12" cy="12" r="4.3"/><circle cx="17.4" cy="6.6" r="1.1" fill="#fff" stroke="none"/></svg> },
-  x:         { label: "X",         color: "#111111", glyph: (s) => <svg width={s} height={s} viewBox="0 0 24 24" fill="#fff"><path d="M18.9 1.9h3.3l-7.2 8.2L23.7 21.3h-6.6l-5.2-6.8-5.9 6.8H1.7l7.7-8.8L1.3 1.9H8l4.7 6.2 6.2-6.2zm-1.2 17.5h1.8L7.1 3.6H5.1l12.6 15.8z"/></svg> },
-  threads:   { label: "Threads",   color: "#000000", glyph: (s) => <svg width={s} height={s} viewBox="0 0 24 24" fill="#fff"><path d="M17.3 11.1c-.1-.05-.2-.1-.3-.14-.18-3.27-1.97-5.15-4.98-5.17h-.04c-1.8 0-3.3.77-4.22 2.17l1.65 1.13c.69-1.04 1.77-1.26 2.57-1.26h.03c1 .01 1.75.3 2.24.86.35.41.59.98.71 1.7-.86-.14-1.78-.18-2.76-.12-2.76.16-4.53 1.77-4.41 4 .06 1.13.62 2.1 1.59 2.74.82.54 1.87.8 2.97.74 1.45-.08 2.59-.63 3.38-1.65.6-.77.98-1.77 1.15-3.03.69.42 1.2.97 1.49 1.63.48 1.12.51 2.96-1 4.46-1.32 1.32-2.91 1.89-5.31 1.91-2.66-.02-4.67-.87-5.98-2.53C5.6 16.71 5 14.9 4.98 12.5v-.02c.02-2.4.62-4.2 1.79-5.38C8.08 5.46 10.09 4.6 12.75 4.58h.01c2.67.02 4.71.88 6.06 2.55.66.82 1.16 1.85 1.49 3.06l1.72-.46c-.4-1.49-1.03-2.78-1.88-3.84C18.42 3.78 15.89 2.68 12.76 2.66h-.02c-3.13.02-5.54 1.12-7.16 3.27C4.13 7.94 3.4 10.13 3.38 12.49v.02c.02 2.36.75 4.55 2.21 6.56 1.62 2.15 4.03 3.25 7.16 3.27h.02c2.78-.02 4.74-.75 6.36-2.37 2.12-2.12 2.06-4.78 1.36-6.41-.5-1.17-1.46-2.12-2.77-2.76zm-5.13 4.65c-1.22.07-2.49-.48-2.55-1.66-.04-.88.63-1.85 2.62-1.97.23-.01.45-.02.67-.02.72 0 1.4.07 2.02.21-.23 2.89-1.59 3.37-2.76 3.44z"/></svg> },
-};
+// Channel colour/label lookup — reuse the same platform set + glyphs as Touchpoints.
+const CHANNEL_META = Object.fromEntries(TOUCHPOINT_PLATFORMS.map(p => [p.key, { label: p.label, color: p.color }]));
 
 function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
   const de = appLanguage === "de";
@@ -11354,8 +11349,10 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
     </motion.div>
   ) : null;
   // Social channel chip(s) — replaces the score number on cards/list.
-  const channelChip = (key, size = 28) => { const c = CHANNEL_META[key]; if (!c) return null; return (
-    <div key={key} title={c.label} style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: c.color }}>{c.glyph(Math.round(size * 0.56))}</div>
+  const channelChip = (key, size = 28) => { const c = CHANNEL_META[key]; if (!c) return null; const g = tpGlyphSize(key, Math.round(size * 0.6)); return (
+    <div key={key} title={c.label} style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: c.color }}>
+      <svg width={g} height={g} viewBox="0 0 24 24">{touchpointGlyph(key)}</svg>
+    </div>
   ); };
   const channelRow = (p, size = 28) => (
     <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>{(p.channels || []).map(k => channelChip(k, size))}</div>
