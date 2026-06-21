@@ -12065,8 +12065,18 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
         {/* Palette + tag filter strip */}
         {(activeBoard.color_palette?.length > 0 || allTags.length > 0) && (
           <div style={{ padding: "10px 24px", display: "flex", alignItems: "center", gap: 14, borderBottom: `1px solid ${theme.borderFaint}`, flexWrap: "wrap" }}>
+            {allTags.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                {[null, ...allTags].map((tg, i) => {
+                  const on = tagFilter === tg;
+                  return (
+                    <div key={i} onClick={() => { setTagFilter(tg); if (tg === null) setColorFilter(null); }} style={{ padding: "3px 10px", borderRadius: 999, cursor: "pointer", fontSize: 11, fontFamily: FONT, fontWeight: 500, background: on ? "#23232b" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"), color: on ? "#fff" : theme.textDim }}>{tg === null ? (t("moodboard.allTags") || "Alle") : "#" + tg}</div>
+                  );
+                })}
+              </div>
+            )}
             {activeBoard.color_palette?.length > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
                 <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1 }}>{t("moodboard.palette") || "Palette"}</span>
                 <div style={{ display: "flex", gap: 4 }}>
                   {activeBoard.color_palette.slice(0, 8).map((c, i) => {
@@ -12079,13 +12089,6 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                     );
                   })}
                 </div>
-              </div>
-            )}
-            {allTags.length > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                {[null, ...allTags].map((tg, i) => (
-                  <div key={i} onClick={() => { setTagFilter(tg); if (tg === null) setColorFilter(null); }} style={{ padding: "3px 10px", borderRadius: 999, cursor: "pointer", fontSize: 11, fontFamily: FONT, fontWeight: 500, background: tagFilter === tg ? accent : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"), color: tagFilter === tg ? "#fff" : theme.textDim }}>{tg === null ? (t("moodboard.allTags") || "Alle") : "#" + tg}</div>
-                ))}
               </div>
             )}
           </div>
