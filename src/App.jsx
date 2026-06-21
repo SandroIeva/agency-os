@@ -7979,8 +7979,9 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
 // Cool, saturated avatar colours — solid fills with enough contrast for white
 // initials (no gradients, no borders). Used for member + group default avatars.
 const CHAT_COLORS = ["#4F46E5", "#2563EB", "#7C3AED", "#0D9488", "#0891B2", "#6366F1", "#0E7490", "#8B5CF6"];
-// Palette offered when creating a group (same cool family, a few more options).
-const GROUP_COLORS = ["#4F46E5", "#2563EB", "#7C3AED", "#0D9488", "#0891B2", "#6366F1", "#0E7490", "#8B5CF6", "#3B82F6", "#14B8A6", "#5B6CFF", "#9333EA"];
+// Palette offered when creating a group — distinct hues that fit in one row,
+// all saturated enough for white initials.
+const GROUP_COLORS = ["#4F46E5", "#2563EB", "#0891B2", "#0D9488", "#16A34A", "#7C3AED", "#DB2777", "#E11D48"];
 
 // Default initials avatar: solid fill, white text, no border, no gradient.
 function InitialsAvatar({ color = "#5B6CFF", initials = "?", size = 42, fontSize, style }) {
@@ -8993,7 +8994,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               <span style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>Farbe</span>
               <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10 }}>
                 <InitialsAvatar color={groupColor} initials={(groupName.trim() || "G").slice(0, 2).toUpperCase()} size={40} fontSize={14} />
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 9, flex: 1 }}>
+                <div style={{ display: "flex", flexWrap: "nowrap", gap: 9, flex: 1 }}>
                   {GROUP_COLORS.map(c => {
                     const on = groupColor === c;
                     return (
