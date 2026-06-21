@@ -18,6 +18,7 @@ import skillStoryMine from "../docs/docs-skillz/story-mine/SKILL.md?raw";
 import skillAudienceGaps from "../docs/docs-skillz/audience-gaps/SKILL.md?raw";
 import skillReelScripter from "../docs/docs-skillz/reel-scripter/SKILL.md?raw";
 import skillNewsletter from "../docs/docs-skillz/newsletter-drafter/SKILL.md?raw";
+import skillSeriesPlanner from "../docs/docs-skillz/series-planner/SKILL.md?raw";
 
 // Error Boundary to prevent black screen — shows error info in production
 export class AppErrorBoundary extends Component {
@@ -14626,6 +14627,14 @@ const DOC_SKILLS = [
     description: { de: "Aus einem Thema oder bestehendem Content — Newsletter Drafter schreibt Betreffzeilen, Preview-Text, Body und CTA in deiner Struktur.", en: "From a topic or existing content — Newsletter Drafter writes subject lines, preview text, body and CTA in your structure." },
     inputPlaceholder: { de: "Thema + 2–3 Stichpunkte, oder füge einen Post/ein Video zum Repurposen ein…", en: "Topic + 2–3 bullets, or paste a post/video to repurpose…" },
     system: stripFrontmatter(skillNewsletter),
+  },
+  {
+    id: "series-planner",
+    name: { de: "Series Planner", en: "Series Planner" },
+    subline: { de: "Macht aus einem großen Thema eine mehrteilige Content-Serie.", en: "Turns one big topic into a multi-part content series." },
+    description: { de: "Aus einem großen Thema — Series Planner baut eine zusammenhängende Serie über Plattformen hinweg: pro Teil Winkel, Format und Plattform, plus Bogen, Plattform-Map und Payoff.", en: "From one big topic — Series Planner builds a connected series across platforms: each part's angle, format and platform, plus the arc, platform map and payoff." },
+    inputPlaceholder: { de: "Nenne dein großes Thema (und optional Plattformen, Ziel, Pillars)…", en: "Name your big topic (and optionally platforms, goal, pillars)…" },
+    system: stripFrontmatter(skillSeriesPlanner),
   },
 ];
 
