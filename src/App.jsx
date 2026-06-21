@@ -12012,7 +12012,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                       <motion.div
                         initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }}
                         transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
-                        style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 41, minWidth: 248,
+                        style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 41, minWidth: 300, whiteSpace: "nowrap",
                           background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
                           boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden", padding: 6 }}>
                         {[
