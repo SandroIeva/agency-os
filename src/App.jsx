@@ -15204,12 +15204,12 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
             </div>
             {/* Body */}
             {!skillSel ? (
-              <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 12px 12px" }}>
+              <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 10px 12px" }}>
                 {DOC_SKILLS.map(sk => (
                   <div key={sk.id} onClick={() => setSkillSel(sk)} className="hover-row"
-                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 12px", borderRadius: 12, cursor: "pointer" }}>
-                    <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: accent + "18", color: accent }}>
-                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z"/></svg>
+                    style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 14px 12px 12px", borderRadius: 12, cursor: "pointer" }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)", color: theme.text }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z"/></svg>
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{L(sk.name)}</div>
