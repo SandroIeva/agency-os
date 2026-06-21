@@ -8468,14 +8468,14 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               )}
             </div>
             <motion.div
-              whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
+              whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98, backgroundColor: darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.09)" }}
               onClick={() => { setGroupName(""); setGroupSelected([]); setGroupModalOpen(true); }}
               style={{
-                marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                padding: "9px 12px", borderRadius: 12, cursor: "pointer",
-                background: darkMode ? "rgba(139,122,255,0.10)" : "rgba(139,122,255,0.08)",
-                border: `1px solid ${darkMode ? "rgba(139,122,255,0.20)" : "rgba(139,122,255,0.18)"}`,
-                color: "#8B7AFF", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
+                marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 9,
+                padding: "11px 12px", borderRadius: 999, cursor: "pointer",
+                background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
+                border: `1px solid ${theme.borderFaint}`,
+                color: theme.text, fontSize: 13, fontFamily: FONT, fontWeight: 500,
               }}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
