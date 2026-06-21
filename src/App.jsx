@@ -11313,7 +11313,7 @@ const SAMPLE_PEOPLE = [
 // Channel colour/label lookup — reuse the same platform set + glyphs as Touchpoints.
 const CHANNEL_META = Object.fromEntries(TOUCHPOINT_PLATFORMS.map(p => [p.key, { label: p.label, color: p.color }]));
 
-function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
+function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef }) {
   const de = appLanguage === "de";
   const [view, setView] = useState("cards"); // "cards" | "list"
   const [search, setSearch] = useState("");
@@ -11407,29 +11407,33 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
         {node}
       </div>
     );
+    const editAction = editing ? (
+      <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={saveEdit}
+        style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 16px", borderRadius: 999, cursor: "pointer", background: "#23232b", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600 }}>
+        {de ? "Speichern" : "Save"}
+      </motion.div>
+    ) : (
+      <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={startEdit}
+        style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", color: theme.text, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+        {de ? "Bearbeiten" : "Edit"}
+      </motion.div>
+    );
+    const slot = headerSlotRef?.current;
     return (
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        {/* Edit/Save lives in the page's top-right header slot (consistent with other pages) */}
+        {slot && createPortal(editAction, slot)}
         <div style={{ padding: "16px 26px 4px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
           <motion.div whileTap={{ scale: 0.96 }} onClick={editing ? cancelEdit : closeDetail}
             style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12.5, fontFamily: FONT }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
             {editing ? (de ? "Abbrechen" : "Cancel") : (de ? "Alle Personen" : "All people")}
           </motion.div>
-          {editing ? (
-            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={saveEdit}
-              style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 16px", borderRadius: 999, cursor: "pointer", background: "#23232b", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600 }}>
-              {de ? "Speichern" : "Save"}
-            </motion.div>
-          ) : (
-            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={startEdit}
-              style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", color: theme.text, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
-              {de ? "Bearbeiten" : "Edit"}
-            </motion.div>
-          )}
+          {!slot && editAction}
         </div>
         <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "14px 26px 26px" }}>
-          <div style={{ maxWidth: 640 }}>
+          <div>
             {/* Header */}
             <div style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 24 }}>
               {avatar(p, 72)}
@@ -11569,6 +11573,7 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
 
 function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", canEdit = true }) {
   const [audTab, setAudTab] = useState("touchpoints"); // "touchpoints" | "people"
+  const peopleHeaderSlot = useRef(null); // top-right header slot the People detail edit button portals into
   const [profile, setProfile] = useState(null);
   const [channels, setChannels] = useState({});
   const [loading, setLoading] = useState(true);
@@ -11629,6 +11634,9 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
             <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{profile?.name || userOrg?.name || ""}</span>
             <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim }}>Audience</span>
           </div>
+          {/* top-right header slot — People detail mounts its Edit/Save here */}
+          <div style={{ flex: 1 }} />
+          <div ref={peopleHeaderSlot} style={{ display: "flex", alignItems: "center", gap: 10 }} />
         </div>
 
         {/* Tabs: Touchpoints · People */}
@@ -11645,7 +11653,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
         </div>
 
         {audTab === "people" ? (
-          <PeopleTab theme={theme} darkMode={darkMode} accent={accent} appLanguage={appLanguage} />
+          <PeopleTab theme={theme} darkMode={darkMode} accent={accent} appLanguage={appLanguage} headerSlotRef={peopleHeaderSlot} />
         ) : (
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
           {loading ? (
