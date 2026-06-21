@@ -14607,8 +14607,8 @@ const DOC_SKILLS = [
     id: "audience-gaps",
     name: { de: "Audience Gaps", en: "Audience Gaps" },
     subline: { de: "Die 3 Fragen, die deine Audience still stellt.", en: "The 3 questions your audience is silently asking." },
-    description: { de: "Füge ein Content-Stück ein (Reel, Carousel, Skript, Idee) — Audience Gaps zeigt die 3 Fragen, die deine Audience still stellt, und was du je damit tust.", en: "Paste a piece of content (Reel, carousel, script, idea) — Audience Gaps surfaces the 3 questions your audience silently asks and what to do with each." },
-    inputPlaceholder: { de: "Füge deinen Content ein (Reel-Skript, Carousel, Idee…)", en: "Paste your content (Reel script, carousel, idea…)" },
+    description: { de: "Füge den Text deines Posts ein (Caption, Beschreibung oder Skript) — Audience Gaps zeigt die 3 Fragen, die deine Audience still stellt, und was du je damit tust. Hinweis: nur Text, keine Links oder Videos.", en: "Paste your post text (caption, description or script) — Audience Gaps surfaces the 3 questions your audience silently asks and what to do with each. Note: text only, no links or videos." },
+    inputPlaceholder: { de: "Füge den Text / die Beschreibung deines Posts ein…", en: "Paste your post text / description…" },
     system: stripFrontmatter(skillAudienceGaps),
   },
   {

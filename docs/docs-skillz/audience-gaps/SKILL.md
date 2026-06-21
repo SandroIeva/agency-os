@@ -5,7 +5,7 @@ description: Surface the questions a creator's audience is silently asking while
 
 # Audience Gaps
 
-Surfaces the 3 questions your audience is silently asking while they watch/read your content — and turns each into an action.
+Surfaces the 3 questions your audience is silently asking while they read your post — and turns each into an action.
 
 ## When to run this
 
@@ -22,11 +22,13 @@ Surfaces the 3 questions your audience is silently asking while they watch/read 
 ## Inputs
 
 Required:
-- The content (Reel script, carousel, video idea, post — any format, any stage)
+- The post text the creator pastes — their caption, description, written-out script or idea (TEXT only)
 
 Reads if available:
 - Audience insight (the exact pains/language the audience uses)
 - The creator's pillars
+
+Note: You only receive the text the creator pastes. You cannot watch videos, open links, or view images — analyse the provided text exactly as given. If the text is too thin to surface real questions, ask the creator to paste more of the actual post copy.
 
 ## Output structure
 
