@@ -12756,7 +12756,6 @@ function MoodboardCard({ board, theme, darkMode, accent, grad, glow, onOpen, onD
       setCount(c || 0);
     })();
   }, [board.id]);
-  const palette = board.color_palette || [];
   return (
     <motion.div whileHover={{ y: -5 }} transition={{ type: "spring", stiffness: 300, damping: 22 }}
       onHoverStart={() => setHover(true)} onHoverEnd={() => setHover(false)} onClick={onOpen}
@@ -12786,11 +12785,6 @@ function MoodboardCard({ board, theme, darkMode, accent, grad, glow, onOpen, onD
         <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: -0.2, textShadow: "0 1px 8px rgba(0,0,0,0.4)" }}>{board.title}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5 }}>
           <span style={{ fontSize: 11, fontFamily: FONT, color: "rgba(255,255,255,0.8)" }}>{count} {count === 1 ? (t("moodboard.itemOne") || "Element") : (t("moodboard.itemMany") || "Elemente")}</span>
-          {palette.length > 0 && (
-            <div style={{ display: "flex", gap: 3, marginLeft: "auto" }}>
-              {palette.slice(0, 5).map((c, i) => <div key={i} style={{ width: 11, height: 11, borderRadius: 4, background: c, boxShadow: "0 0 0 1px rgba(255,255,255,0.35)" }} />)}
-            </div>
-          )}
         </div>
       </div>
     </motion.div>
