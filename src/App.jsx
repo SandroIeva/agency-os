@@ -11683,7 +11683,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   // Live refs so the (once-attached) wheel listener can read the current view.
   const zoomRef = useRef(zoom); zoomRef.current = zoom;
   const panRef = useRef(pan); panRef.current = pan;
-  const clampZoom = (z) => Math.min(2, Math.max(0.4, Math.round(z * 100) / 100));
+  const clampZoom = (z) => Math.min(2, Math.max(0.2, Math.round(z * 100) / 100));
   // Zoom keeping the given screen point fixed (cursor for wheel, centre for buttons).
   const zoomToScreenPoint = (nz, sx, sy) => {
     const z2 = clampZoom(nz), oz = zoomRef.current, p = panRef.current;
