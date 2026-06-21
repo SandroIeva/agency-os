@@ -11401,52 +11401,51 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
       <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 26px 26px" }}>
         {people.length === 0 ? (
           <div style={{ padding: "60px 20px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Keine Kontakte gefunden." : "No contacts found."}</div>
+        ) : view === "list" ? (
+          // List view — flat, no time sections
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {people.map(p => (
+              <motion.div key={p.id} className="hover-row"
+                style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 14, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)" }}>
+                {avatar(p, 40)}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14.5, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+                  <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{L(p.note)}</div>
+                </div>
+                <div style={{ flexShrink: 0 }}>{tag(p.status)}</div>
+                <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textFaint, flexShrink: 0, minWidth: 120, textAlign: "right" }}>{p.date}</div>
+                {actionBtn(p, 34)}
+                {scoreBadge(p.score, 34)}
+              </motion.div>
+            ))}
+          </div>
         ) : PEOPLE_SECTIONS.map(sec => {
           const items = people.filter(p => p.section === sec.key);
           if (!items.length) return null;
           return (
             <div key={sec.key} style={{ marginBottom: 18 }}>
               {sectionHeader(L(sec.label))}
-              {view === "cards" ? (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: 14 }}>
-                  {items.map(p => (
-                    <motion.div key={p.id} whileHover={{ y: -2 }}
-                      style={{ borderRadius: 18, padding: 16, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", display: "flex", flexDirection: "column", gap: 16 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                        {avatar(p, 52)}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
-                          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{L(p.note)}</div>
-                        </div>
-                        {actionBtn(p)}
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        {tag(p.status)}
-                        <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>{p.date}</span>
-                        <div style={{ flex: 1 }} />
-                        {scoreBadge(p.score)}
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                  {items.map(p => (
-                    <motion.div key={p.id} className="hover-row"
-                      style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 14, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)" }}>
-                      {avatar(p, 40)}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: 14 }}>
+                {items.map(p => (
+                  <motion.div key={p.id} whileHover={{ y: -2 }}
+                    style={{ borderRadius: 18, padding: 16, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", display: "flex", flexDirection: "column", gap: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                      {avatar(p, 52)}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14.5, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
-                        <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{L(p.note)}</div>
+                        <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+                        <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{L(p.note)}</div>
                       </div>
-                      <div style={{ flexShrink: 0 }}>{tag(p.status)}</div>
-                      <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textFaint, flexShrink: 0, minWidth: 120, textAlign: "right" }}>{p.date}</div>
-                      {actionBtn(p, 34)}
-                      {scoreBadge(p.score, 34)}
-                    </motion.div>
-                  ))}
-                </div>
-              )}
+                      {actionBtn(p)}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      {tag(p.status)}
+                      <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>{p.date}</span>
+                      <div style={{ flex: 1 }} />
+                      {scoreBadge(p.score)}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
             </div>
           );
         })}
