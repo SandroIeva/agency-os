@@ -12070,7 +12070,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                 {[null, ...allTags].map((tg, i) => {
                   const on = tagFilter === tg;
                   return (
-                    <div key={i} onClick={() => { setTagFilter(tg); if (tg === null) setColorFilter(null); }} style={{ padding: "3px 10px", borderRadius: 999, cursor: "pointer", fontSize: 11, fontFamily: FONT, fontWeight: 500, background: on ? "#23232b" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"), color: on ? "#fff" : theme.textDim }}>{tg === null ? (t("moodboard.allTags") || "Alle") : "#" + tg}</div>
+                    <div key={i} onClick={() => { setTagFilter(tg); if (tg === null) setColorFilter(null); }} style={{ padding: "3px 10px", borderRadius: 999, cursor: "pointer", fontSize: 11, fontFamily: FONT, fontWeight: 500, background: on ? "#23232b" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"), color: on ? "#fff" : theme.textDim }}>{tg === null ? (t("moodboard.allTags") || "Alle") : tg}</div>
                   );
                 })}
               </div>
