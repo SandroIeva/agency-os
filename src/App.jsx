@@ -11318,12 +11318,25 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
   const [view, setView] = useState("cards"); // "cards" | "list"
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all"); // "all" | "explorer" | "customer"
+  const [allPeople, setAllPeople] = useState(SAMPLE_PEOPLE); // editable in state (no DB yet)
   const [selected, setSelected] = useState(null); // open person → detail view
-  const L = (o) => (o && (o[de ? "de" : "en"] ?? o.de)) || "";
+  const [editing, setEditing] = useState(false);  // detail edit mode
+  const [draft, setDraft] = useState(null);        // editable copy while editing
+  const L = (o) => typeof o === "string" ? o : ((o && (o[de ? "de" : "en"] ?? o.de)) || "");
 
-  const people = SAMPLE_PEOPLE
+  const people = allPeople
     .filter(p => filter === "all" || p.status === filter)
     .filter(p => { const s = search.trim().toLowerCase(); return !s || p.name.toLowerCase().includes(s) || L(p.note).toLowerCase().includes(s); });
+
+  const openPerson = (p) => { setSelected(p); setEditing(false); setDraft(null); };
+  const closeDetail = () => { setSelected(null); setEditing(false); setDraft(null); };
+  const startEdit = () => { setDraft({ ...selected, note: L(selected.note), channels: [...(selected.channels || [])] }); setEditing(true); };
+  const cancelEdit = () => { setEditing(false); setDraft(null); };
+  const saveEdit = () => {
+    const updated = { ...draft, name: (draft.name || "").trim() || (de ? "Unbenannt" : "Unnamed"), score: Math.max(0, Math.min(100, parseInt(draft.score, 10) || 0)), email: (draft.email || "").trim() || null };
+    setAllPeople(prev => prev.map(x => x.id === updated.id ? updated : x));
+    setSelected(updated); setEditing(false); setDraft(null);
+  };
 
   // Score → soft badge colour (top tier is solid anthracite, like the design).
   const scoreStyle = (s) =>
@@ -11377,36 +11390,62 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
 
   // ── Detail view (click a card/row) ──
   if (selected) {
-    const p = selected;
-    const sc = scoreStyle(p.score);
+    const p = editing ? draft : selected;
+    const sc = scoreStyle(p.score || 0);
+    const inp = { width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13.5, fontFamily: FONT, outline: "none" };
+    const CH_KEYS = ["linkedin", "instagram", "x", "threads", "youtube", "tiktok", "facebook"];
+    const toggleChannel = (k) => setDraft(d => ({ ...d, channels: (d.channels || []).includes(k) ? d.channels.filter(c => c !== k) : [...(d.channels || []), k] }));
     const infoRow = (label, value) => (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "13px 0", borderBottom: `1px solid ${theme.borderFaint}` }}>
         <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>{label}</span>
         <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.text, textAlign: "right", minWidth: 0 }}>{value}</div>
       </div>
     );
+    const field = (label, node) => (
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 7 }}>{label}</div>
+        {node}
+      </div>
+    );
     return (
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-        <div style={{ padding: "16px 26px 4px" }}>
-          <motion.div whileTap={{ scale: 0.96 }} onClick={() => setSelected(null)}
+        <div style={{ padding: "16px 26px 4px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <motion.div whileTap={{ scale: 0.96 }} onClick={editing ? cancelEdit : closeDetail}
             style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12.5, fontFamily: FONT }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-            {de ? "Alle Personen" : "All people"}
+            {editing ? (de ? "Abbrechen" : "Cancel") : (de ? "Alle Personen" : "All people")}
           </motion.div>
+          {editing ? (
+            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={saveEdit}
+              style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 16px", borderRadius: 999, cursor: "pointer", background: "#23232b", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600 }}>
+              {de ? "Speichern" : "Save"}
+            </motion.div>
+          ) : (
+            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={startEdit}
+              style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", color: theme.text, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+              {de ? "Bearbeiten" : "Edit"}
+            </motion.div>
+          )}
         </div>
         <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "14px 26px 26px" }}>
-          <div>
+          <div style={{ maxWidth: 640 }}>
             {/* Header */}
             <div style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 24 }}>
               {avatar(p, 72)}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{p.name}</div>
+                {editing ? (
+                  <input value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} placeholder={de ? "Name" : "Name"}
+                    style={{ ...inp, fontSize: 18, fontWeight: 600, maxWidth: 360 }} />
+                ) : (
+                  <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{p.name}</div>
+                )}
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
                   {tag(p.status)}
-                  {channelRow(p, 24)}
+                  {!editing && channelRow(p, 24)}
                 </div>
               </div>
-              {p.email && (
+              {!editing && p.email && (
                 <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => { window.location.href = `mailto:${p.email}`; }}
                   style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 16px", borderRadius: 999, cursor: "pointer", background: "#23232b", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 500 }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>
@@ -11414,17 +11453,45 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
                 </motion.div>
               )}
             </div>
-            {/* Info */}
-            <div>
-              {infoRow(de ? "Letzte Aktivität" : "Last activity", L(p.note))}
-              {infoRow(de ? "Datum" : "Date", p.date)}
-              {infoRow("Score", <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><span style={{ width: 10, height: 10, borderRadius: "50%", background: sc.bg }} />{p.score}</span>)}
-              {infoRow(de ? "Kanäle" : "Channels", <div style={{ display: "flex", justifyContent: "flex-end" }}>{channelRow(p, 24)}</div>)}
-              {infoRow("E-Mail", p.email || "—")}
-            </div>
-            <div style={{ marginTop: 22, fontSize: 12.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
-              {de ? "Weitere Details (Verlauf, Notizen) folgen." : "More details (history, notes) coming soon."}
-            </div>
+            {editing ? (
+              /* Edit form */
+              <div>
+                {field(de ? "Status" : "Status", (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {[["explorer", "Explorer"], ["customer", de ? "Kunde" : "Customer"]].map(([v, lab]) => {
+                      const on = draft.status === v;
+                      return <div key={v} onClick={() => setDraft(d => ({ ...d, status: v }))}
+                        style={{ padding: "7px 14px", borderRadius: 999, cursor: "pointer", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, border: `1px solid ${on ? accent : theme.borderFaint}`, background: on ? accent + "16" : "transparent", color: on ? accent : theme.textSub }}>{lab}</div>;
+                    })}
+                  </div>
+                ))}
+                {field(de ? "Aktivität" : "Activity", <input value={draft.note || ""} onChange={e => setDraft(d => ({ ...d, note: e.target.value }))} placeholder={de ? "z. B. Erstgespräch" : "e.g. First call"} style={inp} />)}
+                {field(de ? "Datum" : "Date", <input value={draft.date || ""} onChange={e => setDraft(d => ({ ...d, date: e.target.value }))} placeholder="24.08.2026 7:24" style={inp} />)}
+                {field("Score", <input type="number" min="0" max="100" value={draft.score ?? ""} onChange={e => setDraft(d => ({ ...d, score: e.target.value }))} style={{ ...inp, maxWidth: 120 }} />)}
+                {field("E-Mail", <input value={draft.email || ""} onChange={e => setDraft(d => ({ ...d, email: e.target.value }))} placeholder="name@example.com" style={inp} />)}
+                {field(de ? "Kanäle" : "Channels", (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {CH_KEYS.map(k => {
+                      const on = (draft.channels || []).includes(k); const m = CHANNEL_META[k];
+                      return <div key={k} onClick={() => toggleChannel(k)} title={m?.label}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "5px 12px 5px 6px", borderRadius: 999, cursor: "pointer", border: `1px solid ${on ? (m?.color || accent) : theme.borderFaint}`, background: on ? (m?.color || accent) + "14" : "transparent" }}>
+                        {channelChip(k, 22)}
+                        <span style={{ fontSize: 12, fontFamily: FONT, color: on ? theme.text : theme.textDim }}>{m?.label || k}</span>
+                      </div>;
+                    })}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              /* Read-only info */
+              <div>
+                {infoRow(de ? "Letzte Aktivität" : "Last activity", L(p.note))}
+                {infoRow(de ? "Datum" : "Date", p.date)}
+                {infoRow("Score", <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><span style={{ width: 10, height: 10, borderRadius: "50%", background: sc.bg }} />{p.score}</span>)}
+                {infoRow(de ? "Kanäle" : "Channels", <div style={{ display: "flex", justifyContent: "flex-end" }}>{channelRow(p, 24)}</div>)}
+                {infoRow("E-Mail", p.email || "—")}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -11458,7 +11525,7 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
         ) : view === "list" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
             {people.map(p => (
-              <motion.div key={p.id} className="hover-row" onClick={() => setSelected(p)}
+              <motion.div key={p.id} className="hover-row" onClick={() => openPerson(p)}
                 style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 14, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)" }}>
                 {avatar(p, 40)}
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -11475,7 +11542,7 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de" }) {
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: 14 }}>
             {people.map(p => (
-              <motion.div key={p.id} whileHover={{ y: -2 }} onClick={() => setSelected(p)}
+              <motion.div key={p.id} whileHover={{ y: -2 }} onClick={() => openPerson(p)}
                 style={{ borderRadius: 18, padding: 16, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", display: "flex", flexDirection: "column", gap: 16 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                   {avatar(p, 52)}
