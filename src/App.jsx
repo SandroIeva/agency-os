@@ -11346,12 +11346,18 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
 
   const openPerson = (p) => { setSelected(p); setEditing(false); setDraft(null); };
   const closeDetail = () => { setSelected(null); setEditing(false); setDraft(null); };
-  const startEdit = () => { const { iso, time } = parsePersonDate(selected.date); setDraft({ ...selected, note: L(selected.note), channels: [...(selected.channels || [])], _dateISO: iso, _time: time }); setEditing(true); };
+  const startEdit = () => {
+    const { iso, time } = parsePersonDate(selected.date);
+    const parts = (selected.name || "").trim().split(/\s+/);
+    setDraft({ ...selected, note: L(selected.note), channels: [...(selected.channels || [])], _dateISO: iso, _time: time, _firstName: parts[0] || "", _lastName: parts.slice(1).join(" "), username: selected.username || "" });
+    setEditing(true);
+  };
   const cancelEdit = () => { setEditing(false); setDraft(null); };
   const saveEdit = () => {
     const date = formatPersonDate(draft._dateISO, draft._time) || draft.date || "";
-    const updated = { ...draft, date, name: (draft.name || "").trim() || (de ? "Unbenannt" : "Unnamed"), score: Math.max(0, Math.min(100, parseInt(draft.score, 10) || 0)), email: (draft.email || "").trim() || null };
-    delete updated._dateISO; delete updated._time;
+    const name = `${(draft._firstName || "").trim()} ${(draft._lastName || "").trim()}`.trim() || (de ? "Unbenannt" : "Unnamed");
+    const updated = { ...draft, date, name, username: (draft.username || "").trim(), score: Math.max(0, Math.min(100, parseInt(draft.score, 10) || 0)), email: (draft.email || "").trim() || null };
+    delete updated._dateISO; delete updated._time; delete updated._firstName; delete updated._lastName;
     setAllPeople(prev => prev.map(x => x.id === updated.id ? updated : x));
     setSelected(updated); setEditing(false); setDraft(null);
   };
@@ -11487,15 +11493,13 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
                 </div>
               ) : avatar(p, 72)}
               <div style={{ flex: 1, minWidth: 0 }}>
-                {editing ? (
-                  <input value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} placeholder={de ? "Name" : "Name"}
-                    style={{ ...inp, fontSize: 18, fontWeight: 600, maxWidth: 360 }} />
-                ) : (
-                  <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{p.name}</div>
-                )}
+                <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                  {editing ? (`${draft._firstName || ""} ${draft._lastName || ""}`.trim() || (de ? "Neue Person" : "New person")) : p.name}
+                </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
-                  {tag(p.status)}
+                  {!editing && tag(p.status)}
                   {!editing && channelRow(p, 24)}
+                  {editing && draft.username ? <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>@{draft.username}</span> : null}
                 </div>
               </div>
               {!editing && p.email && (
@@ -11509,6 +11513,9 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
             {editing ? (
               /* Edit form — two columns so fields aren't overly wide */
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", columnGap: 18, rowGap: 18 }}>
+                {field(de ? "Vorname" : "First name", <input value={draft._firstName || ""} onChange={e => setDraft(d => ({ ...d, _firstName: e.target.value }))} placeholder={de ? "Vorname" : "First name"} style={inp} />)}
+                {field(de ? "Nachname" : "Last name", <input value={draft._lastName || ""} onChange={e => setDraft(d => ({ ...d, _lastName: e.target.value }))} placeholder={de ? "Nachname" : "Last name"} style={inp} />)}
+                {field(de ? "Benutzername" : "Username", <input value={draft.username || ""} onChange={e => setDraft(d => ({ ...d, username: e.target.value.replace(/^@+/, "") }))} placeholder={de ? "z. B. gabriela.c" : "e.g. gabriela.c"} style={inp} />)}
                 {field(de ? "Status" : "Status", (
                   <div style={{ display: "flex", gap: 8 }}>
                     {[["explorer", "Explorer"], ["customer", de ? "Kunde" : "Customer"]].map(([v, lab]) => {
@@ -11518,11 +11525,11 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
                     })}
                   </div>
                 ))}
-                {field(de ? "Aktivität" : "Activity", <input value={draft.note || ""} onChange={e => setDraft(d => ({ ...d, note: e.target.value }))} placeholder={de ? "z. B. Erstgespräch" : "e.g. First call"} style={inp} />)}
                 {field(de ? "Datum" : "Date", <input type="date" value={draft._dateISO || ""} onChange={e => setDraft(d => ({ ...d, _dateISO: e.target.value }))} style={inp} />)}
                 {field(de ? "Uhrzeit" : "Time", <input type="time" value={draft._time || ""} onChange={e => setDraft(d => ({ ...d, _time: e.target.value }))} style={inp} />)}
                 {field("Score", <input type="number" min="0" max="100" value={draft.score ?? ""} onChange={e => setDraft(d => ({ ...d, score: e.target.value }))} style={inp} />)}
                 {field("E-Mail", <input value={draft.email || ""} onChange={e => setDraft(d => ({ ...d, email: e.target.value }))} placeholder="name@example.com" style={inp} />)}
+                {field(de ? "Aktivität" : "Activity", <input value={draft.note || ""} onChange={e => setDraft(d => ({ ...d, note: e.target.value }))} placeholder={de ? "z. B. Erstgespräch" : "e.g. First call"} style={inp} />, 2)}
                 {field(de ? "Kanäle" : "Channels", (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                     {CH_KEYS.map(k => {
