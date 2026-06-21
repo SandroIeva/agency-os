@@ -11130,7 +11130,7 @@ const BRAND_PILLAR_TABS = [
   { key: "strategy", label: "Strategie" },
   { key: "identity", label: "Identität" },
   { key: "design",   label: "Brand Design" },
-  { key: "touchpoints", label: "Touchpoints", view: "touchpoints" },
+  { key: "touchpoints", label: "Audience", view: "touchpoints" },
   { key: "assets",      label: "Assets",      view: "assets" },
 ];
 
@@ -11291,7 +11291,8 @@ const frostedPanelStyle = (darkMode) => ({
     : "0 22px 60px rgba(0,0,0,0.09), inset 0 1px 0 rgba(255,255,255,0.7)",
 });
 
-function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, canEdit = true }) {
+function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", canEdit = true }) {
+  const [audTab, setAudTab] = useState("touchpoints"); // "touchpoints" | "people"
   const [profile, setProfile] = useState(null);
   const [channels, setChannels] = useState({});
   const [loading, setLoading] = useState(true);
@@ -11350,13 +11351,34 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, canEdit
           )}
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
             <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{profile?.name || userOrg?.name || ""}</span>
-            <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim }}>{t("touchpoints.title") || "Touchpoints"}</span>
+            <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim }}>Audience</span>
           </div>
+        </div>
+
+        {/* Tabs: Touchpoints · People */}
+        <div style={{ padding: "0 24px", display: "flex", gap: 22, borderBottom: `1px solid ${theme.borderFaint}` }}>
+          {[["touchpoints", "Touchpoints"], ["people", "People"]].map(([k, lbl]) => {
+            const on = audTab === k;
+            return (
+              <div key={k} onClick={() => setAudTab(k)}
+                style={{ padding: "12px 2px", marginBottom: -1, cursor: "pointer", fontSize: 13.5, fontFamily: FONT, fontWeight: on ? 600 : 500, color: on ? theme.text : theme.textDim, borderBottom: `2px solid ${on ? accent : "transparent"}`, transition: "color 0.15s ease" }}>
+                {lbl}
+              </div>
+            );
+          })}
         </div>
 
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
           {loading ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
+          ) : audTab === "people" ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", height: "100%", minHeight: 280, gap: 12, color: theme.textDim }}>
+              <div style={{ width: 64, height: 64, borderRadius: 18, background: accent + "18", color: accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </div>
+              <div style={{ fontSize: 15.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>People</div>
+              <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 340, lineHeight: 1.55 }}>{appLanguage === "de" ? "Hier kommt deine Audience hin. Dieser Bereich wird als Nächstes gebaut." : "Your audience will live here. This section is coming next."}</div>
+            </div>
           ) : (
             <>
               {(() => {
@@ -24115,7 +24137,7 @@ export default function CircularMenu() {
         {/* TOUCHPOINTS VIEW (Brand → Touchpoints): social channels + strategy teaser */}
         <AnimatePresence>
           {currentView === "touchpoints" && (
-            <TouchpointsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} canEdit={canEditBrand} onBack={() => setCurrentView("dashboard")} />
+            <TouchpointsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} canEdit={canEditBrand} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
