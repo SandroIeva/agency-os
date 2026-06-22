@@ -11532,21 +11532,17 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
                 {field("E-Mail", <input value={draft.email || ""} onChange={e => setDraft(d => ({ ...d, email: e.target.value }))} placeholder="name@example.com" style={inp} />)}
                 {field(de ? "Aktivität" : "Activity", <input value={draft.note || ""} onChange={e => setDraft(d => ({ ...d, note: e.target.value }))} placeholder={de ? "z. B. Erstgespräch" : "e.g. First call"} style={inp} />, 2)}
                 {field(de ? "Social-Media-Profile" : "Social profiles", (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-                    {CH_KEYS.map(k => {
-                      const m = CHANNEL_META[k];
-                      return (
-                        <div key={k} style={{ display: "flex", alignItems: "center", gap: 11 }}>
-                          {channelChip(k, 28)}
-                          <span style={{ width: 84, flexShrink: 0, fontSize: 12.5, fontFamily: FONT, color: theme.textSub }}>{m?.label || k}</span>
-                          <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, padding: "9px 12px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }}>
-                            <span style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textFaint }}>@</span>
-                            <input value={(draft.handles && draft.handles[k]) || ""} onChange={e => setHandle(k, e.target.value)} placeholder={de ? "Benutzername" : "Username"}
-                              style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13.5, fontFamily: FONT }} />
-                          </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", columnGap: 18, rowGap: 10 }}>
+                    {CH_KEYS.map(k => (
+                      <div key={k} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        {channelChip(k, 28)}
+                        <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, padding: "9px 12px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }}>
+                          <span style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textFaint }}>@</span>
+                          <input value={(draft.handles && draft.handles[k]) || ""} onChange={e => setHandle(k, e.target.value)} placeholder={CHANNEL_META[k]?.label || k}
+                            style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13.5, fontFamily: FONT }} />
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
                   </div>
                 ), 2)}
                 <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
