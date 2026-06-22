@@ -11341,6 +11341,8 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
   const [editing, setEditing] = useState(false);  // detail edit mode
   const [draft, setDraft] = useState(null);        // editable copy while editing
   const [addOpen, setAddOpen] = useState(false);   // "Hinzufügen" dropdown
+  const [slotReady, setSlotReady] = useState(false); // header slot is mounted → portal can target it
+  useEffect(() => { setSlotReady(true); }, []);
   const avatarFileRef = useRef(null);
   const csvInputRef = useRef(null);
   const pendingNewRef = useRef(null);              // id of a freshly-created person being edited
@@ -11705,8 +11707,52 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
     );
   }
 
+  // "Hinzufügen" dropdown — rendered in the page's top-right header slot (like Assets).
+  const addMenu = (
+    <div style={{ position: "relative" }}>
+      <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setAddOpen(o => !o)}
+        style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, cursor: "pointer", background: "#23232b", color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        {de ? "Hinzufügen" : "Add"}
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 1, opacity: 0.8 }}><polyline points="6 9 12 15 18 9"/></svg>
+      </motion.div>
+      <AnimatePresence>
+        {addOpen && (
+          <>
+            <div onClick={() => setAddOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+            <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
+              style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 41, minWidth: 248, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14, boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden", padding: 6, whiteSpace: "nowrap" }}>
+              {[
+                { key: "new", label: de ? "Neue Person" : "New person", sub: de ? "Von Grund auf anlegen" : "Create from scratch",
+                  icon: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></>,
+                  onClick: () => { setAddOpen(false); createNewPerson(); } },
+                { key: "csv", label: de ? "Aus CSV importieren" : "Import from CSV", sub: de ? "Personen aus einer CSV-Datei" : "People from a CSV file",
+                  icon: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><polyline points="9 15 12 12 15 15"/></>,
+                  onClick: () => { setAddOpen(false); csvInputRef.current?.click(); } },
+              ].map(it => (
+                <div key={it.key} onClick={it.onClick} className="hover-row"
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{it.label}</div>
+                    <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{it.sub}</div>
+                  </div>
+                </div>
+              ))}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+      <input ref={csvInputRef} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={importCsvFile} />
+    </div>
+  );
+
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      {/* Add menu lives in the Audience header's top-right slot (like Assets) */}
+      {slotReady && headerSlotRef?.current ? createPortal(addMenu, headerSlotRef.current) : null}
       {/* Toolbar — search · filter · view (mirrors Assets) */}
       <div style={{ padding: "16px 26px 4px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", maxWidth: 340 }}>
@@ -11723,45 +11769,6 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
         <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
           {viewBtn("cards", de ? "Karten" : "Cards", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>)}
           {viewBtn("list", de ? "Liste" : "List", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>)}
-        </div>
-        {/* Hinzufügen dropdown — new person / import CSV */}
-        <div style={{ position: "relative" }}>
-          <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setAddOpen(o => !o)}
-            style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, cursor: "pointer", background: "#23232b", color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            {de ? "Hinzufügen" : "Add"}
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 1, opacity: 0.8 }}><polyline points="6 9 12 15 18 9"/></svg>
-          </motion.div>
-          <AnimatePresence>
-            {addOpen && (
-              <>
-                <div onClick={() => setAddOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
-                <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
-                  style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 41, minWidth: 248, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14, boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden", padding: 6, whiteSpace: "nowrap" }}>
-                  {[
-                    { key: "new", label: de ? "Neue Person" : "New person", sub: de ? "Von Grund auf anlegen" : "Create from scratch",
-                      icon: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></>,
-                      onClick: () => { setAddOpen(false); createNewPerson(); } },
-                    { key: "csv", label: de ? "Aus CSV importieren" : "Import from CSV", sub: de ? "Personen aus einer CSV-Datei" : "People from a CSV file",
-                      icon: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><polyline points="9 15 12 12 15 15"/></>,
-                      onClick: () => { setAddOpen(false); csvInputRef.current?.click(); } },
-                  ].map(it => (
-                    <div key={it.key} onClick={it.onClick} className="hover-row"
-                      style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
-                      <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
-                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{it.label}</div>
-                        <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{it.sub}</div>
-                      </div>
-                    </div>
-                  ))}
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
-          <input ref={csvInputRef} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={importCsvFile} />
         </div>
       </div>
 
