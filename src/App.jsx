@@ -11420,7 +11420,7 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
         Object.entries(CH).forEach(([k, i]) => { const v = g(row, i).replace(/^@+/, ""); if (v) handles[k] = v; });
         added.push(newPerson({ name, username: g(row, iUser), email: g(row, iEmail) || null, status: normStatus(g(row, iStatus)), gender: normGender(g(row, iGender)), ageRange: g(row, iAge), date: g(row, iDate), notes: g(row, iNotes), handles }));
       }
-      if (!added.length) { alert(de ? "Keine gültigen Personen in der CSV gefunden (Spalte „name" erforderlich)." : "No valid people found in the CSV (a “name” column is required)."); return; }
+      if (!added.length) { alert(de ? "Keine gültigen Personen in der CSV gefunden (Spalte 'name' erforderlich)." : "No valid people found in the CSV (a 'name' column is required)."); return; }
       setAllPeople(prev => [...added, ...prev]);
       alert(de ? `${added.length} Person(en) importiert.` : `Imported ${added.length} person(s).`);
     };
