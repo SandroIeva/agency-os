@@ -11301,14 +11301,15 @@ const frostedPanelStyle = (darkMode) => ({
 
 // ── Audience → People — contact cards (cards / list views, search, filters) ──
 // Placeholder sample data for now; the shape is easy to swap for a real table.
-// `channels` = the social platforms the person came in / engaged through.
+// `handles` = the person's username per social platform. A channel counts as
+// active (and shows its icon) when it has a non-empty handle.
 const SAMPLE_PEOPLE = [
-  { id: "p1", name: "Gabriela Christiansen", note: { de: "Erstgespräch", en: "First customer call" }, status: "explorer", date: "24.08.2026 7:24", score: 90, email: "gabriela@example.com", channels: ["linkedin"],                       color: "#E0B84B" },
-  { id: "p2", name: "Halle Griffiths",       note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "explorer", date: "24.08.2026 7:24", score: 83, email: null,                  channels: ["instagram", "x"],            color: "#E8728C" },
-  { id: "p3", name: "Josiah Love",           note: { de: "Erstgespräch", en: "First customer call" }, status: "explorer", date: "23.08.2026 7:24", score: 72, email: "josiah@example.com",   channels: ["x"],                         color: "#4FAE7B" },
-  { id: "p4", name: "Wyatt Wetmore",         note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "customer", date: "01.08.2026 7:24", score: 62, email: "wyatt@example.com",    channels: ["linkedin", "instagram", "threads"], color: "#E0A06A" },
-  { id: "p5", name: "Jaclyn Moses",          note: { de: "Erstgespräch", en: "First customer call" }, status: "customer", date: "01.08.2026 7:24", score: 32, email: null,                  channels: ["threads"],                   color: "#6C8BE0" },
-  { id: "p6", name: "Marcus Chen",           note: { de: "Angebot gesendet", en: "Proposal sent" },   status: "explorer", date: "28.07.2026 7:24", score: 54, email: "marcus@example.com",   channels: ["instagram"],                 color: "#9B6CE0" },
+  { id: "p1", name: "Gabriela Christiansen", note: { de: "Erstgespräch", en: "First customer call" }, status: "explorer", date: "24.08.2026 7:24", score: 90, email: "gabriela@example.com", handles: { linkedin: "gabriela-christiansen" },                                   color: "#E0B84B" },
+  { id: "p2", name: "Halle Griffiths",       note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "explorer", date: "24.08.2026 7:24", score: 83, email: null,                  handles: { instagram: "halle.griffiths", x: "hallegriffiths" },                  color: "#E8728C" },
+  { id: "p3", name: "Josiah Love",           note: { de: "Erstgespräch", en: "First customer call" }, status: "explorer", date: "23.08.2026 7:24", score: 72, email: "josiah@example.com",   handles: { x: "josiah_love" },                                                   color: "#4FAE7B" },
+  { id: "p4", name: "Wyatt Wetmore",         note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "customer", date: "01.08.2026 7:24", score: 62, email: "wyatt@example.com",    handles: { linkedin: "wyatt-wetmore", instagram: "wyatt.creates", threads: "wyattw" }, color: "#E0A06A" },
+  { id: "p5", name: "Jaclyn Moses",          note: { de: "Erstgespräch", en: "First customer call" }, status: "customer", date: "01.08.2026 7:24", score: 32, email: null,                  handles: { threads: "jaclyn.moses" },                                            color: "#6C8BE0" },
+  { id: "p6", name: "Marcus Chen",           note: { de: "Angebot gesendet", en: "Proposal sent" },   status: "explorer", date: "28.07.2026 7:24", score: 54, email: "marcus@example.com",   handles: { instagram: "marcus.chen" },                                           color: "#9B6CE0" },
 ];
 // Channel colour/label lookup — reuse the same platform set + glyphs as Touchpoints.
 const CHANNEL_META = Object.fromEntries(TOUCHPOINT_PLATFORMS.map(p => [p.key, { label: p.label, color: p.color }]));
@@ -11406,8 +11407,10 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
       <svg width={g} height={g} viewBox="0 0 24 24" style={shift ? { transform: `translateY(${shift}px)` } : undefined}>{touchpointGlyph(key)}</svg>
     </div>
   ); };
+  const CH_KEYS = ["linkedin", "instagram", "x", "threads", "youtube", "tiktok", "facebook"];
+  const activeChannels = (p) => CH_KEYS.filter(k => ((p.handles && p.handles[k]) || "").trim());
   const channelRow = (p, size = 28) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>{(p.channels || []).map(k => channelChip(k, size))}</div>
+    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>{activeChannels(p).map(k => channelChip(k, size))}</div>
   );
 
   const viewBtn = (mode, title, children) => {
@@ -11432,8 +11435,7 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
     const p = editing ? draft : selected;
     const sc = scoreStyle(p.score || 0);
     const inp = { width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13.5, fontFamily: FONT, outline: "none", colorScheme: darkMode ? "dark" : "light" };
-    const CH_KEYS = ["linkedin", "instagram", "x", "threads", "youtube", "tiktok", "facebook"];
-    const toggleChannel = (k) => setDraft(d => ({ ...d, channels: (d.channels || []).includes(k) ? d.channels.filter(c => c !== k) : [...(d.channels || []), k] }));
+    const setHandle = (k, v) => setDraft(d => ({ ...d, handles: { ...(d.handles || {}), [k]: v.replace(/^@+/, "") } }));
     const infoRow = (label, value) => (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "13px 0", borderBottom: `1px solid ${theme.borderFaint}` }}>
         <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>{label}</span>
@@ -11529,15 +11531,21 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
                 {field("Score", <input type="number" min="0" max="100" value={draft.score ?? ""} onChange={e => setDraft(d => ({ ...d, score: e.target.value }))} style={inp} />)}
                 {field("E-Mail", <input value={draft.email || ""} onChange={e => setDraft(d => ({ ...d, email: e.target.value }))} placeholder="name@example.com" style={inp} />)}
                 {field(de ? "Aktivität" : "Activity", <input value={draft.note || ""} onChange={e => setDraft(d => ({ ...d, note: e.target.value }))} placeholder={de ? "z. B. Erstgespräch" : "e.g. First call"} style={inp} />, 2)}
-                {field(de ? "Kanäle" : "Channels", (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {field(de ? "Social-Media-Profile" : "Social profiles", (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
                     {CH_KEYS.map(k => {
-                      const on = (draft.channels || []).includes(k); const m = CHANNEL_META[k];
-                      return <div key={k} onClick={() => toggleChannel(k)} title={m?.label}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "5px 12px 5px 6px", borderRadius: 999, cursor: "pointer", border: `1px solid ${on ? (m?.color || accent) : theme.borderFaint}`, background: on ? (m?.color || accent) + "14" : "transparent" }}>
-                        {channelChip(k, 22)}
-                        <span style={{ fontSize: 12, fontFamily: FONT, color: on ? theme.text : theme.textDim }}>{m?.label || k}</span>
-                      </div>;
+                      const m = CHANNEL_META[k];
+                      return (
+                        <div key={k} style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                          {channelChip(k, 28)}
+                          <span style={{ width: 84, flexShrink: 0, fontSize: 12.5, fontFamily: FONT, color: theme.textSub }}>{m?.label || k}</span>
+                          <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, padding: "9px 12px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }}>
+                            <span style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textFaint }}>@</span>
+                            <input value={(draft.handles && draft.handles[k]) || ""} onChange={e => setHandle(k, e.target.value)} placeholder={de ? "Benutzername" : "Username"}
+                              style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13.5, fontFamily: FONT }} />
+                          </div>
+                        </div>
+                      );
                     })}
                   </div>
                 ), 2)}
