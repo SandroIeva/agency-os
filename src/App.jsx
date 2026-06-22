@@ -11304,12 +11304,12 @@ const frostedPanelStyle = (darkMode) => ({
 // `handles` = the person's username per social platform. A channel counts as
 // active (and shows its icon) when it has a non-empty handle.
 const SAMPLE_PEOPLE = [
-  { id: "p1", name: "Gabriela Christiansen", note: { de: "Erstgespräch", en: "First customer call" }, status: "explorer", date: "24.08.2026 7:24", score: 90, email: "gabriela@example.com", handles: { linkedin: "gabriela-christiansen" },                                   color: "#E0B84B" },
-  { id: "p2", name: "Halle Griffiths",       note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "explorer", date: "24.08.2026 7:24", score: 83, email: null,                  handles: { instagram: "halle.griffiths", x: "hallegriffiths" },                  color: "#E8728C" },
-  { id: "p3", name: "Josiah Love",           note: { de: "Erstgespräch", en: "First customer call" }, status: "explorer", date: "23.08.2026 7:24", score: 72, email: "josiah@example.com",   handles: { x: "josiah_love" },                                                   color: "#4FAE7B" },
-  { id: "p4", name: "Wyatt Wetmore",         note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "customer", date: "01.08.2026 7:24", score: 62, email: "wyatt@example.com",    handles: { linkedin: "wyatt-wetmore", instagram: "wyatt.creates", threads: "wyattw" }, color: "#E0A06A" },
-  { id: "p5", name: "Jaclyn Moses",          note: { de: "Erstgespräch", en: "First customer call" }, status: "customer", date: "01.08.2026 7:24", score: 32, email: null,                  handles: { threads: "jaclyn.moses" },                                            color: "#6C8BE0" },
-  { id: "p6", name: "Marcus Chen",           note: { de: "Angebot gesendet", en: "Proposal sent" },   status: "explorer", date: "28.07.2026 7:24", score: 54, email: "marcus@example.com",   handles: { instagram: "marcus.chen" },                                           color: "#9B6CE0" },
+  { id: "p1", name: "Gabriela Christiansen", note: { de: "Erstgespräch", en: "First customer call" }, status: "explorer", date: "24.08.2026 7:24", gender: "female", ageRange: "29-45", email: "gabriela@example.com", handles: { linkedin: "gabriela-christiansen" },                                   color: "#E0B84B" },
+  { id: "p2", name: "Halle Griffiths",       note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "explorer", date: "24.08.2026 7:24", gender: "female", ageRange: "18-29", email: null,                  handles: { instagram: "halle.griffiths", x: "hallegriffiths" },                  color: "#E8728C" },
+  { id: "p3", name: "Josiah Love",           note: { de: "Erstgespräch", en: "First customer call" }, status: "explorer", date: "23.08.2026 7:24", gender: "male",   ageRange: "18-29", email: "josiah@example.com",   handles: { x: "josiah_love" },                                                   color: "#4FAE7B" },
+  { id: "p4", name: "Wyatt Wetmore",         note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "customer", date: "01.08.2026 7:24", gender: "male",   ageRange: "29-45", email: "wyatt@example.com",    handles: { linkedin: "wyatt-wetmore", instagram: "wyatt.creates", threads: "wyattw" }, color: "#E0A06A" },
+  { id: "p5", name: "Jaclyn Moses",          note: { de: "Erstgespräch", en: "First customer call" }, status: "customer", date: "01.08.2026 7:24", gender: "female", ageRange: "45+",   email: null,                  handles: { threads: "jaclyn.moses" },                                            color: "#6C8BE0" },
+  { id: "p6", name: "Marcus Chen",           note: { de: "Angebot gesendet", en: "Proposal sent" },   status: "explorer", date: "28.07.2026 7:24", gender: "male",   ageRange: "29-45", email: "marcus@example.com",   handles: { instagram: "marcus.chen" },                                           color: "#9B6CE0" },
 ];
 // Channel colour/label lookup — reuse the same platform set + glyphs as Touchpoints.
 const CHANNEL_META = Object.fromEntries(TOUCHPOINT_PLATFORMS.map(p => [p.key, { label: p.label, color: p.color }]));
@@ -11357,7 +11357,7 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
   const saveEdit = () => {
     const date = formatPersonDate(draft._dateISO, draft._time) || draft.date || "";
     const name = `${(draft._firstName || "").trim()} ${(draft._lastName || "").trim()}`.trim() || (de ? "Unbenannt" : "Unnamed");
-    const updated = { ...draft, date, name, username: (draft.username || "").trim(), score: Math.max(0, Math.min(100, parseInt(draft.score, 10) || 0)), email: (draft.email || "").trim() || null };
+    const updated = { ...draft, date, name, username: (draft.username || "").trim(), email: (draft.email || "").trim() || null };
     delete updated._dateISO; delete updated._time; delete updated._firstName; delete updated._lastName;
     setAllPeople(prev => prev.map(x => x.id === updated.id ? updated : x));
     setSelected(updated); setEditing(false); setDraft(null);
@@ -11416,13 +11416,10 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
     rec.start(); notesRecRef.current = rec; setNotesRec(true);
   };
 
-  // Score → soft badge colour (top tier is solid anthracite, like the design).
-  const scoreStyle = (s) =>
-    s >= 88 ? { bg: darkMode ? "#0f0f16" : "#1b1b1b", fg: "#fff" }
-    : s >= 78 ? { bg: "#D7F0C2", fg: "#3f6b2e" }
-    : s >= 66 ? { bg: "#F3E7A8", fg: "#7a6a1f" }
-    : s >= 50 ? { bg: "#F4D7C0", fg: "#8a5a32" }
-    : { bg: "#F3C8D0", fg: "#9a3b53" };
+  const GENDER_OPTS = [["female", de ? "Weiblich" : "Female"], ["male", de ? "Männlich" : "Male"]];
+  const AGE_OPTS = [["14-18", "14–18"], ["18-29", "18–29"], ["29-45", "29–45"], ["45+", "45+"]];
+  const genderLabel = (g) => GENDER_OPTS.find(o => o[0] === g)?.[1] || "—";
+  const ageLabel = (a) => AGE_OPTS.find(o => o[0] === a)?.[1] || "—";
   const initials = (n) => (n || "?").split(" ").map(w => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
   const statusLabel = (st) => st === "customer" ? (de ? "Kunde" : "Customer") : (de ? "Explorer" : "Explorer");
   const avatar = (p, size) => p.avatar_url ? (
@@ -11473,7 +11470,6 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
   // ── Detail view (click a card/row) ──
   if (selected) {
     const p = editing ? draft : selected;
-    const sc = scoreStyle(p.score || 0);
     const inp = { width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13.5, fontFamily: FONT, outline: "none", colorScheme: darkMode ? "dark" : "light" };
     const setHandle = (k, v) => setDraft(d => ({ ...d, handles: { ...(d.handles || {}), [k]: v.replace(/^@+/, "") } }));
     const infoRow = (label, value) => (
@@ -11566,10 +11562,21 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
                     })}
                   </div>
                 ))}
+                {field(de ? "Geschlecht" : "Gender", (
+                  <select value={draft.gender || ""} onChange={e => setDraft(d => ({ ...d, gender: e.target.value }))} style={inp}>
+                    <option value="">{de ? "Bitte wählen" : "Select…"}</option>
+                    {GENDER_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                ))}
+                {field(de ? "Altersgruppe" : "Age range", (
+                  <select value={draft.ageRange || ""} onChange={e => setDraft(d => ({ ...d, ageRange: e.target.value }))} style={inp}>
+                    <option value="">{de ? "Bitte wählen" : "Select…"}</option>
+                    {AGE_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                ))}
                 {field(de ? "Datum" : "Date", <input type="date" value={draft._dateISO || ""} onChange={e => setDraft(d => ({ ...d, _dateISO: e.target.value }))} style={inp} />)}
                 {field(de ? "Uhrzeit" : "Time", <input type="time" value={draft._time || ""} onChange={e => setDraft(d => ({ ...d, _time: e.target.value }))} style={inp} />)}
-                {field("Score", <input type="number" min="0" max="100" value={draft.score ?? ""} onChange={e => setDraft(d => ({ ...d, score: e.target.value }))} style={inp} />)}
-                {field("E-Mail", <input value={draft.email || ""} onChange={e => setDraft(d => ({ ...d, email: e.target.value }))} placeholder="name@example.com" style={inp} />)}
+                {field("E-Mail", <input value={draft.email || ""} onChange={e => setDraft(d => ({ ...d, email: e.target.value }))} placeholder="name@example.com" style={inp} />, 2)}
                 {field(de ? "Aktivität" : "Activity", <input value={draft.note || ""} onChange={e => setDraft(d => ({ ...d, note: e.target.value }))} placeholder={de ? "z. B. Erstgespräch" : "e.g. First call"} style={inp} />, 2)}
                 {field(de ? "Social-Media-Profile" : "Social profiles", (
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", columnGap: 18, rowGap: 10 }}>
@@ -11597,8 +11604,9 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
               /* Read-only info */
               <div>
                 {infoRow(de ? "Letzte Aktivität" : "Last activity", L(p.note))}
+                {infoRow(de ? "Geschlecht" : "Gender", genderLabel(p.gender))}
+                {infoRow(de ? "Altersgruppe" : "Age range", ageLabel(p.ageRange))}
                 {infoRow(de ? "Datum" : "Date", p.date)}
-                {infoRow("Score", <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><span style={{ width: 10, height: 10, borderRadius: "50%", background: sc.bg }} />{p.score}</span>)}
                 {infoRow(de ? "Kanäle" : "Channels", <div style={{ display: "flex", justifyContent: "flex-end" }}>{channelRow(p, 24)}</div>)}
                 {infoRow("E-Mail", p.email || "—")}
 
