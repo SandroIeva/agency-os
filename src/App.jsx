@@ -11681,9 +11681,9 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
                 {infoRow(de ? "Letzte Aktivität" : "Last activity", L(p.note))}
                 {infoRow(de ? "Geschlecht" : "Gender", genderLabel(p.gender))}
                 {infoRow(de ? "Altersgruppe" : "Age range", ageLabel(p.ageRange))}
-                {infoRow(de ? "Datum" : "Date", p.date)}
                 {infoRow(de ? "Kanäle" : "Channels", <div style={{ display: "flex", justifyContent: "flex-end" }}>{channelRow(p, 24)}</div>)}
                 {infoRow("E-Mail", p.email || "—")}
+                {infoRow(de ? "Erstellt am" : "Created", (p.date || "").split(" ")[0] || "—")}
 
                 {/* Notes — directly editable here (not in edit mode), with dictation */}
                 <div style={{ marginTop: 26 }}>
