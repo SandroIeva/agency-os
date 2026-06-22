@@ -11376,6 +11376,46 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
     reader.readAsDataURL(file);
   };
 
+  // Per-person notes — in the read detail (not edit mode), with dictation.
+  const [notesText, setNotesText] = useState("");
+  const [notesRec, setNotesRec] = useState(false);
+  const notesRecRef = useRef(null);
+  const notesSaveTimer = useRef(null);
+  useEffect(() => { setNotesText(selected?.notes || ""); }, [selected?.id]); // eslint-disable-line
+  const saveNotes = (text) => {
+    if (!selected) return;
+    setAllPeople(prev => prev.map(x => x.id === selected.id ? { ...x, notes: text } : x));
+    setSelected(s => s ? { ...s, notes: text } : s);
+  };
+  useEffect(() => {
+    if (!selected || editing || notesText === (selected.notes || "")) return;
+    clearTimeout(notesSaveTimer.current);
+    notesSaveTimer.current = setTimeout(() => saveNotes(notesText), 500);
+    return () => clearTimeout(notesSaveTimer.current);
+  }, [notesText]); // eslint-disable-line
+  useEffect(() => () => { try { notesRecRef.current?.stop(); } catch (_) {} }, []);
+  const startNotesDictation = () => {
+    const SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (!SR) { alert(de ? "Spracherkennung wird in diesem Browser nicht unterstützt." : "Speech recognition isn't supported in this browser."); return; }
+    if (notesRec) { try { notesRecRef.current?.stop(); } catch (_) {} return; }
+    const rec = new SR();
+    rec.lang = de ? "de-DE" : "en-US";
+    rec.continuous = true; rec.interimResults = true;
+    let base = notesText; let needsSpace = base.length > 0 && !base.endsWith(" ");
+    rec.onresult = (event) => {
+      let working = base;
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const tr = event.results[i][0].transcript;
+        if (event.results[i].isFinal) { working += (needsSpace ? " " : "") + tr.trim(); base = working; needsSpace = true; }
+        else { working = base + (needsSpace ? " " : "") + tr; }
+        setNotesText(working);
+      }
+    };
+    rec.onerror = (e) => { if (e.error !== "no-speech") console.error("[people notes dictation]", e.error); };
+    rec.onend = () => { setNotesRec(false); notesRecRef.current = null; };
+    rec.start(); notesRecRef.current = rec; setNotesRec(true);
+  };
+
   // Score → soft badge colour (top tier is solid anthracite, like the design).
   const scoreStyle = (s) =>
     s >= 88 ? { bg: darkMode ? "#0f0f16" : "#1b1b1b", fg: "#fff" }
@@ -11561,6 +11601,21 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
                 {infoRow("Score", <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><span style={{ width: 10, height: 10, borderRadius: "50%", background: sc.bg }} />{p.score}</span>)}
                 {infoRow(de ? "Kanäle" : "Channels", <div style={{ display: "flex", justifyContent: "flex-end" }}>{channelRow(p, 24)}</div>)}
                 {infoRow("E-Mail", p.email || "—")}
+
+                {/* Notes — directly editable here (not in edit mode), with dictation */}
+                <div style={{ marginTop: 26 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1 }}>{de ? "Notizen" : "Notes"}</span>
+                    <motion.div whileTap={{ scale: 0.92 }} onClick={startNotesDictation} title={notesRec ? (de ? "Diktat stoppen" : "Stop dictation") : (de ? "Diktieren" : "Dictate")}
+                      style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                        border: `1px solid ${notesRec ? "rgba(239,68,68,0.4)" : theme.borderFaint}`, background: notesRec ? "rgba(239,68,68,0.12)" : "transparent", color: notesRec ? "#EF4444" : theme.textDim }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
+                    </motion.div>
+                  </div>
+                  <textarea value={notesText} onChange={e => setNotesText(e.target.value)} onBlur={() => saveNotes(notesText)}
+                    placeholder={de ? "Notiz hinzufügen…" : "Add a note…"} rows={4}
+                    style={{ width: "100%", boxSizing: "border-box", padding: "11px 13px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13.5, fontFamily: FONT, lineHeight: 1.55, outline: "none", resize: "vertical", minHeight: 92 }} />
+                </div>
               </div>
             )}
           </div>
