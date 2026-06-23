@@ -116,7 +116,7 @@ export default function PublicBrandLanding({ token }) {
   );
 
   return (
-    <div style={{ fontFamily: FONT, color: "#15151c", background: "#fff", minHeight: "100vh" }}>
+    <div style={{ fontFamily: FONT, color: "#15151c", background: "#fff", position: "fixed", inset: 0, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
       {/* Hero */}
       <header style={{ position: "relative", overflow: "hidden", padding: "96px 24px 80px", textAlign: "center",
         background: `radial-gradient(1200px 500px at 50% -10%, ${accent}22, transparent 70%), #fff` }}>
