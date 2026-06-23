@@ -9,6 +9,26 @@ import { supabase } from "./supabase";
 
 const FONT = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
+// Mirrors the brand editor's default Voice & Tone, shown when none is saved.
+const DEFAULT_VOICE_TONE = {
+  intro: {
+    body: "Unsere Stimme bleibt immer gleich — der Ton ist, wie wir sie situativ ausdrücken. Über Wortwahl, Schreibstil, Typografie, Satzbau und Phrasierung passen wir die Stimme an den Kontext an. Der richtige Ton schafft emotionale Verbindung und Vertrauen durch Anpassungsfähigkeit.",
+    questions: ["Was soll dieser Text bewirken?", "Für welches Szenario schreiben wir?", "Mit wem sprichst du?"],
+    closing: "Wir nutzen die Customer Journey, um Momente und Ton-Leitlinien zu mappen — als Erinnerung, dass jede Interaktion einen kundenzentrierten Zweck hat.",
+  },
+  moments: [
+    { title: "First impressions", desc: "Hier wollen wir Interesse wecken und Neugier entfachen — durch mutige, clevere Sprache, die zum genaueren Hinsehen einlädt.", traits: [{ label: "To-the-point", value: 40 }, { label: "Approachable", value: 90 }, { label: "Upfront", value: 12 }], channels: ["In-app Product Flows", "Transactional Email", "Push Notifications"] },
+    { title: "Consideration", desc: "Wir haben die Aufmerksamkeit — jetzt geht es um Verständnis und Vertrauen. Wir erklären Produkte, wie sie funktionieren und welche Ergebnisse sie bringen.", traits: [{ label: "To-the-point", value: 88 }, { label: "Approachable", value: 30 }, { label: "Upfront", value: 70 }], channels: ["Product Pages", "Campaign Lander", "App Store"] },
+    { title: "Education", desc: "Wir geben Nutzer:innen die Infos, die sie für Entscheidungen brauchen. Jede Interaktion vermittelt Kontrolle, Sicherheit und Vertrauen — mit Social Proof, Metaphern und Daten.", traits: [{ label: "To-the-point", value: 80 }, { label: "Approachable", value: 95 }, { label: "Upfront", value: 45 }], channels: ["Announcement Emails", "Tooltips", "New-User States", "Half Sheets"] },
+    { title: "Support", desc: "Wenn etwas hakt, sind wir ruhig, klar und lösungsorientiert. Wir nehmen Sorgen ernst und führen Schritt für Schritt zur Lösung.", traits: [{ label: "To-the-point", value: 72 }, { label: "Approachable", value: 82 }, { label: "Upfront", value: 88 }], channels: ["Help Center", "Support Chat", "Status Updates", "FAQ"] },
+  ],
+  attributes: [
+    { name: "To-the-point", overview: "Wir sind klar in dem, was wir sagen, und bleiben dabei. Wir reißen Barrieren ein, indem wir Fachjargon übersetzen, und geben unseren Kunden Sicherheit auf ihrer Reise.", shouldBe: ["Klar", "Fokussiert", "Organisiert", "Kuratiert", "Selbstbewusst", "Befähigend"], shouldntBe: ["Spärlich", "Kalt", "Langweilig", "Leblos", "Stumpf", "Vage"] },
+    { name: "Approachable", overview: "Unser einladender, fantasievoller Stil macht uns nahbar und mühelos verständlich. Wir verstecken uns nicht hinter Jargon, Ego oder billigen Emotionen.", shouldBe: ["Selbstbewusst", "Gesprächig", "Reaktionsschnell", "Verlässlich", "Unterstützend", "Optimistisch"], shouldntBe: ["Übergriffig", "Geschwätzig", "Kindisch", "Distanziert", "Reißerisch", "Exklusiv"] },
+    { name: "Upfront", overview: "Wir sagen, wie es ist, und stellen uns zugleich vor, wie es sein könnte. Wir vermeiden Schönfärberei und setzen klare Erwartungen — Vertrauen entsteht durch Ehrlichkeit und Transparenz.", shouldBe: ["Offen", "Aufrichtig", "Verantwortungsvoll", "Echt", "Empathisch"], shouldntBe: ["Technokratisch", "Angstmachend", "Akademisch"] },
+  ],
+};
+
 function pickBrand(row) {
   if (!row) return null;
   const pal = (row.color_palette && typeof row.color_palette === "object" && !Array.isArray(row.color_palette)) ? row.color_palette : null;
@@ -31,10 +51,14 @@ function pickBrand(row) {
     imagery: Array.isArray(row.imagery) ? row.imagery.filter(i => i?.url) : [],
     personas: Array.isArray(row.personas) ? row.personas : [],
     values: Array.isArray(row.brand_values) ? row.brand_values : [],
-    taglines: Array.isArray(row.taglines) ? row.taglines.filter(Boolean) : [],
+    taglines: (Array.isArray(row.taglines) ? row.taglines : [])
+      .map(t => typeof t === "string" ? { tagline: t, desc: "" } : { tagline: t?.tagline || t?.text || "", desc: t?.desc || "" })
+      .filter(t => t.tagline),
+    // Voice & Tone: use the saved object if it has content, else the same default
+    // the brand editor shows (so the landing mirrors the app).
     tone: (row.voice_tone && typeof row.voice_tone === "object" && !Array.isArray(row.voice_tone)
-      && (row.voice_tone.intro || (row.voice_tone.moments || []).length || (row.voice_tone.attributes || []).length)) ? row.voice_tone : null,
-    toneList: Array.isArray(row.tone_of_voice) ? row.tone_of_voice.map(v => typeof v === "string" ? v : (v?.label || v?.name || "")).filter(Boolean) : [],
+      && (row.voice_tone.intro || (row.voice_tone.moments || []).length || (row.voice_tone.attributes || []).length))
+      ? row.voice_tone : DEFAULT_VOICE_TONE,
   };
 }
 
@@ -102,7 +126,7 @@ export default function PublicBrandLanding({ token }) {
   const NAV = [
     { key: "strategy", label: "Brand Strategy", has: show("strategy") && !!(brand.claim || brand.description || brand.values.length) },
     { key: "taglines", label: "Taglines", has: show("taglines") && brand.taglines.length > 0 },
-    { key: "voice", label: "Voice & Tone", has: show("voice") && !!(brand.tone || brand.toneList.length) },
+    { key: "voice", label: "Voice & Tone", has: show("voice") && !!brand.tone },
     { key: "logo", label: "Logo", has: show("logo") && brand.logos.length > 0 },
     { key: "colors", label: "Brand Colors", has: show("colors") && brand.colors.length > 0 },
     { key: "typography", label: "Typografie", has: show("typography") && !!brand.typography },
@@ -145,19 +169,20 @@ export default function PublicBrandLanding({ token }) {
       </div>
     );
     if (current === "taglines") return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 760 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 820 }}>
         {brand.taglines.map((t, i) => (
-          <div key={i} style={{ borderRadius: 16, border: "1px solid #ececf0", padding: "22px 26px", fontSize: 24, fontWeight: 700, letterSpacing: -0.3, lineHeight: 1.25, fontFamily: fontFamily ? `'${fontFamily}', ${FONT}` : FONT }}>“{t}”</div>
+          <div key={i} style={{ display: "flex", gap: 22, borderRadius: 16, border: "1px solid #ececf0", padding: "22px 26px" }}>
+            <div style={{ fontSize: 26, fontWeight: 800, color: "#d7d7de", lineHeight: 1, flexShrink: 0, width: 44, fontVariantNumeric: "tabular-nums" }}>{String(i + 1).padStart(2, "0")}</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: -0.3, lineHeight: 1.25, fontFamily: fontFamily ? `'${fontFamily}', ${FONT}` : FONT }}>{t.tagline}</div>
+              {t.desc && <div style={{ fontSize: 14, color: "#6a6a74", lineHeight: 1.6, marginTop: 8 }}>{t.desc}</div>}
+            </div>
+          </div>
         ))}
       </div>
     );
     if (current === "voice") {
       const tone = brand.tone;
-      if (!tone) return (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-          {brand.toneList.map((t, i) => <span key={i} style={{ fontSize: 15, fontWeight: 600, color: "#333", background: "#f3f3f6", padding: "10px 16px", borderRadius: 999 }}>{t}</span>)}
-        </div>
-      );
       return (
         <div>
           {tone.intro && (
@@ -174,11 +199,23 @@ export default function PublicBrandLanding({ token }) {
           {Array.isArray(tone.attributes) && tone.attributes.length > 0 && (
             <div style={{ marginBottom: 30 }}>
               {labelEyebrow("Attribute")}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
                 {tone.attributes.map((a, i) => (
-                  <div key={i} style={{ borderRadius: 16, border: "1px solid #ececf0", padding: "18px 20px" }}>
-                    <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 5 }}>{a.label || a.name}</div>
-                    {a.description && <div style={{ fontSize: 13.5, color: "#6a6a74", lineHeight: 1.55 }}>{a.description}</div>}
+                  <div key={i} style={{ borderRadius: 16, border: "1px solid #ececf0", padding: "20px 22px" }}>
+                    <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 8 }}>{a.label || a.name}</div>
+                    {(a.overview || a.description) && <div style={{ fontSize: 13.5, color: "#5a5a66", lineHeight: 1.6 }}>{a.overview || a.description}</div>}
+                    {Array.isArray(a.shouldBe) && a.shouldBe.length > 0 && (
+                      <div style={{ marginTop: 14 }}>
+                        <div style={{ fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", color: "#3f9b6a", fontWeight: 600, marginBottom: 7 }}>Sollte sein</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{a.shouldBe.map((s, j) => <span key={j} style={{ fontSize: 12, color: "#2f7d54", background: "#eaf6ee", padding: "4px 10px", borderRadius: 999 }}>{s}</span>)}</div>
+                      </div>
+                    )}
+                    {Array.isArray(a.shouldntBe) && a.shouldntBe.length > 0 && (
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", color: "#b9536b", fontWeight: 600, marginBottom: 7 }}>Sollte nicht sein</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{a.shouldntBe.map((s, j) => <span key={j} style={{ fontSize: 12, color: "#a23b54", background: "#fbeef1", padding: "4px 10px", borderRadius: 999 }}>{s}</span>)}</div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
