@@ -32,6 +32,9 @@ function pickBrand(row) {
     personas: Array.isArray(row.personas) ? row.personas : [],
     values: Array.isArray(row.brand_values) ? row.brand_values : [],
     taglines: Array.isArray(row.taglines) ? row.taglines.filter(Boolean) : [],
+    tone: (row.voice_tone && typeof row.voice_tone === "object" && !Array.isArray(row.voice_tone)
+      && (row.voice_tone.intro || (row.voice_tone.moments || []).length || (row.voice_tone.attributes || []).length)) ? row.voice_tone : null,
+    toneList: Array.isArray(row.tone_of_voice) ? row.tone_of_voice.map(v => typeof v === "string" ? v : (v?.label || v?.name || "")).filter(Boolean) : [],
   };
 }
 
@@ -97,7 +100,9 @@ export default function PublicBrandLanding({ token }) {
 
   // Available sections (only those with data + allowed by the share config).
   const NAV = [
-    { key: "strategy", label: "Brand Strategy", has: show("strategy") && !!(brand.claim || brand.description || brand.values.length || brand.taglines.length) },
+    { key: "strategy", label: "Brand Strategy", has: show("strategy") && !!(brand.claim || brand.description || brand.values.length) },
+    { key: "taglines", label: "Taglines", has: show("taglines") && brand.taglines.length > 0 },
+    { key: "voice", label: "Voice & Tone", has: show("voice") && !!(brand.tone || brand.toneList.length) },
     { key: "logo", label: "Logo", has: show("logo") && brand.logos.length > 0 },
     { key: "colors", label: "Brand Colors", has: show("colors") && brand.colors.length > 0 },
     { key: "typography", label: "Typografie", has: show("typography") && !!brand.typography },
@@ -124,11 +129,6 @@ export default function PublicBrandLanding({ token }) {
       <div>
         {brand.claim && <div style={{ fontSize: 36, fontWeight: 800, letterSpacing: -0.6, lineHeight: 1.1, fontFamily: fontFamily ? `'${fontFamily}', ${FONT}` : FONT }}>{brand.claim}</div>}
         {brand.description && <p style={{ fontSize: 17, lineHeight: 1.7, color: "#4a4a56", marginTop: 18, maxWidth: 720 }}>{brand.description}</p>}
-        {brand.taglines.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 24 }}>
-            {brand.taglines.map((t, i) => <span key={i} style={{ fontSize: 14, fontWeight: 500, color: "#333", background: "#f3f3f6", padding: "8px 14px", borderRadius: 999 }}>{t}</span>)}
-          </div>
-        )}
         {brand.values.length > 0 && (
           <div style={{ marginTop: 34 }}>
             {labelEyebrow("Werte")}
@@ -144,6 +144,77 @@ export default function PublicBrandLanding({ token }) {
         )}
       </div>
     );
+    if (current === "taglines") return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 760 }}>
+        {brand.taglines.map((t, i) => (
+          <div key={i} style={{ borderRadius: 16, border: "1px solid #ececf0", padding: "22px 26px", fontSize: 24, fontWeight: 700, letterSpacing: -0.3, lineHeight: 1.25, fontFamily: fontFamily ? `'${fontFamily}', ${FONT}` : FONT }}>“{t}”</div>
+        ))}
+      </div>
+    );
+    if (current === "voice") {
+      const tone = brand.tone;
+      if (!tone) return (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+          {brand.toneList.map((t, i) => <span key={i} style={{ fontSize: 15, fontWeight: 600, color: "#333", background: "#f3f3f6", padding: "10px 16px", borderRadius: 999 }}>{t}</span>)}
+        </div>
+      );
+      return (
+        <div>
+          {tone.intro && (
+            <div style={{ marginBottom: 34, maxWidth: 760 }}>
+              {tone.intro.body && <p style={{ fontSize: 17, lineHeight: 1.7, color: "#3a3a44" }}>{tone.intro.body}</p>}
+              {Array.isArray(tone.intro.questions) && tone.intro.questions.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 18 }}>
+                  {tone.intro.questions.map((q, i) => <span key={i} style={{ fontSize: 14, fontWeight: 500, color: "#333", background: "#f3f3f6", padding: "8px 14px", borderRadius: 999 }}>{q}</span>)}
+                </div>
+              )}
+              {tone.intro.closing && <p style={{ fontSize: 14.5, lineHeight: 1.65, color: "#6a6a74", marginTop: 16 }}>{tone.intro.closing}</p>}
+            </div>
+          )}
+          {Array.isArray(tone.attributes) && tone.attributes.length > 0 && (
+            <div style={{ marginBottom: 30 }}>
+              {labelEyebrow("Attribute")}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 16 }}>
+                {tone.attributes.map((a, i) => (
+                  <div key={i} style={{ borderRadius: 16, border: "1px solid #ececf0", padding: "18px 20px" }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 5 }}>{a.label || a.name}</div>
+                    {a.description && <div style={{ fontSize: 13.5, color: "#6a6a74", lineHeight: 1.55 }}>{a.description}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {Array.isArray(tone.moments) && tone.moments.length > 0 && (
+            <div>
+              {labelEyebrow("Momente")}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 18 }}>
+                {tone.moments.map((m, i) => (
+                  <div key={i} style={{ borderRadius: 18, border: "1px solid #ececf0", padding: 22 }}>
+                    <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 6 }}>{m.title}</div>
+                    {m.desc && <p style={{ fontSize: 13.5, color: "#5a5a66", lineHeight: 1.55, marginBottom: 14 }}>{m.desc}</p>}
+                    {Array.isArray(m.traits) && m.traits.length > 0 && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 9, marginBottom: 14 }}>
+                        {m.traits.map((tr, j) => (
+                          <div key={j}>
+                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#8a8a94", marginBottom: 4 }}><span>{tr.label}</span><span>{tr.value}</span></div>
+                            <div style={{ height: 6, borderRadius: 999, background: "#eee" }}><div style={{ height: "100%", width: `${Math.max(0, Math.min(100, tr.value))}%`, borderRadius: 999, background: accent }} /></div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {Array.isArray(m.channels) && m.channels.length > 0 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                        {m.channels.map((c, j) => <span key={j} style={{ fontSize: 12, color: "#555", background: "#f3f3f6", padding: "5px 10px", borderRadius: 999 }}>{c}</span>)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
     if (current === "logo") return (
       <div>
         <div style={{ display: "flex", gap: 28, flexWrap: "wrap", alignItems: "stretch" }}>
