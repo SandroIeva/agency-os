@@ -11321,12 +11321,12 @@ function parseCSV(text) {
 // `handles` = the person's username per social platform. A channel counts as
 // active (and shows its icon) when it has a non-empty handle.
 const SAMPLE_PEOPLE = [
-  { id: "p1", name: "Gabriela Christiansen", note: { de: "Erstgespräch", en: "First customer call" }, status: "explorer", date: "24.08.2026 7:24", gender: "female", ageRange: "29-45", email: "gabriela@example.com", handles: { linkedin: "gabriela-christiansen" },                                   color: "#E0B84B" },
-  { id: "p2", name: "Halle Griffiths",       note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "explorer", date: "24.08.2026 7:24", gender: "female", ageRange: "18-29", email: null,                  handles: { instagram: "halle.griffiths", x: "hallegriffiths" },                  color: "#E8728C" },
-  { id: "p3", name: "Josiah Love",           note: { de: "Erstgespräch", en: "First customer call" }, status: "explorer", date: "23.08.2026 7:24", gender: "male",   ageRange: "18-29", email: "josiah@example.com",   handles: { x: "josiah_love" },                                                   color: "#4FAE7B" },
-  { id: "p4", name: "Wyatt Wetmore",         note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "customer", date: "01.08.2026 7:24", gender: "male",   ageRange: "29-45", email: "wyatt@example.com",    handles: { linkedin: "wyatt-wetmore", instagram: "wyatt.creates", threads: "wyattw" }, color: "#E0A06A" },
-  { id: "p5", name: "Jaclyn Moses",          note: { de: "Erstgespräch", en: "First customer call" }, status: "customer", date: "01.08.2026 7:24", gender: "female", ageRange: "45+",   email: null,                  handles: { threads: "jaclyn.moses" },                                            color: "#6C8BE0" },
-  { id: "p6", name: "Marcus Chen",           note: { de: "Angebot gesendet", en: "Proposal sent" },   status: "explorer", date: "28.07.2026 7:24", gender: "male",   ageRange: "29-45", email: "marcus@example.com",   handles: { instagram: "marcus.chen" },                                           color: "#9B6CE0" },
+  { id: "p1", name: "Gabriela Christiansen", note: { de: "Erstgespräch", en: "First customer call" }, status: "explorer", date: "24.08.2026 7:24", gender: "female", ageRange: "29-45", country: "Dänemark",       email: "gabriela@example.com", handles: { linkedin: "gabriela-christiansen" },                                   color: "#E0B84B" },
+  { id: "p2", name: "Halle Griffiths",       note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "explorer", date: "24.08.2026 7:24", gender: "female", ageRange: "18-29", country: "USA, Kalifornien", email: null,                  handles: { instagram: "halle.griffiths", x: "hallegriffiths" },                  color: "#E8728C" },
+  { id: "p3", name: "Josiah Love",           note: { de: "Erstgespräch", en: "First customer call" }, status: "explorer", date: "23.08.2026 7:24", gender: "male",   ageRange: "18-29", country: "Großbritannien",  email: "josiah@example.com",   handles: { x: "josiah_love" },                                                   color: "#4FAE7B" },
+  { id: "p4", name: "Wyatt Wetmore",         note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "customer", date: "01.08.2026 7:24", gender: "male",   ageRange: "29-45", country: "USA, New York",   email: "wyatt@example.com",    handles: { linkedin: "wyatt-wetmore", instagram: "wyatt.creates", threads: "wyattw" }, color: "#E0A06A" },
+  { id: "p5", name: "Jaclyn Moses",          note: { de: "Erstgespräch", en: "First customer call" }, status: "customer", date: "01.08.2026 7:24", gender: "female", ageRange: "45+",   country: "Kanada",         email: null,                  handles: { threads: "jaclyn.moses" },                                            color: "#6C8BE0" },
+  { id: "p6", name: "Marcus Chen",           note: { de: "Angebot gesendet", en: "Proposal sent" },   status: "explorer", date: "28.07.2026 7:24", gender: "male",   ageRange: "29-45", country: "Singapur",       email: "marcus@example.com",   handles: { instagram: "marcus.chen" },                                           color: "#9B6CE0" },
 ];
 // Channel colour/label lookup — reuse the same platform set + glyphs as Touchpoints.
 const CHANNEL_META = Object.fromEntries(TOUCHPOINT_PLATFORMS.map(p => [p.key, { label: p.label, color: p.color }]));
@@ -11651,7 +11651,8 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
                 ))}
                 {field(de ? "Datum" : "Date", <input type="date" value={draft._dateISO || ""} onChange={e => setDraft(d => ({ ...d, _dateISO: e.target.value }))} style={inp} />)}
                 {field(de ? "Uhrzeit" : "Time", <input type="time" value={draft._time || ""} onChange={e => setDraft(d => ({ ...d, _time: e.target.value }))} style={inp} />)}
-                {field("E-Mail", <input value={draft.email || ""} onChange={e => setDraft(d => ({ ...d, email: e.target.value }))} placeholder="name@example.com" style={inp} />, 2)}
+                {field(de ? "Land / Region" : "Country / Region", <input value={draft.country || ""} onChange={e => setDraft(d => ({ ...d, country: e.target.value }))} placeholder={de ? "z. B. Deutschland, Berlin" : "e.g. Germany, Berlin"} style={inp} />)}
+                {field("E-Mail", <input value={draft.email || ""} onChange={e => setDraft(d => ({ ...d, email: e.target.value }))} placeholder="name@example.com" style={inp} />)}
                 {field(de ? "Aktivität" : "Activity", <input value={draft.note || ""} onChange={e => setDraft(d => ({ ...d, note: e.target.value }))} placeholder={de ? "z. B. Erstgespräch" : "e.g. First call"} style={inp} />, 2)}
                 {field(de ? "Social-Media-Profile" : "Social profiles", (
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", columnGap: 18, rowGap: 10 }}>
@@ -24060,6 +24061,10 @@ export default function CircularMenu() {
       return;
     }
 
+    // Tasks overlay scrolls natively — no swipe-back. Return to the dashboard
+    // via the Home button at the bottom of the tasks view.
+    if (currentView === "dashboard" && tasksOpen) return;
+
     // Prevent the container from scrolling on dashboard/menu views
     e.preventDefault();
     // Reset scrollTop to prevent drift
@@ -24082,16 +24087,9 @@ export default function CircularMenu() {
           setTimeout(() => { panelCooldown.current = false; }, 800);
           return;
         }
-        // Scroll up (swipe up) → open tasks view
+        // Scroll up (swipe up) → open tasks view (closing is via the Home button)
         if (e.deltaY > 30 && !tasksOpen && !panelOpen) {
           setTasksOpen(true);
-          panelCooldown.current = true;
-          setTimeout(() => { panelCooldown.current = false; }, 800);
-          return;
-        }
-        // Scroll down (swipe down) → close tasks view
-        if (e.deltaY < -30 && tasksOpen) {
-          setTasksOpen(false);
           panelCooldown.current = true;
           setTimeout(() => { panelCooldown.current = false; }, 800);
           return;
@@ -26304,8 +26302,16 @@ export default function CircularMenu() {
               })()}
             </div>
 
-            {/* Drag handle at bottom */}
-            <div onClick={() => setTasksOpen(false)} style={{ width: 36, height: 4, borderRadius: 2, background: darkMode ? "#ffffff18" : "#1a1a2e20", margin: "24px auto 0", cursor: "pointer" }} />
+            {/* Home button — returns to the dashboard */}
+            <div style={{ display: "flex", justifyContent: "center", margin: "20px auto 0" }}>
+              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.95 }} onClick={() => setTasksOpen(false)}
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px", borderRadius: 999, cursor: "pointer",
+                  background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}`,
+                  color: darkMode ? "#ffffffCC" : "#1a1a2eCC", fontSize: 13.5, fontFamily: FONT, fontWeight: 500 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
+                {t("dash.home") || "Home"}
+              </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
