@@ -77,6 +77,10 @@ export default function PublicBrandLanding({ token }) {
   const [active, setActive] = useState(null);
   const [copied, setCopied] = useState(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [voiceSub, setVoiceSub] = useState("intro"); // inner nav within Voice & Tone
+  const voiceRefs = React.useRef({});
+  const de = typeof navigator !== "undefined" ? (navigator.language || "de").toLowerCase().startsWith("de") : true;
+  const darkMode = false; // the public brand page is always light
 
   useEffect(() => {
     let alive = true;
@@ -183,72 +187,99 @@ export default function PublicBrandLanding({ token }) {
     );
     if (current === "voice") {
       const tone = brand.tone;
+      const moments = Array.isArray(tone.moments) ? tone.moments : [];
+      const attrs = Array.isArray(tone.attributes) ? tone.attributes : [];
+      const sidenote = tone.intro?.body || "";
+      const navItems = [
+        { id: "intro", label: de ? "Übersicht" : "Overview" },
+        ...moments.map((m, i) => ({ id: `m${i}`, label: m.title })),
+        ...(attrs.length ? [{ id: "attrs", label: de ? "Attribute" : "Attributes" }] : []),
+      ];
+      const scrollTo = (id) => { setVoiceSub(id); const el = voiceRefs.current[id]; if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); };
+      const traitBar = (val) => (
+        <div style={{ height: 10, borderRadius: 999, background: darkMode ? "#2a2a30" : "#e3e3e8", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${Math.max(0, Math.min(100, Number(val) || 0))}%`, borderRadius: 999, background: "#15151c" }} />
+        </div>
+      );
+      const traitCard = (m) => (
+        <div style={{ borderRadius: 18, background: darkMode ? "rgba(255,255,255,0.04)" : "#f3f3f5", padding: "22px 24px" }}>
+          <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 18 }}>{m.title}</div>
+          {m.desc && <p style={{ fontSize: 13.5, color: "#6a6a74", lineHeight: 1.55, marginTop: -8, marginBottom: 16 }}>{m.desc}</p>}
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            {(m.traits || []).map((tr, j) => (
+              <div key={j}>
+                {traitBar(tr.value)}
+                <div style={{ fontSize: 13, color: "#8a8a94", marginTop: 8 }}>{tr.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
       return (
-        <div>
-          {tone.intro && (
-            <div style={{ marginBottom: 34, maxWidth: 760 }}>
-              {tone.intro.body && <p style={{ fontSize: 17, lineHeight: 1.7, color: "#3a3a44" }}>{tone.intro.body}</p>}
-              {Array.isArray(tone.intro.questions) && tone.intro.questions.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 18 }}>
-                  {tone.intro.questions.map((q, i) => <span key={i} style={{ fontSize: 14, fontWeight: 500, color: "#333", background: "#f3f3f6", padding: "8px 14px", borderRadius: 999 }}>{q}</span>)}
+        <div style={{ display: "flex", gap: 40 }}>
+          {/* Inner navigation */}
+          <div style={{ width: 150, flexShrink: 0 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 11, position: "sticky", top: 0 }}>
+              {navItems.map(n => {
+                const on = voiceSub === n.id;
+                return <div key={n.id} onClick={() => scrollTo(n.id)} style={{ fontSize: 14, cursor: "pointer", color: on ? "#15151c" : "#9a9aa5", fontWeight: on ? 700 : 500, textDecoration: on ? "none" : "underline", textUnderlineOffset: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.label}</div>;
+              })}
+            </div>
+          </div>
+
+          {/* Content */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Header + sidenote */}
+            <div ref={el => (voiceRefs.current.intro = el)} style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 40, marginBottom: 38 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#15151c", paddingBottom: 12, borderBottom: "1px solid #e6e6ea", marginBottom: 20 }}>{de ? "Wie wir unsere Stimme anpassen" : "How We Adapt Our Voice"}</div>
+                <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: -0.6, lineHeight: 1.18, fontFamily: fontFamily ? `'${fontFamily}', ${FONT}` : FONT }}>
+                  {de ? "Unsere Persönlichkeit ist, wer wir sind — unser Ton ist, wie wir in jeder Situation klingen." : "While our personality is who we are, our tone of voice is how we sound in any given situation."}
                 </div>
-              )}
-              {tone.intro.closing && <p style={{ fontSize: 14.5, lineHeight: 1.65, color: "#6a6a74", marginTop: 16 }}>{tone.intro.closing}</p>}
-            </div>
-          )}
-          {Array.isArray(tone.attributes) && tone.attributes.length > 0 && (
-            <div style={{ marginBottom: 30 }}>
-              {labelEyebrow("Attribute")}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
-                {tone.attributes.map((a, i) => (
-                  <div key={i} style={{ borderRadius: 16, border: "1px solid #ececf0", padding: "20px 22px" }}>
-                    <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 8 }}>{a.label || a.name}</div>
-                    {(a.overview || a.description) && <div style={{ fontSize: 13.5, color: "#5a5a66", lineHeight: 1.6 }}>{a.overview || a.description}</div>}
-                    {Array.isArray(a.shouldBe) && a.shouldBe.length > 0 && (
-                      <div style={{ marginTop: 14 }}>
-                        <div style={{ fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", color: "#3f9b6a", fontWeight: 600, marginBottom: 7 }}>Sollte sein</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{a.shouldBe.map((s, j) => <span key={j} style={{ fontSize: 12, color: "#2f7d54", background: "#eaf6ee", padding: "4px 10px", borderRadius: 999 }}>{s}</span>)}</div>
-                      </div>
-                    )}
-                    {Array.isArray(a.shouldntBe) && a.shouldntBe.length > 0 && (
-                      <div style={{ marginTop: 12 }}>
-                        <div style={{ fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", color: "#b9536b", fontWeight: 600, marginBottom: 7 }}>Sollte nicht sein</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{a.shouldntBe.map((s, j) => <span key={j} style={{ fontSize: 12, color: "#a23b54", background: "#fbeef1", padding: "4px 10px", borderRadius: 999 }}>{s}</span>)}</div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+              </div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Sidenote</div>
+                <p style={{ fontSize: 14, lineHeight: 1.65, color: "#6a6a74" }}>{sidenote}</p>
               </div>
             </div>
-          )}
-          {Array.isArray(tone.moments) && tone.moments.length > 0 && (
-            <div>
-              {labelEyebrow("Momente")}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 18 }}>
-                {tone.moments.map((m, i) => (
-                  <div key={i} style={{ borderRadius: 18, border: "1px solid #ececf0", padding: 22 }}>
-                    <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 6 }}>{m.title}</div>
-                    {m.desc && <p style={{ fontSize: 13.5, color: "#5a5a66", lineHeight: 1.55, marginBottom: 14 }}>{m.desc}</p>}
-                    {Array.isArray(m.traits) && m.traits.length > 0 && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 9, marginBottom: 14 }}>
-                        {m.traits.map((tr, j) => (
-                          <div key={j}>
-                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#8a8a94", marginBottom: 4 }}><span>{tr.label}</span><span>{tr.value}</span></div>
-                            <div style={{ height: 6, borderRadius: 999, background: "#eee" }}><div style={{ height: "100%", width: `${Math.max(0, Math.min(100, tr.value))}%`, borderRadius: 999, background: accent }} /></div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {Array.isArray(m.channels) && m.channels.length > 0 && (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-                        {m.channels.map((c, j) => <span key={j} style={{ fontSize: 12, color: "#555", background: "#f3f3f6", padding: "5px 10px", borderRadius: 999 }}>{c}</span>)}
-                      </div>
-                    )}
-                  </div>
-                ))}
+
+            {/* Trait cards — two columns */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, alignItems: "start" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                {moments.map((m, i) => i % 2 === 0 ? <div key={i} ref={el => (voiceRefs.current[`m${i}`] = el)}>{traitCard(m)}</div> : null)}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                {moments.map((m, i) => i % 2 === 1 ? <div key={i} ref={el => (voiceRefs.current[`m${i}`] = el)}>{traitCard(m)}</div> : null)}
               </div>
             </div>
-          )}
+
+            {/* Attributes (do / don't), reachable via the inner nav */}
+            {attrs.length > 0 && (
+              <div ref={el => (voiceRefs.current.attrs = el)} style={{ marginTop: 40 }}>
+                {labelEyebrow(de ? "Attribute" : "Attributes")}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
+                  {attrs.map((a, i) => (
+                    <div key={i} style={{ borderRadius: 18, background: darkMode ? "rgba(255,255,255,0.04)" : "#f3f3f5", padding: "20px 22px" }}>
+                      <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 8 }}>{a.label || a.name}</div>
+                      {(a.overview || a.description) && <div style={{ fontSize: 13.5, color: "#5a5a66", lineHeight: 1.6 }}>{a.overview || a.description}</div>}
+                      {Array.isArray(a.shouldBe) && a.shouldBe.length > 0 && (
+                        <div style={{ marginTop: 14 }}>
+                          <div style={{ fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", color: "#3f9b6a", fontWeight: 600, marginBottom: 7 }}>Sollte sein</div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{a.shouldBe.map((s, j) => <span key={j} style={{ fontSize: 12, color: "#2f7d54", background: "#eaf6ee", padding: "4px 10px", borderRadius: 999 }}>{s}</span>)}</div>
+                        </div>
+                      )}
+                      {Array.isArray(a.shouldntBe) && a.shouldntBe.length > 0 && (
+                        <div style={{ marginTop: 12 }}>
+                          <div style={{ fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", color: "#b9536b", fontWeight: 600, marginBottom: 7 }}>Sollte nicht sein</div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{a.shouldntBe.map((s, j) => <span key={j} style={{ fontSize: 12, color: "#a23b54", background: "#fbeef1", padding: "4px 10px", borderRadius: 999 }}>{s}</span>)}</div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       );
     }
