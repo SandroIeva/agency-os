@@ -18993,30 +18993,29 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   // Avatar preview card — glass panel with the avatar image (swap cfg.imageUrl)
   // and HTML overlays: "Avatar" title, an editable name field, and the archetype
   // label bottom-left. Used in the right column + the read-only view.
-  const onImg = !!cfg.imageUrl;            // true once a user/generated photo is set
   const imgSrc = cfg.imageUrl || "/Avatar-Img.png"; // default placeholder lives in /public
   const avatarCard = (
-    <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.06", borderRadius: 22, overflow: "hidden",
-      background: onImg ? "#0a0a10" : (darkMode ? "#1a1a22" : "#e9ecf2"),
-      border: `1px solid ${theme.borderFaint}`, boxShadow: "0 16px 44px rgba(0,0,0,0.10)" }}>
+    <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.08", borderRadius: 20, overflow: "hidden",
+      background: darkMode ? "#1a1a22" : "#c4c6cc", boxShadow: "0 14px 38px rgba(0,0,0,0.12)" }}>
+      <style>{`.avatarNameInput::placeholder{color:rgba(255,255,255,0.82);}`}</style>
       {/* Avatar image — just swap cfg.imageUrl; falls back to /Avatar-Img.png */}
-      <img src={imgSrc} alt={cfg.name || "Brand Avatar"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+      <img src={imgSrc} alt={cfg.name || "Brand Avatar"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", transform: cfg.imageUrl ? "none" : "scale(1.18)", transformOrigin: "center 46%" }} />
 
-      {/* "Avatar" title (HTML, on top) */}
-      <div style={{ position: "absolute", top: 24, left: 0, right: 0, textAlign: "center", fontSize: 22, fontFamily: FONT, fontWeight: 700, letterSpacing: -0.2, color: onImg ? "#fff" : "#1a1a2e" }}>Avatar</div>
+      {/* "Avatar" title (HTML overlay, white, on top) */}
+      <div style={{ position: "absolute", top: 26, left: 0, right: 0, textAlign: "center", fontSize: 23, fontFamily: FONT, fontWeight: 600, letterSpacing: -0.2, color: "#fff" }}>Avatar</div>
 
-      {/* Editable name field (HTML, overlaid) */}
-      <div style={{ position: "absolute", left: "50%", bottom: "30%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 7, maxWidth: "80%" }}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2bb6a8" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="9 18 15 12 9 6"/></svg>
-        <input value={cfg.name || ""} readOnly={!canEdit} onChange={canEdit ? (e => update({ name: e.target.value })) : undefined}
+      {/* Editable name field (HTML overlay, centered) */}
+      <div style={{ position: "absolute", left: "50%", bottom: "34%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 7, maxWidth: "84%" }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.95 }}><polyline points="9 18 15 12 9 6"/></svg>
+        <input className="avatarNameInput" value={cfg.name || ""} readOnly={!canEdit} onChange={canEdit ? (e => update({ name: e.target.value })) : undefined}
           placeholder={de ? "Name eingeben" : "Enter name"}
-          style={{ width: 140, minWidth: 0, border: "none", outline: "none", background: "transparent", fontSize: 15, fontFamily: FONT, fontWeight: 500, color: onImg ? "#fff" : "#3a3a44" }} />
+          style={{ width: 130, minWidth: 0, border: "none", outline: "none", background: "transparent", fontSize: 15, fontFamily: FONT, fontWeight: 500, color: "#fff" }} />
       </div>
 
-      {/* Archetype label (HTML, bottom-left) */}
+      {/* Archetype label (HTML overlay, bottom-left, white) */}
       <div style={{ position: "absolute", left: 22, bottom: 22, display: "flex", alignItems: "center", gap: 9 }}>
-        <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: arch ? (arch.color || "#36C28E") : "#9aa0a8" }} />
-        <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: onImg ? "rgba(255,255,255,0.92)" : "#3a3a44" }}>{arch ? L(arch) : (de ? "Kein Archetyp" : "No Archetype")}</span>
+        <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: arch ? (arch.color || "#36C28E") : "rgba(255,255,255,0.55)" }} />
+        <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: "rgba(255,255,255,0.92)" }}>{arch ? L(arch) : (de ? "Kein Archetyp" : "No Archetype")}</span>
       </div>
 
       {busy && (
@@ -19050,9 +19049,9 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     );
   };
   const stepHead = (title, desc) => (
-    <div style={{ marginBottom: 22 }}>
-      <div style={{ fontSize: 25, fontFamily: FONT, fontWeight: 700, letterSpacing: -0.4, color: theme.text }}>{title}</div>
-      {desc && <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginTop: 8, maxWidth: 470 }}>{desc}</div>}
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ fontSize: 21, fontFamily: FONT, fontWeight: 700, letterSpacing: -0.3, color: theme.text }}>{title}</div>
+      {desc && <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55, marginTop: 7, maxWidth: 320 }}>{desc}</div>}
     </div>
   );
 
@@ -19067,32 +19066,33 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
-      {/* Numbered tab bar — active step = dark pill */}
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+      {/* Numbered tab bar — equal-width rounded rectangles; active = black */}
+      <div style={{ display: "flex", gap: 10 }}>
         {steps.map((s, i) => {
           const active = i === stepIdx;
           return (
             <div key={i} onClick={() => setStepIdx(i)}
-              style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 17px", borderRadius: 999, cursor: "pointer",
+              style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "11px 16px", borderRadius: 12, cursor: "pointer",
                 background: active ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "#f1f1f4"),
-                color: active ? "#fff" : theme.textSub, transition: "background .15s" }}>
-              <span style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 700, opacity: active ? 0.5 : 0.45 }}>{String(i + 1).padStart(2, "0")}</span>
-              <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, whiteSpace: "nowrap" }}>{L(s)}</span>
+                color: active ? "#fff" : theme.text, transition: "background .15s" }}>
+              <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: active ? "rgba(255,255,255,0.5)" : theme.textDim }}>{String(i + 1).padStart(2, "0")}</span>
+              <span style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{L(s)}</span>
             </div>
           );
         })}
       </div>
 
-      {/* Two columns: left = step content, right = persistent avatar card */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.45fr) minmax(0, 1fr)", gap: 36, alignItems: "start" }}>
+      {/* Light-grey box wrapping both columns: left = step content, right = avatar card */}
+      <div style={{ background: darkMode ? "rgba(255,255,255,0.03)" : "#f3f3f5", borderRadius: 22, padding: 30 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.94fr)", gap: 30, alignItems: "start" }}>
         {/* Left — step content */}
-        <div style={{ minHeight: 420 }}>
+        <div style={{ minHeight: 380 }}>
           {stepIdx === 0 && (
             <div>
               {stepHead(de ? "Archetyp" : "Archetype",
                 de ? "Wir gehen Schritt für Schritt durch, wer dein Brand-Avatar ist. Wähle zunächst den Archetyp, der die Persönlichkeit deiner Marke am besten verkörpert."
                    : "We'll go through, step by step, who your brand avatar is. Start by choosing the archetype that best embodies your brand's personality.")}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 12px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "repeat(6, auto)", gridAutoFlow: "column", gap: "4px 14px" }}>
                 {AVATAR_ARCHETYPES.map(archRow)}
               </div>
             </div>
@@ -19147,16 +19147,11 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
               </div>
             </div>
           )}
-
-          {/* Back / Next under the left column */}
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: 28 }}>
-            {stepIdx > 0 ? navBtn(de ? "Zurück" : "Back", () => setStepIdx(s => s - 1), false, false) : <div />}
-            {stepIdx < 3 ? navBtn(de ? "Weiter" : "Next", () => setStepIdx(s => s + 1), true, stepIdx === 0 && !cfg.archetype) : <div />}
-          </div>
         </div>
 
-        {/* Right — avatar preview card (sticky) */}
-        <div style={{ position: "sticky", top: 8 }}>{avatarCard}</div>
+        {/* Right — avatar preview card */}
+        <div>{avatarCard}</div>
+      </div>
       </div>
     </div>
   );
