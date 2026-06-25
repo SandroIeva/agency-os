@@ -23,9 +23,9 @@ const DEFAULT_VOICE_TONE = {
     { title: "Support", desc: "Wenn etwas hakt, sind wir ruhig, klar und lösungsorientiert. Wir nehmen Sorgen ernst und führen Schritt für Schritt zur Lösung.", traits: [{ label: "To-the-point", value: 72 }, { label: "Approachable", value: 82 }, { label: "Upfront", value: 88 }], channels: ["Help Center", "Support Chat", "Status Updates", "FAQ"] },
   ],
   attributes: [
-    { name: "To-the-point", overview: "Wir sind klar in dem, was wir sagen, und bleiben dabei. Wir reißen Barrieren ein, indem wir Fachjargon übersetzen, und geben unseren Kunden Sicherheit auf ihrer Reise.", shouldBe: ["Klar", "Fokussiert", "Organisiert", "Kuratiert", "Selbstbewusst", "Befähigend"], shouldntBe: ["Spärlich", "Kalt", "Langweilig", "Leblos", "Stumpf", "Vage"] },
-    { name: "Approachable", overview: "Unser einladender, fantasievoller Stil macht uns nahbar und mühelos verständlich. Wir verstecken uns nicht hinter Jargon, Ego oder billigen Emotionen.", shouldBe: ["Selbstbewusst", "Gesprächig", "Reaktionsschnell", "Verlässlich", "Unterstützend", "Optimistisch"], shouldntBe: ["Übergriffig", "Geschwätzig", "Kindisch", "Distanziert", "Reißerisch", "Exklusiv"] },
-    { name: "Upfront", overview: "Wir sagen, wie es ist, und stellen uns zugleich vor, wie es sein könnte. Wir vermeiden Schönfärberei und setzen klare Erwartungen — Vertrauen entsteht durch Ehrlichkeit und Transparenz.", shouldBe: ["Offen", "Aufrichtig", "Verantwortungsvoll", "Echt", "Empathisch"], shouldntBe: ["Technokratisch", "Angstmachend", "Akademisch"] },
+    { name: "To-the-point", overview: "Wir sind klar in dem, was wir sagen, und bleiben dabei. Wir reißen Barrieren ein, indem wir Fachjargon übersetzen, und geben unseren Kunden Sicherheit auf ihrer Reise.", shouldBe: ["Klar", "Fokussiert", "Organisiert", "Kuratiert", "Selbstbewusst", "Befähigend"], shouldntBe: ["Spärlich", "Kalt", "Langweilig", "Leblos", "Stumpf", "Vage"], tactics: [{ title: "Never bury the lead", desc: "Wir beginnen immer mit der wichtigsten Information zuerst und respektieren die begrenzte Zeit und Aufmerksamkeit unseres Publikums." }, { title: "Clarity first (style second)", desc: "Wir fokussieren die Botschaft und strukturieren Inhalte so, dass Punkt, Zweck und Absicht unmissverständlich sind. Stil überlagert nie die Botschaft." }, { title: "Guide with confidence", desc: "Wir erklären, wie Dinge funktionieren und was zu erwarten ist — klar und prägnant, damit Kunden befähigt sind, den nächsten Schritt zu gehen." }, { title: "Build familiarity", desc: "Durch Konsistenz und Wiederholung schaffen wir Vertrautheit, die die Beziehung zu unseren Kunden vertieft." }] },
+    { name: "Approachable", overview: "Unser einladender, fantasievoller Stil macht uns nahbar und mühelos verständlich. Wir verstecken uns nicht hinter Jargon, Ego oder billigen Emotionen.", shouldBe: ["Selbstbewusst", "Gesprächig", "Reaktionsschnell", "Verlässlich", "Unterstützend", "Optimistisch"], shouldntBe: ["Übergriffig", "Geschwätzig", "Kindisch", "Distanziert", "Reißerisch", "Exklusiv"], tactics: [{ title: "Read the room", desc: "Wir berücksichtigen den Kontext, bevor wir schreiben — was Kunden wollen, brauchen und fühlen." }, { title: "Act as a translator", desc: "Wir machen Komplexes einfach und entmystifizieren Fachsprache, ohne überkonstruiert zu klingen." }, { title: "Be inventive", desc: "Wir fordern Konventionen heraus, wenn es unseren Kunden besser dient." }, { title: "Write inclusively", desc: "Unsere Inhalte sind für alle zugänglich — keine ausschließende oder herabsetzende Sprache." }] },
+    { name: "Upfront", overview: "Wir sagen, wie es ist, und stellen uns zugleich vor, wie es sein könnte. Wir vermeiden Schönfärberei und setzen klare Erwartungen — Vertrauen entsteht durch Ehrlichkeit und Transparenz.", shouldBe: ["Offen", "Aufrichtig", "Verantwortungsvoll", "Echt", "Empathisch"], shouldntBe: ["Technokratisch", "Angstmachend", "Akademisch"], tactics: [{ title: "Tell the whole truth", desc: "Wir sind ehrlich über Produkte, Prozesse und Richtlinien — der einzige Weg, echtes Vertrauen aufzubauen." }, { title: "Balance humility & confidence", desc: "Wir lassen Begeisterung und Stärken strahlen und erkennen zugleich Grenzen offen an." }, { title: "Use friction", desc: "Wenn viel auf dem Spiel steht, verlangsamen wir und sorgen dafür, dass Kunden die Kontrolle behalten." }] },
   ],
 };
 
@@ -229,8 +229,8 @@ export default function PublicBrandLanding({ token }) {
 
           {/* Content */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            {/* Header + sidenote */}
-            <div ref={el => (voiceRefs.current.intro = el)} style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 40, marginBottom: 38 }}>
+            {/* Header + sidenote — same 2-col grid as the cards below, so they align */}
+            <div ref={el => (voiceRefs.current.intro = el)} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 38, alignItems: "start" }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#15151c", paddingBottom: 12, borderBottom: "1px solid #e6e6ea", marginBottom: 20 }}>{de ? "Wie wir unsere Stimme anpassen" : "How We Adapt Our Voice"}</div>
                 <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: -0.6, lineHeight: 1.18, fontFamily: fontFamily ? `'${fontFamily}', ${FONT}` : FONT }}>
@@ -272,6 +272,16 @@ export default function PublicBrandLanding({ token }) {
                         <div style={{ marginTop: 12 }}>
                           <div style={{ fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", color: "#b9536b", fontWeight: 600, marginBottom: 7 }}>Sollte nicht sein</div>
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{a.shouldntBe.map((s, j) => <span key={j} style={{ fontSize: 12, color: "#a23b54", background: "#fbeef1", padding: "4px 10px", borderRadius: 999 }}>{s}</span>)}</div>
+                        </div>
+                      )}
+                      {Array.isArray(a.tactics) && a.tactics.length > 0 && (
+                        <div style={{ marginTop: 16, borderTop: "1px solid #e6e6ea", paddingTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+                          {a.tactics.map((tac, j) => (
+                            <div key={j}>
+                              <div style={{ fontSize: 13.5, fontWeight: 600, color: "#15151c", marginBottom: 3 }}>{tac.title}</div>
+                              {tac.desc && <div style={{ fontSize: 13, color: "#6a6a74", lineHeight: 1.55 }}>{tac.desc}</div>}
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
