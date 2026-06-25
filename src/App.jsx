@@ -18993,23 +18993,14 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   // Avatar preview card — glass panel with the avatar image (swap cfg.imageUrl)
   // and HTML overlays: "Avatar" title, an editable name field, and the archetype
   // label bottom-left. Used in the right column + the read-only view.
-  const onImg = !!cfg.imageUrl;
+  const onImg = !!cfg.imageUrl;            // true once a user/generated photo is set
+  const imgSrc = cfg.imageUrl || "/Avatar-Img.png"; // default placeholder lives in /public
   const avatarCard = (
     <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.06", borderRadius: 22, overflow: "hidden",
-      background: onImg ? "#0a0a10" : (darkMode ? "linear-gradient(160deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02))" : "linear-gradient(158deg, #edeff4 0%, #dde0e9 52%, #e9ecf2 100%)"),
+      background: onImg ? "#0a0a10" : (darkMode ? "#1a1a22" : "#e9ecf2"),
       border: `1px solid ${theme.borderFaint}`, boxShadow: "0 16px 44px rgba(0,0,0,0.10)" }}>
-      {/* Avatar image — replace cfg.imageUrl; placeholder silhouette until then */}
-      {onImg ? (
-        <img src={cfg.imageUrl} alt={cfg.name || "Brand Avatar"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
-      ) : (
-        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <svg width="60%" height="80%" viewBox="0 0 100 132" preserveAspectRatio="xMidYMax meet" fill="none" style={{ opacity: 0.6 }}>
-            <defs><linearGradient id="avh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2b3a67"/><stop offset="1" stopColor="#c9d0df"/></linearGradient></defs>
-            <ellipse cx="50" cy="40" rx="25" ry="29" fill="url(#avh)"/>
-            <path d="M15 132c0-26 16-44 35-44s35 18 35 44z" fill="url(#avh)"/>
-          </svg>
-        </div>
-      )}
+      {/* Avatar image — just swap cfg.imageUrl; falls back to /Avatar-Img.png */}
+      <img src={imgSrc} alt={cfg.name || "Brand Avatar"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
 
       {/* "Avatar" title (HTML, on top) */}
       <div style={{ position: "absolute", top: 24, left: 0, right: 0, textAlign: "center", fontSize: 22, fontFamily: FONT, fontWeight: 700, letterSpacing: -0.2, color: onImg ? "#fff" : "#1a1a2e" }}>Avatar</div>
