@@ -19106,15 +19106,19 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const ageSlider = (
     <div>
       {SL(de ? "Alter" : "Age")}
+      {/* Container is as tall as the thumb; the grey track is thinner and centered,
+          so the white pill thumb overhangs it top and bottom. */}
       <div ref={ageTrackRef}
         onPointerDown={canEdit ? (e) => { e.currentTarget.setPointerCapture(e.pointerId); setAgeFromX(e.clientX); } : undefined}
         onPointerMove={canEdit ? (e) => { if (e.buttons === 1) setAgeFromX(e.clientX); } : undefined}
-        style={{ position: "relative", height: 56, borderRadius: 28, background: darkMode ? "rgba(255,255,255,0.06)" : "#e6e6ea",
-          cursor: canEdit ? "pointer" : "default", touchAction: "none", userSelect: "none" }}>
-        <div style={{ position: "absolute", top: 5, bottom: 5, left: `${ageRatio * 100}%`, transform: `translateX(-${ageRatio * 100}%)`,
-          width: 104, borderRadius: 23, background: darkMode ? "#2a2a33" : "#fff", boxShadow: "0 4px 14px rgba(0,0,0,0.12)",
+        style={{ position: "relative", height: 46, cursor: canEdit ? "pointer" : "default", touchAction: "none", userSelect: "none" }}>
+        {/* grey track — thinner than the thumb */}
+        <div style={{ position: "absolute", left: 0, right: 0, top: 6, height: 34, borderRadius: 17, background: darkMode ? "rgba(255,255,255,0.06)" : "#e6e6ea" }} />
+        {/* white pill thumb — taller than the track, floats over it */}
+        <div style={{ position: "absolute", top: 0, height: 46, left: `${ageRatio * 100}%`, transform: `translateX(-${ageRatio * 100}%)`,
+          width: 90, borderRadius: 23, background: darkMode ? "#2a2a33" : "#fff", boxShadow: "0 5px 16px rgba(0,0,0,0.15)",
           display: "flex", alignItems: "center", justifyContent: "center", transition: "left .12s ease",
-          fontSize: 16, fontFamily: FONT, fontWeight: 600, color: ageSelIdx >= 0 ? theme.text : theme.textDim }}>
+          fontSize: 12.5, fontFamily: FONT, fontWeight: 500, color: ageSelIdx >= 0 ? theme.text : theme.textDim }}>
           {AVATAR_AGES[ageIdx].de}
         </div>
       </div>
