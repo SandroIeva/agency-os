@@ -19006,9 +19006,9 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       <div style={{ position: "absolute", top: 26, left: 0, right: 0, textAlign: "center", fontSize: 23, fontFamily: FONT, fontWeight: 400, letterSpacing: 0.5, color: "#fff" }}>Avatar</div>
 
       {/* Editable name field — frosted input: white 12% bg, 16px blur, white 20% stroke */}
-      <div style={{ position: "absolute", left: "50%", bottom: "32%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 8, maxWidth: "84%",
+      <div style={{ position: "absolute", right: 30, bottom: "32%", display: "inline-flex", alignItems: "center", gap: 8, maxWidth: "84%",
         padding: "9px 15px", borderRadius: 11, background: "rgba(255,255,255,0.12)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.2)" }}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.95 }}><polyline points="9 18 15 12 9 6"/></svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#88E0E1" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="9 18 15 12 9 6"/></svg>
         <input className="avatarNameInput" value={cfg.name || ""} readOnly={!canEdit} onChange={canEdit ? (e => update({ name: e.target.value })) : undefined}
           placeholder={de ? "Name eingeben" : "Enter name"}
           style={{ width: 120, minWidth: 0, border: "none", outline: "none", background: "transparent", fontSize: 15, fontFamily: FONT, fontWeight: 500, color: "#fff" }} />
@@ -19047,7 +19047,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     return (
       <div key={a.id} onClick={canEdit ? () => setField("archetype", a.id) : undefined}
         onMouseEnter={canEdit ? () => setHoverArch(a.id) : undefined} onMouseLeave={canEdit ? () => setHoverArch(null) : undefined}
-        style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "9px 16px", borderRadius: 10, cursor: canEdit ? "pointer" : "default", width: "fit-content", maxWidth: "100%",
+        style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", borderRadius: 10, cursor: canEdit ? "pointer" : "default", width: "100%", boxSizing: "border-box",
           background: on ? "#15151c" : "transparent", transition: "background .15s" }}>
         <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: dotColor, transition: "background .15s" }} />
         <span style={{ fontSize: 14.5, fontFamily: FONT, fontWeight: on ? 600 : 500, color: on ? "#fff" : theme.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{L(a)}</span>
