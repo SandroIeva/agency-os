@@ -18887,6 +18887,19 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [nameFocus, setNameFocus] = useState(false); // name field focused → fade text out, darken bg
   // Wizard step: 0 archetype · 1 appearance · 2 character · 3 avatar.
   const [stepIdx, setStepIdx] = useState(() => (value && value.imageUrl) ? 3 : 0);
+  // Avatar video: paused by default. Hovering an archetype or the video plays it
+  // (looping); leaving lets the current play finish, then it stops (no replay).
+  const videoRef = useRef(null);
+  const playAvatarVideo = () => {
+    const v = videoRef.current; if (!v) return;
+    if (v.ended) { try { v.currentTime = 0; } catch (_) {} }
+    v.loop = true;
+    v.play?.().catch(() => {});
+  };
+  const releaseAvatarVideo = () => {
+    const v = videoRef.current; if (!v) return;
+    v.loop = false; // finish the current play-through, then stop (onEnded)
+  };
   const de = appLanguage === "de";
   const L = (o) => (de ? o.de : o.en);
   const update = (partial) => onChange({ ...cfg, ...partial });
@@ -19009,12 +19022,13 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.23", borderRadius: 20, overflow: "hidden",
       background: darkMode ? "#1a1a22" : "#c4c6cc" }}>
       <style>{`.avatarNameInput::placeholder{color:rgba(255,255,255,0.82);transition:color .22s ease;}.avatarNameInput:focus::placeholder{color:transparent;}`}</style>
-      {/* Default = looping muted video; a set cfg.imageUrl shows as a static image */}
+      {/* Default = hover-driven muted video; a set cfg.imageUrl shows as a static image */}
       {cfg.imageUrl ? (
         <img src={cfg.imageUrl} alt={cfg.name || "Brand Avatar"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
       ) : (
-        <video src="/avatar.mp4" autoPlay muted loop playsInline
-          onTimeUpdate={(e) => { if (e.currentTarget.currentTime >= 5) e.currentTarget.currentTime = 0; }}
+        <video ref={videoRef} src="/avatar.mp4" muted playsInline preload="auto" poster="/Avatar-Bg.jpg?v=2"
+          onMouseEnter={playAvatarVideo} onMouseLeave={releaseAvatarVideo}
+          onEnded={(e) => { const v = e.currentTarget; v.pause(); try { v.currentTime = 0; } catch (_) {} }}
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
       )}
 
@@ -19059,7 +19073,8 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     const dotColor = (on || hov) ? (a.color || "#36C28E") : (darkMode ? "rgba(255,255,255,0.28)" : "#c9ccd2");
     return (
       <div key={a.id} onClick={canEdit ? () => setField("archetype", a.id) : undefined}
-        onMouseEnter={canEdit ? () => setHoverArch(a.id) : undefined} onMouseLeave={canEdit ? () => setHoverArch(null) : undefined}
+        onMouseEnter={canEdit ? () => { setHoverArch(a.id); playAvatarVideo(); } : undefined}
+        onMouseLeave={canEdit ? () => { setHoverArch(null); releaseAvatarVideo(); } : undefined}
         style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px 10px 13px", borderRadius: 10, cursor: canEdit ? "pointer" : "default", width: "100%", boxSizing: "border-box",
           background: on ? "#15151c" : "transparent", transition: "background .15s" }}>
         <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: dotColor, transition: "background .15s" }} />
