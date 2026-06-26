@@ -19184,7 +19184,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
         initial={{ opacity: 0, y: 26 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 14 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         onAnimationComplete={() => { if (ethOpen) setEthBlur(true); }}
-        style={{ position: "relative", width: "min(600px, 94vw)", borderRadius: 24, padding: 26,
+        style={{ position: "relative", width: "min(600px, 94vw)", borderRadius: 24, padding: 34,
           background: "rgba(255,255,255,0.1)",
           backdropFilter: ethBlur ? "blur(30px) saturate(1.4)" : "blur(0px) saturate(1)",
           WebkitBackdropFilter: ethBlur ? "blur(30px) saturate(1.4)" : "blur(0px) saturate(1)",
@@ -19192,7 +19192,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           boxShadow: "0 24px 70px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)",
           border: "1px solid rgba(255,255,255,0.45)", isolation: "isolate", willChange: "opacity, transform", WebkitBackfaceVisibility: "hidden" }}>
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 30 }}>
           <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, letterSpacing: -0.2, color: "#1c1c24" }}>{de ? "Erscheinung wählen" : "Choose appearance"}</div>
           <div onClick={() => setEthOpen(false)}
             style={{ width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.25)" }}>
@@ -19200,7 +19200,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           </div>
         </div>
         {/* Options — 3×2 grid, fits without scrolling */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
           {AVATAR_ETHNICITIES.map(e => {
             const on = ethDraft === e.id;
             const hov = ethHover === e.id;
@@ -19226,7 +19226,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           })}
         </div>
         {/* Confirm */}
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 22 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 32 }}>
           <motion.div whileTap={{ scale: 0.97 }} onClick={() => { update({ ethnicity: ethDraft || "" }); setEthOpen(false); }}
             style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "11px 26px", borderRadius: 12, cursor: "pointer",
               background: "#15151c", color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 500 }}>
