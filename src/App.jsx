@@ -19170,11 +19170,17 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       </div>
     </div>
   );
-  const ethOverlay = ethOpen ? createPortal(
-    <div onClick={() => setEthOpen(false)}
+  const ethOverlay = createPortal(
+    <AnimatePresence>
+      {ethOpen && (
+    <motion.div onClick={() => setEthOpen(false)}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18, ease: "easeOut" }}
       style={{ position: "fixed", inset: 0, zIndex: 5000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "transparent" }}>
-      {/* Frosted-glass panel: semi-transparent white + blur, light shadow, no backdrop dim */}
-      <div onClick={(e) => e.stopPropagation()}
+      {/* Frosted-glass panel: semi-transparent white + blur, light shadow, no backdrop dim.
+          Animates up from below, fading in. */}
+      <motion.div onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 28 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 16 }}
+        transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
         style={{ position: "relative", width: "min(600px, 94vw)", borderRadius: 24, padding: 26,
           background: "rgba(255,255,255,0.1)", backdropFilter: "blur(30px) saturate(1.4)", WebkitBackdropFilter: "blur(30px) saturate(1.4)",
           boxShadow: "0 24px 70px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)",
@@ -19221,8 +19227,10 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
             {de ? "Bestätigen" : "Confirm"}
           </motion.div>
         </div>
-      </div>
-    </div>, document.body) : null;
+      </motion.div>
+    </motion.div>
+      )}
+    </AnimatePresence>, document.body);
 
   // ── Read-only: just show the avatar card ──
   if (!canEdit) {
