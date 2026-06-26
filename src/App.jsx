@@ -19083,7 +19083,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           const active = i === stepIdx;
           return (
             <div key={i} onClick={() => setStepIdx(i)}
-              style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", borderRadius: 12, cursor: "pointer",
+              style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "13.5px 16px", borderRadius: 12, cursor: "pointer",
                 background: active ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "#f1f1f4"),
                 color: active ? "#fff" : theme.text, transition: "background .15s" }}>
               <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: active ? "rgba(255,255,255,0.5)" : theme.textDim }}>{String(i + 1).padStart(2, "0")}</span>
