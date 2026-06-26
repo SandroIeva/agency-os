@@ -19156,11 +19156,11 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     <div>
       {SL(de ? "Erscheinung" : "Appearance")}
       <div onClick={canEdit ? () => { setEthDraft(cfg.ethnicity || null); setEthBlur(false); setEthOpen(true); } : undefined}
-        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 10, minWidth: 96, height: 46, padding: ethSel ? "0 20px" : "0 26px",
+        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 10, minWidth: 96, height: 46, padding: ethSel ? "0 20px 0 10px" : "0 26px",
           borderRadius: 23, border: `1.5px solid ${theme.borderFaint}`, background: "transparent", cursor: canEdit ? "pointer" : "default" }}>
         {ethSel ? (
           <>
-            <div style={{ width: 26, height: 26, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: ethGradient(ethSel.id) }}>
+            <div style={{ width: 26, height: 26, borderRadius: "50%", overflow: "hidden", flexShrink: 0, background: ethGradient(ethSel.id) }}>
               {ethSel.img && <img src={ethSel.img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
             </div>
             <span style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{L(ethSel)}</span>
