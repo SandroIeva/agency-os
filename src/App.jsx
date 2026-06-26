@@ -18893,8 +18893,16 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [ethOpen, setEthOpen] = useState(false);     // appearance picker overlay open
   const [ethDraft, setEthDraft] = useState(null);    // tentative appearance selection (applied on confirm)
   const [ethHover, setEthHover] = useState(null);    // appearance tile under the cursor (hover effect)
-  const [ethBlur, setEthBlur] = useState(false);     // enable backdrop blur only after the panel finished fading in (avoids flicker)
+  const [ethBlur, setEthBlur] = useState(false);     // ramp the backdrop blur 0->full together with the panel's opacity fade
   const [ageDragging, setAgeDragging] = useState(false); // true while dragging the age stepper (disables tween for instant follow)
+  // Appearance overlay: render the panel at blur(0) on open, then ramp to full blur on
+  // the next frame so the blur fades in *with* the opacity (no late/flickering blur).
+  useEffect(() => {
+    if (!ethOpen) { setEthBlur(false); return; }
+    let r2 = 0;
+    const r1 = requestAnimationFrame(() => { r2 = requestAnimationFrame(() => setEthBlur(true)); });
+    return () => { cancelAnimationFrame(r1); cancelAnimationFrame(r2); };
+  }, [ethOpen]);
   // Wizard step: 0 archetype · 1 appearance · 2 character · 3 avatar.
   const [stepIdx, setStepIdx] = useState(() => (value && value.imageUrl) ? 3 : 0);
   // Avatar video: paused by default. Hovering an archetype or the video plays it
@@ -19185,12 +19193,11 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       <motion.div onClick={(e) => e.stopPropagation()}
         initial={{ opacity: 0, y: 26 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 14 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        onAnimationComplete={() => { if (ethOpen) setEthBlur(true); }}
         style={{ position: "relative", width: "min(600px, 94vw)", borderRadius: 24, padding: 34,
           background: "rgba(255,255,255,0.1)",
           backdropFilter: ethBlur ? "blur(30px) saturate(1.4)" : "blur(0px) saturate(1)",
           WebkitBackdropFilter: ethBlur ? "blur(30px) saturate(1.4)" : "blur(0px) saturate(1)",
-          transition: "backdrop-filter 0.5s ease, -webkit-backdrop-filter 0.5s ease",
+          transition: "backdrop-filter 0.5s cubic-bezier(0.22, 1, 0.36, 1), -webkit-backdrop-filter 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
           boxShadow: "0 24px 70px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)",
           border: "1px solid rgba(255,255,255,0.45)", isolation: "isolate", willChange: "opacity, transform", WebkitBackfaceVisibility: "hidden" }}>
         {/* Header */}
