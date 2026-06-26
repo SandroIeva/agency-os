@@ -18995,7 +18995,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   // label bottom-left. Used in the right column + the read-only view.
   const imgSrc = cfg.imageUrl || "/Avatar-Img.png"; // default placeholder lives in /public
   const avatarCard = (
-    <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.2", borderRadius: 20, overflow: "hidden",
+    <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.26", borderRadius: 20, overflow: "hidden",
       background: darkMode ? "#1a1a22" : "#c4c6cc", boxShadow: "0 14px 38px rgba(0,0,0,0.12)" }}>
       <style>{`.avatarNameInput::placeholder{color:rgba(255,255,255,0.82);}`}</style>
       {/* Avatar image — just swap cfg.imageUrl; falls back to /Avatar-Img.png */}
