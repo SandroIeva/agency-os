@@ -18899,7 +18899,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [ethDraft, setEthDraft] = useState(null);    // tentative appearance selection (applied on confirm)
   const [ethHover, setEthHover] = useState(null);    // appearance tile under the cursor (hover effect)
   const [traitsOpen, setTraitsOpen] = useState(false); const [traitsDraft, setTraitsDraft] = useState([]); // personality picker
-  const [skinOpen, setSkinOpen] = useState(false); const [skinDraft, setSkinDraft] = useState(null); // skin-condition picker (own + button next to Personality)
+  const [skinOpen, setSkinOpen] = useState(false); const [skinDraft, setSkinDraft] = useState(null); const [skinHover, setSkinHover] = useState(null); // skin-condition picker (image grid like Appearance)
   const [styleOpen, setStyleOpen] = useState(false); const [styleDraft, setStyleDraft] = useState(null);   // style picker
   const [notesOpen, setNotesOpen] = useState(false); const [notesDraft, setNotesDraft] = useState("");     // extra-details picker
   const [isRecording, setIsRecording] = useState(false); const recognitionRef = useRef(null);              // dictation for the details field
@@ -19340,8 +19340,32 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     </div>,
     () => { update({ traits: traitsDraft || [] }); setTraitsOpen(false); });
   const skinOverlay = pickerShell("skinpicker", skinOpen, () => setSkinOpen(false), de ? "Hautbeschaffenheit wählen" : "Choose skin",
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-      {AVATAR_SKIN.map(s => chip(L(s), skinDraft === s.id, () => setSkinDraft(skinDraft === s.id ? null : s.id), s.id))}
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 30 }}>
+      {AVATAR_SKIN.map(s => {
+        const on = skinDraft === s.id;
+        const hov = skinHover === s.id;
+        return (
+          <div key={s.id} onClick={() => setSkinDraft(skinDraft === s.id ? null : s.id)}
+            onMouseEnter={() => setSkinHover(s.id)} onMouseLeave={() => setSkinHover(null)}
+            style={{ cursor: "pointer" }}>
+            <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.2", borderRadius: 14, overflow: "hidden",
+              background: darkMode ? "rgba(255,255,255,0.05)" : "#ececef",
+              boxShadow: on ? "0 0 0 2.5px #15151c, 0 6px 18px rgba(0,0,0,0.18)"
+                : (hov ? "0 0 0 2px rgba(21,21,28,0.35), 0 6px 16px rgba(0,0,0,0.14)" : "none"),
+              transition: "box-shadow .3s cubic-bezier(0.33, 1, 0.68, 1)" }}>
+              <img src={`/avatar-skin/${s.id}.png`} alt={L(s)} loading="lazy"
+                onError={(e) => { e.currentTarget.style.display = "none"; }}
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }} />
+              {on && (
+                <div style={{ position: "absolute", top: 8, right: 8, width: 20, height: 20, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+              )}
+            </div>
+            <div style={{ marginTop: 11, fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500, textAlign: "center", color: on ? "#1c1c24" : "#4a4a54" }}>{L(s)}</div>
+          </div>
+        );
+      })}
     </div>,
     () => { update({ skin: skinDraft || "" }); setSkinOpen(false); });
   const styleOverlay = pickerShell("stylepicker", styleOpen, () => setStyleOpen(false), de ? "Stil wählen" : "Choose style",
