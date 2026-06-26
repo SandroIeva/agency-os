@@ -19048,7 +19048,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
         style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", borderRadius: 10, cursor: canEdit ? "pointer" : "default", width: "100%", boxSizing: "border-box",
           background: on ? "#15151c" : "transparent", transition: "background .15s" }}>
         <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: dotColor, transition: "background .15s" }} />
-        <span style={{ fontSize: 14.5, fontFamily: FONT, fontWeight: 500, color: on ? "#fff" : theme.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{L(a)}</span>
+        <span style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 400, color: on ? "#fff" : theme.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{L(a)}</span>
       </div>
     );
   };
