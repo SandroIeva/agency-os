@@ -18995,7 +18995,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   // Avatar preview card — glass panel with the avatar image (swap cfg.imageUrl)
   // and HTML overlays: "Avatar" title, an editable name field, and the archetype
   // label bottom-left. Used in the right column + the read-only view.
-  const imgSrc = cfg.imageUrl || "/Avatar-Bg.jpg"; // default placeholder lives in /public
+  const imgSrc = cfg.imageUrl || "/Avatar-Bg.jpg?v=2"; // default placeholder lives in /public (v= busts CDN cache on update)
   const avatarCard = (
     <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.23", borderRadius: 20, overflow: "hidden",
       background: darkMode ? "#1a1a22" : "#c4c6cc" }}>
@@ -19008,7 +19008,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
 
       {/* Editable name field — frosted input: white 12% bg, 16px blur, white 20% stroke.
           On focus the placeholder fades out and the background darkens slightly. */}
-      <div style={{ position: "absolute", left: "50%", bottom: 50, transform: "translateX(-50%)", display: "inline-flex", alignItems: "center", gap: 8, maxWidth: "84%",
+      <div style={{ position: "absolute", left: "50%", bottom: 45, transform: "translateX(-50%)", display: "inline-flex", alignItems: "center", gap: 8, maxWidth: "84%",
         padding: "9px 15px", borderRadius: 11, background: nameFocus ? "rgba(0,0,0,0.28)" : "rgba(255,255,255,0.12)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.2)", transition: "background .25s ease" }}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#88E0E1" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="9 18 15 12 9 6"/></svg>
         <input className="avatarNameInput" value={cfg.name || ""} readOnly={!canEdit}
@@ -19096,7 +19096,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
               {stepHead(de ? "Archetyp" : "Archetype",
                 de ? "Wir gehen Schritt für Schritt durch, wer dein Brand-Avatar ist. Wähle zunächst den Archetyp, der die Persönlichkeit deiner Marke am besten verkörpert."
                    : "We'll go through, step by step, who your brand avatar is. Start by choosing the archetype that best embodies your brand's personality.")}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "repeat(6, auto)", gridAutoFlow: "column", gap: "4px 14px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "repeat(6, auto)", gridAutoFlow: "column", gap: "4px 14px", marginTop: 4 }}>
                 {AVATAR_ARCHETYPES.map(archRow)}
               </div>
             </div>
