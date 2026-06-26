@@ -18885,6 +18885,8 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [hoverArch, setHoverArch] = useState(null); // archetype id under the cursor
   const [hoverTab, setHoverTab] = useState(null);   // tab index under the cursor (hover effect)
   const [nameFocus, setNameFocus] = useState(false); // name field focused → fade text out, darken bg
+  const [ethOpen, setEthOpen] = useState(false);     // appearance picker overlay open
+  const [ethDraft, setEthDraft] = useState(null);    // tentative appearance selection (applied on confirm)
   // Wizard step: 0 archetype · 1 appearance · 2 character · 3 avatar.
   const [stepIdx, setStepIdx] = useState(() => (value && value.imageUrl) ? 3 : 0);
   // Avatar video: paused by default. Hovering an archetype or the video plays it
@@ -19125,6 +19127,79 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     </div>
   );
 
+  // Appearance picker — a "+" trigger that opens a blurred overlay with preview tiles.
+  const ethGradient = (id) => {
+    const map = {
+      european: ["#f0ddc8", "#d6bca0"], african: ["#c79c74", "#8b5836"],
+      asian: ["#f3e3c8", "#dfc097"], latin: ["#e7c79f", "#c4946a"],
+      middleeastern: ["#e6cba4", "#c39b6e"], multicultural: ["#dcd2e8", "#b9a8cb"],
+    };
+    const [a, b] = map[id] || ["#e2e2e8", "#c6c6cf"];
+    return `linear-gradient(155deg, ${a}, ${b})`;
+  };
+  const ethSel = AVATAR_ETHNICITIES.find(e => e.id === cfg.ethnicity);
+  const ethTrigger = (
+    <div>
+      {SL(de ? "Erscheinung" : "Appearance")}
+      <div onClick={canEdit ? () => { setEthDraft(cfg.ethnicity || null); setEthOpen(true); } : undefined}
+        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 10, minWidth: 96, height: 46, padding: ethSel ? "0 20px" : "0 26px",
+          borderRadius: 23, border: `1.5px solid ${theme.borderFaint}`, background: "transparent", cursor: canEdit ? "pointer" : "default" }}>
+        {ethSel ? (
+          <>
+            <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: ethGradient(ethSel.id) }} />
+            <span style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{L(ethSel)}</span>
+          </>
+        ) : (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={theme.textSub} strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        )}
+      </div>
+    </div>
+  );
+  const ethOverlay = ethOpen ? createPortal(
+    <div onClick={() => setEthOpen(false)}
+      style={{ position: "fixed", inset: 0, zIndex: 5000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24,
+        background: "rgba(10,10,16,0.42)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ position: "relative", width: "min(600px, 94vw)", background: darkMode ? "#16161c" : "#fff", borderRadius: 24, padding: 26,
+          boxShadow: "0 30px 80px rgba(0,0,0,0.32)", border: `1px solid ${theme.borderFaint}` }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+          <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, letterSpacing: -0.2, color: theme.text }}>{de ? "Erscheinung wählen" : "Choose appearance"}</div>
+          <div onClick={() => setEthOpen(false)}
+            style={{ width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "#f1f1f4" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.textSub} strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </div>
+        </div>
+        {/* Options — 3×2 grid, fits without scrolling */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+          {AVATAR_ETHNICITIES.map(e => {
+            const on = ethDraft === e.id;
+            return (
+              <div key={e.id} onClick={() => setEthDraft(e.id)} style={{ cursor: "pointer" }}>
+                <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.04", borderRadius: 14, background: ethGradient(e.id),
+                  border: `2.5px solid ${on ? accent : "transparent"}`, transition: "border .15s" }}>
+                  {on && (
+                    <div style={{ position: "absolute", top: 8, right: 8, width: 20, height: 20, borderRadius: "50%", background: accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    </div>
+                  )}
+                </div>
+                <div style={{ marginTop: 8, fontSize: 12.5, fontFamily: FONT, fontWeight: 500, textAlign: "center", color: on ? theme.text : theme.textSub }}>{L(e)}</div>
+              </div>
+            );
+          })}
+        </div>
+        {/* Confirm */}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 22 }}>
+          <motion.div whileTap={{ scale: 0.97 }} onClick={() => { update({ ethnicity: ethDraft || "" }); setEthOpen(false); }}
+            style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "11px 26px", borderRadius: 12, cursor: "pointer",
+              background: "#15151c", color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 500 }}>
+            {de ? "Bestätigen" : "Confirm"}
+          </motion.div>
+        </div>
+      </div>
+    </div>, document.body) : null;
+
   // ── Read-only: just show the avatar card ──
   if (!canEdit) {
     return (
@@ -19188,7 +19263,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                 <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
                   {group(de ? "Geschlecht" : "Gender", AVATAR_GENDERS, "gender")}
                   {ageSlider}
-                  {group(de ? "Erscheinung" : "Appearance", AVATAR_ETHNICITIES, "ethnicity")}
+                  {ethTrigger}
                 </div>
               )}
               {stepIdx === 2 && (
@@ -19248,6 +19323,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           </motion.div>
         )}
       </div>
+      {ethOverlay}
     </div>
   );
 }
