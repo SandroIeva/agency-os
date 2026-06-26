@@ -19053,7 +19053,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     return (
       <div key={a.id} onClick={canEdit ? () => setField("archetype", a.id) : undefined}
         onMouseEnter={canEdit ? () => setHoverArch(a.id) : undefined} onMouseLeave={canEdit ? () => setHoverArch(null) : undefined}
-        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px 10px 14px", borderRadius: 10, cursor: canEdit ? "pointer" : "default", width: "100%", boxSizing: "border-box",
+        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px 10px 13px", borderRadius: 10, cursor: canEdit ? "pointer" : "default", width: "100%", boxSizing: "border-box",
           background: on ? "#15151c" : "transparent", transition: "background .15s" }}>
         <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: dotColor, transition: "background .15s" }} />
         <span style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 400, color: on ? "#fff" : theme.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{L(a)}</span>
