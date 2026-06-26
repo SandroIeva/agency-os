@@ -19166,17 +19166,18 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   );
   const ethOverlay = ethOpen ? createPortal(
     <div onClick={() => setEthOpen(false)}
-      style={{ position: "fixed", inset: 0, zIndex: 5000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24,
-        background: "rgba(10,10,16,0.42)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}>
+      style={{ position: "fixed", inset: 0, zIndex: 5000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "transparent" }}>
+      {/* Frosted-glass panel: semi-transparent white + blur, light shadow, no backdrop dim */}
       <div onClick={(e) => e.stopPropagation()}
-        style={{ position: "relative", width: "min(600px, 94vw)", background: darkMode ? "#16161c" : "#fff", borderRadius: 24, padding: 26,
-          boxShadow: "0 30px 80px rgba(0,0,0,0.32)", border: `1px solid ${theme.borderFaint}` }}>
+        style={{ position: "relative", width: "min(600px, 94vw)", borderRadius: 24, padding: 26,
+          background: "rgba(255,255,255,0.1)", backdropFilter: "blur(22px)", WebkitBackdropFilter: "blur(22px)",
+          boxShadow: "0 24px 70px rgba(0,0,0,0.22)", border: "1px solid rgba(255,255,255,0.25)" }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-          <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, letterSpacing: -0.2, color: theme.text }}>{de ? "Erscheinung wählen" : "Choose appearance"}</div>
+          <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, letterSpacing: -0.2, color: "#fff" }}>{de ? "Erscheinung wählen" : "Choose appearance"}</div>
           <div onClick={() => setEthOpen(false)}
-            style={{ width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "#f1f1f4" }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.textSub} strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            style={{ width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.25)" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </div>
         </div>
         {/* Options — 3×2 grid, fits without scrolling */}
@@ -19186,14 +19187,14 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
             return (
               <div key={e.id} onClick={() => setEthDraft(e.id)} style={{ cursor: "pointer" }}>
                 <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.04", borderRadius: 14, background: ethGradient(e.id),
-                  border: `2.5px solid ${on ? accent : "transparent"}`, transition: "border .15s" }}>
+                  border: `2.5px solid ${on ? "#fff" : "transparent"}`, boxShadow: on ? "0 0 0 1px rgba(0,0,0,0.15)" : "none", transition: "border .15s" }}>
                   {on && (
-                    <div style={{ position: "absolute", top: 8, right: 8, width: 20, height: 20, borderRadius: "50%", background: accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ position: "absolute", top: 8, right: 8, width: 20, height: 20, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                     </div>
                   )}
                 </div>
-                <div style={{ marginTop: 8, fontSize: 12.5, fontFamily: FONT, fontWeight: 500, textAlign: "center", color: on ? theme.text : theme.textSub }}>{L(e)}</div>
+                <div style={{ marginTop: 8, fontSize: 12.5, fontFamily: FONT, fontWeight: 500, textAlign: "center", color: on ? "#fff" : "rgba(255,255,255,0.78)" }}>{L(e)}</div>
               </div>
             );
           })}
