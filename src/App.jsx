@@ -18882,6 +18882,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const cfg = value && typeof value === "object" ? value : {};
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [hoverArch, setHoverArch] = useState(null); // archetype id under the cursor
   // Wizard step: 0 archetype · 1 appearance · 2 character · 3 avatar.
   const [stepIdx, setStepIdx] = useState(() => (value && value.imageUrl) ? 3 : 0);
   const de = appLanguage === "de";
@@ -18999,17 +19000,18 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       background: darkMode ? "#1a1a22" : "#c4c6cc", boxShadow: "0 14px 38px rgba(0,0,0,0.12)" }}>
       <style>{`.avatarNameInput::placeholder{color:rgba(255,255,255,0.82);}`}</style>
       {/* Avatar image — just swap cfg.imageUrl; falls back to /Avatar-Img.png */}
-      <img src={imgSrc} alt={cfg.name || "Brand Avatar"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", transform: cfg.imageUrl ? "none" : "scale(1.18)", transformOrigin: "center 46%" }} />
+      <img src={imgSrc} alt={cfg.name || "Brand Avatar"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", transform: cfg.imageUrl ? "none" : "scale(1.22)", transformOrigin: "center 58%" }} />
 
       {/* "Avatar" title (HTML overlay, white, on top) */}
-      <div style={{ position: "absolute", top: 26, left: 0, right: 0, textAlign: "center", fontSize: 23, fontFamily: FONT, fontWeight: 400, letterSpacing: -0.2, color: "#fff" }}>Avatar</div>
+      <div style={{ position: "absolute", top: 26, left: 0, right: 0, textAlign: "center", fontSize: 23, fontFamily: FONT, fontWeight: 400, letterSpacing: 1.5, color: "#fff" }}>Avatar</div>
 
-      {/* Editable name field (HTML overlay, centered) */}
-      <div style={{ position: "absolute", left: "50%", bottom: "34%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 7, maxWidth: "84%" }}>
+      {/* Editable name field — frosted input: white 12% bg, 16px blur, white 20% stroke */}
+      <div style={{ position: "absolute", left: "50%", bottom: "32%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 8, maxWidth: "84%",
+        padding: "9px 15px", borderRadius: 11, background: "rgba(255,255,255,0.12)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.2)" }}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.95 }}><polyline points="9 18 15 12 9 6"/></svg>
         <input className="avatarNameInput" value={cfg.name || ""} readOnly={!canEdit} onChange={canEdit ? (e => update({ name: e.target.value })) : undefined}
           placeholder={de ? "Name eingeben" : "Enter name"}
-          style={{ width: 130, minWidth: 0, border: "none", outline: "none", background: "transparent", fontSize: 15, fontFamily: FONT, fontWeight: 500, color: "#fff" }} />
+          style={{ width: 120, minWidth: 0, border: "none", outline: "none", background: "transparent", fontSize: 15, fontFamily: FONT, fontWeight: 500, color: "#fff" }} />
       </div>
 
       {/* Archetype label (HTML overlay, bottom-left, white) */}
@@ -19039,11 +19041,15 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   // green dot + white text; others are plain text with a small grey dot.
   const archRow = (a) => {
     const on = cfg.archetype === a.id;
+    const hov = hoverArch === a.id;
+    // Dot is grey by default; takes the archetype's own colour on hover or when selected.
+    const dotColor = (on || hov) ? (a.color || "#36C28E") : (darkMode ? "rgba(255,255,255,0.28)" : "#c9ccd2");
     return (
       <div key={a.id} onClick={canEdit ? () => setField("archetype", a.id) : undefined}
-        style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "9px 16px", borderRadius: 999, cursor: canEdit ? "pointer" : "default", width: "fit-content", maxWidth: "100%",
+        onMouseEnter={canEdit ? () => setHoverArch(a.id) : undefined} onMouseLeave={canEdit ? () => setHoverArch(null) : undefined}
+        style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "9px 16px", borderRadius: 10, cursor: canEdit ? "pointer" : "default", width: "fit-content", maxWidth: "100%",
           background: on ? "#15151c" : "transparent", transition: "background .15s" }}>
-        <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: on ? "#36C28E" : (darkMode ? "rgba(255,255,255,0.28)" : "#c9ccd2") }} />
+        <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: dotColor, transition: "background .15s" }} />
         <span style={{ fontSize: 14.5, fontFamily: FONT, fontWeight: on ? 600 : 500, color: on ? "#fff" : theme.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{L(a)}</span>
       </div>
     );
