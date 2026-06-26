@@ -18883,6 +18883,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [hoverArch, setHoverArch] = useState(null); // archetype id under the cursor
+  const [nameFocus, setNameFocus] = useState(false); // name field focused → fade text out, darken bg
   // Wizard step: 0 archetype · 1 appearance · 2 character · 3 avatar.
   const [stepIdx, setStepIdx] = useState(() => (value && value.imageUrl) ? 3 : 0);
   const de = appLanguage === "de";
@@ -18996,20 +18997,23 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   // label bottom-left. Used in the right column + the read-only view.
   const imgSrc = cfg.imageUrl || "/Avatar-Img.png"; // default placeholder lives in /public
   const avatarCard = (
-    <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.32", borderRadius: 20, overflow: "hidden",
-      background: darkMode ? "#1a1a22" : "#c4c6cc", boxShadow: "0 14px 38px rgba(0,0,0,0.12)" }}>
-      <style>{`.avatarNameInput::placeholder{color:rgba(255,255,255,0.82);}`}</style>
+    <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.23", borderRadius: 20, overflow: "hidden",
+      background: darkMode ? "#1a1a22" : "#c4c6cc" }}>
+      <style>{`.avatarNameInput::placeholder{color:rgba(255,255,255,0.82);transition:color .22s ease;}.avatarNameInput:focus::placeholder{color:transparent;}`}</style>
       {/* Avatar image — just swap cfg.imageUrl; falls back to /Avatar-Img.png */}
       <img src={imgSrc} alt={cfg.name || "Brand Avatar"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", transform: cfg.imageUrl ? "none" : "scale(1.22)", transformOrigin: "center 58%" }} />
 
       {/* "Avatar" title (HTML overlay, white, on top) */}
       <div style={{ position: "absolute", top: 26, left: 0, right: 0, textAlign: "center", fontSize: 23, fontFamily: FONT, fontWeight: 400, letterSpacing: 0.5, color: "#fff" }}>Avatar</div>
 
-      {/* Editable name field — frosted input: white 12% bg, 16px blur, white 20% stroke */}
+      {/* Editable name field — frosted input: white 12% bg, 16px blur, white 20% stroke.
+          On focus the placeholder fades out and the background darkens slightly. */}
       <div style={{ position: "absolute", right: 30, bottom: "32%", display: "inline-flex", alignItems: "center", gap: 8, maxWidth: "84%",
-        padding: "9px 15px", borderRadius: 11, background: "rgba(255,255,255,0.12)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.2)" }}>
+        padding: "9px 15px", borderRadius: 11, background: nameFocus ? "rgba(0,0,0,0.28)" : "rgba(255,255,255,0.12)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.2)", transition: "background .25s ease" }}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#88E0E1" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="9 18 15 12 9 6"/></svg>
-        <input className="avatarNameInput" value={cfg.name || ""} readOnly={!canEdit} onChange={canEdit ? (e => update({ name: e.target.value })) : undefined}
+        <input className="avatarNameInput" value={cfg.name || ""} readOnly={!canEdit}
+          onFocus={() => setNameFocus(true)} onBlur={() => setNameFocus(false)}
+          onChange={canEdit ? (e => update({ name: e.target.value })) : undefined}
           placeholder={de ? "Name eingeben" : "Enter name"}
           style={{ width: 120, minWidth: 0, border: "none", outline: "none", background: "transparent", fontSize: 15, fontFamily: FONT, fontWeight: 500, color: "#fff" }} />
       </div>
