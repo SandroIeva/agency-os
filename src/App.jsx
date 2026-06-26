@@ -19202,7 +19202,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           </div>
         </div>
         {/* Options — 3×2 grid, fits without scrolling */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 30 }}>
           {AVATAR_ETHNICITIES.map(e => {
             const on = ethDraft === e.id;
             const hov = ethHover === e.id;
@@ -19259,11 +19259,13 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           return (
             <div key={i} onClick={() => setStepIdx(i)}
               onMouseEnter={() => setHoverTab(i)} onMouseLeave={() => setHoverTab(null)}
-              style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "13.5px 16px", borderRadius: 12, cursor: "pointer",
+              style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "13.5px 16px", borderRadius: 12, cursor: "pointer",
                 background: active ? (hov ? "#0e0e14" : "#15151c") : (darkMode ? (hov ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.05)") : (hov ? "#e6e6eb" : "#f1f1f4")),
                 color: active ? "#fff" : theme.text, transition: "background .38s cubic-bezier(0.33, 1, 0.68, 1)" }}>
               <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: active ? "rgba(255,255,255,0.5)" : theme.textDim }}>{String(i + 1).padStart(2, "0")}</span>
               <span style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{L(s)}</span>
+              {/* Archetype tab shows the selected archetype's colour as a dot (top-right) */}
+              {i === 0 && arch && <div style={{ position: "absolute", top: 8, right: 9, width: 8, height: 8, borderRadius: "50%", background: arch.color || "#36C28E" }} />}
             </div>
           );
         })}
