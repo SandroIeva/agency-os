@@ -19220,7 +19220,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                     </div>
                   )}
                 </div>
-                <div style={{ marginTop: 8, fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500, textAlign: "center", color: on ? "#1c1c24" : "#4a4a54" }}>{L(e)}</div>
+                <div style={{ marginTop: 11, fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500, textAlign: "center", color: on ? "#1c1c24" : "#4a4a54" }}>{L(e)}</div>
               </div>
             );
           })}
