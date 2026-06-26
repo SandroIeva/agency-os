@@ -19018,7 +19018,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           On focus the placeholder fades out and the background darkens slightly. */}
       <div style={{ position: "absolute", left: "50%", bottom: 40, transform: "translateX(-50%)", display: "inline-flex", alignItems: "center", gap: 8, maxWidth: "84%",
         padding: "9px 15px 10px 11px", borderRadius: 11, background: nameFocus ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.12)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.2)", transition: "background .25s ease" }}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#88E0E1" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="9 18 15 12 9 6"/></svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#A3EDED" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="9 18 15 12 9 6"/></svg>
         <input className="avatarNameInput" value={cfg.name || ""} readOnly={!canEdit}
           onFocus={() => setNameFocus(true)} onBlur={() => setNameFocus(false)}
           onChange={canEdit ? (e => update({ name: e.target.value })) : undefined}
