@@ -18905,10 +18905,13 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   };
   // Age range slider: drag/click sets the nearest age bracket.
   const ageTrackRef = useRef(null);
+  const AGE_THUMB_W = 90;
   const setAgeFromX = (clientX) => {
     const el = ageTrackRef.current; if (!el) return;
     const r = el.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+    // Map against the thumb-centre travel range (track minus the thumb width).
+    const usable = Math.max(1, r.width - AGE_THUMB_W);
+    const ratio = Math.min(1, Math.max(0, (clientX - r.left - AGE_THUMB_W / 2) / usable));
     const idx = Math.round(ratio * (AVATAR_AGES.length - 1));
     const id = AVATAR_AGES[idx]?.id;
     if (id && cfg.age !== id) update({ age: id });
@@ -19121,9 +19124,10 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
         style={{ position: "relative", height: 46, maxWidth: 270, cursor: canEdit ? "pointer" : "default", touchAction: "none", userSelect: "none" }}>
         {/* grey track — thinner than the thumb */}
         <div style={{ position: "absolute", left: 0, right: 0, top: 6, height: 34, borderRadius: 17, background: darkMode ? "rgba(255,255,255,0.06)" : "#e6e6ea" }} />
-        {/* white pill thumb — taller than the track, floats over it */}
-        <div style={{ position: "absolute", top: 0, height: 46, left: `${ageRatio * 100}%`, transform: `translateX(-${ageRatio * 100}%)`,
-          width: 90, borderRadius: 23, background: darkMode ? "#2a2a33" : "#fff", boxShadow: "0 5px 16px rgba(0,0,0,0.15)",
+        {/* white pill thumb — taller than the track, floats over it. Positioned with a
+            single property (left calc) so click-mapping and animation stay in sync. */}
+        <div style={{ position: "absolute", top: 0, height: 46, left: `calc(${ageRatio} * (100% - ${AGE_THUMB_W}px))`,
+          width: AGE_THUMB_W, borderRadius: 23, background: darkMode ? "#2a2a33" : "#fff", boxShadow: "0 5px 16px rgba(0,0,0,0.15)",
           display: "flex", alignItems: "center", justifyContent: "center", transition: ageDragging ? "none" : "left .2s cubic-bezier(0.22, 1, 0.36, 1)",
           fontSize: 12.5, fontFamily: FONT, fontWeight: 500, color: ageSelIdx >= 0 ? theme.text : theme.textDim }}>
           {AVATAR_AGES[ageIdx].de}
