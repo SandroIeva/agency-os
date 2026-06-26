@@ -19173,18 +19173,19 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const ethOverlay = createPortal(
     <AnimatePresence>
       {ethOpen && (
-    <motion.div onClick={() => setEthOpen(false)}
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18, ease: "easeOut" }}
+    <motion.div key="ethpicker" onClick={() => setEthOpen(false)}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
       style={{ position: "fixed", inset: 0, zIndex: 5000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "transparent" }}>
       {/* Frosted-glass panel: semi-transparent white + blur, light shadow, no backdrop dim.
-          Animates up from below, fading in. */}
+          Fades in softly from below. willChange + isolation keep the backdrop blur from
+          flickering during the opacity animation. */}
       <motion.div onClick={(e) => e.stopPropagation()}
-        initial={{ opacity: 0, y: 28 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 16 }}
-        transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
+        initial={{ opacity: 0, y: 26 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 14 }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         style={{ position: "relative", width: "min(600px, 94vw)", borderRadius: 24, padding: 26,
           background: "rgba(255,255,255,0.1)", backdropFilter: "blur(30px) saturate(1.4)", WebkitBackdropFilter: "blur(30px) saturate(1.4)",
           boxShadow: "0 24px 70px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)",
-          border: "1px solid rgba(255,255,255,0.45)" }}>
+          border: "1px solid rgba(255,255,255,0.45)", isolation: "isolate", willChange: "opacity, transform", WebkitBackfaceVisibility: "hidden" }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, letterSpacing: -0.2, color: "#1c1c24" }}>{de ? "Erscheinung wählen" : "Choose appearance"}</div>
