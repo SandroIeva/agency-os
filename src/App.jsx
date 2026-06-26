@@ -19182,7 +19182,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           Fades in softly from below. willChange + isolation keep the backdrop blur from
           flickering during the opacity animation. */}
       <motion.div onClick={(e) => e.stopPropagation()}
-        initial={{ opacity: 0, y: 26 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 14 }}
+        initial={{ opacity: 0, scale: 1.06 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.04 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         style={{ position: "relative", width: "min(600px, 94vw)", borderRadius: 24, padding: 34,
           background: "rgba(255,255,255,0.1)",
