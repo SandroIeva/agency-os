@@ -19003,7 +19003,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       <img src={imgSrc} alt={cfg.name || "Brand Avatar"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", transform: cfg.imageUrl ? "none" : "scale(1.22)", transformOrigin: "center 58%" }} />
 
       {/* "Avatar" title (HTML overlay, white, on top) */}
-      <div style={{ position: "absolute", top: 26, left: 0, right: 0, textAlign: "center", fontSize: 23, fontFamily: FONT, fontWeight: 400, letterSpacing: 1.5, color: "#fff" }}>Avatar</div>
+      <div style={{ position: "absolute", top: 26, left: 0, right: 0, textAlign: "center", fontSize: 23, fontFamily: FONT, fontWeight: 400, letterSpacing: 0.5, color: "#fff" }}>Avatar</div>
 
       {/* Editable name field — frosted input: white 12% bg, 16px blur, white 20% stroke */}
       <div style={{ position: "absolute", left: "50%", bottom: "32%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 8, maxWidth: "84%",
