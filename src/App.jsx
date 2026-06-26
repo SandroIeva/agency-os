@@ -19004,11 +19004,11 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       <img src={imgSrc} alt={cfg.name || "Brand Avatar"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
 
       {/* "Avatar" title (HTML overlay, white, on top) */}
-      <div style={{ position: "absolute", top: 26, left: 0, right: 0, textAlign: "center", fontSize: 23, fontFamily: FONT, fontWeight: 400, letterSpacing: 0.5, color: "#fff" }}>Avatar</div>
+      <div style={{ position: "absolute", top: 41, left: 0, right: 0, textAlign: "center", fontSize: 23, fontFamily: FONT, fontWeight: 400, letterSpacing: 0.5, color: "#fff" }}>Avatar</div>
 
       {/* Editable name field — frosted input: white 12% bg, 16px blur, white 20% stroke.
           On focus the placeholder fades out and the background darkens slightly. */}
-      <div style={{ position: "absolute", right: 30, bottom: "32%", display: "inline-flex", alignItems: "center", gap: 8, maxWidth: "84%",
+      <div style={{ position: "absolute", left: "50%", bottom: 80, transform: "translateX(-50%)", display: "inline-flex", alignItems: "center", gap: 8, maxWidth: "84%",
         padding: "9px 15px", borderRadius: 11, background: nameFocus ? "rgba(0,0,0,0.28)" : "rgba(255,255,255,0.12)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.2)", transition: "background .25s ease" }}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#88E0E1" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="9 18 15 12 9 6"/></svg>
         <input className="avatarNameInput" value={cfg.name || ""} readOnly={!canEdit}
@@ -19016,12 +19016,6 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           onChange={canEdit ? (e => update({ name: e.target.value })) : undefined}
           placeholder={de ? "Name eingeben" : "Enter name"}
           style={{ width: 120, minWidth: 0, border: "none", outline: "none", background: "transparent", fontSize: 15, fontFamily: FONT, fontWeight: 500, color: "#fff" }} />
-      </div>
-
-      {/* Archetype label (HTML overlay, bottom-left, white) */}
-      <div style={{ position: "absolute", left: 22, bottom: 22, display: "flex", alignItems: "center", gap: 9 }}>
-        <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: arch ? (arch.color || "#36C28E") : "#D1D1D1" }} />
-        <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: arch ? "rgba(255,255,255,0.92)" : "#D1D1D1" }}>{arch ? L(arch) : (de ? "Kein Archetyp" : "No Archetype")}</span>
       </div>
 
       {busy && (
@@ -19096,7 +19090,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       <div style={{ background: darkMode ? "rgba(255,255,255,0.03)" : "#f3f3f5", borderRadius: 22, padding: 30 }}>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.94fr)", gap: 30, alignItems: "start" }}>
         {/* Left — step content */}
-        <div>
+        <div style={{ paddingTop: 60 }}>
           {stepIdx === 0 && (
             <div>
               {stepHead(de ? "Archetyp" : "Archetype",
