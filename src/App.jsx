@@ -19184,7 +19184,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       <motion.div onClick={(e) => e.stopPropagation()}
         initial={{ scale: 1.06 }} animate={{ scale: 1 }} exit={{ scale: 1.04 }}
         transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
-        style={{ position: "relative", width: "min(600px, 94vw)", borderRadius: 24, padding: 34,
+        style={{ position: "relative", width: "min(500px, 94vw)", borderRadius: 24, padding: 34,
           background: "rgba(255,255,255,0.1)",
           backdropFilter: "blur(30px) saturate(1.4)", WebkitBackdropFilter: "blur(30px) saturate(1.4)",
           boxShadow: "0 24px 70px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)",
