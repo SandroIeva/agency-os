@@ -18995,14 +18995,14 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   // label bottom-left. Used in the right column + the read-only view.
   const imgSrc = cfg.imageUrl || "/Avatar-Img.png"; // default placeholder lives in /public
   const avatarCard = (
-    <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.14", borderRadius: 20, overflow: "hidden",
+    <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.2", borderRadius: 20, overflow: "hidden",
       background: darkMode ? "#1a1a22" : "#c4c6cc", boxShadow: "0 14px 38px rgba(0,0,0,0.12)" }}>
       <style>{`.avatarNameInput::placeholder{color:rgba(255,255,255,0.82);}`}</style>
       {/* Avatar image — just swap cfg.imageUrl; falls back to /Avatar-Img.png */}
       <img src={imgSrc} alt={cfg.name || "Brand Avatar"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", transform: cfg.imageUrl ? "none" : "scale(1.18)", transformOrigin: "center 46%" }} />
 
       {/* "Avatar" title (HTML overlay, white, on top) */}
-      <div style={{ position: "absolute", top: 26, left: 0, right: 0, textAlign: "center", fontSize: 23, fontFamily: FONT, fontWeight: 600, letterSpacing: -0.2, color: "#fff" }}>Avatar</div>
+      <div style={{ position: "absolute", top: 26, left: 0, right: 0, textAlign: "center", fontSize: 23, fontFamily: FONT, fontWeight: 400, letterSpacing: -0.2, color: "#fff" }}>Avatar</div>
 
       {/* Editable name field (HTML overlay, centered) */}
       <div style={{ position: "absolute", left: "50%", bottom: "34%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 7, maxWidth: "84%" }}>
@@ -19014,8 +19014,8 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
 
       {/* Archetype label (HTML overlay, bottom-left, white) */}
       <div style={{ position: "absolute", left: 22, bottom: 22, display: "flex", alignItems: "center", gap: 9 }}>
-        <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: arch ? (arch.color || "#36C28E") : "rgba(255,255,255,0.55)" }} />
-        <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: "rgba(255,255,255,0.92)" }}>{arch ? L(arch) : (de ? "Kein Archetyp" : "No Archetype")}</span>
+        <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: arch ? (arch.color || "#36C28E") : "#D1D1D1" }} />
+        <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: arch ? "rgba(255,255,255,0.92)" : "#D1D1D1" }}>{arch ? L(arch) : (de ? "Kein Archetyp" : "No Archetype")}</span>
       </div>
 
       {busy && (
@@ -19086,7 +19086,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       <div style={{ background: darkMode ? "rgba(255,255,255,0.03)" : "#f3f3f5", borderRadius: 22, padding: 30 }}>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.94fr)", gap: 30, alignItems: "start" }}>
         {/* Left — step content */}
-        <div style={{ minHeight: 380 }}>
+        <div>
           {stepIdx === 0 && (
             <div>
               {stepHead(de ? "Archetyp" : "Archetype",
@@ -19149,8 +19149,8 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           )}
         </div>
 
-        {/* Right — avatar preview card */}
-        <div>{avatarCard}</div>
+        {/* Right — avatar preview card (vertically centered → equal top/bottom padding) */}
+        <div style={{ alignSelf: "center" }}>{avatarCard}</div>
       </div>
       </div>
     </div>
