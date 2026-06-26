@@ -19003,13 +19003,20 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   // Avatar preview card — glass panel with the avatar image (swap cfg.imageUrl)
   // and HTML overlays: "Avatar" title, an editable name field, and the archetype
   // label bottom-left. Used in the right column + the read-only view.
-  const imgSrc = cfg.imageUrl || "/Avatar-Bg.jpg?v=2"; // default placeholder lives in /public (v= busts CDN cache on update)
+  // Default placeholder is a looping, muted video (/public/avatar.mp4); a user or
+  // generated avatar (cfg.imageUrl) shows as a static image instead.
   const avatarCard = (
     <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.23", borderRadius: 20, overflow: "hidden",
       background: darkMode ? "#1a1a22" : "#c4c6cc" }}>
       <style>{`.avatarNameInput::placeholder{color:rgba(255,255,255,0.82);transition:color .22s ease;}.avatarNameInput:focus::placeholder{color:transparent;}`}</style>
-      {/* Avatar image — just swap cfg.imageUrl; falls back to /Avatar-Img.png */}
-      <img src={imgSrc} alt={cfg.name || "Brand Avatar"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+      {/* Default = looping muted video; a set cfg.imageUrl shows as a static image */}
+      {cfg.imageUrl ? (
+        <img src={cfg.imageUrl} alt={cfg.name || "Brand Avatar"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+      ) : (
+        <video src="/avatar.mp4" autoPlay muted loop playsInline
+          onTimeUpdate={(e) => { if (e.currentTarget.currentTime >= 5) e.currentTarget.currentTime = 0; }}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+      )}
 
       {/* "Avatar" title (HTML overlay, white, on top) */}
       <div style={{ position: "absolute", top: 31, left: 0, right: 0, textAlign: "center", fontSize: 23, fontFamily: FONT, fontWeight: 400, letterSpacing: 0.5, color: "#fff" }}>Avatar</div>
