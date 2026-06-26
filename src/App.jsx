@@ -19172,7 +19172,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       </div>
 
       {/* Footer: contextual info link (left) + next-step button (right) */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "0 4px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "0 4px", marginTop: 10 }}>
         <span onClick={() => { /* TODO: link to help article */ }}
           style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, cursor: "pointer" }}>
           {L(infoQ[stepIdx] || infoQ[0])}
