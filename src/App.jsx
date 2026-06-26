@@ -19170,11 +19170,12 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       {/* Frosted-glass panel: semi-transparent white + blur, light shadow, no backdrop dim */}
       <div onClick={(e) => e.stopPropagation()}
         style={{ position: "relative", width: "min(600px, 94vw)", borderRadius: 24, padding: 26,
-          background: "rgba(255,255,255,0.1)", backdropFilter: "blur(22px)", WebkitBackdropFilter: "blur(22px)",
-          boxShadow: "0 24px 70px rgba(0,0,0,0.22)", border: "1px solid rgba(255,255,255,0.25)" }}>
+          background: "rgba(255,255,255,0.1)", backdropFilter: "blur(30px) saturate(1.4)", WebkitBackdropFilter: "blur(30px) saturate(1.4)",
+          boxShadow: "0 24px 70px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)",
+          border: "1px solid rgba(255,255,255,0.45)" }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-          <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, letterSpacing: -0.2, color: "#fff" }}>{de ? "Erscheinung wählen" : "Choose appearance"}</div>
+          <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, letterSpacing: -0.2, color: "#1c1c24" }}>{de ? "Erscheinung wählen" : "Choose appearance"}</div>
           <div onClick={() => setEthOpen(false)}
             style={{ width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.25)" }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -19194,7 +19195,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                     </div>
                   )}
                 </div>
-                <div style={{ marginTop: 8, fontSize: 12.5, fontFamily: FONT, fontWeight: 500, textAlign: "center", color: on ? "#fff" : "rgba(255,255,255,0.78)" }}>{L(e)}</div>
+                <div style={{ marginTop: 8, fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500, textAlign: "center", color: on ? "#1c1c24" : "#4a4a54" }}>{L(e)}</div>
               </div>
             );
           })}
