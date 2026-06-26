@@ -18883,6 +18883,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [hoverArch, setHoverArch] = useState(null); // archetype id under the cursor
+  const [hoverTab, setHoverTab] = useState(null);   // tab index under the cursor (hover effect)
   const [nameFocus, setNameFocus] = useState(false); // name field focused → fade text out, darken bg
   // Wizard step: 0 archetype · 1 appearance · 2 character · 3 avatar.
   const [stepIdx, setStepIdx] = useState(() => (value && value.imageUrl) ? 3 : 0);
@@ -19081,11 +19082,13 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       <div style={{ display: "flex", gap: 10 }}>
         {steps.map((s, i) => {
           const active = i === stepIdx;
+          const hov = hoverTab === i;
           return (
             <div key={i} onClick={() => setStepIdx(i)}
+              onMouseEnter={() => setHoverTab(i)} onMouseLeave={() => setHoverTab(null)}
               style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "13.5px 16px", borderRadius: 12, cursor: "pointer",
-                background: active ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "#f1f1f4"),
-                color: active ? "#fff" : theme.text, transition: "background .15s" }}>
+                background: active ? (hov ? "#0e0e14" : "#15151c") : (darkMode ? (hov ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.05)") : (hov ? "#e6e6eb" : "#f1f1f4")),
+                color: active ? "#fff" : theme.text, transition: "background .22s ease" }}>
               <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: active ? "rgba(255,255,255,0.5)" : theme.textDim }}>{String(i + 1).padStart(2, "0")}</span>
               <span style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{L(s)}</span>
             </div>
