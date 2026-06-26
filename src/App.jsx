@@ -19321,7 +19321,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     </div>
   );
   const personalityTrigger = pickerTrigger(de ? "Persönlichkeit" : "Personality", selTraits.length > 0, previewText(selTraits.map(L).join(", ")), () => { setTraitsDraft([...(cfg.traits || [])]); setTraitsOpen(true); });
-  const styleTrigger = pickerTrigger(de ? "Stil" : "Style", !!styleSel, previewText(styleSel ? L(styleSel) : ""), () => { setStyleDraft(cfg.style || null); setStyleOpen(true); });
+  const styleTrigger = pickerTrigger(de ? "Avatar Stil" : "Avatar Style", !!styleSel, previewText(styleSel ? L(styleSel) : ""), () => { setStyleDraft(cfg.style || null); setStyleOpen(true); });
   const detailsTrigger = pickerTrigger(de ? "Weitere Details" : "More details", hasNotes, previewText(cfg.notes || ""), () => { setNotesDraft(cfg.notes || ""); setNotesOpen(true); });
 
   const traitsOverlay = pickerShell("traitspicker", traitsOpen, () => setTraitsOpen(false), de ? "Persönlichkeit wählen" : "Choose personality",
@@ -24464,6 +24464,7 @@ export default function CircularMenu() {
   }, [handleWheel]);
 
   const handleCenterClick = () => {
+    if (tasksOpen) setTasksOpen(false); // central button also returns home from the tasks view
     if (!menuOpen) { setCurrentView("dashboard"); setMenuOpen(true); setSubOpen(false); setSubHover(-1); try { sounds.menuOpen(); } catch(e) {} return; }
     if (menuOpen && !subOpen) {
       // Direct navigation for items that don't need a submenu
@@ -26644,16 +26645,6 @@ export default function CircularMenu() {
               })()}
             </div>
 
-            {/* Home button — returns to the dashboard */}
-            <div style={{ display: "flex", justifyContent: "center", margin: "20px auto 0" }}>
-              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.95 }} onClick={() => setTasksOpen(false)}
-                style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px", borderRadius: 999, cursor: "pointer",
-                  background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}`,
-                  color: darkMode ? "#ffffffCC" : "#1a1a2eCC", fontSize: 13.5, fontFamily: FONT, fontWeight: 500 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
-                {t("dash.home") || "Home"}
-              </motion.div>
-            </div>
           </motion.div>
         )}
       </AnimatePresence>
