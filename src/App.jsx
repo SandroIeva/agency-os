@@ -18991,6 +18991,13 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const selTraits = (cfg.traits || []).map(id => AVATAR_TRAITS.find(t => t.id === id)).filter(Boolean);
   const accentGlow = `0 18px 50px ${accent}33`;
   const steps = [{ de: "Archetyp", en: "Archetype" }, { de: "Aussehen", en: "Appearance" }, { de: "Charakter", en: "Character" }, { de: "Avatar", en: "Avatar" }];
+  // Contextual info link per step (will later point to a help article).
+  const infoQ = [
+    { de: "Was sind Archetypen?", en: "What are archetypes?" },
+    { de: "Warum ist das Aussehen wichtig?", en: "Why does appearance matter?" },
+    { de: "Was macht den Charakter aus?", en: "What defines the character?" },
+    { de: "Wie funktioniert die Avatar-Generierung?", en: "How does avatar generation work?" },
+  ];
 
   // Avatar preview card — glass panel with the avatar image (swap cfg.imageUrl)
   // and HTML overlays: "Avatar" title, an editable name field, and the archetype
@@ -19162,6 +19169,23 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
         {/* Right — avatar preview card (sets the constant row height) */}
         <div style={{ alignSelf: "center" }}>{avatarCard}</div>
       </div>
+      </div>
+
+      {/* Footer: contextual info link (left) + next-step button (right) */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "0 4px" }}>
+        <span onClick={() => { /* TODO: link to help article */ }}
+          style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, cursor: "pointer" }}>
+          {L(infoQ[stepIdx] || infoQ[0])}
+        </span>
+        {stepIdx < 3 && (
+          <motion.div whileTap={{ scale: 0.97 }} onClick={() => setStepIdx(s => Math.min(3, s + 1))}
+            style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
+            <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{de ? "Nächster Schritt" : "Next step"}</span>
+            <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+          </motion.div>
+        )}
       </div>
     </div>
   );
