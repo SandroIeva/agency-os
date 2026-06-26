@@ -18893,6 +18893,10 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [ethOpen, setEthOpen] = useState(false);     // appearance picker overlay open
   const [ethDraft, setEthDraft] = useState(null);    // tentative appearance selection (applied on confirm)
   const [ethHover, setEthHover] = useState(null);    // appearance tile under the cursor (hover effect)
+  const [traitsOpen, setTraitsOpen] = useState(false); const [traitsDraft, setTraitsDraft] = useState([]); // personality picker
+  const [styleOpen, setStyleOpen] = useState(false); const [styleDraft, setStyleDraft] = useState(null);   // style picker
+  const [notesOpen, setNotesOpen] = useState(false); const [notesDraft, setNotesDraft] = useState("");     // extra-details picker
+  const [isRecording, setIsRecording] = useState(false); const recognitionRef = useRef(null);              // dictation for the details field
   const [ageDragging, setAgeDragging] = useState(false); // true while dragging the age stepper (disables tween for instant follow)
   // Wizard step: 0 archetype · 1 appearance · 2 character · 3 avatar.
   const [stepIdx, setStepIdx] = useState(() => (value && value.imageUrl) ? 3 : 0);
@@ -18925,6 +18929,35 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const de = appLanguage === "de";
   const L = (o) => (de ? o.de : o.en);
   const update = (partial) => onChange({ ...cfg, ...partial });
+  // Dictation (Web Speech API) for the extra-details field — appends into notesDraft.
+  const startNotesDictation = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert(de ? "Spracherkennung wird in diesem Browser nicht unterstützt. Bitte Chrome oder Safari verwenden." : "Speech recognition isn't supported in this browser. Use Chrome or Safari."); return; }
+    if (isRecording) { stopNotesDictation(); return; }
+    const recognition = new SR();
+    recognition.lang = de ? "de-DE" : "en-US";
+    recognition.continuous = true; recognition.interimResults = true;
+    let finalTranscript = notesDraft || "";
+    let needsSpace = finalTranscript.length > 0 && !finalTranscript.endsWith(" ") && !finalTranscript.endsWith("\n");
+    recognition.onresult = (event) => {
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          let cleaned = t.trim();
+          if (cleaned.length > 0) { const prev = finalTranscript.trim().slice(-1); if (!prev || prev === "." || prev === "!" || prev === "?" || prev === "\n") cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1); }
+          const last = cleaned.slice(-1);
+          if (cleaned.length > 0 && !/[.!?,;:\n]/.test(last)) cleaned += ".";
+          finalTranscript += (needsSpace ? " " : "") + cleaned; needsSpace = true;
+          setNotesDraft(finalTranscript);
+        }
+      }
+    };
+    recognition.onerror = (e) => { if (e.error !== "no-speech") console.error("Speech error:", e.error); };
+    recognition.onend = () => { setIsRecording(false); recognitionRef.current = null; };
+    recognition.start(); recognitionRef.current = recognition; setIsRecording(true);
+  };
+  const stopNotesDictation = () => { if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; } setIsRecording(false); };
+  useEffect(() => () => { if (recognitionRef.current) recognitionRef.current.stop(); }, []);
   const setField = (key, id) => update({ [key]: cfg[key] === id ? "" : id });
   const toggleTrait = (id) => {
     const cur = Array.isArray(cfg.traits) ? cfg.traits : [];
@@ -19204,7 +19237,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
             const on = ethDraft === e.id;
             const hov = ethHover === e.id;
             return (
-              <div key={e.id} onClick={() => setEthDraft(e.id)}
+              <div key={e.id} onClick={() => setEthDraft(ethDraft === e.id ? null : e.id)}
                 onMouseEnter={() => setEthHover(e.id)} onMouseLeave={() => setEthHover(null)}
                 style={{ cursor: "pointer" }}>
                 <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.2", borderRadius: 14, overflow: "hidden",
@@ -19237,6 +19270,83 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     </motion.div>
       )}
     </AnimatePresence>, document.body);
+
+  // Generic frosted-glass picker shell (same look/animation as the appearance overlay),
+  // reused for the Character step's Personality / Style / Details pickers.
+  const pickerShell = (keyName, open, onClose, title, body, onConfirm) => createPortal(
+    <AnimatePresence>
+      {open && (
+        <motion.div key={keyName} onClick={onClose}
+          initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2, ease: "easeOut" }}
+          style={{ position: "fixed", inset: 0, zIndex: 5000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "transparent" }}>
+          <motion.div onClick={(e) => e.stopPropagation()}
+            initial={{ scale: 1.06 }} animate={{ scale: 1 }} exit={{ scale: 1.04 }}
+            transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+            style={{ position: "relative", width: "min(500px, 94vw)", borderRadius: 24, padding: 34,
+              background: "rgba(255,255,255,0.1)", backdropFilter: "blur(30px) saturate(1.4)", WebkitBackdropFilter: "blur(30px) saturate(1.4)",
+              boxShadow: "0 24px 70px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)",
+              border: "1px solid rgba(255,255,255,0.45)", isolation: "isolate", willChange: "transform", WebkitBackfaceVisibility: "hidden" }}>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.32, ease: "easeOut", delay: 0.04 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 30 }}>
+                <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, letterSpacing: -0.2, color: "#1c1c24" }}>{title}</div>
+                <div onClick={onClose} style={{ width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.25)" }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </div>
+              </div>
+              {body}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 32 }}>
+                <motion.div whileTap={{ scale: 0.97 }} onClick={onConfirm}
+                  style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "11px 26px", borderRadius: 12, cursor: "pointer", background: "#15151c", color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 500 }}>
+                  {de ? "Bestätigen" : "Confirm"}
+                </motion.div>
+              </div>
+            </motion.div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>, document.body);
+
+  // "+" trigger (same pill as the appearance trigger): shows a preview when filled.
+  const styleSel = AVATAR_STYLES.find(s => s.id === cfg.style);
+  const hasNotes = !!(cfg.notes && cfg.notes.trim());
+  const previewText = (txt) => <span style={{ minWidth: 0, fontSize: 12.5, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{txt}</span>;
+  const pickerTrigger = (label, filled, previewNode, onOpen) => (
+    <div>
+      {SL(label)}
+      <div onClick={canEdit ? onOpen : undefined}
+        style={{ display: "inline-flex", alignItems: "center", justifyContent: filled ? "flex-start" : "center", gap: 10, minWidth: 96, maxWidth: "100%", height: 46, padding: filled ? "0 18px" : "0 26px",
+          borderRadius: 23, border: `1.5px solid ${theme.borderFaint}`, background: "transparent", cursor: canEdit ? "pointer" : "default", overflow: "hidden", boxSizing: "border-box" }}>
+        {filled ? previewNode : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={theme.textSub} strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>}
+      </div>
+    </div>
+  );
+  const personalityTrigger = pickerTrigger(de ? "Persönlichkeit" : "Personality", selTraits.length > 0, previewText(selTraits.map(L).join(", ")), () => { setTraitsDraft([...(cfg.traits || [])]); setTraitsOpen(true); });
+  const styleTrigger = pickerTrigger(de ? "Stil" : "Style", !!styleSel, previewText(styleSel ? L(styleSel) : ""), () => { setStyleDraft(cfg.style || null); setStyleOpen(true); });
+  const detailsTrigger = pickerTrigger(de ? "Weitere Details" : "More details", hasNotes, previewText(cfg.notes || ""), () => { setNotesDraft(cfg.notes || ""); setNotesOpen(true); });
+
+  const traitsOverlay = pickerShell("traitspicker", traitsOpen, () => setTraitsOpen(false), de ? "Persönlichkeit wählen" : "Choose personality",
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+      {AVATAR_TRAITS.map(tr => { const on = (traitsDraft || []).includes(tr.id); return chip(L(tr), on, () => setTraitsDraft(on ? (traitsDraft || []).filter(x => x !== tr.id) : [...(traitsDraft || []), tr.id]), tr.id); })}
+    </div>,
+    () => { update({ traits: traitsDraft || [] }); setTraitsOpen(false); });
+  const styleOverlay = pickerShell("stylepicker", styleOpen, () => setStyleOpen(false), de ? "Stil wählen" : "Choose style",
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+      {AVATAR_STYLES.map(s => chip(L(s), styleDraft === s.id, () => setStyleDraft(styleDraft === s.id ? null : s.id), s.id))}
+    </div>,
+    () => { update({ style: styleDraft || "" }); setStyleOpen(false); });
+  const notesOverlay = pickerShell("notespicker", notesOpen, () => setNotesOpen(false), de ? "Weitere Details" : "More details",
+    <div>
+      <textarea value={notesDraft} onChange={e => setNotesDraft(e.target.value)} rows={5}
+        placeholder={de ? "z. B. lockige Haare, freundliches Lächeln, Brille, Tattoos…" : "e.g. curly hair, friendly smile, glasses, tattoos…"}
+        style={{ ...inputStyle, width: "100%", fontSize: 14, lineHeight: 1.55, resize: "vertical", minHeight: 130, background: "rgba(255,255,255,0.6)" }} />
+      <div onClick={startNotesDictation}
+        style={{ marginTop: 12, display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 16px", borderRadius: 11, cursor: "pointer",
+          background: isRecording ? "#15151c" : "rgba(255,255,255,0.6)", border: "1px solid rgba(0,0,0,0.12)", color: isRecording ? "#fff" : "#1c1c24", fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0" strokeLinecap="round"/><path d="M12 17v4M8 21h8" strokeLinecap="round"/></svg>
+        {isRecording ? (de ? "Aufnahme stoppen" : "Stop recording") : (de ? "Diktieren" : "Dictate")}
+      </div>
+    </div>,
+    () => { update({ notes: notesDraft }); setNotesOpen(false); });
 
   // ── Read-only: just show the avatar card ──
   if (!canEdit) {
@@ -19308,17 +19418,10 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                 </div>
               )}
               {stepIdx === 2 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-                  <div>{SL(de ? "Persönlichkeit" : "Personality")}<div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {AVATAR_TRAITS.map(tr => chip(L(tr), (cfg.traits || []).includes(tr.id), () => toggleTrait(tr.id), tr.id))}
-                  </div></div>
-                  {group(de ? "Stil" : "Style", AVATAR_STYLES, "style")}
-                  {group(de ? "Setting" : "Setting", AVATAR_SETTINGS, "setting")}
-                  <div>{SL(de ? "Weitere Details" : "Extra details")}
-                    <textarea value={cfg.notes || ""} onChange={e => update({ notes: e.target.value })} rows={2}
-                      placeholder={de ? "z. B. lockige Haare, freundliches Lächeln, Brille…" : "e.g. curly hair, friendly smile, glasses…"}
-                      style={{ ...inputStyle, fontSize: 13.5, lineHeight: 1.5, resize: "vertical" }} />
-                  </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 27 }}>
+                  {personalityTrigger}
+                  {styleTrigger}
+                  {detailsTrigger}
                 </div>
               )}
               {stepIdx === 3 && (
@@ -19365,6 +19468,9 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
         )}
       </div>
       {ethOverlay}
+      {traitsOverlay}
+      {styleOverlay}
+      {notesOverlay}
     </div>
   );
 }
