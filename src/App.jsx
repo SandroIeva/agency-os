@@ -18999,7 +18999,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       background: darkMode ? "#1a1a22" : "#c4c6cc", boxShadow: "0 14px 38px rgba(0,0,0,0.12)" }}>
       <style>{`.avatarNameInput::placeholder{color:rgba(255,255,255,0.82);}`}</style>
       {/* Avatar image — just swap cfg.imageUrl; falls back to /Avatar-Img.png */}
-      <img src={imgSrc} alt={cfg.name || "Brand Avatar"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", transform: cfg.imageUrl ? "none" : "scale(1.18)", transformOrigin: "center 46%" }} />
+      <img src={imgSrc} alt={cfg.name || "Brand Avatar"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", transform: cfg.imageUrl ? "translateY(-20px)" : "translateY(-20px) scale(1.18)", transformOrigin: "center 46%" }} />
 
       {/* "Avatar" title (HTML overlay, white, on top) */}
       <div style={{ position: "absolute", top: 26, left: 0, right: 0, textAlign: "center", fontSize: 23, fontFamily: FONT, fontWeight: 600, letterSpacing: -0.2, color: "#fff" }}>Avatar</div>
