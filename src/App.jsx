@@ -18854,7 +18854,7 @@ const AVATAR_ARCHETYPES = [
   { id: "sage", de: "Der Weise", en: "The Sage", hint: "klug, vertrauenswürdig · BBC", hintEn: "wise, trusted · BBC", color: "#43A65C" },
 ];
 const AVATAR_GENDERS = [{ id: "female", de: "Weiblich", en: "Female" }, { id: "male", de: "Männlich", en: "Male" }];
-const AVATAR_AGES = [{ id: "18-25", de: "18–25", en: "18–25" }, { id: "26-32", de: "26–32", en: "26–32" }, { id: "33-45", de: "33–45", en: "33–45" }, { id: "46-60", de: "46–60", en: "46–60" }, { id: "60+", de: "60+", en: "60+" }];
+const AVATAR_AGES = [{ id: "18-25", de: "18–25", en: "18–25" }, { id: "26-35", de: "26–35", en: "26–35" }, { id: "36-50", de: "36–50", en: "36–50" }, { id: "50+", de: "50+", en: "50+" }];
 const AVATAR_ETHNICITIES = [
   { id: "european", de: "Europäisch", en: "European" }, { id: "african", de: "Afrikanisch", en: "African" },
   { id: "asian", de: "Asiatisch", en: "Asian" }, { id: "latin", de: "Lateinamerikanisch", en: "Latin American" },
@@ -18905,7 +18905,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   };
   // Age range slider: drag/click sets the nearest age bracket.
   const ageTrackRef = useRef(null);
-  const AGE_THUMB_W = 90;
+  const AGE_THUMB_W = 78;
   const setAgeFromX = (clientX) => {
     const el = ageTrackRef.current; if (!el) return;
     const r = el.getBoundingClientRect();
