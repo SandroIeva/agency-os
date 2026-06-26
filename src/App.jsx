@@ -18890,6 +18890,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [nameFocus, setNameFocus] = useState(false); // name field focused → fade text out, darken bg
   const [ethOpen, setEthOpen] = useState(false);     // appearance picker overlay open
   const [ethDraft, setEthDraft] = useState(null);    // tentative appearance selection (applied on confirm)
+  const [ethHover, setEthHover] = useState(null);    // appearance tile under the cursor (hover effect)
   const [ageDragging, setAgeDragging] = useState(false); // true while dragging the age stepper (disables tween for instant follow)
   // Wizard step: 0 archetype · 1 appearance · 2 character · 3 avatar.
   const [stepIdx, setStepIdx] = useState(() => (value && value.imageUrl) ? 3 : 0);
@@ -19190,11 +19191,16 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
           {AVATAR_ETHNICITIES.map(e => {
             const on = ethDraft === e.id;
+            const hov = ethHover === e.id;
             return (
-              <div key={e.id} onClick={() => setEthDraft(e.id)} style={{ cursor: "pointer" }}>
+              <div key={e.id} onClick={() => setEthDraft(e.id)}
+                onMouseEnter={() => setEthHover(e.id)} onMouseLeave={() => setEthHover(null)}
+                style={{ cursor: "pointer" }}>
                 <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.04", borderRadius: 14, overflow: "hidden",
                   background: darkMode ? "rgba(255,255,255,0.05)" : "#ececef",
-                  boxShadow: on ? "0 0 0 2.5px #15151c, 0 6px 18px rgba(0,0,0,0.18)" : "none", transition: "box-shadow .15s" }}>
+                  boxShadow: on ? "0 0 0 2.5px #15151c, 0 6px 18px rgba(0,0,0,0.18)"
+                    : (hov ? "0 0 0 2px rgba(21,21,28,0.35), 0 6px 16px rgba(0,0,0,0.14)" : "none"),
+                  transition: "box-shadow .3s cubic-bezier(0.33, 1, 0.68, 1)" }}>
                   {e.img && <img src={e.img} alt={L(e)} loading="lazy" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
                   {on && (
                     <div style={{ position: "absolute", top: 8, right: 8, width: 20, height: 20, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center" }}>
