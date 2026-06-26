@@ -18856,13 +18856,15 @@ const AVATAR_ARCHETYPES = [
 const AVATAR_GENDERS = [{ id: "female", de: "Weiblich", en: "Female" }, { id: "male", de: "Männlich", en: "Male" }];
 const AVATAR_AGES = [{ id: "18-25", de: "18–25", en: "18–25" }, { id: "26-35", de: "26–35", en: "26–35" }, { id: "36-50", de: "36–50", en: "36–50" }, { id: "50+", de: "50+", en: "50+" }];
 const AVATAR_ETHNICITIES = [
-  { id: "european", de: "Europäisch", en: "European", img: "/avatar-women/european.png" },
-  { id: "african", de: "Afrikanisch", en: "African", img: "/avatar-women/african.png" },
-  { id: "asian", de: "Asiatisch", en: "Asian", img: "/avatar-women/asian.png" },
-  { id: "indian", de: "Indisch", en: "Indian", img: "/avatar-women/indian.png" },
-  { id: "middleeastern", de: "Nahöstlich", en: "Middle Eastern", img: "/avatar-women/middleeast.png" },
-  { id: "multicultural", de: "Multikulturell", en: "Multicultural", img: "/avatar-women/mixed.png" },
+  { id: "european", de: "Europäisch", en: "European", slug: "european" },
+  { id: "african", de: "Afrikanisch", en: "African", slug: "african" },
+  { id: "asian", de: "Asiatisch", en: "Asian", slug: "asian" },
+  { id: "indian", de: "Indisch", en: "Indian", slug: "indian" },
+  { id: "middleeastern", de: "Nahöstlich", en: "Middle Eastern", slug: "middleeast" },
+  { id: "multicultural", de: "Multikulturell", en: "Multicultural", slug: "mixed" },
 ];
+// Appearance preview image — male set when gender is male, otherwise the female set.
+const ethnicityImg = (e, gender) => (gender === "male" ? `/avatar-man/${e.slug}-man.png` : `/avatar-women/${e.slug}.png`);
 const AVATAR_STYLES = [
   { id: "casual", de: "Casual", en: "Casual" }, { id: "business", de: "Business", en: "Business" },
   { id: "creative", de: "Kreativ / Edgy", en: "Creative / Edgy" }, { id: "luxury", de: "Luxuriös", en: "Luxury" },
@@ -19161,7 +19163,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
         {ethSel ? (
           <>
             <div style={{ width: 26, height: 26, borderRadius: "50%", overflow: "hidden", flexShrink: 0, background: ethGradient(ethSel.id) }}>
-              {ethSel.img && <img src={ethSel.img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+              <img src={ethnicityImg(ethSel, cfg.gender)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             </div>
             <span style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{L(ethSel)}</span>
           </>
@@ -19213,7 +19215,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                   boxShadow: on ? "0 0 0 2.5px #15151c, 0 6px 18px rgba(0,0,0,0.18)"
                     : (hov ? "0 0 0 2px rgba(21,21,28,0.35), 0 6px 16px rgba(0,0,0,0.14)" : "none"),
                   transition: "box-shadow .3s cubic-bezier(0.33, 1, 0.68, 1)" }}>
-                  {e.img && <img src={e.img} alt={L(e)} loading="lazy" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
+                  <img src={ethnicityImg(e, cfg.gender)} alt={L(e)} loading="lazy" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
                   {on && (
                     <div style={{ position: "absolute", top: 8, right: 8, width: 20, height: 20, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
