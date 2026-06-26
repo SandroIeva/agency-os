@@ -19210,12 +19210,12 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
               <div key={e.id} onClick={() => setEthDraft(e.id)}
                 onMouseEnter={() => setEthHover(e.id)} onMouseLeave={() => setEthHover(null)}
                 style={{ cursor: "pointer" }}>
-                <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.04", borderRadius: 14, overflow: "hidden",
+                <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.2", borderRadius: 14, overflow: "hidden",
                   background: darkMode ? "rgba(255,255,255,0.05)" : "#ececef",
                   boxShadow: on ? "0 0 0 2.5px #15151c, 0 6px 18px rgba(0,0,0,0.18)"
                     : (hov ? "0 0 0 2px rgba(21,21,28,0.35), 0 6px 16px rgba(0,0,0,0.14)" : "none"),
                   transition: "box-shadow .3s cubic-bezier(0.33, 1, 0.68, 1)" }}>
-                  <img src={ethnicityImg(e, cfg.gender)} alt={L(e)} loading="lazy" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+                  <img src={ethnicityImg(e, cfg.gender)} alt={L(e)} loading="lazy" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }} />
                   {on && (
                     <div style={{ position: "absolute", top: 8, right: 8, width: 20, height: 20, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
