@@ -24369,6 +24369,8 @@ export default function CircularMenu() {
       try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch(e) {}
       setVoiceMode(false); setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript("");
     }
+    if (tasksOpen) setTasksOpen(false); // center home button also returns from the tasks view
+    if (panelOpen) setPanelOpen(false);
     setCurrentView("dashboard");
   };
 
@@ -24464,7 +24466,6 @@ export default function CircularMenu() {
   }, [handleWheel]);
 
   const handleCenterClick = () => {
-    if (tasksOpen) setTasksOpen(false); // central button also returns home from the tasks view
     if (!menuOpen) { setCurrentView("dashboard"); setMenuOpen(true); setSubOpen(false); setSubHover(-1); try { sounds.menuOpen(); } catch(e) {} return; }
     if (menuOpen && !subOpen) {
       // Direct navigation for items that don't need a submenu
