@@ -19076,7 +19076,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           const active = i === stepIdx;
           return (
             <div key={i} onClick={() => setStepIdx(i)}
-              style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "11px 16px", borderRadius: 12, cursor: "pointer",
+              style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", borderRadius: 12, cursor: "pointer",
                 background: active ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "#f1f1f4"),
                 color: active ? "#fff" : theme.text, transition: "background .15s" }}>
               <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: active ? "rgba(255,255,255,0.5)" : theme.textDim }}>{String(i + 1).padStart(2, "0")}</span>
@@ -19088,72 +19088,78 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
 
       {/* Light-grey box wrapping both columns: left = step content, right = avatar card */}
       <div style={{ background: darkMode ? "rgba(255,255,255,0.03)" : "#f3f3f5", borderRadius: 22, padding: 30 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.94fr)", gap: 30, alignItems: "start" }}>
-        {/* Left — step content */}
-        <div style={{ paddingTop: 30 }}>
-          {stepIdx === 0 && (
-            <div>
-              {stepHead(de ? "Archetyp" : "Archetype",
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.94fr)", gap: 30, alignItems: "stretch" }}>
+        {/* Left — step content. The right avatar card sets the row height (constant
+            across tabs); the left fills that height with a fixed headline on top and
+            a scrollable body below, so the grey frame never changes height. */}
+        <div style={{ position: "relative", overflow: "hidden" }}>
+          <div style={{ position: "absolute", inset: 0, paddingTop: 30, display: "flex", flexDirection: "column" }}>
+            {/* Fixed headline */}
+            <div style={{ flexShrink: 0 }}>
+              {stepIdx === 0 && stepHead(de ? "Archetyp" : "Archetype",
                 de ? "Wir gehen Schritt für Schritt durch, wer dein Brand-Avatar ist. Wähle zunächst den Archetyp, der die Persönlichkeit deiner Marke am besten verkörpert."
                    : "We'll go through, step by step, who your brand avatar is. Start by choosing the archetype that best embodies your brand's personality.")}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "repeat(6, auto)", gridAutoFlow: "column", gap: "4px 14px", marginTop: 4 }}>
-                {AVATAR_ARCHETYPES.map(archRow)}
-              </div>
-            </div>
-          )}
-          {stepIdx === 1 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-              {stepHead(de ? "Aussehen" : "Appearance",
+              {stepIdx === 1 && stepHead(de ? "Aussehen" : "Appearance",
                 de ? "Lege fest, wie dein Avatar aussieht — Geschlecht, Alter und Erscheinung."
                    : "Define how your avatar looks — gender, age and appearance.")}
-              {group(de ? "Geschlecht" : "Gender", AVATAR_GENDERS, "gender")}
-              {group(de ? "Alter" : "Age", AVATAR_AGES, "age")}
-              {group(de ? "Erscheinung" : "Appearance", AVATAR_ETHNICITIES, "ethnicity")}
-            </div>
-          )}
-          {stepIdx === 2 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-              {stepHead(de ? "Charakter" : "Character",
+              {stepIdx === 2 && stepHead(de ? "Charakter" : "Character",
                 de ? "Was macht den Charakter deines Avatars aus? Wähle Eigenschaften, Stil und Umgebung."
                    : "What defines your avatar's character? Pick personality traits, style and setting.")}
-              <div>{SL(de ? "Persönlichkeit" : "Personality")}<div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {AVATAR_TRAITS.map(tr => chip(L(tr), (cfg.traits || []).includes(tr.id), () => toggleTrait(tr.id), tr.id))}
-              </div></div>
-              {group(de ? "Stil" : "Style", AVATAR_STYLES, "style")}
-              {group(de ? "Setting" : "Setting", AVATAR_SETTINGS, "setting")}
-              <div>{SL(de ? "Weitere Details" : "Extra details")}
-                <textarea value={cfg.notes || ""} onChange={e => update({ notes: e.target.value })} rows={2}
-                  placeholder={de ? "z. B. lockige Haare, freundliches Lächeln, Brille…" : "e.g. curly hair, friendly smile, glasses…"}
-                  style={{ ...inputStyle, fontSize: 13.5, lineHeight: 1.5, resize: "vertical" }} />
-              </div>
-            </div>
-          )}
-          {stepIdx === 3 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-              {stepHead(de ? "Avatar" : "Avatar",
+              {stepIdx === 3 && stepHead(de ? "Avatar" : "Avatar",
                 de ? "Generiere das Portrait deines Avatars aus den gewählten Merkmalen — oder lade ein eigenes Bild hoch."
                    : "Generate your avatar's portrait from the chosen traits — or use your own image.")}
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 340 }}>
-                <motion.div whileHover={{ scale: busy ? 1 : 1.02 }} whileTap={{ scale: busy ? 1 : 0.97 }} onClick={() => !busy && generate()}
-                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "13px 0", borderRadius: 14, cursor: busy ? "default" : "pointer",
-                    background: `linear-gradient(135deg, ${accent}, ${accent}c0)`, color: "#fff", fontSize: 14, fontFamily: FONT, fontWeight: 600, boxShadow: busy ? "none" : accentGlow, opacity: busy ? 0.7 : 1 }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/></svg>
-                  {cfg.imageUrl ? (de ? "Neu generieren" : "Regenerate") : (de ? "Avatar generieren" : "Generate avatar")}
-                </motion.div>
-                {cfg.imageUrl && (
-                  <motion.div whileTap={{ scale: 0.97 }} onClick={downloadAvatar}
-                    style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px 0", borderRadius: 12, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    {de ? "Herunterladen" : "Download"}
-                  </motion.div>
-                )}
-                {err && <div style={{ fontSize: 12, fontFamily: FONT, color: "#EF4444", lineHeight: 1.5 }}>{err}</div>}
-              </div>
             </div>
-          )}
+            {/* Scrollable body */}
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingRight: 8 }}>
+              {stepIdx === 0 && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "repeat(6, auto)", gridAutoFlow: "column", gap: "4px 14px", marginTop: 4 }}>
+                  {AVATAR_ARCHETYPES.map(archRow)}
+                </div>
+              )}
+              {stepIdx === 1 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+                  {group(de ? "Geschlecht" : "Gender", AVATAR_GENDERS, "gender")}
+                  {group(de ? "Alter" : "Age", AVATAR_AGES, "age")}
+                  {group(de ? "Erscheinung" : "Appearance", AVATAR_ETHNICITIES, "ethnicity")}
+                </div>
+              )}
+              {stepIdx === 2 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+                  <div>{SL(de ? "Persönlichkeit" : "Personality")}<div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {AVATAR_TRAITS.map(tr => chip(L(tr), (cfg.traits || []).includes(tr.id), () => toggleTrait(tr.id), tr.id))}
+                  </div></div>
+                  {group(de ? "Stil" : "Style", AVATAR_STYLES, "style")}
+                  {group(de ? "Setting" : "Setting", AVATAR_SETTINGS, "setting")}
+                  <div>{SL(de ? "Weitere Details" : "Extra details")}
+                    <textarea value={cfg.notes || ""} onChange={e => update({ notes: e.target.value })} rows={2}
+                      placeholder={de ? "z. B. lockige Haare, freundliches Lächeln, Brille…" : "e.g. curly hair, friendly smile, glasses…"}
+                      style={{ ...inputStyle, fontSize: 13.5, lineHeight: 1.5, resize: "vertical" }} />
+                  </div>
+                </div>
+              )}
+              {stepIdx === 3 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 340 }}>
+                  <motion.div whileHover={{ scale: busy ? 1 : 1.02 }} whileTap={{ scale: busy ? 1 : 0.97 }} onClick={() => !busy && generate()}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "13px 0", borderRadius: 14, cursor: busy ? "default" : "pointer",
+                      background: `linear-gradient(135deg, ${accent}, ${accent}c0)`, color: "#fff", fontSize: 14, fontFamily: FONT, fontWeight: 600, boxShadow: busy ? "none" : accentGlow, opacity: busy ? 0.7 : 1 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/></svg>
+                    {cfg.imageUrl ? (de ? "Neu generieren" : "Regenerate") : (de ? "Avatar generieren" : "Generate avatar")}
+                  </motion.div>
+                  {cfg.imageUrl && (
+                    <motion.div whileTap={{ scale: 0.97 }} onClick={downloadAvatar}
+                      style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px 0", borderRadius: 12, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      {de ? "Herunterladen" : "Download"}
+                    </motion.div>
+                  )}
+                  {err && <div style={{ fontSize: 12, fontFamily: FONT, color: "#EF4444", lineHeight: 1.5 }}>{err}</div>}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Right — avatar preview card (vertically centered → equal top/bottom padding) */}
+        {/* Right — avatar preview card (sets the constant row height) */}
         <div style={{ alignSelf: "center" }}>{avatarCard}</div>
       </div>
       </div>
