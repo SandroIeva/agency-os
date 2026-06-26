@@ -19042,7 +19042,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       {cfg.imageUrl ? (
         <img src={cfg.imageUrl} alt={cfg.name || "Brand Avatar"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
       ) : (
-        <video ref={videoRef} src="/avatar.mp4" muted playsInline preload="auto" poster="/Avatar-Bg.jpg?v=2"
+        <video ref={videoRef} src="/avatar-v2.mp4" muted playsInline preload="auto" poster="/Avatar-Bg.jpg?v=2"
           onMouseEnter={playAvatarVideo} onMouseLeave={releaseAvatarVideo}
           onEnded={(e) => { const v = e.currentTarget; v.pause(); try { v.currentTime = 0; } catch (_) {} }}
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
