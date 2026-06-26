@@ -19060,9 +19060,9 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     );
   };
   const stepHead = (title, desc) => (
-    <div style={{ marginBottom: 20 }}>
-      <div style={{ fontSize: 23, fontFamily: FONT, fontWeight: 600, letterSpacing: -0.3, color: theme.text }}>{title}</div>
-      {desc && <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55, marginTop: 10, maxWidth: 320 }}>{desc}</div>}
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ fontSize: 23, fontFamily: FONT, fontWeight: 500, letterSpacing: -0.3, color: theme.text }}>{title}</div>
+      {desc && <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55, marginTop: 8, maxWidth: 320 }}>{desc}</div>}
     </div>
   );
 
