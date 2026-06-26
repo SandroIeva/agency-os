@@ -19119,7 +19119,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
             {/* Scrollable body */}
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingRight: 8 }}>
               {stepIdx === 0 && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "repeat(6, auto)", gridAutoFlow: "column", gap: "4px 14px", marginTop: 4 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "repeat(6, auto)", gridAutoFlow: "column", gap: "4px 14px", marginTop: -1 }}>
                   {AVATAR_ARCHETYPES.map(archRow)}
                 </div>
               )}
