@@ -18899,7 +18899,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [ethDraft, setEthDraft] = useState(null);    // tentative appearance selection (applied on confirm)
   const [ethHover, setEthHover] = useState(null);    // appearance tile under the cursor (hover effect)
   const [traitsOpen, setTraitsOpen] = useState(false); const [traitsDraft, setTraitsDraft] = useState([]); // personality picker
-  const [skinDraft, setSkinDraft] = useState(null);    // skin condition (lives in the personality overlay's 2nd column)
+  const [skinOpen, setSkinOpen] = useState(false); const [skinDraft, setSkinDraft] = useState(null); // skin-condition picker (own + button next to Personality)
   const [styleOpen, setStyleOpen] = useState(false); const [styleDraft, setStyleDraft] = useState(null);   // style picker
   const [notesOpen, setNotesOpen] = useState(false); const [notesDraft, setNotesDraft] = useState("");     // extra-details picker
   const [isRecording, setIsRecording] = useState(false); const recognitionRef = useRef(null);              // dictation for the details field
@@ -19327,28 +19327,23 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     </div>
   );
   const skinSel = AVATAR_SKIN.find(s => s.id === cfg.skin);
-  const personalitySummary = [...selTraits.map(L), skinSel ? L(skinSel) : null].filter(Boolean).join(", ");
-  const personalityTrigger = pickerTrigger(de ? "Persönlichkeit" : "Personality", selTraits.length > 0 || !!skinSel, previewText(personalitySummary),
-    () => { setTraitsDraft([...(cfg.traits || [])]); setSkinDraft(cfg.skin || null); setTraitsOpen(true); });
+  const personalityTrigger = pickerTrigger(de ? "Persönlichkeit" : "Personality", selTraits.length > 0, previewText(selTraits.map(L).join(", ")),
+    () => { setTraitsDraft([...(cfg.traits || [])]); setTraitsOpen(true); });
+  const skinTrigger = pickerTrigger(de ? "Skin" : "Skin", !!skinSel, previewText(skinSel ? L(skinSel) : ""),
+    () => { setSkinDraft(cfg.skin || null); setSkinOpen(true); });
   const styleTrigger = pickerTrigger(de ? "Avatar Stil" : "Avatar Style", !!styleSel, previewText(styleSel ? L(styleSel) : ""), () => { setStyleDraft(cfg.style || null); setStyleOpen(true); });
   const detailsTrigger = pickerTrigger(de ? "Weitere Details" : "More details", hasNotes, previewText(cfg.notes || ""), () => { setNotesDraft(cfg.notes || ""); setNotesOpen(true); });
 
-  const traitsOverlay = pickerShell("traitspicker", traitsOpen, () => setTraitsOpen(false), de ? "Persönlichkeit & Haut" : "Personality & skin",
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 30 }}>
-      <div>
-        {SL(de ? "Persönlichkeit" : "Personality")}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {AVATAR_TRAITS.map(tr => { const on = (traitsDraft || []).includes(tr.id); return chip(L(tr), on, () => setTraitsDraft(on ? (traitsDraft || []).filter(x => x !== tr.id) : [...(traitsDraft || []), tr.id]), tr.id); })}
-        </div>
-      </div>
-      <div>
-        {SL(de ? "Skin Conditions" : "Skin conditions")}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {AVATAR_SKIN.map(s => chip(L(s), skinDraft === s.id, () => setSkinDraft(skinDraft === s.id ? null : s.id), s.id))}
-        </div>
-      </div>
+  const traitsOverlay = pickerShell("traitspicker", traitsOpen, () => setTraitsOpen(false), de ? "Persönlichkeit wählen" : "Choose personality",
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+      {AVATAR_TRAITS.map(tr => { const on = (traitsDraft || []).includes(tr.id); return chip(L(tr), on, () => setTraitsDraft(on ? (traitsDraft || []).filter(x => x !== tr.id) : [...(traitsDraft || []), tr.id]), tr.id); })}
     </div>,
-    () => { update({ traits: traitsDraft || [], skin: skinDraft || "" }); setTraitsOpen(false); }, 580);
+    () => { update({ traits: traitsDraft || [] }); setTraitsOpen(false); });
+  const skinOverlay = pickerShell("skinpicker", skinOpen, () => setSkinOpen(false), de ? "Hautbeschaffenheit wählen" : "Choose skin",
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+      {AVATAR_SKIN.map(s => chip(L(s), skinDraft === s.id, () => setSkinDraft(skinDraft === s.id ? null : s.id), s.id))}
+    </div>,
+    () => { update({ skin: skinDraft || "" }); setSkinOpen(false); });
   const styleOverlay = pickerShell("stylepicker", styleOpen, () => setStyleOpen(false), de ? "Stil wählen" : "Choose style",
     <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
       {AVATAR_STYLES.map(s => chip(L(s), styleDraft === s.id, () => setStyleDraft(styleDraft === s.id ? null : s.id), s.id))}
@@ -19439,7 +19434,10 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
               )}
               {stepIdx === 2 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 27 }}>
-                  {personalityTrigger}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+                    {personalityTrigger}
+                    {skinTrigger}
+                  </div>
                   {styleTrigger}
                   {detailsTrigger}
                 </div>
@@ -19489,6 +19487,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       </div>
       {ethOverlay}
       {traitsOverlay}
+      {skinOverlay}
       {styleOverlay}
       {notesOverlay}
     </div>
