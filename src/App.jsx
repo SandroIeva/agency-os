@@ -19090,7 +19090,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       <div style={{ background: darkMode ? "rgba(255,255,255,0.03)" : "#f3f3f5", borderRadius: 22, padding: 30 }}>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.94fr)", gap: 30, alignItems: "start" }}>
         {/* Left — step content */}
-        <div style={{ paddingTop: 60 }}>
+        <div style={{ paddingTop: 40 }}>
           {stepIdx === 0 && (
             <div>
               {stepHead(de ? "Archetyp" : "Archetype",
