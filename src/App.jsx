@@ -19244,7 +19244,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
         {/* Left — step content. The right avatar card sets the row height (constant
             across tabs); the left fills that height with a fixed headline on top and
             a scrollable body below, so the grey frame never changes height. */}
-        <div style={{ position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "relative" }}>
           <div style={{ position: "absolute", inset: 0, paddingTop: 30, display: "flex", flexDirection: "column" }}>
             {/* Fixed headline */}
             <div style={{ flexShrink: 0 }}>
@@ -19261,8 +19261,9 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                 de ? "Generiere das Portrait deines Avatars aus den gewählten Merkmalen — oder lade ein eigenes Bild hoch."
                    : "Generate your avatar's portrait from the chosen traits — or use your own image.")}
             </div>
-            {/* Scrollable body */}
-            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingRight: 8 }}>
+            {/* Scrollable body. paddingLeft + negative marginLeft give the age-slider
+                thumb's shadow room on the left without shifting the content. */}
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingRight: 8, paddingLeft: 20, marginLeft: -20 }}>
               {stepIdx === 0 && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "repeat(6, auto)", gridAutoFlow: "column", gap: "4px 14px", marginTop: -1 }}>
                   {AVATAR_ARCHETYPES.map(archRow)}
