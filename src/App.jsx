@@ -19192,8 +19192,9 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
             const on = ethDraft === e.id;
             return (
               <div key={e.id} onClick={() => setEthDraft(e.id)} style={{ cursor: "pointer" }}>
-                <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.04", borderRadius: 14, overflow: "hidden", background: ethGradient(e.id),
-                  border: `2.5px solid ${on ? "#15151c" : "transparent"}`, boxShadow: on ? "0 6px 18px rgba(0,0,0,0.18)" : "none", transition: "border .15s, box-shadow .15s" }}>
+                <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.04", borderRadius: 14, overflow: "hidden",
+                  background: darkMode ? "rgba(255,255,255,0.05)" : "#ececef",
+                  boxShadow: on ? "0 0 0 2.5px #15151c, 0 6px 18px rgba(0,0,0,0.18)" : "none", transition: "box-shadow .15s" }}>
                   {e.img && <img src={e.img} alt={L(e)} loading="lazy" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
                   {on && (
                     <div style={{ position: "absolute", top: 8, right: 8, width: 20, height: 20, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center" }}>
