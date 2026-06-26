@@ -18853,8 +18853,8 @@ const AVATAR_ARCHETYPES = [
   { id: "jester", de: "Der Narr", en: "The Jester", hint: "verspielt, humorvoll · Old Spice", hintEn: "playful, witty · Old Spice", color: "#C0436C" },
   { id: "sage", de: "Der Weise", en: "The Sage", hint: "klug, vertrauenswürdig · BBC", hintEn: "wise, trusted · BBC", color: "#43A65C" },
 ];
-const AVATAR_GENDERS = [{ id: "female", de: "Weiblich", en: "Female" }, { id: "male", de: "Männlich", en: "Male" }, { id: "nonbinary", de: "Non-binär", en: "Non-binary" }];
-const AVATAR_AGES = [{ id: "18-25", de: "18–25", en: "18–25" }, { id: "26-35", de: "26–35", en: "26–35" }, { id: "36-50", de: "36–50", en: "36–50" }, { id: "50+", de: "50+", en: "50+" }];
+const AVATAR_GENDERS = [{ id: "female", de: "Weiblich", en: "Female" }, { id: "male", de: "Männlich", en: "Male" }];
+const AVATAR_AGES = [{ id: "18-25", de: "18–25", en: "18–25" }, { id: "26-32", de: "26–32", en: "26–32" }, { id: "33-45", de: "33–45", en: "33–45" }, { id: "46-60", de: "46–60", en: "46–60" }, { id: "60+", de: "60+", en: "60+" }];
 const AVATAR_ETHNICITIES = [
   { id: "european", de: "Europäisch", en: "European" }, { id: "african", de: "Afrikanisch", en: "African" },
   { id: "asian", de: "Asiatisch", en: "Asian" }, { id: "latin", de: "Lateinamerikanisch", en: "Latin American" },
@@ -18899,6 +18899,16 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const releaseAvatarVideo = () => {
     const v = videoRef.current; if (!v) return;
     v.loop = false; // finish the current play-through, then stop (onEnded)
+  };
+  // Age range slider: drag/click sets the nearest age bracket.
+  const ageTrackRef = useRef(null);
+  const setAgeFromX = (clientX) => {
+    const el = ageTrackRef.current; if (!el) return;
+    const r = el.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+    const idx = Math.round(ratio * (AVATAR_AGES.length - 1));
+    const id = AVATAR_AGES[idx]?.id;
+    if (id && cfg.age !== id) update({ age: id });
   };
   const de = appLanguage === "de";
   const L = (o) => (de ? o.de : o.en);
@@ -19089,6 +19099,28 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     </div>
   );
 
+  // Age slider — grey track with a white pill thumb showing the selected bracket.
+  const ageSelIdx = AVATAR_AGES.findIndex(a => a.id === cfg.age);
+  const ageIdx = ageSelIdx >= 0 ? ageSelIdx : Math.floor((AVATAR_AGES.length - 1) / 2);
+  const ageRatio = AVATAR_AGES.length > 1 ? ageIdx / (AVATAR_AGES.length - 1) : 0;
+  const ageSlider = (
+    <div>
+      {SL(de ? "Alter" : "Age")}
+      <div ref={ageTrackRef}
+        onPointerDown={canEdit ? (e) => { e.currentTarget.setPointerCapture(e.pointerId); setAgeFromX(e.clientX); } : undefined}
+        onPointerMove={canEdit ? (e) => { if (e.buttons === 1) setAgeFromX(e.clientX); } : undefined}
+        style={{ position: "relative", height: 56, borderRadius: 28, background: darkMode ? "rgba(255,255,255,0.06)" : "#e6e6ea",
+          cursor: canEdit ? "pointer" : "default", touchAction: "none", userSelect: "none" }}>
+        <div style={{ position: "absolute", top: 5, bottom: 5, left: `${ageRatio * 100}%`, transform: `translateX(-${ageRatio * 100}%)`,
+          width: 104, borderRadius: 23, background: darkMode ? "#2a2a33" : "#fff", boxShadow: "0 4px 14px rgba(0,0,0,0.12)",
+          display: "flex", alignItems: "center", justifyContent: "center", transition: "left .12s ease",
+          fontSize: 16, fontFamily: FONT, fontWeight: 600, color: ageSelIdx >= 0 ? theme.text : theme.textDim }}>
+          {AVATAR_AGES[ageIdx].de}
+        </div>
+      </div>
+    </div>
+  );
+
   // ── Read-only: just show the avatar card ──
   if (!canEdit) {
     return (
@@ -19151,7 +19183,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
               {stepIdx === 1 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
                   {group(de ? "Geschlecht" : "Gender", AVATAR_GENDERS, "gender")}
-                  {group(de ? "Alter" : "Age", AVATAR_AGES, "age")}
+                  {ageSlider}
                   {group(de ? "Erscheinung" : "Appearance", AVATAR_ETHNICITIES, "ethnicity")}
                 </div>
               )}
