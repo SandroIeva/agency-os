@@ -19176,19 +19176,20 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     <AnimatePresence>
       {ethOpen && (
     <motion.div key="ethpicker" onClick={() => setEthOpen(false)}
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2, ease: "easeOut" }}
       style={{ position: "fixed", inset: 0, zIndex: 5000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "transparent" }}>
-      {/* Frosted-glass panel: semi-transparent white + blur, light shadow, no backdrop dim.
-          Fades in softly from below. willChange + isolation keep the backdrop blur from
-          flickering during the opacity animation. */}
+      {/* Frosted-glass panel. It only ANIMATES SCALE (no opacity) so the backdrop blur
+          stays visible throughout — opacity on a backdrop-filter element makes Chrome
+          drop the blur until the animation settles. The content fades in separately. */}
       <motion.div onClick={(e) => e.stopPropagation()}
-        initial={{ opacity: 0, scale: 1.06 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.04 }}
-        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        initial={{ scale: 1.06 }} animate={{ scale: 1 }} exit={{ scale: 1.04 }}
+        transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
         style={{ position: "relative", width: "min(600px, 94vw)", borderRadius: 24, padding: 34,
           background: "rgba(255,255,255,0.1)",
           backdropFilter: "blur(30px) saturate(1.4)", WebkitBackdropFilter: "blur(30px) saturate(1.4)",
           boxShadow: "0 24px 70px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)",
-          border: "1px solid rgba(255,255,255,0.45)", isolation: "isolate", willChange: "opacity, transform", WebkitBackfaceVisibility: "hidden" }}>
+          border: "1px solid rgba(255,255,255,0.45)", isolation: "isolate", willChange: "transform", WebkitBackfaceVisibility: "hidden" }}>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.32, ease: "easeOut", delay: 0.04 }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 30 }}>
           <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, letterSpacing: -0.2, color: "#1c1c24" }}>{de ? "Erscheinung wählen" : "Choose appearance"}</div>
@@ -19231,6 +19232,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
             {de ? "Bestätigen" : "Confirm"}
           </motion.div>
         </div>
+      </motion.div>
       </motion.div>
     </motion.div>
       )}
