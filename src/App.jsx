@@ -18882,6 +18882,11 @@ const AVATAR_TRAITS = [
   { id: "energetic", de: "energiegeladen", en: "energetic" }, { id: "elegant", de: "elegant", en: "elegant" },
   { id: "approachable", de: "nahbar", en: "approachable" }, { id: "visionary", de: "visionär", en: "visionary" },
 ];
+const AVATAR_SKIN = [
+  { id: "normal", de: "Normal", en: "Normal" }, { id: "vitiligo", de: "Vitiligo", en: "Vitiligo" },
+  { id: "pigmentation", de: "Pigmentierung", en: "Pigmentation" }, { id: "freckles", de: "Sommersprossen", en: "Freckles" },
+  { id: "albinism", de: "Albinismus", en: "Albinism" }, { id: "tattoo", de: "Tattoo", en: "Tattoo" },
+];
 
 function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider, llmKeys, ensureValidToken, appLanguage = "de", theme, darkMode, accent }) {
   const cfg = value && typeof value === "object" ? value : {};
@@ -18894,6 +18899,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [ethDraft, setEthDraft] = useState(null);    // tentative appearance selection (applied on confirm)
   const [ethHover, setEthHover] = useState(null);    // appearance tile under the cursor (hover effect)
   const [traitsOpen, setTraitsOpen] = useState(false); const [traitsDraft, setTraitsDraft] = useState([]); // personality picker
+  const [skinDraft, setSkinDraft] = useState(null);    // skin condition (lives in the personality overlay's 2nd column)
   const [styleOpen, setStyleOpen] = useState(false); const [styleDraft, setStyleDraft] = useState(null);   // style picker
   const [notesOpen, setNotesOpen] = useState(false); const [notesDraft, setNotesDraft] = useState("");     // extra-details picker
   const [isRecording, setIsRecording] = useState(false); const recognitionRef = useRef(null);              // dictation for the details field
@@ -19059,7 +19065,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const arch = AVATAR_ARCHETYPES.find(a => a.id === cfg.archetype);
   const selTraits = (cfg.traits || []).map(id => AVATAR_TRAITS.find(t => t.id === id)).filter(Boolean);
   const accentGlow = `0 18px 50px ${accent}33`;
-  const steps = [{ de: "Archetyp", en: "Archetype" }, { de: "Aussehen", en: "Appearance" }, { de: "Charakter", en: "Character" }, { de: "Avatar", en: "Avatar" }];
+  const steps = [{ de: "Archetyp", en: "Archetype" }, { de: "Aussehen", en: "Appearance" }, { de: "Details", en: "Details" }, { de: "Avatar", en: "Avatar" }];
   // Contextual info link per step (will later point to a help article).
   const infoQ = [
     { de: "Was sind Archetypen?", en: "What are archetypes?" },
@@ -19273,7 +19279,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
 
   // Generic frosted-glass picker shell (same look/animation as the appearance overlay),
   // reused for the Character step's Personality / Style / Details pickers.
-  const pickerShell = (keyName, open, onClose, title, body, onConfirm) => createPortal(
+  const pickerShell = (keyName, open, onClose, title, body, onConfirm, panelW = 500) => createPortal(
     <AnimatePresence>
       {open && (
         <motion.div key={keyName} onClick={onClose}
@@ -19282,7 +19288,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           <motion.div onClick={(e) => e.stopPropagation()}
             initial={{ scale: 1.06 }} animate={{ scale: 1 }} exit={{ scale: 1.04 }}
             transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
-            style={{ position: "relative", width: "min(500px, 94vw)", borderRadius: 24, padding: 34,
+            style={{ position: "relative", width: `min(${panelW}px, 94vw)`, borderRadius: 24, padding: 34,
               background: "rgba(255,255,255,0.1)", backdropFilter: "blur(30px) saturate(1.4)", WebkitBackdropFilter: "blur(30px) saturate(1.4)",
               boxShadow: "0 24px 70px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)",
               border: "1px solid rgba(255,255,255,0.45)", isolation: "isolate", willChange: "transform", WebkitBackfaceVisibility: "hidden" }}>
@@ -19320,15 +19326,29 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       </div>
     </div>
   );
-  const personalityTrigger = pickerTrigger(de ? "Persönlichkeit" : "Personality", selTraits.length > 0, previewText(selTraits.map(L).join(", ")), () => { setTraitsDraft([...(cfg.traits || [])]); setTraitsOpen(true); });
+  const skinSel = AVATAR_SKIN.find(s => s.id === cfg.skin);
+  const personalitySummary = [...selTraits.map(L), skinSel ? L(skinSel) : null].filter(Boolean).join(", ");
+  const personalityTrigger = pickerTrigger(de ? "Persönlichkeit" : "Personality", selTraits.length > 0 || !!skinSel, previewText(personalitySummary),
+    () => { setTraitsDraft([...(cfg.traits || [])]); setSkinDraft(cfg.skin || null); setTraitsOpen(true); });
   const styleTrigger = pickerTrigger(de ? "Avatar Stil" : "Avatar Style", !!styleSel, previewText(styleSel ? L(styleSel) : ""), () => { setStyleDraft(cfg.style || null); setStyleOpen(true); });
   const detailsTrigger = pickerTrigger(de ? "Weitere Details" : "More details", hasNotes, previewText(cfg.notes || ""), () => { setNotesDraft(cfg.notes || ""); setNotesOpen(true); });
 
-  const traitsOverlay = pickerShell("traitspicker", traitsOpen, () => setTraitsOpen(false), de ? "Persönlichkeit wählen" : "Choose personality",
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-      {AVATAR_TRAITS.map(tr => { const on = (traitsDraft || []).includes(tr.id); return chip(L(tr), on, () => setTraitsDraft(on ? (traitsDraft || []).filter(x => x !== tr.id) : [...(traitsDraft || []), tr.id]), tr.id); })}
+  const traitsOverlay = pickerShell("traitspicker", traitsOpen, () => setTraitsOpen(false), de ? "Persönlichkeit & Haut" : "Personality & skin",
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 30 }}>
+      <div>
+        {SL(de ? "Persönlichkeit" : "Personality")}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {AVATAR_TRAITS.map(tr => { const on = (traitsDraft || []).includes(tr.id); return chip(L(tr), on, () => setTraitsDraft(on ? (traitsDraft || []).filter(x => x !== tr.id) : [...(traitsDraft || []), tr.id]), tr.id); })}
+        </div>
+      </div>
+      <div>
+        {SL(de ? "Skin Conditions" : "Skin conditions")}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {AVATAR_SKIN.map(s => chip(L(s), skinDraft === s.id, () => setSkinDraft(skinDraft === s.id ? null : s.id), s.id))}
+        </div>
+      </div>
     </div>,
-    () => { update({ traits: traitsDraft || [] }); setTraitsOpen(false); });
+    () => { update({ traits: traitsDraft || [], skin: skinDraft || "" }); setTraitsOpen(false); }, 580);
   const styleOverlay = pickerShell("stylepicker", styleOpen, () => setStyleOpen(false), de ? "Stil wählen" : "Choose style",
     <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
       {AVATAR_STYLES.map(s => chip(L(s), styleDraft === s.id, () => setStyleDraft(styleDraft === s.id ? null : s.id), s.id))}
@@ -19395,9 +19415,9 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
               {stepIdx === 1 && stepHead(de ? "Aussehen" : "Appearance",
                 de ? "Lege fest, wie dein Avatar aussieht — Geschlecht, Alter und Erscheinung."
                    : "Define how your avatar looks — gender, age and appearance.")}
-              {stepIdx === 2 && stepHead(de ? "Charakter" : "Character",
-                de ? "Was macht den Charakter deines Avatars aus? Wähle Eigenschaften, Stil und Umgebung."
-                   : "What defines your avatar's character? Pick personality traits, style and setting.")}
+              {stepIdx === 2 && stepHead(de ? "Details" : "Details",
+                de ? "Verfeinere deinen Avatar — Persönlichkeit & Haut, Stil und weitere Details."
+                   : "Refine your avatar — personality & skin, style and extra details.")}
               {stepIdx === 3 && stepHead(de ? "Avatar" : "Avatar",
                 de ? "Generiere das Portrait deines Avatars aus den gewählten Merkmalen — oder lade ein eigenes Bild hoch."
                    : "Generate your avatar's portrait from the chosen traits — or use your own image.")}
