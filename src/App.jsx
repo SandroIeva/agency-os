@@ -19180,7 +19180,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
         {stepIdx < 3 && (
           <motion.div whileTap={{ scale: 0.97 }} onClick={() => setStepIdx(s => Math.min(3, s + 1))}
             style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
-            <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{de ? "Nächster Schritt" : "Next step"}</span>
+            <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{de ? "Nächster Schritt" : "Next step"}</span>
             <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </div>
