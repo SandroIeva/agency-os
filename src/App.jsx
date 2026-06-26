@@ -18887,6 +18887,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [nameFocus, setNameFocus] = useState(false); // name field focused → fade text out, darken bg
   const [ethOpen, setEthOpen] = useState(false);     // appearance picker overlay open
   const [ethDraft, setEthDraft] = useState(null);    // tentative appearance selection (applied on confirm)
+  const [ageDragging, setAgeDragging] = useState(false); // true while dragging the age stepper (disables tween for instant follow)
   // Wizard step: 0 archetype · 1 appearance · 2 character · 3 avatar.
   const [stepIdx, setStepIdx] = useState(() => (value && value.imageUrl) ? 3 : 0);
   // Avatar video: paused by default. Hovering an archetype or the video plays it
@@ -18977,9 +18978,9 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const SL = (s, extra) => <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 11, fontWeight: 600, ...extra }}>{s}</div>;
   const chip = (label, on, onClick, key) => (
     <motion.div key={key} whileHover={canEdit && !on ? { y: -1 } : undefined} whileTap={canEdit ? { scale: 0.95 } : undefined} onClick={canEdit ? onClick : undefined}
-      style={{ padding: "8px 14px", borderRadius: 999, cursor: canEdit ? "pointer" : "default", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap",
-        background: on ? accent : (darkMode ? "rgba(255,255,255,0.05)" : "#fff"), color: on ? "#fff" : theme.textSub,
-        border: `1px solid ${on ? accent : theme.borderFaint}`, boxShadow: on ? `0 4px 12px ${accent}40` : "none", transition: "background .15s, box-shadow .15s" }}>{label}</motion.div>
+      style={{ padding: "10px 16px", borderRadius: 999, cursor: canEdit ? "pointer" : "default", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap",
+        background: on ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "#fff"), color: on ? "#fff" : theme.textSub,
+        border: `1px solid ${on ? "#15151c" : theme.borderFaint}`, boxShadow: "none", transition: "background .15s, border-color .15s" }}>{label}</motion.div>
   );
   const group = (label, options, selKey) => (
     <div>{SL(label)}<div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{options.map(o => chip(L(o), cfg[selKey] === o.id, () => setField(selKey, o.id), o.id))}</div></div>
@@ -19109,17 +19110,21 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     <div>
       {SL(de ? "Alter" : "Age")}
       {/* Container is as tall as the thumb; the grey track is thinner and centered,
-          so the white pill thumb overhangs it top and bottom. */}
+          so the white pill thumb overhangs it top and bottom. Tween only on click —
+          while dragging the thumb follows instantly (no lag). */}
       <div ref={ageTrackRef}
         onPointerDown={canEdit ? (e) => { e.currentTarget.setPointerCapture(e.pointerId); setAgeFromX(e.clientX); } : undefined}
-        onPointerMove={canEdit ? (e) => { if (e.buttons === 1) setAgeFromX(e.clientX); } : undefined}
-        style={{ position: "relative", height: 46, cursor: canEdit ? "pointer" : "default", touchAction: "none", userSelect: "none" }}>
+        onPointerMove={canEdit ? (e) => { if (e.buttons === 1) { if (!ageDragging) setAgeDragging(true); setAgeFromX(e.clientX); } } : undefined}
+        onPointerUp={canEdit ? () => setAgeDragging(false) : undefined}
+        onPointerCancel={canEdit ? () => setAgeDragging(false) : undefined}
+        onLostPointerCapture={canEdit ? () => setAgeDragging(false) : undefined}
+        style={{ position: "relative", height: 46, maxWidth: 270, cursor: canEdit ? "pointer" : "default", touchAction: "none", userSelect: "none" }}>
         {/* grey track — thinner than the thumb */}
         <div style={{ position: "absolute", left: 0, right: 0, top: 6, height: 34, borderRadius: 17, background: darkMode ? "rgba(255,255,255,0.06)" : "#e6e6ea" }} />
         {/* white pill thumb — taller than the track, floats over it */}
         <div style={{ position: "absolute", top: 0, height: 46, left: `${ageRatio * 100}%`, transform: `translateX(-${ageRatio * 100}%)`,
           width: 90, borderRadius: 23, background: darkMode ? "#2a2a33" : "#fff", boxShadow: "0 5px 16px rgba(0,0,0,0.15)",
-          display: "flex", alignItems: "center", justifyContent: "center", transition: "left .12s ease",
+          display: "flex", alignItems: "center", justifyContent: "center", transition: ageDragging ? "none" : "left .2s cubic-bezier(0.22, 1, 0.36, 1)",
           fontSize: 12.5, fontFamily: FONT, fontWeight: 500, color: ageSelIdx >= 0 ? theme.text : theme.textDim }}>
           {AVATAR_AGES[ageIdx].de}
         </div>
@@ -19260,7 +19265,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                 </div>
               )}
               {stepIdx === 1 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 27 }}>
                   {group(de ? "Geschlecht" : "Gender", AVATAR_GENDERS, "gender")}
                   {ageSlider}
                   {ethTrigger}
