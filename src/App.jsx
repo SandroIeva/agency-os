@@ -19535,7 +19535,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
               {stepIdx === 2 && stepHead(de ? "Aussehen" : "Appearance",
                 de ? "Gib deinem Avatar nun die gewünschte Optik und Persönlichkeit."
                    : "Now give your avatar the look and personality you want.")}
-              {stepIdx === 3 && stepHead(de ? "Details" : "Details", null, 4)}
+              {stepIdx === 3 && stepHead(<>Details <span style={{ fontWeight: 400, fontSize: 19, color: theme.textDim }}>(Optional)</span></>, null, 4)}
             </div>
             {/* Scrollable body. paddingLeft + negative marginLeft give the age-slider
                 thumb's shadow room on the left without shifting the content. */}
