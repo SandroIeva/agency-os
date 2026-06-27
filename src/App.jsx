@@ -18887,6 +18887,16 @@ const AVATAR_SKIN = [
   { id: "pigmentation", de: "Pigmentierung", en: "Pigmentation" }, { id: "freckles", de: "Sommersprossen", en: "Freckles" },
   { id: "albinism", de: "Albinismus", en: "Albinism" }, { id: "tattoo", de: "Tattoo", en: "Tattoo" },
 ];
+const AVATAR_EYES = [
+  { id: "brown", de: "Braun", en: "Brown" }, { id: "blue", de: "Blau", en: "Blue" },
+  { id: "green", de: "Grün", en: "Green" }, { id: "hazel", de: "Haselnuss", en: "Hazel" },
+  { id: "grey", de: "Grau", en: "Grey" }, { id: "amber", de: "Bernstein", en: "Amber" },
+];
+const AVATAR_HAIR = [
+  { id: "black", de: "Schwarz", en: "Black" }, { id: "brown", de: "Braun", en: "Brown" },
+  { id: "blonde", de: "Blond", en: "Blonde" }, { id: "red", de: "Rot", en: "Red" },
+  { id: "grey", de: "Grau", en: "Grey" }, { id: "colorful", de: "Bunt", en: "Colorful" },
+];
 
 function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider, llmKeys, ensureValidToken, appLanguage = "de", theme, darkMode, accent }) {
   const cfg = value && typeof value === "object" ? value : {};
@@ -18900,6 +18910,8 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [ethHover, setEthHover] = useState(null);    // appearance tile under the cursor (hover effect)
   const [traitsOpen, setTraitsOpen] = useState(false); const [traitsDraft, setTraitsDraft] = useState([]); // personality picker
   const [skinOpen, setSkinOpen] = useState(false); const [skinDraft, setSkinDraft] = useState(null); const [skinHover, setSkinHover] = useState(null); // skin-condition picker (image grid like Appearance)
+  const [eyesOpen, setEyesOpen] = useState(false); const [eyesDraft, setEyesDraft] = useState(null); const [eyesHover, setEyesHover] = useState(null); // eye-colour picker
+  const [hairOpen, setHairOpen] = useState(false); const [hairDraft, setHairDraft] = useState(null); const [hairHover, setHairHover] = useState(null); // hair-colour picker
   const [styleOpen, setStyleOpen] = useState(false); const [styleDraft, setStyleDraft] = useState(null);   // style picker
   const [notesOpen, setNotesOpen] = useState(false); const [notesDraft, setNotesDraft] = useState("");     // extra-details picker
   const [isRecording, setIsRecording] = useState(false); const recognitionRef = useRef(null);              // dictation for the details field
@@ -19326,11 +19338,43 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       </div>
     </div>
   );
+  // Image tile grid (identical look to the appearance picker) for skin/eyes/hair.
+  const imageGrid = (items, imgBase, draft, setDraft, hover, setHover) => (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 30 }}>
+      {items.map(it => {
+        const on = draft === it.id; const hov = hover === it.id;
+        return (
+          <div key={it.id} onClick={() => setDraft(draft === it.id ? null : it.id)}
+            onMouseEnter={() => setHover(it.id)} onMouseLeave={() => setHover(null)} style={{ cursor: "pointer" }}>
+            <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.2", borderRadius: 14, overflow: "hidden",
+              background: darkMode ? "rgba(255,255,255,0.05)" : "#ececef",
+              boxShadow: on ? "0 0 0 2.5px #15151c, 0 6px 18px rgba(0,0,0,0.18)" : (hov ? "0 0 0 2px rgba(21,21,28,0.35), 0 6px 16px rgba(0,0,0,0.14)" : "none"),
+              transition: "box-shadow .3s cubic-bezier(0.33, 1, 0.68, 1)" }}>
+              <img src={`${imgBase}/${it.id}.png`} alt={L(it)} loading="lazy" onError={(e) => { e.currentTarget.style.display = "none"; }}
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }} />
+              {on && (
+                <div style={{ position: "absolute", top: 8, right: 8, width: 20, height: 20, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+              )}
+            </div>
+            <div style={{ marginTop: 11, fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500, textAlign: "center", color: on ? "#1c1c24" : "#4a4a54" }}>{L(it)}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
   const skinSel = AVATAR_SKIN.find(s => s.id === cfg.skin);
+  const eyesSel = AVATAR_EYES.find(s => s.id === cfg.eyes);
+  const hairSel = AVATAR_HAIR.find(s => s.id === cfg.hair);
   const personalityTrigger = pickerTrigger(de ? "Persönlichkeit" : "Personality", selTraits.length > 0, previewText(selTraits.map(L).join(", ")),
     () => { setTraitsDraft([...(cfg.traits || [])]); setTraitsOpen(true); });
-  const skinTrigger = pickerTrigger(de ? "Skin" : "Skin", !!skinSel, previewText(skinSel ? L(skinSel) : ""),
+  const skinTrigger = pickerTrigger(de ? "Hauttyp" : "Skin type", !!skinSel, previewText(skinSel ? L(skinSel) : ""),
     () => { setSkinDraft(cfg.skin || null); setSkinOpen(true); });
+  const eyesTrigger = pickerTrigger(de ? "Augenfarbe" : "Eye colour", !!eyesSel, previewText(eyesSel ? L(eyesSel) : ""),
+    () => { setEyesDraft(cfg.eyes || null); setEyesOpen(true); });
+  const hairTrigger = pickerTrigger(de ? "Haarfarbe" : "Hair colour", !!hairSel, previewText(hairSel ? L(hairSel) : ""),
+    () => { setHairDraft(cfg.hair || null); setHairOpen(true); });
   const styleTrigger = pickerTrigger(de ? "Avatar Stil" : "Avatar Style", !!styleSel, previewText(styleSel ? L(styleSel) : ""), () => { setStyleDraft(cfg.style || null); setStyleOpen(true); });
   const detailsTrigger = pickerTrigger(de ? "Weitere Details" : "More details", hasNotes, previewText(cfg.notes || ""), () => { setNotesDraft(cfg.notes || ""); setNotesOpen(true); });
 
@@ -19339,35 +19383,15 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       {AVATAR_TRAITS.map(tr => { const on = (traitsDraft || []).includes(tr.id); return chip(L(tr), on, () => setTraitsDraft(on ? (traitsDraft || []).filter(x => x !== tr.id) : [...(traitsDraft || []), tr.id]), tr.id); })}
     </div>,
     () => { update({ traits: traitsDraft || [] }); setTraitsOpen(false); });
-  const skinOverlay = pickerShell("skinpicker", skinOpen, () => setSkinOpen(false), de ? "Hautbeschaffenheit wählen" : "Choose skin",
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 30 }}>
-      {AVATAR_SKIN.map(s => {
-        const on = skinDraft === s.id;
-        const hov = skinHover === s.id;
-        return (
-          <div key={s.id} onClick={() => setSkinDraft(skinDraft === s.id ? null : s.id)}
-            onMouseEnter={() => setSkinHover(s.id)} onMouseLeave={() => setSkinHover(null)}
-            style={{ cursor: "pointer" }}>
-            <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.2", borderRadius: 14, overflow: "hidden",
-              background: darkMode ? "rgba(255,255,255,0.05)" : "#ececef",
-              boxShadow: on ? "0 0 0 2.5px #15151c, 0 6px 18px rgba(0,0,0,0.18)"
-                : (hov ? "0 0 0 2px rgba(21,21,28,0.35), 0 6px 16px rgba(0,0,0,0.14)" : "none"),
-              transition: "box-shadow .3s cubic-bezier(0.33, 1, 0.68, 1)" }}>
-              <img src={`/avatar-skin/${s.id}.png`} alt={L(s)} loading="lazy"
-                onError={(e) => { e.currentTarget.style.display = "none"; }}
-                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }} />
-              {on && (
-                <div style={{ position: "absolute", top: 8, right: 8, width: 20, height: 20, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                </div>
-              )}
-            </div>
-            <div style={{ marginTop: 11, fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500, textAlign: "center", color: on ? "#1c1c24" : "#4a4a54" }}>{L(s)}</div>
-          </div>
-        );
-      })}
-    </div>,
+  const skinOverlay = pickerShell("skinpicker", skinOpen, () => setSkinOpen(false), de ? "Hauttyp wählen" : "Choose skin type",
+    imageGrid(AVATAR_SKIN, "/avatar-skin", skinDraft, setSkinDraft, skinHover, setSkinHover),
     () => { update({ skin: skinDraft || "" }); setSkinOpen(false); });
+  const eyesOverlay = pickerShell("eyespicker", eyesOpen, () => setEyesOpen(false), de ? "Augenfarbe wählen" : "Choose eye colour",
+    imageGrid(AVATAR_EYES, "/avatar-eyes", eyesDraft, setEyesDraft, eyesHover, setEyesHover),
+    () => { update({ eyes: eyesDraft || "" }); setEyesOpen(false); });
+  const hairOverlay = pickerShell("hairpicker", hairOpen, () => setHairOpen(false), de ? "Haarfarbe wählen" : "Choose hair colour",
+    imageGrid(AVATAR_HAIR, "/avatar-hair", hairDraft, setHairDraft, hairHover, setHairHover),
+    () => { update({ hair: hairDraft || "" }); setHairOpen(false); });
   const styleOverlay = pickerShell("stylepicker", styleOpen, () => setStyleOpen(false), de ? "Stil wählen" : "Choose style",
     <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
       {AVATAR_STYLES.map(s => chip(L(s), styleDraft === s.id, () => setStyleDraft(styleDraft === s.id ? null : s.id), s.id))}
@@ -19462,6 +19486,10 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                     {personalityTrigger}
                     {skinTrigger}
                   </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+                    {eyesTrigger}
+                    {hairTrigger}
+                  </div>
                   {styleTrigger}
                   {detailsTrigger}
                 </div>
@@ -19512,6 +19540,8 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       {ethOverlay}
       {traitsOverlay}
       {skinOverlay}
+      {eyesOverlay}
+      {hairOverlay}
       {styleOverlay}
       {notesOverlay}
     </div>
