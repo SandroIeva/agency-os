@@ -19418,17 +19418,21 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
         const on = hairDraft === "custom"; const hov = hairHover === "custom";
         return (
           <div key="custom" onMouseEnter={() => setHairHover("custom")} onMouseLeave={() => setHairHover(null)} style={{ cursor: "pointer" }}>
-            <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.2", borderRadius: 14, overflow: "hidden",
-              background: on ? hairColorDraft : "conic-gradient(from 90deg, #f87171, #fbbf24, #a3e635, #34d399, #22d3ee, #818cf8, #e879f9, #f87171)",
+            <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.2", borderRadius: 14, overflow: "hidden", isolation: "isolate",
+              background: darkMode ? "rgba(255,255,255,0.05)" : "#ececef",
               boxShadow: hairTileShadow(on, hov), transition: "box-shadow .3s cubic-bezier(0.33, 1, 0.68, 1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {/* base hair image + chosen colour multiplied on top → realistic preview */}
+              <img src="/avatar-haare/custom.png" alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = "none"; }}
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }} />
+              <div style={{ position: "absolute", inset: 0, background: hairColorDraft, mixBlendMode: "multiply", pointerEvents: "none" }} />
               <input type="color" value={hairColorDraft} onChange={(e) => { setHairColorDraft(e.target.value); setHairDraft("custom"); }}
                 style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", border: "none", padding: 0 }} />
               {on ? (
-                <div style={{ position: "absolute", top: 8, right: 8, width: 20, height: 20, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ position: "absolute", top: 8, right: 8, width: 20, height: 20, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                 </div>
               ) : (
-                <div style={{ width: 34, height: 34, borderRadius: "50%", background: "rgba(255,255,255,0.92)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.25)" }}>
+                <div style={{ width: 34, height: 34, borderRadius: "50%", background: "rgba(255,255,255,0.92)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.25)", pointerEvents: "none" }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1c1c24" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 </div>
               )}
