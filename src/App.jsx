@@ -19572,14 +19572,14 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                     </div>
                     <textarea value={cfg.notes || ""} onChange={e => update({ notes: e.target.value })}
                       onFocus={() => setNotesFocus(true)} onBlur={() => setNotesFocus(false)} rows={6}
-                      placeholder={de ? "Beschreibe deinen Avatar in ein paar Sätzen…" : "Describe your avatar in a few sentences…"}
-                      style={{ width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: 14, border: "none", outline: "none", resize: "none", minHeight: 180,
+                      placeholder={de ? "Hier kannst du deinem Avatar deinen besonderen Touch geben…" : "Give your avatar your special touch here…"}
+                      style={{ width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: 14, border: "none", outline: "none", resize: "none", minHeight: 190,
                         background: notesFocus ? (darkMode ? "rgba(255,255,255,0.12)" : "#ffffff") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
                         color: theme.text, fontSize: 14, fontFamily: FONT, lineHeight: 1.6, transition: "background .25s ease" }} />
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 340 }}>
                   <motion.div whileHover={{ scale: busy ? 1 : 1.02 }} whileTap={{ scale: busy ? 1 : 0.97 }} onClick={() => !busy && generate()}
-                    style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "13px 0", borderRadius: 14, cursor: busy ? "default" : "pointer",
+                    style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "13px 0 15px", borderRadius: 14, cursor: busy ? "default" : "pointer",
                       background: "#15151c", color: "#fff", fontSize: 14, fontFamily: FONT, fontWeight: 600, boxShadow: "none", opacity: busy ? 0.7 : 1 }}>
                     {cfg.imageUrl ? (de ? "Neu generieren" : "Regenerate") : (de ? "Avatar generieren" : "Generate avatar")}
                   </motion.div>
