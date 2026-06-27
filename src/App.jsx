@@ -19491,11 +19491,11 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                     {hairTrigger}
                   </div>
                   {styleTrigger}
-                  {detailsTrigger}
                 </div>
               )}
               {stepIdx === 3 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 340 }}>
+                  <div style={{ marginBottom: 8 }}>{detailsTrigger}</div>
                   <motion.div whileHover={{ scale: busy ? 1 : 1.02 }} whileTap={{ scale: busy ? 1 : 0.97 }} onClick={() => !busy && generate()}
                     style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "13px 0", borderRadius: 14, cursor: busy ? "default" : "pointer",
                       background: `linear-gradient(135deg, ${accent}, ${accent}c0)`, color: "#fff", fontSize: 14, fontFamily: FONT, fontWeight: 600, boxShadow: busy ? "none" : accentGlow, opacity: busy ? 0.7 : 1 }}>
