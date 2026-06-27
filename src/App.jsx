@@ -18888,7 +18888,7 @@ const AVATAR_SKIN = [
   { id: "albinism", de: "Albinismus", en: "Albinism" }, { id: "tattoo", de: "Tattoo", en: "Tattoo" },
 ];
 const AVATAR_EYES = [
-  { id: "blue", de: "Blau", en: "Blue" }, { id: "dark-brown", de: "Dunkelbraun", en: "Dark brown" },
+  { id: "blue", de: "Blau", en: "Blue" }, { id: "brown", de: "Braun", en: "Brown" },
   { id: "light-brown", de: "Hellbraun", en: "Light brown" }, { id: "green", de: "Grün", en: "Green" },
   { id: "light-green", de: "Hellgrün", en: "Light green" }, { id: "mixed", de: "Gemischt", en: "Mixed" },
 ];
