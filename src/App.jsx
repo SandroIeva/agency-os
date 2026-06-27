@@ -18957,7 +18957,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     const recognition = new SR();
     recognition.lang = de ? "de-DE" : "en-US";
     recognition.continuous = true; recognition.interimResults = true;
-    let finalTranscript = notesDraft || "";
+    let finalTranscript = cfg.notes || "";
     let needsSpace = finalTranscript.length > 0 && !finalTranscript.endsWith(" ") && !finalTranscript.endsWith("\n");
     recognition.onresult = (event) => {
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -18968,7 +18968,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           const last = cleaned.slice(-1);
           if (cleaned.length > 0 && !/[.!?,;:\n]/.test(last)) cleaned += ".";
           finalTranscript += (needsSpace ? " " : "") + cleaned; needsSpace = true;
-          setNotesDraft(finalTranscript);
+          update({ notes: finalTranscript });
         }
       }
     };
@@ -19090,7 +19090,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const arch = AVATAR_ARCHETYPES.find(a => a.id === cfg.archetype);
   const selTraits = (cfg.traits || []).map(id => AVATAR_TRAITS.find(t => t.id === id)).filter(Boolean);
   const accentGlow = `0 18px 50px ${accent}33`;
-  const steps = [{ de: "Archetyp", en: "Archetype" }, { de: "Aussehen", en: "Appearance" }, { de: "Details", en: "Details" }, { de: "Avatar", en: "Avatar" }];
+  const steps = [{ de: "Archetyp", en: "Archetype" }, { de: "Aussehen", en: "Appearance" }, { de: "Details", en: "Details" }, { de: "Customize", en: "Customize" }];
   // Contextual info link per step (will later point to a help article).
   const infoQ = [
     { de: "Was sind Archetypen?", en: "What are archetypes?" },
@@ -19525,9 +19525,9 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
               {stepIdx === 2 && stepHead(de ? "Details" : "Details",
                 de ? "Verfeinere deinen Avatar — Persönlichkeit & Haut, Stil und weitere Details."
                    : "Refine your avatar — personality & skin, style and extra details.")}
-              {stepIdx === 3 && stepHead(de ? "Avatar" : "Avatar",
-                de ? "Generiere das Portrait deines Avatars aus den gewählten Merkmalen — oder lade ein eigenes Bild hoch."
-                   : "Generate your avatar's portrait from the chosen traits — or use your own image.")}
+              {stepIdx === 3 && stepHead(de ? "Customize" : "Customize",
+                de ? "Füge letzte Details hinzu und generiere dann deinen Avatar."
+                   : "Add any final details, then generate your avatar.")}
             </div>
             {/* Scrollable body. paddingLeft + negative marginLeft give the age-slider
                 thumb's shadow room on the left without shifting the content. */}
@@ -19558,8 +19558,19 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                 </div>
               )}
               {stepIdx === 3 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 340 }}>
-                  <div style={{ marginBottom: 8 }}>{detailsTrigger}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                  {/* Inline 'more details' field with dictation top-right */}
+                  <div style={{ position: "relative", width: "100%" }}>
+                    <textarea value={cfg.notes || ""} onChange={e => update({ notes: e.target.value })} rows={6}
+                      placeholder={de ? "Beschreibe weitere Details zu deinem Avatar…" : "Describe more details about your avatar…"}
+                      style={{ ...inputStyle, width: "100%", fontSize: 14, lineHeight: 1.55, resize: "vertical", minHeight: 150, paddingRight: 46 }} />
+                    <div onClick={startNotesDictation} title={de ? "Diktieren" : "Dictate"}
+                      style={{ position: "absolute", top: 10, right: 10, width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                        background: isRecording ? "#15151c" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"), color: isRecording ? "#fff" : theme.textSub, transition: "background .15s" }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0"/><path d="M12 17v4M8 21h8"/></svg>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 340 }}>
                   <motion.div whileHover={{ scale: busy ? 1 : 1.02 }} whileTap={{ scale: busy ? 1 : 0.97 }} onClick={() => !busy && generate()}
                     style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "13px 0", borderRadius: 14, cursor: busy ? "default" : "pointer",
                       background: `linear-gradient(135deg, ${accent}, ${accent}c0)`, color: "#fff", fontSize: 14, fontFamily: FONT, fontWeight: 600, boxShadow: busy ? "none" : accentGlow, opacity: busy ? 0.7 : 1 }}>
@@ -19574,6 +19585,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                     </motion.div>
                   )}
                   {err && <div style={{ fontSize: 12, fontFamily: FONT, color: "#EF4444", lineHeight: 1.5 }}>{err}</div>}
+                  </div>
                 </div>
               )}
             </div>
