@@ -19557,7 +19557,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                 </div>
               )}
               {stepIdx === 3 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 26, marginTop: -15 }}>
                   {/* 'More details' field — dictation control above the field, right-aligned (same pattern as elsewhere) */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
@@ -19573,7 +19573,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                     <textarea value={cfg.notes || ""} onChange={e => update({ notes: e.target.value })}
                       onFocus={() => setNotesFocus(true)} onBlur={() => setNotesFocus(false)} rows={6}
                       placeholder={de ? "Hier kannst du deinen Avatar individualisieren…" : "Here you can customise your avatar…"}
-                      style={{ width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: 14, border: "none", outline: "none", resize: "none", minHeight: 190,
+                      style={{ width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: 14, border: "none", outline: "none", resize: "none", minHeight: 200,
                         background: notesFocus ? (darkMode ? "rgba(255,255,255,0.12)" : "#ffffff") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
                         color: theme.text, fontSize: 14, fontFamily: FONT, lineHeight: 1.6, transition: "background .25s ease" }} />
                   </div>
