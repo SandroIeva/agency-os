@@ -18915,6 +18915,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [hairColorDraft, setHairColorDraft] = useState("#8a5a2b"); // custom hair colour (6th tile = colour selector)
   const [hairNames, setHairNames] = useState({});      // hex -> human-readable colour name (api.color.pizza)
   const [notesFocus, setNotesFocus] = useState(false); // Customize details field focused → brighten with a transition
+  const [refUploading, setRefUploading] = useState(false); // uploading a reference image on the final step
   const [styleOpen, setStyleOpen] = useState(false); const [styleDraft, setStyleDraft] = useState(null);   // style picker
   const [notesOpen, setNotesOpen] = useState(false); const [notesDraft, setNotesDraft] = useState("");     // extra-details picker
   const [isRecording, setIsRecording] = useState(false); const recognitionRef = useRef(null);              // dictation for the details field
@@ -19086,6 +19087,14 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       const a = document.createElement("a"); a.href = objectUrl; a.download = `brand-avatar.${(blob.type.split("/")[1] || "png").replace("jpeg", "jpg")}`;
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
     } catch (_) {}
+  };
+  // Upload a reference image (final step) → stored on cfg.referenceImage.
+  const handleRefUpload = async (e) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    setRefUploading(true);
+    try { const r = await uploadFile?.(file, "brand-avatar-ref"); if (r?.url) update({ referenceImage: r.url }); } catch (_) {}
+    setRefUploading(false);
+    if (e.target) e.target.value = "";
   };
 
   const arch = AVATAR_ARCHETYPES.find(a => a.id === cfg.archetype);
@@ -19577,12 +19586,24 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                         background: notesFocus ? (darkMode ? "rgba(255,255,255,0.12)" : "#ffffff") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
                         color: theme.text, fontSize: 14, fontFamily: FONT, lineHeight: 1.6, transition: "background .25s ease" }} />
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 340 }}>
-                  <motion.div whileHover={{ scale: busy ? 1 : 1.02 }} whileTap={{ scale: busy ? 1 : 0.97 }} onClick={() => !busy && generate()}
-                    style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "13px 0 15px", borderRadius: 14, cursor: busy ? "default" : "pointer",
-                      background: "#15151c", color: "#fff", fontSize: 14, fontFamily: FONT, fontWeight: 600, boxShadow: "none", opacity: busy ? 0.7 : 1 }}>
-                    {cfg.imageUrl ? (de ? "Neu generieren" : "Regenerate") : (de ? "Avatar generieren" : "Generate avatar")}
-                  </motion.div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 340 }}>
+                  {/* Reference image upload */}
+                  {cfg.referenceImage ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <img src={cfg.referenceImage} alt="" style={{ width: 60, height: 74, objectFit: "cover", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, flexShrink: 0 }} />
+                      <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+                        <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{de ? "Referenzbild" : "Reference image"}</span>
+                        <span onClick={() => update({ referenceImage: "" })} style={{ fontSize: 12, fontFamily: FONT, color: "#EF4444", cursor: "pointer" }}>{de ? "Entfernen" : "Remove"}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 9, padding: "15px 0", borderRadius: 12, cursor: refUploading ? "default" : "pointer",
+                      border: `1.5px dashed ${theme.borderFaint}`, color: theme.textSub, fontSize: 13.5, fontFamily: FONT, fontWeight: 500 }}>
+                      <input type="file" accept="image/*" disabled={refUploading} style={{ display: "none" }} onChange={handleRefUpload} />
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                      {refUploading ? (de ? "Wird hochgeladen…" : "Uploading…") : (de ? "Referenzbild hochladen" : "Upload reference image")}
+                    </label>
+                  )}
                   {cfg.imageUrl && (
                     <motion.div whileTap={{ scale: 0.97 }} onClick={downloadAvatar}
                       style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px 0", borderRadius: 12, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
@@ -19609,10 +19630,18 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, cursor: "pointer" }}>
           {L(infoQ[stepIdx] || infoQ[0])}
         </span>
-        {stepIdx < 3 && (
+        {stepIdx < 3 ? (
           <motion.div whileTap={{ scale: 0.97 }} onClick={() => setStepIdx(s => Math.min(3, s + 1))}
             style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
             <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{de ? "Nächster Schritt" : "Next step"}</span>
+            <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div whileTap={{ scale: busy ? 1 : 0.97 }} onClick={() => !busy && generate()}
+            style={{ display: "flex", alignItems: "center", gap: 12, cursor: busy ? "default" : "pointer", opacity: busy ? 0.7 : 1 }}>
+            <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{busy ? (de ? "Wird erstellt…" : "Creating…") : (de ? "Avatar finalisieren" : "Finalize avatar")}</span>
             <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </div>
