@@ -19352,7 +19352,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     </div>
   );
   // Image tile grid (identical look to the appearance picker) for skin/eyes/hair.
-  const imageGrid = (items, imgBase, draft, setDraft, hover, setHover) => (
+  const imageGrid = (items, imgFor, draft, setDraft, hover, setHover) => (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 30 }}>
       {items.map(it => {
         const on = draft === it.id; const hov = hover === it.id;
@@ -19363,7 +19363,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
               background: darkMode ? "rgba(255,255,255,0.05)" : "#ececef",
               boxShadow: on ? "0 0 0 2.5px #15151c, 0 6px 18px rgba(0,0,0,0.18)" : (hov ? "0 0 0 2px rgba(21,21,28,0.35), 0 6px 16px rgba(0,0,0,0.14)" : "none"),
               transition: "box-shadow .3s cubic-bezier(0.33, 1, 0.68, 1)" }}>
-              <img src={`${imgBase}/${it.id}.png`} alt={L(it)} loading="lazy" onError={(e) => { e.currentTarget.style.display = "none"; }}
+              <img src={imgFor(it)} alt={L(it)} loading="lazy" onError={(e) => { e.currentTarget.style.display = "none"; }}
                 style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }} />
               {on && (
                 <div style={{ position: "absolute", top: 8, right: 8, width: 20, height: 20, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -19399,10 +19399,10 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     </div>,
     () => { update({ traits: traitsDraft || [] }); setTraitsOpen(false); });
   const skinOverlay = pickerShell("skinpicker", skinOpen, () => setSkinOpen(false), de ? "Hauttyp wählen" : "Choose skin type",
-    imageGrid(AVATAR_SKIN, "/avatar-skin", skinDraft, setSkinDraft, skinHover, setSkinHover),
+    imageGrid(AVATAR_SKIN, (s) => `/avatar-skin/${s.id}${cfg.gender === "male" ? "-man" : ""}.png`, skinDraft, setSkinDraft, skinHover, setSkinHover),
     () => { update({ skin: skinDraft || "" }); setSkinOpen(false); });
   const eyesOverlay = pickerShell("eyespicker", eyesOpen, () => setEyesOpen(false), de ? "Augenfarbe wählen" : "Choose eye colour",
-    imageGrid(AVATAR_EYES, "/avatar-eyes", eyesDraft, setEyesDraft, eyesHover, setEyesHover),
+    imageGrid(AVATAR_EYES, (e) => `/avatar-eyes/${e.id}.png`, eyesDraft, setEyesDraft, eyesHover, setEyesHover),
     () => { update({ eyes: eyesDraft || "" }); setEyesOpen(false); });
   const hairTileShadow = (on, hov) => on ? "0 0 0 2.5px #15151c, 0 6px 18px rgba(0,0,0,0.18)" : (hov ? "0 0 0 2px rgba(21,21,28,0.35), 0 6px 16px rgba(0,0,0,0.14)" : "none");
   const hairOverlay = pickerShell("hairpicker", hairOpen, () => setHairOpen(false), de ? "Haarfarbe wählen" : "Choose hair colour",
