@@ -19169,8 +19169,8 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       </div>
     );
   };
-  const stepHead = (title, desc) => (
-    <div style={{ marginBottom: 18 }}>
+  const stepHead = (title, desc, mb = 18) => (
+    <div style={{ marginBottom: mb }}>
       <div style={{ fontSize: 23, fontFamily: FONT, fontWeight: 500, letterSpacing: -0.3, color: theme.text }}>{title}</div>
       {desc && <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55, marginTop: 8, maxWidth: 320 }}>{desc}</div>}
     </div>
@@ -19526,7 +19526,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
               {stepIdx === 2 && stepHead(de ? "Aussehen" : "Appearance",
                 de ? "Gib deinem Avatar nun die gewünschte Optik und Persönlichkeit."
                    : "Now give your avatar the look and personality you want.")}
-              {stepIdx === 3 && stepHead(de ? "Details" : "Details")}
+              {stepIdx === 3 && stepHead(de ? "Details" : "Details", null, 4)}
             </div>
             {/* Scrollable body. paddingLeft + negative marginLeft give the age-slider
                 thumb's shadow room on the left without shifting the content. */}
@@ -19557,7 +19557,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                 </div>
               )}
               {stepIdx === 3 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 26, marginTop: -15 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
                   {/* 'More details' field — dictation control above the field, right-aligned (same pattern as elsewhere) */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
