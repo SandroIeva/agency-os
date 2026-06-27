@@ -19402,7 +19402,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     imageGrid(AVATAR_SKIN, (s) => `/avatar-skin/${s.id}${cfg.gender === "male" ? "-man" : ""}.png`, skinDraft, setSkinDraft, skinHover, setSkinHover),
     () => { update({ skin: skinDraft || "" }); setSkinOpen(false); });
   const eyesOverlay = pickerShell("eyespicker", eyesOpen, () => setEyesOpen(false), de ? "Augenfarbe wählen" : "Choose eye colour",
-    imageGrid(AVATAR_EYES, (e) => `/avatar-eyes/${e.id}.png`, eyesDraft, setEyesDraft, eyesHover, setEyesHover),
+    imageGrid(AVATAR_EYES, (e) => `/avatar-eyes/${e.id}${cfg.gender === "male" ? "-man" : ""}.png`, eyesDraft, setEyesDraft, eyesHover, setEyesHover),
     () => { update({ eyes: eyesDraft || "" }); setEyesOpen(false); });
   const hairTileShadow = (on, hov) => on ? "0 0 0 2.5px #15151c, 0 6px 18px rgba(0,0,0,0.18)" : (hov ? "0 0 0 2px rgba(21,21,28,0.35), 0 6px 16px rgba(0,0,0,0.14)" : "none");
   const hairOverlay = pickerShell("hairpicker", hairOpen, () => setHairOpen(false), de ? "Haarfarbe wählen" : "Choose hair colour",
