@@ -19572,7 +19572,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                     </div>
                     <textarea value={cfg.notes || ""} onChange={e => update({ notes: e.target.value })}
                       onFocus={() => setNotesFocus(true)} onBlur={() => setNotesFocus(false)} rows={6}
-                      placeholder={de ? "Hier kannst du deinem Avatar deinen besonderen Touch geben…" : "Give your avatar your special touch here…"}
+                      placeholder={de ? "Hier kannst du deinen Avatar individualisieren…" : "Here you can customise your avatar…"}
                       style={{ width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: 14, border: "none", outline: "none", resize: "none", minHeight: 190,
                         background: notesFocus ? (darkMode ? "rgba(255,255,255,0.12)" : "#ffffff") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
                         color: theme.text, fontSize: 14, fontFamily: FONT, lineHeight: 1.6, transition: "background .25s ease" }} />
