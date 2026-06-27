@@ -18913,6 +18913,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [eyesOpen, setEyesOpen] = useState(false); const [eyesDraft, setEyesDraft] = useState(null); const [eyesHover, setEyesHover] = useState(null); // eye-colour picker
   const [hairOpen, setHairOpen] = useState(false); const [hairDraft, setHairDraft] = useState(null); const [hairHover, setHairHover] = useState(null); // hair-colour picker
   const [hairColorDraft, setHairColorDraft] = useState("#8a5a2b"); // custom hair colour (6th tile = colour selector)
+  const [hairNames, setHairNames] = useState({});      // hex -> human-readable colour name (api.color.pizza)
   const [styleOpen, setStyleOpen] = useState(false); const [styleDraft, setStyleDraft] = useState(null);   // style picker
   const [notesOpen, setNotesOpen] = useState(false); const [notesDraft, setNotesDraft] = useState("");     // extra-details picker
   const [isRecording, setIsRecording] = useState(false); const recognitionRef = useRef(null);              // dictation for the details field
@@ -18977,6 +18978,17 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   };
   const stopNotesDictation = () => { if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; } setIsRecording(false); };
   useEffect(() => () => { if (recognitionRef.current) recognitionRef.current.stop(); }, []);
+  // Resolve the custom hair hex to a human-readable colour name (same API as Brand colours).
+  useEffect(() => {
+    const hex = cfg.hair === "custom" ? cfg.hairColor : null;
+    if (!hex || hairNames[hex]) return;
+    let cancelled = false;
+    fetch(`https://api.color.pizza/v1/?values=${String(hex).replace("#", "")}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!cancelled && d?.colors?.[0]?.name) setHairNames(prev => ({ ...prev, [hex]: d.colors[0].name })); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [cfg.hair, cfg.hairColor]);
   const setField = (key, id) => update({ [key]: cfg[key] === id ? "" : id });
   const toggleTrait = (id) => {
     const cur = Array.isArray(cfg.traits) ? cfg.traits : [];
@@ -19375,7 +19387,8 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     () => { setSkinDraft(cfg.skin || null); setSkinOpen(true); });
   const eyesTrigger = pickerTrigger(de ? "Augenfarbe" : "Eye colour", !!eyesSel, previewText(eyesSel ? L(eyesSel) : ""),
     () => { setEyesDraft(cfg.eyes || null); setEyesOpen(true); });
-  const hairTrigger = pickerTrigger(de ? "Haarfarbe" : "Hair colour", !!hairSel || hairCustom, previewText(hairSel ? L(hairSel) : (hairCustom ? (de ? "Eigene Farbe" : "Custom") : "")),
+  const hairCustomLabel = hairCustom ? (hairNames[cfg.hairColor] || cfg.hairColor || (de ? "Eigene Farbe" : "Custom")) : "";
+  const hairTrigger = pickerTrigger(de ? "Haarfarbe" : "Hair colour", !!hairSel || hairCustom, previewText(hairSel ? L(hairSel) : hairCustomLabel),
     () => { setHairDraft(cfg.hair || null); setHairColorDraft(cfg.hairColor || "#8a5a2b"); setHairOpen(true); });
   const styleTrigger = pickerTrigger(de ? "Avatar Stil" : "Avatar Style", !!styleSel, previewText(styleSel ? L(styleSel) : ""), () => { setStyleDraft(cfg.style || null); setStyleOpen(true); });
   const detailsTrigger = pickerTrigger(de ? "Weitere Details" : "More details", hasNotes, previewText(cfg.notes || ""), () => { setNotesDraft(cfg.notes || ""); setNotesOpen(true); });
