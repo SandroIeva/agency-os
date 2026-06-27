@@ -19526,9 +19526,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
               {stepIdx === 2 && stepHead(de ? "Aussehen" : "Appearance",
                 de ? "Gib deinem Avatar nun die gewünschte Optik und Persönlichkeit."
                    : "Now give your avatar the look and personality you want.")}
-              {stepIdx === 3 && stepHead(de ? "Details" : "Details",
-                de ? "Hier kannst du deinem Avatar den gewissen letzten Touch geben."
-                   : "Give your avatar that certain final touch.")}
+              {stepIdx === 3 && stepHead(de ? "Details" : "Details")}
             </div>
             {/* Scrollable body. paddingLeft + negative marginLeft give the age-slider
                 thumb's shadow room on the left without shifting the content. */}
@@ -19559,9 +19557,9 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                 </div>
               )}
               {stepIdx === 3 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
                   {/* 'More details' field — dictation control above the field, right-aligned (same pattern as elsewhere) */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
                       <motion.div whileTap={{ scale: 0.9 }} onClick={startNotesDictation}
                         style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", color: isRecording ? "#EF4444" : theme.textSub, fontSize: 12, fontFamily: FONT, fontWeight: 500 }}>
@@ -19577,14 +19575,12 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                       placeholder={de ? "Beschreibe deinen Avatar in ein paar Sätzen…" : "Describe your avatar in a few sentences…"}
                       style={{ width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: 14, border: "none", outline: "none", resize: "none", minHeight: 180,
                         background: notesFocus ? (darkMode ? "rgba(255,255,255,0.12)" : "#ffffff") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
-                        boxShadow: notesFocus ? "0 8px 24px rgba(0,0,0,0.12)" : "0 2px 10px rgba(0,0,0,0.06)",
-                        color: theme.text, fontSize: 14, fontFamily: FONT, lineHeight: 1.6, transition: "background .25s ease, box-shadow .25s ease" }} />
+                        color: theme.text, fontSize: 14, fontFamily: FONT, lineHeight: 1.6, transition: "background .25s ease" }} />
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 340 }}>
                   <motion.div whileHover={{ scale: busy ? 1 : 1.02 }} whileTap={{ scale: busy ? 1 : 0.97 }} onClick={() => !busy && generate()}
                     style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "13px 0", borderRadius: 14, cursor: busy ? "default" : "pointer",
                       background: "#15151c", color: "#fff", fontSize: 14, fontFamily: FONT, fontWeight: 600, boxShadow: "none", opacity: busy ? 0.7 : 1 }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/></svg>
                     {cfg.imageUrl ? (de ? "Neu generieren" : "Regenerate") : (de ? "Avatar generieren" : "Generate avatar")}
                   </motion.div>
                   {cfg.imageUrl && (
