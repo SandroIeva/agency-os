@@ -19090,7 +19090,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const arch = AVATAR_ARCHETYPES.find(a => a.id === cfg.archetype);
   const selTraits = (cfg.traits || []).map(id => AVATAR_TRAITS.find(t => t.id === id)).filter(Boolean);
   const accentGlow = `0 18px 50px ${accent}33`;
-  const steps = [{ de: "Archetyp", en: "Archetype" }, { de: "Aussehen", en: "Appearance" }, { de: "Details", en: "Details" }, { de: "Customize", en: "Customize" }];
+  const steps = [{ de: "Archetyp", en: "Archetype" }, { de: "Type", en: "Type" }, { de: "Aussehen", en: "Appearance" }, { de: "Details", en: "Details" }];
   // Contextual info link per step (will later point to a help article).
   const infoQ = [
     { de: "Was sind Archetypen?", en: "What are archetypes?" },
@@ -19519,13 +19519,13 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
               {stepIdx === 0 && stepHead(de ? "Archetyp" : "Archetype",
                 de ? "Wir gehen Schritt für Schritt durch, wer dein Brand-Avatar ist. Wähle zunächst den Archetyp, der die Persönlichkeit deiner Marke am besten verkörpert."
                    : "We'll go through, step by step, who your brand avatar is. Start by choosing the archetype that best embodies your brand's personality.")}
-              {stepIdx === 1 && stepHead(de ? "Aussehen" : "Appearance",
+              {stepIdx === 1 && stepHead(de ? "Type" : "Type",
                 de ? "Lege fest, wie dein Avatar aussieht — Geschlecht, Alter und Erscheinung."
                    : "Define how your avatar looks — gender, age and appearance.")}
-              {stepIdx === 2 && stepHead(de ? "Details" : "Details",
-                de ? "Verfeinere deinen Avatar — Persönlichkeit & Haut, Stil und weitere Details."
-                   : "Refine your avatar — personality & skin, style and extra details.")}
-              {stepIdx === 3 && stepHead(de ? "Customize" : "Customize",
+              {stepIdx === 2 && stepHead(de ? "Aussehen" : "Appearance",
+                de ? "Persönlichkeit & Haut, Augen, Haare und Stil deines Avatars."
+                   : "Personality & skin, eyes, hair and style of your avatar.")}
+              {stepIdx === 3 && stepHead(de ? "Details" : "Details",
                 de ? "Füge letzte Details hinzu und generiere dann deinen Avatar."
                    : "Add any final details, then generate your avatar.")}
             </div>
