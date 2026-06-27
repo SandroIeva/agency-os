@@ -19414,7 +19414,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
             onMouseEnter={() => setHairHover(it.id)} onMouseLeave={() => setHairHover(null)} style={{ cursor: "pointer" }}>
             <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.2", borderRadius: 14, overflow: "hidden",
               background: darkMode ? "rgba(255,255,255,0.05)" : "#ececef", boxShadow: hairTileShadow(on, hov), transition: "box-shadow .3s cubic-bezier(0.33, 1, 0.68, 1)" }}>
-              <img src={`/avatar-haare/${it.id}.png`} alt={L(it)} loading="lazy" onError={(e) => { e.currentTarget.style.display = "none"; }}
+              <img src={`/avatar-haare/${it.id}${cfg.gender === "male" ? "-man" : ""}.png`} alt={L(it)} loading="lazy" onError={(e) => { e.currentTarget.style.display = "none"; }}
                 style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }} />
               {on && (
                 <div style={{ position: "absolute", top: 8, right: 8, width: 20, height: 20, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -19435,7 +19435,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
               background: darkMode ? "rgba(255,255,255,0.05)" : "#ececef",
               boxShadow: hairTileShadow(on, hov), transition: "box-shadow .3s cubic-bezier(0.33, 1, 0.68, 1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               {/* base hair image + chosen colour multiplied on top → realistic preview */}
-              <img src="/avatar-haare/custom.png" alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = "none"; }}
+              <img src={`/avatar-haare/custom${cfg.gender === "male" ? "-man" : ""}.png`} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = "none"; }}
                 style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }} />
               <div style={{ position: "absolute", inset: 0, background: hairColorDraft, mixBlendMode: "multiply", pointerEvents: "none" }} />
               <input type="color" value={hairColorDraft} onChange={(e) => { setHairColorDraft(e.target.value); setHairDraft("custom"); }}
