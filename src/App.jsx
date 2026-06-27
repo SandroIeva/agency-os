@@ -18893,9 +18893,9 @@ const AVATAR_EYES = [
   { id: "green", de: "Grün", en: "Green" }, { id: "light-green", de: "Hellgrün", en: "Light green" },
 ];
 const AVATAR_HAIR = [
-  { id: "black", de: "Schwarz", en: "Black" }, { id: "brown", de: "Braun", en: "Brown" },
-  { id: "blonde", de: "Blond", en: "Blonde" }, { id: "red", de: "Rot", en: "Red" },
-  { id: "grey", de: "Grau", en: "Grey" }, { id: "colorful", de: "Bunt", en: "Colorful" },
+  { id: "blond", de: "Blond", en: "Blonde" }, { id: "brown", de: "Braun", en: "Brown" },
+  { id: "orange", de: "Orange", en: "Orange" }, { id: "red", de: "Rot", en: "Red" },
+  { id: "silver", de: "Silber", en: "Silver" },
 ];
 
 function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider, llmKeys, ensureValidToken, appLanguage = "de", theme, darkMode, accent }) {
@@ -18912,6 +18912,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [skinOpen, setSkinOpen] = useState(false); const [skinDraft, setSkinDraft] = useState(null); const [skinHover, setSkinHover] = useState(null); // skin-condition picker (image grid like Appearance)
   const [eyesOpen, setEyesOpen] = useState(false); const [eyesDraft, setEyesDraft] = useState(null); const [eyesHover, setEyesHover] = useState(null); // eye-colour picker
   const [hairOpen, setHairOpen] = useState(false); const [hairDraft, setHairDraft] = useState(null); const [hairHover, setHairHover] = useState(null); // hair-colour picker
+  const [hairColorDraft, setHairColorDraft] = useState("#8a5a2b"); // custom hair colour (6th tile = colour selector)
   const [styleOpen, setStyleOpen] = useState(false); const [styleDraft, setStyleDraft] = useState(null);   // style picker
   const [notesOpen, setNotesOpen] = useState(false); const [notesDraft, setNotesDraft] = useState("");     // extra-details picker
   const [isRecording, setIsRecording] = useState(false); const recognitionRef = useRef(null);              // dictation for the details field
@@ -19367,14 +19368,15 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const skinSel = AVATAR_SKIN.find(s => s.id === cfg.skin);
   const eyesSel = AVATAR_EYES.find(s => s.id === cfg.eyes);
   const hairSel = AVATAR_HAIR.find(s => s.id === cfg.hair);
+  const hairCustom = cfg.hair === "custom";
   const personalityTrigger = pickerTrigger(de ? "Persönlichkeit" : "Personality", selTraits.length > 0, previewText(selTraits.map(L).join(", ")),
     () => { setTraitsDraft([...(cfg.traits || [])]); setTraitsOpen(true); });
   const skinTrigger = pickerTrigger(de ? "Hauttyp" : "Skin type", !!skinSel, previewText(skinSel ? L(skinSel) : ""),
     () => { setSkinDraft(cfg.skin || null); setSkinOpen(true); });
   const eyesTrigger = pickerTrigger(de ? "Augenfarbe" : "Eye colour", !!eyesSel, previewText(eyesSel ? L(eyesSel) : ""),
     () => { setEyesDraft(cfg.eyes || null); setEyesOpen(true); });
-  const hairTrigger = pickerTrigger(de ? "Haarfarbe" : "Hair colour", !!hairSel, previewText(hairSel ? L(hairSel) : ""),
-    () => { setHairDraft(cfg.hair || null); setHairOpen(true); });
+  const hairTrigger = pickerTrigger(de ? "Haarfarbe" : "Hair colour", !!hairSel || hairCustom, previewText(hairSel ? L(hairSel) : (hairCustom ? (de ? "Eigene Farbe" : "Custom") : "")),
+    () => { setHairDraft(cfg.hair || null); setHairColorDraft(cfg.hairColor || "#8a5a2b"); setHairOpen(true); });
   const styleTrigger = pickerTrigger(de ? "Avatar Stil" : "Avatar Style", !!styleSel, previewText(styleSel ? L(styleSel) : ""), () => { setStyleDraft(cfg.style || null); setStyleOpen(true); });
   const detailsTrigger = pickerTrigger(de ? "Weitere Details" : "More details", hasNotes, previewText(cfg.notes || ""), () => { setNotesDraft(cfg.notes || ""); setNotesOpen(true); });
 
@@ -19389,9 +19391,54 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const eyesOverlay = pickerShell("eyespicker", eyesOpen, () => setEyesOpen(false), de ? "Augenfarbe wählen" : "Choose eye colour",
     imageGrid(AVATAR_EYES, "/avatar-eyes", eyesDraft, setEyesDraft, eyesHover, setEyesHover),
     () => { update({ eyes: eyesDraft || "" }); setEyesOpen(false); });
+  const hairTileShadow = (on, hov) => on ? "0 0 0 2.5px #15151c, 0 6px 18px rgba(0,0,0,0.18)" : (hov ? "0 0 0 2px rgba(21,21,28,0.35), 0 6px 16px rgba(0,0,0,0.14)" : "none");
   const hairOverlay = pickerShell("hairpicker", hairOpen, () => setHairOpen(false), de ? "Haarfarbe wählen" : "Choose hair colour",
-    imageGrid(AVATAR_HAIR, "/avatar-hair", hairDraft, setHairDraft, hairHover, setHairHover),
-    () => { update({ hair: hairDraft || "" }); setHairOpen(false); });
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 30 }}>
+      {AVATAR_HAIR.map(it => {
+        const on = hairDraft === it.id; const hov = hairHover === it.id;
+        return (
+          <div key={it.id} onClick={() => setHairDraft(hairDraft === it.id ? null : it.id)}
+            onMouseEnter={() => setHairHover(it.id)} onMouseLeave={() => setHairHover(null)} style={{ cursor: "pointer" }}>
+            <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.2", borderRadius: 14, overflow: "hidden",
+              background: darkMode ? "rgba(255,255,255,0.05)" : "#ececef", boxShadow: hairTileShadow(on, hov), transition: "box-shadow .3s cubic-bezier(0.33, 1, 0.68, 1)" }}>
+              <img src={`/avatar-haare/${it.id}.png`} alt={L(it)} loading="lazy" onError={(e) => { e.currentTarget.style.display = "none"; }}
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }} />
+              {on && (
+                <div style={{ position: "absolute", top: 8, right: 8, width: 20, height: 20, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+              )}
+            </div>
+            <div style={{ marginTop: 11, fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500, textAlign: "center", color: on ? "#1c1c24" : "#4a4a54" }}>{L(it)}</div>
+          </div>
+        );
+      })}
+      {/* 6th tile — custom colour selector */}
+      {(() => {
+        const on = hairDraft === "custom"; const hov = hairHover === "custom";
+        return (
+          <div key="custom" onMouseEnter={() => setHairHover("custom")} onMouseLeave={() => setHairHover(null)} style={{ cursor: "pointer" }}>
+            <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.2", borderRadius: 14, overflow: "hidden",
+              background: on ? hairColorDraft : "conic-gradient(from 90deg, #f87171, #fbbf24, #a3e635, #34d399, #22d3ee, #818cf8, #e879f9, #f87171)",
+              boxShadow: hairTileShadow(on, hov), transition: "box-shadow .3s cubic-bezier(0.33, 1, 0.68, 1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <input type="color" value={hairColorDraft} onChange={(e) => { setHairColorDraft(e.target.value); setHairDraft("custom"); }}
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", border: "none", padding: 0 }} />
+              {on ? (
+                <div style={{ position: "absolute", top: 8, right: 8, width: 20, height: 20, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+              ) : (
+                <div style={{ width: 34, height: 34, borderRadius: "50%", background: "rgba(255,255,255,0.92)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.25)" }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1c1c24" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </div>
+              )}
+            </div>
+            <div style={{ marginTop: 11, fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500, textAlign: "center", color: on ? "#1c1c24" : "#4a4a54" }}>{de ? "Eigene Farbe" : "Custom"}</div>
+          </div>
+        );
+      })()}
+    </div>,
+    () => { update({ hair: hairDraft || "", hairColor: hairDraft === "custom" ? (hairColorDraft || "") : "" }); setHairOpen(false); });
   const styleOverlay = pickerShell("stylepicker", styleOpen, () => setStyleOpen(false), de ? "Stil wählen" : "Choose style",
     <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
       {AVATAR_STYLES.map(s => chip(L(s), styleDraft === s.id, () => setStyleDraft(styleDraft === s.id ? null : s.id), s.id))}
