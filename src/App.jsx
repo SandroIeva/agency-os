@@ -18916,6 +18916,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [hairNames, setHairNames] = useState({});      // hex -> human-readable colour name (api.color.pizza)
   const [notesFocus, setNotesFocus] = useState(false); // Customize details field focused → brighten with a transition
   const [refUploading, setRefUploading] = useState(false); // uploading a reference image on the final step
+  const [dlHover, setDlHover] = useState(false);       // download button hover (darken bg)
   const [styleOpen, setStyleOpen] = useState(false); const [styleDraft, setStyleDraft] = useState(null);   // style picker
   const [notesOpen, setNotesOpen] = useState(false); const [notesDraft, setNotesDraft] = useState("");     // extra-details picker
   const [isRecording, setIsRecording] = useState(false); const recognitionRef = useRef(null);              // dictation for the details field
@@ -19011,7 +19012,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     if (cfg.hair === "custom" && cfg.hairColor) hairDesc = `${hairNames[cfg.hairColor] || cfg.hairColor} hair`;
     else { const h = AVATAR_HAIR.find(x => x.id === cfg.hair); if (h) hairDesc = `${h.en.toLowerCase()} hair`; }
     const parts = [
-      `Photorealistic portrait photo (head and shoulders, looking at camera, natural soft lighting, shallow depth of field) of a brand persona`,
+      `Photorealistic portrait photo (head and shoulders, looking at camera, natural soft lighting) of a brand persona`,
       eth ? `${eth.en.toLowerCase()} appearance` : "",
       age ? `aged ${age.id}` : "",
       gender ? `${gender.en.toLowerCase()}` : "person",
@@ -19022,6 +19023,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       hairDesc,
       style ? `style: ${style.en}` : "",
       cfg.notes ? cfg.notes : "",
+      "isolated on a plain, even, neutral light-grey seamless studio background — absolutely no scenery, no objects, no props, no background details, no environment",
       "ultra-detailed, high resolution, authentic, professional editorial photography",
     ].filter(Boolean);
     return parts.join(", ");
@@ -19134,21 +19136,21 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
       )}
 
-      {/* Editable name (top) — dark frosted pill with a pencil edit affordance */}
-      <div style={{ position: "absolute", top: 28, left: "50%", transform: "translateX(-50%)", display: "inline-flex", alignItems: "center", gap: 8, maxWidth: "84%",
-        padding: "9px 15px", borderRadius: 11, background: "rgba(0,0,0,0.34)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.18)" }}>
+      {/* Editable name (top) — plain text like the old title (no background) + pencil edit icon */}
+      <div style={{ position: "absolute", top: 28, left: "50%", transform: "translateX(-50%)", display: "inline-flex", alignItems: "center", gap: 8, maxWidth: "90%" }}>
         <input className="avatarNameInput" value={cfg.name || ""} readOnly={!canEdit}
           onChange={canEdit ? (e => update({ name: e.target.value })) : undefined}
           placeholder={de ? "Name eingeben" : "Enter name"}
-          style={{ width: 118, minWidth: 0, border: "none", outline: "none", background: "transparent", fontSize: 15, fontFamily: FONT, fontWeight: 500, color: "#fff", textAlign: "center" }} />
-        {canEdit && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#A3EDED" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>}
+          style={{ width: `${((cfg.name || (de ? "Name eingeben" : "Enter name")).length) + 1}ch`, minWidth: 0, maxWidth: "100%", border: "none", outline: "none", background: "transparent", fontSize: 23, fontFamily: FONT, fontWeight: 400, letterSpacing: 0.5, color: "#fff", textAlign: "center" }} />
+        {canEdit && <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#A3EDED" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>}
       </div>
 
-      {/* Download (only after generation) — sits where the name field used to be */}
+      {/* Download (only after generation) — bottom-left, subtle bg that darkens on hover */}
       {cfg.imageUrl && (
         <motion.div whileTap={{ scale: 0.96 }} onClick={downloadAvatar} title={de ? "Herunterladen" : "Download"}
-          style={{ position: "absolute", left: "50%", bottom: 40, transform: "translateX(-50%)", display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer",
-            padding: "9px 16px", borderRadius: 11, background: "rgba(0,0,0,0.34)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.18)", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 500 }}>
+          onMouseEnter={() => setDlHover(true)} onMouseLeave={() => setDlHover(false)}
+          style={{ position: "absolute", left: 22, bottom: 22, display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer",
+            padding: "9px 16px", borderRadius: 11, background: dlHover ? "rgba(0,0,0,0.42)" : "rgba(0,0,0,0.18)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.16)", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 500, transition: "background .2s ease" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           {de ? "Herunterladen" : "Download"}
         </motion.div>
