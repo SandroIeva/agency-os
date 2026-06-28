@@ -18919,6 +18919,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [dlHover, setDlHover] = useState(false);       // download button hover (darken bg)
   const [detailOpen, setDetailOpen] = useState(false); // fullscreen avatar detail view (reuses MoodboardItemDetail)
   const [storyOpen, setStoryOpen] = useState(false); const [storyDraft, setStoryDraft] = useState(""); // brand-avatar story overlay
+  const [updateOpen, setUpdateOpen] = useState(false); // "Avatar aktualisieren" overlay (recreate / new version / new pose + gallery)
   const [styleOpen, setStyleOpen] = useState(false); const [styleDraft, setStyleDraft] = useState(null);   // style picker
   const [notesOpen, setNotesOpen] = useState(false); const [notesDraft, setNotesDraft] = useState("");     // extra-details picker
   const [isRecording, setIsRecording] = useState(false); const recognitionRef = useRef(null);              // dictation for the details field
@@ -19034,7 +19035,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     return parts.join(", ");
   };
 
-  const generate = async () => {
+  const generate = async (variation) => {
     setErr("");
     if (!canGenImage) { setErr(de ? "Bildgenerierung benötigt OpenAI oder Gemini (Settings → KI & Modelle)." : "Image generation needs OpenAI or Gemini (Settings → AI)."); return; }
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
@@ -19042,7 +19043,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     if (llmProvider === "gemini" && !apiKey && ensureValidToken) { try { oauthToken = await ensureValidToken(); } catch (_) {} }
     if (!apiKey && !oauthToken) { setErr(de ? "Kein API-Key hinterlegt (Settings → KI & Modelle)." : "No API key configured (Settings → AI)."); return; }
     setBusy(true);
-    const promptStr = buildPrompt();
+    const promptStr = buildPrompt() + (variation ? `, ${variation}` : "");
     try {
       const resp = await fetch("/api/chat-multi", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -19059,7 +19060,9 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
         const r = await uploadFile?.(file, "brand-avatar");
         if (r?.url) finalUrl = r.url;
       } catch (_) {}
-      update({ imageUrl: finalUrl, prompt: promptStr });
+      const prevGallery = (cfg.gallery && cfg.gallery.length) ? cfg.gallery : (cfg.imageUrl ? [cfg.imageUrl] : []);
+      const gallery = prevGallery.includes(finalUrl) ? prevGallery : [...prevGallery, finalUrl];
+      update({ imageUrl: finalUrl, prompt: promptStr, gallery });
     } catch (e) { setErr(e?.message || (de ? "Fehler bei der Generierung." : "Generation error.")); }
     setBusy(false);
   };
@@ -19541,6 +19544,42 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
         style={{ ...inputStyle, width: "100%", fontSize: 14, lineHeight: 1.6, resize: "vertical", minHeight: 220, background: "rgba(255,255,255,0.28)", border: "1px solid rgba(255,255,255,0.4)" }} />
     </div>,
     () => { update({ story: storyDraft }); setStoryOpen(false); }, 560);
+  // "Avatar aktualisieren" overlay — recreate / new version / new pose + a gallery of all versions.
+  const updateAction = (icon, label, onClick) => (
+    <motion.div whileTap={{ scale: busy ? 1 : 0.98 }} onClick={() => { if (!busy) onClick(); }}
+      style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 16px", borderRadius: 12, cursor: busy ? "default" : "pointer",
+        background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.55)", border: "1px solid rgba(0,0,0,0.06)", opacity: busy ? 0.55 : 1 }}>
+      <div style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#15151c", color: "#fff" }}>{icon}</div>
+      <span style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: "#1c1c24" }}>{label}</span>
+    </motion.div>
+  );
+  const galleryUrls = (cfg.gallery && cfg.gallery.length) ? cfg.gallery : (cfg.imageUrl ? [cfg.imageUrl] : []);
+  const updateOverlay = pickerShell("updatepicker", updateOpen, () => setUpdateOpen(false), de ? "Avatar aktualisieren" : "Update avatar",
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {updateAction(<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>, de ? "Avatar erneut erstellen" : "Recreate avatar", () => generate())}
+      {updateAction(<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>, de ? "Weitere Version erstellen" : "Create another version", () => generate())}
+      {updateAction(<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>, de ? "Andere Pose erstellen" : "Create a different pose", () => generate("in a clearly different pose and camera angle, different body posture and head tilt — same person, same outfit, same style"))}
+      {busy && <div style={{ fontSize: 12.5, fontFamily: FONT, color: "#4a4a54", textAlign: "center", paddingTop: 2 }}>{de ? "Wird erstellt…" : "Creating…"}</div>}
+      {err && <div style={{ fontSize: 12, fontFamily: FONT, color: "#EF4444", lineHeight: 1.5 }}>{err}</div>}
+      {galleryUrls.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 10.5, fontFamily: FONT, color: "#4a4a54", textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 600, marginBottom: 10 }}>{de ? "Versionen & Posen" : "Versions & poses"}</div>
+          <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
+            {galleryUrls.map((url, i) => {
+              const cur = url === cfg.imageUrl;
+              return (
+                <div key={i} onClick={() => update({ imageUrl: url })}
+                  style={{ position: "relative", flexShrink: 0, width: 84, aspectRatio: "1 / 1.2", borderRadius: 10, overflow: "hidden", cursor: "pointer",
+                    boxShadow: cur ? "0 0 0 2.5px #15151c" : "0 0 0 1px rgba(0,0,0,0.1)" }}>
+                  <img src={url} alt="" loading="lazy" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>,
+    () => setUpdateOpen(false), 460);
 
   // ── Read-only: just show the avatar card ──
   if (!canEdit) {
@@ -19690,7 +19729,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
             </div>
           </motion.div>
         ) : (
-          <motion.div whileTap={{ scale: busy ? 1 : 0.97 }} onClick={() => !busy && generate()}
+          <motion.div whileTap={{ scale: busy ? 1 : 0.97 }} onClick={() => { if (busy) return; if (cfg.imageUrl) setUpdateOpen(true); else generate(); }}
             style={{ display: "flex", alignItems: "center", gap: 12, cursor: busy ? "default" : "pointer", opacity: busy ? 0.7 : 1 }}>
             <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{busy ? (de ? "Wird erstellt…" : "Creating…") : (cfg.imageUrl ? (de ? "Avatar aktualisieren" : "Update avatar") : (de ? "Avatar finalisieren" : "Finalize avatar"))}</span>
             <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -19707,6 +19746,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       {styleOverlay}
       {notesOverlay}
       {storyOverlay}
+      {updateOverlay}
       {avatarDetail}
     </div>
   );
