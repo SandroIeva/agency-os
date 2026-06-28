@@ -19538,7 +19538,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       </div>
       <textarea value={storyDraft} onChange={e => setStoryDraft(e.target.value)} rows={8}
         placeholder={de ? "Erzähl die Story deines Brand-Avatars…" : "Tell your brand avatar's story…"}
-        style={{ ...inputStyle, width: "100%", fontSize: 14, lineHeight: 1.6, resize: "vertical", minHeight: 220, background: "rgba(255,255,255,0.6)" }} />
+        style={{ ...inputStyle, width: "100%", fontSize: 14, lineHeight: 1.6, resize: "vertical", minHeight: 220, background: "rgba(255,255,255,0.28)", border: "1px solid rgba(255,255,255,0.4)" }} />
     </div>,
     () => { update({ story: storyDraft }); setStoryOpen(false); }, 560);
 
