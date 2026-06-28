@@ -18918,6 +18918,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [refUploading, setRefUploading] = useState(false); // uploading a reference image on the final step
   const [dlHover, setDlHover] = useState(false);       // download button hover (darken bg)
   const [detailOpen, setDetailOpen] = useState(false); // fullscreen avatar detail view (reuses MoodboardItemDetail)
+  const [storyOpen, setStoryOpen] = useState(false); const [storyDraft, setStoryDraft] = useState(""); // brand-avatar story overlay
   const [styleOpen, setStyleOpen] = useState(false); const [styleDraft, setStyleDraft] = useState(null);   // style picker
   const [notesOpen, setNotesOpen] = useState(false); const [notesDraft, setNotesDraft] = useState("");     // extra-details picker
   const [isRecording, setIsRecording] = useState(false); const recognitionRef = useRef(null);              // dictation for the details field
@@ -18953,15 +18954,15 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const de = appLanguage === "de";
   const L = (o) => (de ? o.de : o.en);
   const update = (partial) => onChange({ ...cfg, ...partial });
-  // Dictation (Web Speech API) for the extra-details field — appends into notesDraft.
-  const startNotesDictation = () => {
+  // Dictation (Web Speech API) — appends recognised speech into the given field.
+  const startDictation = (getCurrent, setValue) => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { alert(de ? "Spracherkennung wird in diesem Browser nicht unterstützt. Bitte Chrome oder Safari verwenden." : "Speech recognition isn't supported in this browser. Use Chrome or Safari."); return; }
     if (isRecording) { stopNotesDictation(); return; }
     const recognition = new SR();
     recognition.lang = de ? "de-DE" : "en-US";
     recognition.continuous = true; recognition.interimResults = true;
-    let finalTranscript = cfg.notes || "";
+    let finalTranscript = getCurrent() || "";
     let needsSpace = finalTranscript.length > 0 && !finalTranscript.endsWith(" ") && !finalTranscript.endsWith("\n");
     recognition.onresult = (event) => {
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -18972,7 +18973,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           const last = cleaned.slice(-1);
           if (cleaned.length > 0 && !/[.!?,;:\n]/.test(last)) cleaned += ".";
           finalTranscript += (needsSpace ? " " : "") + cleaned; needsSpace = true;
-          update({ notes: finalTranscript });
+          setValue(finalTranscript);
         }
       }
     };
@@ -18980,6 +18981,8 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     recognition.onend = () => { setIsRecording(false); recognitionRef.current = null; };
     recognition.start(); recognitionRef.current = recognition; setIsRecording(true);
   };
+  const startNotesDictation = () => startDictation(() => cfg.notes, (v) => update({ notes: v }));
+  const startStoryDictation = () => startDictation(() => storyDraft, setStoryDraft);
   const stopNotesDictation = () => { if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; } setIsRecording(false); };
   useEffect(() => () => { if (recognitionRef.current) recognitionRef.current.stop(); }, []);
   // Resolve the custom hair hex to a human-readable colour name (same API as Brand colours).
@@ -19520,6 +19523,24 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       </div>
     </div>,
     () => { update({ notes: notesDraft }); setNotesOpen(false); });
+  // Brand Avatar Story — overlay with a textarea + dictation (top-right), saved to cfg.story.
+  const storyOverlay = pickerShell("storypicker", storyOpen, () => setStoryOpen(false), de ? "Brand Avatar Story" : "Brand avatar story",
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <motion.div whileTap={{ scale: 0.9 }} onClick={startStoryDictation}
+          style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", color: isRecording ? "#EF4444" : theme.textSub, fontSize: 12, fontFamily: FONT, fontWeight: 500 }}>
+          {isRecording ? (
+            <><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="6" y="6" width="12" height="12" rx="2" fill="#EF4444"/></svg> {de ? "Stopp" : "Stop"}</>
+          ) : (
+            <><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M5 10a7 7 0 0014 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M12 17v4M8 21h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> {de ? "Diktieren" : "Dictate"}</>
+          )}
+        </motion.div>
+      </div>
+      <textarea value={storyDraft} onChange={e => setStoryDraft(e.target.value)} rows={8}
+        placeholder={de ? "Erzähl die Story deines Brand-Avatars…" : "Tell your brand avatar's story…"}
+        style={{ ...inputStyle, width: "100%", fontSize: 14, lineHeight: 1.6, resize: "vertical", minHeight: 220, background: "rgba(255,255,255,0.6)" }} />
+    </div>,
+    () => { update({ story: storyDraft }); setStoryOpen(false); }, 560);
 
   // ── Read-only: just show the avatar card ──
   if (!canEdit) {
@@ -19656,9 +19677,9 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
 
       {/* Footer: contextual info link (left) + next-step button (right) */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "0 4px", marginTop: 10 }}>
-        <span onClick={() => { if (stepIdx === 3) onCreateStory?.(); }}
+        <span onClick={() => { if (stepIdx === 3) { setStoryDraft(cfg.story || ""); setStoryOpen(true); } }}
           style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, cursor: "pointer" }}>
-          {stepIdx === 3 ? (cfg.storyDocId ? (de ? "Zum Brand Avatar Dokument" : "Go to brand avatar document") : (de ? "Brand Avatar Story erstellen" : "Create brand avatar story")) : L(infoQ[stepIdx] || infoQ[0])}
+          {stepIdx === 3 ? (cfg.story ? (de ? "Brand Avatar Story bearbeiten" : "Edit brand avatar story") : (de ? "Brand Avatar Story schreiben" : "Write brand avatar story")) : L(infoQ[stepIdx] || infoQ[0])}
         </span>
         {stepIdx < 3 ? (
           <motion.div whileTap={{ scale: 0.97 }} onClick={() => setStepIdx(s => Math.min(3, s + 1))}
@@ -19685,6 +19706,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       {hairOverlay}
       {styleOverlay}
       {notesOverlay}
+      {storyOverlay}
       {avatarDetail}
     </div>
   );
