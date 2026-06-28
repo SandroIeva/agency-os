@@ -18898,7 +18898,7 @@ const AVATAR_HAIR = [
   { id: "silver", de: "Silber", en: "Silver" },
 ];
 
-function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider, llmKeys, ensureValidToken, appLanguage = "de", theme, darkMode, accent }) {
+function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider, llmKeys, ensureValidToken, appLanguage = "de", theme, darkMode, accent, onCreateStory }) {
   const cfg = value && typeof value === "object" ? value : {};
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -19656,10 +19656,18 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
 
       {/* Footer: contextual info link (left) + next-step button (right) */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "0 4px", marginTop: 10 }}>
-        <span onClick={() => { /* TODO: link to help article */ }}
-          style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, cursor: "pointer" }}>
-          {L(infoQ[stepIdx] || infoQ[0])}
-        </span>
+        {stepIdx === 3 ? (
+          <motion.div whileTap={{ scale: 0.97 }} onClick={() => onCreateStory?.()}
+            style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 16px", borderRadius: 11, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text, fontSize: 13.5, fontFamily: FONT, fontWeight: 500 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+            {de ? "Brand Avatar Story erstellen" : "Create brand avatar story"}
+          </motion.div>
+        ) : (
+          <span onClick={() => { /* TODO: link to help article */ }}
+            style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, cursor: "pointer" }}>
+            {L(infoQ[stepIdx] || infoQ[0])}
+          </span>
+        )}
         {stepIdx < 3 ? (
           <motion.div whileTap={{ scale: 0.97 }} onClick={() => setStepIdx(s => Math.min(3, s + 1))}
             style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
@@ -19690,7 +19698,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   );
 }
 
-function BrandView({ onBack, onNavigate, session, userOrg, theme, darkMode, t, appLanguage = "de", brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true }) {
+function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, darkMode, t, appLanguage = "de", brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true }) {
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
   const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
   // Edit permission for the current pillar: Design System needs the Designer
@@ -20021,6 +20029,40 @@ If you don't know a field, infer a plausible value. Write all text values in the
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
     }, 500);
+  };
+  // Create a prefilled "Brand Avatar Story" document and open it in Docs.
+  const createAvatarStory = async () => {
+    if (!userOrg?.id) return;
+    const av = profile?.brand_avatar || {};
+    const de = appLanguage === "de";
+    const pick = (arr, id) => { const o = arr.find(x => x.id === id); return o ? (de ? o.de : o.en) : null; };
+    const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const lines = [];
+    const g = pick(AVATAR_GENDERS, av.gender); if (g) lines.push(`${de ? "Geschlecht" : "Gender"}: ${g}`);
+    const age = AVATAR_AGES.find(a => a.id === av.age); if (age) lines.push(`${de ? "Alter" : "Age"}: ${age.de}`);
+    const eth = pick(AVATAR_ETHNICITIES, av.ethnicity); if (eth) lines.push(`${de ? "Erscheinung" : "Appearance"}: ${eth}`);
+    const skin = pick(AVATAR_SKIN, av.skin); if (skin) lines.push(`${de ? "Hauttyp" : "Skin type"}: ${skin}`);
+    const eyes = pick(AVATAR_EYES, av.eyes); if (eyes) lines.push(`${de ? "Augenfarbe" : "Eye colour"}: ${eyes}`);
+    let hair = pick(AVATAR_HAIR, av.hair); if (!hair && av.hair === "custom" && av.hairColor) hair = av.hairColor; if (hair) lines.push(`${de ? "Haarfarbe" : "Hair colour"}: ${hair}`);
+    const traits = (av.traits || []).map(id => pick(AVATAR_TRAITS, id)).filter(Boolean); if (traits.length) lines.push(`${de ? "Persönlichkeit" : "Personality"}: ${traits.join(", ")}`);
+    const style = pick(AVATAR_STYLES, av.style); if (style) lines.push(`${de ? "Avatar Stil" : "Avatar style"}: ${style}`);
+    const name = (av.name || "").trim();
+    const html = [
+      `<h1>${esc(name || "Brand Avatar")} – Story</h1>`,
+      av.imageUrl ? `<p><img src="${esc(av.imageUrl)}" alt="${esc(name || "Brand Avatar")}" /></p>` : "",
+      lines.length ? `<h2>${de ? "Aussehen" : "Appearance"}</h2><p>${lines.map(esc).join("<br>")}</p>` : "",
+      av.notes ? `<h2>${de ? "Details" : "Details"}</h2><p>${esc(av.notes)}</p>` : "",
+      `<h2>Story</h2>`,
+      `<p>${de ? "Hier kannst du jetzt deine Brand Avatar Story schreiben…" : "Write your brand avatar story here…"}</p>`,
+    ].filter(Boolean).join("");
+    let pref = "workspace"; try { pref = localStorage.getItem("agencyos-doc-default-visibility") || "workspace"; } catch (_) {}
+    const visibility = pref === "private" ? "restricted" : "workspace";
+    const title = name ? `${name} – Story` : "Brand Avatar Story";
+    const { data, error } = await supabase.from("brand_documents")
+      .insert({ org_id: userOrg.id, title, content: html, created_by: session?.user?.id, visibility })
+      .select().single();
+    if (error) { alert((de ? "Dokument konnte nicht erstellt werden: " : "Couldn't create document: ") + error.message); return; }
+    if (data && onOpenDoc) onOpenDoc(data.id);
   };
   const logoLayoutTimer = useRef(null);
   const saveLogoLayout = (cfg) => {
@@ -21611,6 +21653,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                       ) : k === "identity/avatar" ? (
                         <BrandAvatar value={profile.brand_avatar} onChange={saveBrandAvatar} canEdit={canEditCurrent}
                           uploadFile={uploadFile} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} appLanguage={appLanguage}
+                          onCreateStory={createAvatarStory}
                           theme={theme} darkMode={darkMode} accent={theme.accent} />
                       ) : k === "identity/voice" ? (
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
@@ -25542,7 +25585,7 @@ export default function CircularMenu() {
         {/* BRAND VIEW */}
         <AnimatePresence>
           {currentView === "brand" && (
-            <BrandView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} brandTab={brandTab} setBrandTab={setBrandTab} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} canEditBrand={canEditBrand} canEditDesign={canEditDesign} onNavigate={(v) => setCurrentView(v)} onBack={() => setCurrentView("dashboard")} />
+            <BrandView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} brandTab={brandTab} setBrandTab={setBrandTab} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} canEditBrand={canEditBrand} canEditDesign={canEditDesign} onNavigate={(v) => setCurrentView(v)} onOpenDoc={(id) => { setDocDeepLink({ documentId: id, blockId: null, ts: Date.now() }); setCurrentView("assets"); }} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
