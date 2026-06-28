@@ -19656,18 +19656,10 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
 
       {/* Footer: contextual info link (left) + next-step button (right) */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "0 4px", marginTop: 10 }}>
-        {stepIdx === 3 ? (
-          <motion.div whileTap={{ scale: 0.97 }} onClick={() => onCreateStory?.()}
-            style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 16px", borderRadius: 11, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text, fontSize: 13.5, fontFamily: FONT, fontWeight: 500 }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
-            {de ? "Brand Avatar Story erstellen" : "Create brand avatar story"}
-          </motion.div>
-        ) : (
-          <span onClick={() => { /* TODO: link to help article */ }}
-            style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, cursor: "pointer" }}>
-            {L(infoQ[stepIdx] || infoQ[0])}
-          </span>
-        )}
+        <span onClick={() => { if (stepIdx === 3) onCreateStory?.(); }}
+          style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, cursor: "pointer" }}>
+          {stepIdx === 3 ? (de ? "Brand Avatar Story erstellen" : "Create brand avatar story") : L(infoQ[stepIdx] || infoQ[0])}
+        </span>
         {stepIdx < 3 ? (
           <motion.div whileTap={{ scale: 0.97 }} onClick={() => setStepIdx(s => Math.min(3, s + 1))}
             style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
