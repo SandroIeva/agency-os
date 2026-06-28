@@ -20034,28 +20034,33 @@ If you don't know a field, infer a plausible value. Write all text values in the
     }
     const pick = (arr, id) => { const o = arr.find(x => x.id === id); return o ? (de ? o.de : o.en) : null; };
     const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const lines = [];
-    const g = pick(AVATAR_GENDERS, av.gender); if (g) lines.push(`${de ? "Geschlecht" : "Gender"}: ${g}`);
-    const age = AVATAR_AGES.find(a => a.id === av.age); if (age) lines.push(`${de ? "Alter" : "Age"}: ${age.de}`);
-    const eth = pick(AVATAR_ETHNICITIES, av.ethnicity); if (eth) lines.push(`${de ? "Erscheinung" : "Appearance"}: ${eth}`);
-    const skin = pick(AVATAR_SKIN, av.skin); if (skin) lines.push(`${de ? "Hauttyp" : "Skin type"}: ${skin}`);
-    const eyes = pick(AVATAR_EYES, av.eyes); if (eyes) lines.push(`${de ? "Augenfarbe" : "Eye colour"}: ${eyes}`);
-    let hair = pick(AVATAR_HAIR, av.hair); if (!hair && av.hair === "custom" && av.hairColor) hair = av.hairColor; if (hair) lines.push(`${de ? "Haarfarbe" : "Hair colour"}: ${hair}`);
-    const traits = (av.traits || []).map(id => pick(AVATAR_TRAITS, id)).filter(Boolean); if (traits.length) lines.push(`${de ? "Persönlichkeit" : "Personality"}: ${traits.join(", ")}`);
-    const style = pick(AVATAR_STYLES, av.style); if (style) lines.push(`${de ? "Avatar Stil" : "Avatar style"}: ${style}`);
     const name = (av.name || "").trim();
+    const rows = [];
+    const g = pick(AVATAR_GENDERS, av.gender); if (g) rows.push([de ? "Geschlecht" : "Gender", g]);
+    const age = AVATAR_AGES.find(a => a.id === av.age); if (age) rows.push([de ? "Alter" : "Age", age.de]);
+    const eth = pick(AVATAR_ETHNICITIES, av.ethnicity); if (eth) rows.push([de ? "Erscheinung" : "Appearance", eth]);
+    const skin = pick(AVATAR_SKIN, av.skin); if (skin) rows.push([de ? "Hauttyp" : "Skin type", skin]);
+    const eyes = pick(AVATAR_EYES, av.eyes); if (eyes) rows.push([de ? "Augenfarbe" : "Eye colour", eyes]);
+    let hair = pick(AVATAR_HAIR, av.hair); if (!hair && av.hair === "custom" && av.hairColor) hair = av.hairColor; if (hair) rows.push([de ? "Haarfarbe" : "Hair colour", hair]);
+    const traits = (av.traits || []).map(id => pick(AVATAR_TRAITS, id)).filter(Boolean); if (traits.length) rows.push([de ? "Persönlichkeit" : "Personality", traits.join(", ")]);
+    const style = pick(AVATAR_STYLES, av.style); if (style) rows.push([de ? "Avatar Stil" : "Avatar style", style]);
+    const greet = name ? (de ? `Hey, ich bin <strong>${esc(name)}</strong>.` : `Hey, I'm <strong>${esc(name)}</strong>.`) : "Hey!";
     const html = [
-      `<h1>${esc(name || "Brand Avatar")} – Story</h1>`,
+      `<p>${greet}</p>`,
       av.imageUrl ? `<img src="${esc(av.imageUrl)}" alt="${esc(name || "Brand Avatar")}" />` : "",
-      lines.length ? `<h2>${de ? "Aussehen" : "Appearance"}</h2><ul>${lines.map(l => `<li>${esc(l)}</li>`).join("")}</ul>` : "",
+      rows.length ? `<h2>${de ? "Aussehen" : "Appearance"}</h2>` + rows.map(([l, v]) => `<p>${esc(l)}: <strong>${esc(v)}</strong></p>`).join("") : "",
       av.notes ? `<h2>${de ? "Details" : "Details"}</h2><p>${esc(av.notes)}</p>` : "",
       `<h2>Story</h2>`,
       `<p>${de ? "Hier kannst du jetzt deine Brand Avatar Story schreiben…" : "Write your brand avatar story here…"}</p>`,
     ].filter(Boolean).join("");
-    // The editor stores BlockNote block JSON (not HTML) — parse our HTML into blocks.
+    // The editor stores BlockNote block JSON (not HTML) — parse our HTML into blocks; shrink the image.
     let content = "";
-    try { const parser = BlockNoteEditor.create({ schema: docSchema }); const blocks = await parser.tryParseHTMLToBlocks(html); content = JSON.stringify(blocks); }
-    catch (e) { console.error("[avatar-story] HTML parse failed", e); content = ""; }
+    try {
+      const parser = BlockNoteEditor.create({ schema: docSchema });
+      const blocks = await parser.tryParseHTMLToBlocks(html);
+      blocks.forEach(b => { if (b && b.type === "image") b.props = { ...(b.props || {}), previewWidth: 300 }; });
+      content = JSON.stringify(blocks);
+    } catch (e) { console.error("[avatar-story] HTML parse failed", e); content = ""; }
     let pref = "workspace"; try { pref = localStorage.getItem("agencyos-doc-default-visibility") || "workspace"; } catch (_) {}
     const visibility = pref === "private" ? "restricted" : "workspace";
     const title = name ? `${name} – Story` : "Brand Avatar Story";
