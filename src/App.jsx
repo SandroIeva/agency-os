@@ -19004,8 +19004,12 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     const age = AVATAR_AGES.find(a => a.id === cfg.age);
     const eth = AVATAR_ETHNICITIES.find(e => e.id === cfg.ethnicity);
     const style = AVATAR_STYLES.find(s => s.id === cfg.style);
-    const setting = AVATAR_SETTINGS.find(s => s.id === cfg.setting);
     const traits = (cfg.traits || []).map(id => AVATAR_TRAITS.find(t => t.id === id)).filter(Boolean);
+    const skin = AVATAR_SKIN.find(s => s.id === cfg.skin);
+    const eyes = AVATAR_EYES.find(e => e.id === cfg.eyes);
+    let hairDesc = "";
+    if (cfg.hair === "custom" && cfg.hairColor) hairDesc = `${hairNames[cfg.hairColor] || cfg.hairColor} hair`;
+    else { const h = AVATAR_HAIR.find(x => x.id === cfg.hair); if (h) hairDesc = `${h.en.toLowerCase()} hair`; }
     const parts = [
       `Photorealistic portrait photo (head and shoulders, looking at camera, natural soft lighting, shallow depth of field) of a brand persona`,
       eth ? `${eth.en.toLowerCase()} appearance` : "",
@@ -19013,8 +19017,10 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       gender ? `${gender.en.toLowerCase()}` : "person",
       arch ? `embodying the ${arch.en} brand archetype` : "",
       traits.length ? `personality: ${traits.map(t => t.en).join(", ")}` : "",
+      skin ? `skin: ${skin.en.toLowerCase()}` : "",
+      eyes ? `${eyes.en.toLowerCase()} eyes` : "",
+      hairDesc,
       style ? `style: ${style.en}` : "",
-      setting ? `setting: ${setting.en} background` : "",
       cfg.notes ? cfg.notes : "",
       "ultra-detailed, high resolution, authentic, professional editorial photography",
     ].filter(Boolean);
