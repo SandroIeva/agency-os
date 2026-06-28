@@ -18917,6 +18917,8 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [notesFocus, setNotesFocus] = useState(false); // Customize details field focused → brighten with a transition
   const [refUploading, setRefUploading] = useState(false); // uploading a reference image on the final step
   const [dlHover, setDlHover] = useState(false);       // download button hover (darken bg)
+  const [detailOpen, setDetailOpen] = useState(false); // fullscreen avatar detail view
+  const [palette, setPalette] = useState([]);          // colours extracted from the generated avatar
   const [styleOpen, setStyleOpen] = useState(false); const [styleDraft, setStyleDraft] = useState(null);   // style picker
   const [notesOpen, setNotesOpen] = useState(false); const [notesDraft, setNotesDraft] = useState("");     // extra-details picker
   const [isRecording, setIsRecording] = useState(false); const recognitionRef = useRef(null);              // dictation for the details field
@@ -18992,6 +18994,14 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       .catch(() => {});
     return () => { cancelled = true; };
   }, [cfg.hair, cfg.hairColor]);
+  // Extract a colour palette from the generated avatar when the detail view opens.
+  useEffect(() => {
+    let cancelled = false;
+    if (detailOpen && cfg.imageUrl) {
+      extractColors(cfg.imageUrl, 5).then(c => { if (!cancelled) setPalette(c || []); }).catch(() => {});
+    }
+    return () => { cancelled = true; };
+  }, [detailOpen, cfg.imageUrl]);
   const setField = (key, id) => update({ [key]: cfg[key] === id ? "" : id });
   const toggleTrait = (id) => {
     const cur = Array.isArray(cfg.traits) ? cfg.traits : [];
@@ -19037,10 +19047,11 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     if (llmProvider === "gemini" && !apiKey && ensureValidToken) { try { oauthToken = await ensureValidToken(); } catch (_) {} }
     if (!apiKey && !oauthToken) { setErr(de ? "Kein API-Key hinterlegt (Settings → KI & Modelle)." : "No API key configured (Settings → AI)."); return; }
     setBusy(true);
+    const promptStr = buildPrompt();
     try {
       const resp = await fetch("/api/chat-multi", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: buildPrompt(), provider: llmProvider, apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, wantsImage: true }),
+        body: JSON.stringify({ message: promptStr, provider: llmProvider, apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, wantsImage: true }),
       });
       const data = await resp.json().catch(() => ({}));
       const img = (data?.content || []).find(c => c.type === "image")?.url;
@@ -19053,7 +19064,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
         const r = await uploadFile?.(file, "brand-avatar");
         if (r?.url) finalUrl = r.url;
       } catch (_) {}
-      update({ imageUrl: finalUrl });
+      update({ imageUrl: finalUrl, prompt: promptStr });
     } catch (e) { setErr(e?.message || (de ? "Fehler bei der Generierung." : "Generation error.")); }
     setBusy(false);
   };
@@ -19136,23 +19147,14 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
       )}
 
-      {/* Editable name (top) — plain text like the old title (no background) + pencil edit icon */}
-      <div style={{ position: "absolute", top: 28, left: "50%", transform: "translateX(-50%)", display: "inline-flex", alignItems: "center", gap: 8, maxWidth: "90%" }}>
-        <input className="avatarNameInput" value={cfg.name || ""} readOnly={!canEdit}
-          onChange={canEdit ? (e => update({ name: e.target.value })) : undefined}
-          placeholder={de ? "Name eingeben" : "Enter name"}
-          style={{ width: `${((cfg.name || (de ? "Name eingeben" : "Enter name")).length) + 1}ch`, minWidth: 0, maxWidth: "100%", border: "none", outline: "none", background: "transparent", fontSize: 23, fontFamily: FONT, fontWeight: 400, letterSpacing: 0.5, color: "#fff", textAlign: "center" }} />
-        {canEdit && <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#A3EDED" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>}
-      </div>
-
-      {/* Download (only after generation) — bottom-left, subtle bg that darkens on hover */}
+      {/* After generation: bottom-left pill shows the name and opens the fullscreen detail */}
       {cfg.imageUrl && (
-        <motion.div whileTap={{ scale: 0.96 }} onClick={downloadAvatar} title={de ? "Herunterladen" : "Download"}
+        <motion.div whileTap={{ scale: 0.96 }} onClick={() => setDetailOpen(true)} title={de ? "Avatar öffnen" : "Open avatar"}
           onMouseEnter={() => setDlHover(true)} onMouseLeave={() => setDlHover(false)}
-          style={{ position: "absolute", left: 22, bottom: 22, display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer",
-            padding: "9px 16px", borderRadius: 11, background: dlHover ? "rgba(0,0,0,0.42)" : "rgba(0,0,0,0.18)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.16)", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 500, transition: "background .2s ease" }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          {de ? "Herunterladen" : "Download"}
+          style={{ position: "absolute", left: 22, bottom: 22, display: "inline-flex", alignItems: "center", gap: 9, cursor: "pointer", maxWidth: "84%",
+            padding: "9px 16px", borderRadius: 11, background: dlHover ? "rgba(0,0,0,0.42)" : "rgba(0,0,0,0.18)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.16)", color: "#fff", fontSize: 14, fontFamily: FONT, fontWeight: 500, transition: "background .2s ease" }}>
+          <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cfg.name || "Avatar"}</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
         </motion.div>
       )}
 
@@ -19164,6 +19166,68 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       )}
     </div>
   );
+
+  // Fullscreen avatar detail — large image + right panel (name, folder, palette, prompt, share, download).
+  const shareAvatar = async () => {
+    if (!cfg.imageUrl) return;
+    try {
+      if (navigator.share) { await navigator.share({ title: cfg.name || "Brand Avatar", url: cfg.imageUrl }); return; }
+      await navigator.clipboard?.writeText(cfg.imageUrl);
+    } catch (_) {}
+  };
+  const avatarDetail = (detailOpen && cfg.imageUrl) ? createPortal(
+    <div style={{ position: "fixed", inset: 0, zIndex: 6000, display: "flex", background: "rgba(10,10,14,0.9)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
+      {/* Image area */}
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 48, position: "relative", minWidth: 0 }}>
+        <div onClick={() => setDetailOpen(false)} style={{ position: "absolute", top: 22, left: 22, width: 38, height: 38, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "rgba(255,255,255,0.1)", color: "#fff" }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </div>
+        <img src={cfg.imageUrl} alt={cfg.name || "Brand Avatar"} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 18, boxShadow: "0 30px 80px rgba(0,0,0,0.5)" }} />
+      </div>
+      {/* Right panel */}
+      <div style={{ width: 400, flexShrink: 0, background: darkMode ? "#16161c" : "#fff", display: "flex", flexDirection: "column", padding: 30, gap: 26, overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <motion.div whileTap={{ scale: 0.96 }} onClick={shareAvatar}
+            style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
+            {de ? "Teilen" : "Share"}
+          </motion.div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 600, marginBottom: 6 }}>Name</div>
+          <input value={cfg.name || ""} readOnly={!canEdit} onChange={canEdit ? (e => update({ name: e.target.value })) : undefined}
+            placeholder={de ? "Name eingeben" : "Enter name"}
+            style={{ width: "100%", boxSizing: "border-box", border: "none", outline: "none", background: "transparent", fontSize: 22, fontFamily: FONT, fontWeight: 600, letterSpacing: -0.3, color: theme.text }} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 18, borderBottom: `1px solid ${theme.borderFaint}` }}>
+          <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>{de ? "Ordner" : "Folder"}</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            Avatar
+          </span>
+        </div>
+        <div>
+          <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 600, marginBottom: 10 }}>{de ? "Farbpalette" : "Colour palette"}</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {(palette.length ? palette : [null, null, null, null, null]).map((c, i) => (
+              <div key={i} title={c || ""} onClick={c ? () => { try { navigator.clipboard?.writeText(c); } catch (_) {} } : undefined}
+                style={{ width: 46, height: 46, borderRadius: 10, background: c || (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"), border: `1px solid ${theme.borderFaint}`, cursor: c ? "pointer" : "default" }} />
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 600, marginBottom: 8 }}>Prompt</div>
+          <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textSub, lineHeight: 1.55, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", borderRadius: 12, padding: "12px 14px", whiteSpace: "pre-wrap" }}>{cfg.prompt || "—"}</div>
+        </div>
+        <div style={{ marginTop: "auto" }}>
+          <motion.div whileTap={{ scale: 0.97 }} onClick={downloadAvatar}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 0", borderRadius: 12, cursor: "pointer", background: "#15151c", color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 600 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            {de ? "Herunterladen" : "Download"}
+          </motion.div>
+        </div>
+      </div>
+    </div>, document.body) : null;
 
   const navBtn = (label, onClick, primary, disabled) => (
     <motion.div whileTap={disabled ? undefined : { scale: 0.97 }} onClick={disabled ? undefined : onClick}
@@ -19503,6 +19567,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     return (
       <div style={{ display: "flex", justifyContent: "center", paddingTop: 8 }}>
         <div style={{ width: "100%", maxWidth: 380 }}>{avatarCard}</div>
+        {avatarDetail}
       </div>
     );
   }
@@ -19661,6 +19726,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       {hairOverlay}
       {styleOverlay}
       {notesOverlay}
+      {avatarDetail}
     </div>
   );
 }
