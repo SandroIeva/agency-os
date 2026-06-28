@@ -19658,7 +19658,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "0 4px", marginTop: 10 }}>
         <span onClick={() => { if (stepIdx === 3) onCreateStory?.(); }}
           style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, cursor: "pointer" }}>
-          {stepIdx === 3 ? (de ? "Brand Avatar Story erstellen" : "Create brand avatar story") : L(infoQ[stepIdx] || infoQ[0])}
+          {stepIdx === 3 ? (cfg.storyDocId ? (de ? "Zum Brand Avatar Dokument" : "Go to brand avatar document") : (de ? "Brand Avatar Story erstellen" : "Create brand avatar story")) : L(infoQ[stepIdx] || infoQ[0])}
         </span>
         {stepIdx < 3 ? (
           <motion.div whileTap={{ scale: 0.97 }} onClick={() => setStepIdx(s => Math.min(3, s + 1))}
@@ -20022,11 +20022,16 @@ If you don't know a field, infer a plausible value. Write all text values in the
       }
     }, 500);
   };
-  // Create a prefilled "Brand Avatar Story" document and open it in Docs.
+  // Open the avatar's story doc — create it (prefilled) the first time, otherwise reopen it.
   const createAvatarStory = async () => {
     if (!userOrg?.id) return;
     const av = profile?.brand_avatar || {};
     const de = appLanguage === "de";
+    // Already have one (and it still exists)? Just open it.
+    if (av.storyDocId) {
+      const { data: existing } = await supabase.from("brand_documents").select("id").eq("id", av.storyDocId).maybeSingle();
+      if (existing?.id) { onOpenDoc?.(existing.id); return; }
+    }
     const pick = (arr, id) => { const o = arr.find(x => x.id === id); return o ? (de ? o.de : o.en) : null; };
     const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const lines = [];
@@ -20041,20 +20046,24 @@ If you don't know a field, infer a plausible value. Write all text values in the
     const name = (av.name || "").trim();
     const html = [
       `<h1>${esc(name || "Brand Avatar")} – Story</h1>`,
-      av.imageUrl ? `<p><img src="${esc(av.imageUrl)}" alt="${esc(name || "Brand Avatar")}" /></p>` : "",
-      lines.length ? `<h2>${de ? "Aussehen" : "Appearance"}</h2><p>${lines.map(esc).join("<br>")}</p>` : "",
+      av.imageUrl ? `<img src="${esc(av.imageUrl)}" alt="${esc(name || "Brand Avatar")}" />` : "",
+      lines.length ? `<h2>${de ? "Aussehen" : "Appearance"}</h2><ul>${lines.map(l => `<li>${esc(l)}</li>`).join("")}</ul>` : "",
       av.notes ? `<h2>${de ? "Details" : "Details"}</h2><p>${esc(av.notes)}</p>` : "",
       `<h2>Story</h2>`,
       `<p>${de ? "Hier kannst du jetzt deine Brand Avatar Story schreiben…" : "Write your brand avatar story here…"}</p>`,
     ].filter(Boolean).join("");
+    // The editor stores BlockNote block JSON (not HTML) — parse our HTML into blocks.
+    let content = "";
+    try { const parser = BlockNoteEditor.create({ schema: docSchema }); const blocks = await parser.tryParseHTMLToBlocks(html); content = JSON.stringify(blocks); }
+    catch (e) { console.error("[avatar-story] HTML parse failed", e); content = ""; }
     let pref = "workspace"; try { pref = localStorage.getItem("agencyos-doc-default-visibility") || "workspace"; } catch (_) {}
     const visibility = pref === "private" ? "restricted" : "workspace";
     const title = name ? `${name} – Story` : "Brand Avatar Story";
     const { data, error } = await supabase.from("brand_documents")
-      .insert({ org_id: userOrg.id, title, content: html, created_by: session?.user?.id, visibility })
+      .insert({ org_id: userOrg.id, title, content, created_by: session?.user?.id, visibility })
       .select().single();
     if (error) { alert((de ? "Dokument konnte nicht erstellt werden: " : "Couldn't create document: ") + error.message); return; }
-    if (data && onOpenDoc) onOpenDoc(data.id);
+    if (data) { saveBrandAvatar({ ...av, storyDocId: data.id }); onOpenDoc?.(data.id); }
   };
   const logoLayoutTimer = useRef(null);
   const saveLogoLayout = (cfg) => {
