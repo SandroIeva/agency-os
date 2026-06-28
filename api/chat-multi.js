@@ -68,7 +68,7 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { message, messages, systemPrompt, provider = "claude", apiKey, oauthToken, model, maxTokens, wantsImage, image } = req.body || {};
+  const { message, messages, systemPrompt, provider = "claude", apiKey, oauthToken, model, maxTokens, wantsImage, image, imageOrientation } = req.body || {};
 
   // Build a normalised conversation history: array of { role: "user" | "assistant", content: string }
   // Accept either legacy single-message format or full messages array.
@@ -173,7 +173,11 @@ export default async function handler(req, res) {
       if (wantsImage) {
         const lastUserMsg = [...conversation].reverse().find(m => m.role === "user")?.content || "";
         const callOpenAI = async (model) => {
-          const body = { model, prompt: lastUserMsg, n: 1, size: "1024x1024" };
+          // Portrait when requested: dall-e-3 supports 1024x1792, gpt-image-1 1024x1536.
+          const size = imageOrientation === "portrait"
+            ? (model === "gpt-image-1" ? "1024x1536" : "1024x1792")
+            : "1024x1024";
+          const body = { model, prompt: lastUserMsg, n: 1, size };
           const r = await withTimeout(fetch("https://api.openai.com/v1/images/generations", {
             method: "POST",
             headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },

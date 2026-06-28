@@ -19025,6 +19025,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       style ? `style: ${style.en}` : "",
       cfg.notes ? cfg.notes : "",
       "isolated on a plain, even, neutral light-grey seamless studio background — absolutely no scenery, no objects, no props, no background details, no environment",
+      "vertical portrait orientation, 3:4 aspect ratio, full head visible with a little headroom",
       "ultra-detailed, high resolution, authentic, professional editorial photography",
     ].filter(Boolean);
     return parts.join(", ");
@@ -19042,7 +19043,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     try {
       const resp = await fetch("/api/chat-multi", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: promptStr, provider: llmProvider, apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, wantsImage: true }),
+        body: JSON.stringify({ message: promptStr, provider: llmProvider, apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, wantsImage: true, imageOrientation: "portrait" }),
       });
       const data = await resp.json().catch(() => ({}));
       const img = (data?.content || []).find(c => c.type === "image")?.url;
