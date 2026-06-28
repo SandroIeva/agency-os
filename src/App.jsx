@@ -19134,20 +19134,25 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
       )}
 
-      {/* "Avatar" title (HTML overlay, white, on top) */}
-      <div style={{ position: "absolute", top: 31, left: 0, right: 0, textAlign: "center", fontSize: 23, fontFamily: FONT, fontWeight: 400, letterSpacing: 0.5, color: "#fff" }}>Avatar</div>
-
-      {/* Editable name field — frosted input: white 12% bg, 16px blur, white 20% stroke.
-          On focus the placeholder fades out and the background darkens slightly. */}
-      <div style={{ position: "absolute", left: "50%", bottom: 40, transform: "translateX(-50%)", display: "inline-flex", alignItems: "center", gap: 8, maxWidth: "84%",
-        padding: "9px 15px 10px 11px", borderRadius: 11, background: nameFocus ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.12)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.2)", transition: "background .25s ease" }}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#A3EDED" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="9 18 15 12 9 6"/></svg>
+      {/* Editable name (top) — dark frosted pill with a pencil edit affordance */}
+      <div style={{ position: "absolute", top: 28, left: "50%", transform: "translateX(-50%)", display: "inline-flex", alignItems: "center", gap: 8, maxWidth: "84%",
+        padding: "9px 15px", borderRadius: 11, background: "rgba(0,0,0,0.34)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.18)" }}>
         <input className="avatarNameInput" value={cfg.name || ""} readOnly={!canEdit}
-          onFocus={() => setNameFocus(true)} onBlur={() => setNameFocus(false)}
           onChange={canEdit ? (e => update({ name: e.target.value })) : undefined}
           placeholder={de ? "Name eingeben" : "Enter name"}
-          style={{ width: 120, minWidth: 0, border: "none", outline: "none", background: "transparent", fontSize: 15, fontFamily: FONT, fontWeight: 500, color: "#fff" }} />
+          style={{ width: 118, minWidth: 0, border: "none", outline: "none", background: "transparent", fontSize: 15, fontFamily: FONT, fontWeight: 500, color: "#fff", textAlign: "center" }} />
+        {canEdit && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#A3EDED" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>}
       </div>
+
+      {/* Download (only after generation) — sits where the name field used to be */}
+      {cfg.imageUrl && (
+        <motion.div whileTap={{ scale: 0.96 }} onClick={downloadAvatar} title={de ? "Herunterladen" : "Download"}
+          style={{ position: "absolute", left: "50%", bottom: 40, transform: "translateX(-50%)", display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer",
+            padding: "9px 16px", borderRadius: 11, background: "rgba(0,0,0,0.34)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.18)", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 500 }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          {de ? "Herunterladen" : "Download"}
+        </motion.div>
+      )}
 
       {busy && (
         <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, background: "rgba(8,8,14,0.6)", backdropFilter: "blur(6px)" }}>
@@ -19610,13 +19615,6 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                       {refUploading ? (de ? "Wird hochgeladen…" : "Uploading…") : (de ? "Referenzbild hochladen" : "Upload reference image")}
                     </label>
                   )}
-                  {cfg.imageUrl && (
-                    <motion.div whileTap={{ scale: 0.97 }} onClick={downloadAvatar}
-                      style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px 0", borderRadius: 12, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                      {de ? "Herunterladen" : "Download"}
-                    </motion.div>
-                  )}
                   {err && <div style={{ fontSize: 12, fontFamily: FONT, color: "#EF4444", lineHeight: 1.5 }}>{err}</div>}
                   </div>
                 </div>
@@ -19647,7 +19645,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
         ) : (
           <motion.div whileTap={{ scale: busy ? 1 : 0.97 }} onClick={() => !busy && generate()}
             style={{ display: "flex", alignItems: "center", gap: 12, cursor: busy ? "default" : "pointer", opacity: busy ? 0.7 : 1 }}>
-            <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{busy ? (de ? "Wird erstellt…" : "Creating…") : (de ? "Avatar finalisieren" : "Finalize avatar")}</span>
+            <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{busy ? (de ? "Wird erstellt…" : "Creating…") : (cfg.imageUrl ? (de ? "Avatar aktualisieren" : "Update avatar") : (de ? "Avatar finalisieren" : "Finalize avatar"))}</span>
             <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </div>
