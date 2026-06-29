@@ -19716,7 +19716,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                       { key: "version", label: de ? "Weitere Version erstellen" : "Create another version", sub: de ? "Eine zusätzliche Variante" : "An additional variation",
                         icon: <><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>, run: () => generate() },
                       { key: "fullbody", label: de ? "Ganzkörperansicht" : "Full-body view", sub: de ? "Avatar in voller Größe" : "Avatar at full length",
-                        icon: <><circle cx="12" cy="4" r="2"/><path d="M12 6v9"/><path d="M8 9h8"/><path d="M9 21l3-6 3 6"/></>, run: () => generate("full-body shot, head-to-toe, the entire person visible from head to feet standing in a natural full-length pose — same person, same outfit, same style") },
+                        icon: <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>, run: () => generate("full-body shot, head-to-toe, the entire person visible from head to feet standing in a natural full-length pose — same person, same outfit, same style") },
                     ].map(it => (
                       <div key={it.key} className="hover-row" onClick={() => { setUpdateOpen(false); it.run(); }}
                         style={{ display: "flex", alignItems: "center", gap: 12, padding: 12, borderRadius: 10, cursor: "pointer" }}>
