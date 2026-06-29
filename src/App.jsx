@@ -28820,7 +28820,9 @@ export default function CircularMenu() {
         .bn-mantine .bn-suggestion-menu-label:first-child { margin-top: 0; }
         .bn-mantine .bn-suggestion-menu-item { height: auto; padding: 12px; border-radius: 10px; transition: background-color 0.9s cubic-bezier(0.22, 1, 0.36, 1); }
         .bn-mantine .bn-mt-suggestion-menu-item-section[data-position="left"] { border-radius: 8px; transition: background-color 0.9s cubic-bezier(0.22, 1, 0.36, 1), color 0.9s cubic-bezier(0.22, 1, 0.36, 1); }
-        /* Highlight on real mouse hover only — so the auto-selected first item (Diktieren) isn't permanently highlighted */
+        /* Nothing is pre-selected: neutralise BlockNote's default aria-selected highlight */
+        .bn-mantine .bn-suggestion-menu-item[aria-selected="true"] { background-color: transparent; }
+        /* Highlight on real mouse hover only */
         .bn-mantine .bn-suggestion-menu-item:hover { background-color: rgba(0,0,0,0.035); }
         [data-color-scheme="dark"] .bn-suggestion-menu-item:hover { background-color: rgba(255,255,255,0.05); }
         .bn-mantine .bn-suggestion-menu-item:hover .bn-mt-suggestion-menu-item-section[data-position="left"] { background-color: #15151c; color: #fff; }
