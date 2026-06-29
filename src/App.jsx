@@ -28913,11 +28913,11 @@ export default function CircularMenu() {
           transition: background 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), border-color 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
         /* Overlay close button (X circle) — subtle by default, darkens softly on hover */
-        .ov-close { transition: background 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
-        .ov-close-light { background: rgba(0,0,0,0.14); }
-        .ov-close-light:hover { background: rgba(0,0,0,0.34); }
-        .ov-close-dark { background: rgba(255,255,255,0.14); }
-        .ov-close-dark:hover { background: rgba(255,255,255,0.32); }
+        .ov-close { transition: background 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
+        .ov-close-light { background: rgba(0,0,0,0.12); }
+        .ov-close-light:hover { background: rgba(0,0,0,0.2); }
+        .ov-close-dark { background: rgba(255,255,255,0.12); }
+        .ov-close-dark:hover { background: rgba(255,255,255,0.2); }
         .hover-back {
           transition: background 0.5s cubic-bezier(0.16, 1, 0.3, 1);
         }
