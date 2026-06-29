@@ -15718,10 +15718,10 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
           {visibleDocs.map(d => {
             const creator = memberById[d.created_by];
             return (
-            <motion.div key={d.id} whileHover={{ y: -3 }} onClick={() => { setOpenDoc(d); setTitle(d.title || ""); }}
+            <motion.div key={d.id} className="doc-row" whileHover={{ y: -3 }} onClick={() => { setOpenDoc(d); setTitle(d.title || ""); }}
               style={{ position: "relative", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)", boxShadow: "0 5px 16px rgba(0,0,0,0.06)", padding: 18, cursor: "pointer", minHeight: 116, display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16)}</div>
+                <div className="doc-row-icon" style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16)}</div>
                 <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || "Unbenanntes Dokument"}</div>
                 {dupBtn(d)}
               </div>
@@ -15739,9 +15739,9 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
           {visibleDocs.map((d, i) => {
             const creator = memberById[d.created_by];
             return (
-            <motion.div key={d.id} whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }} onClick={() => { setOpenDoc(d); setTitle(d.title || ""); }}
+            <motion.div key={d.id} className="doc-row" whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }} onClick={() => { setOpenDoc(d); setTitle(d.title || ""); }}
               style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", cursor: "pointer", borderBottom: i < visibleDocs.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
-              <div style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16)}</div>
+              <div className="doc-row-icon" style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16)}</div>
               <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || "Unbenanntes Dokument"}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, width: 140 }}>
                 {creator?.display_name && <>{creatorAvatar(creator)}<span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{creator.display_name}</span></>}
@@ -28826,6 +28826,11 @@ export default function CircularMenu() {
         .bn-mantine .bn-suggestion-menu-item:hover { background-color: rgba(0,0,0,0.035); }
         [data-color-scheme="dark"] .bn-suggestion-menu-item:hover { background-color: rgba(255,255,255,0.05); }
         .bn-mantine .bn-suggestion-menu-item:hover .bn-mt-suggestion-menu-item-section[data-position="left"] { background-color: #15151c; color: #fff; }
+        /* Documents list/grid: icon box turns anthracite with a white icon on row hover (matches slash menu) */
+        .doc-row-icon { transition: background-color 0.9s cubic-bezier(0.22, 1, 0.36, 1); }
+        .doc-row-icon svg { transition: stroke 0.9s cubic-bezier(0.22, 1, 0.36, 1); }
+        .doc-row:hover .doc-row-icon { background-color: #15151c !important; }
+        .doc-row:hover .doc-row-icon svg { stroke: #fff; }
         .avatar-edit:hover .avatar-edit-overlay { opacity: 1 !important; }
         /* Brand imagery: prompt overlay fades in on hover */
         .imagery-overlay { opacity: 0; transition: opacity 0.18s ease; }
