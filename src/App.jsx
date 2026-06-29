@@ -28816,17 +28816,14 @@ export default function CircularMenu() {
         [data-color-scheme="dark"] .bn-suggestion-menu { box-shadow: 0 18px 50px rgba(0,0,0,0.45), 0 4px 14px rgba(0,0,0,0.25) !important; border-color: rgba(255,255,255,0.06) !important; }
         /* Slash menu polish: spacing, rounder highlight, subtle icon boxes, soft fade */
         .bn-mantine .bn-suggestion-menu { padding: 12px 4px; }
-        .bn-mantine .bn-suggestion-menu-label { margin-top: 15px; margin-bottom: 3px; }
+        .bn-mantine .bn-suggestion-menu-label { margin-top: 15px; margin-bottom: 3px; font-size: 14px; }
         .bn-mantine .bn-suggestion-menu-label:first-child { margin-top: 0; }
         .bn-mantine .bn-suggestion-menu-item { height: auto; padding: 12px; border-radius: 10px; transition: background-color 0.9s cubic-bezier(0.22, 1, 0.36, 1); }
         .bn-mantine .bn-mt-suggestion-menu-item-section[data-position="left"] { border-radius: 8px; transition: background-color 0.9s cubic-bezier(0.22, 1, 0.36, 1), color 0.9s cubic-bezier(0.22, 1, 0.36, 1); }
-        .bn-mantine .bn-suggestion-menu-item:hover,
-        .bn-mantine .bn-suggestion-menu-item[aria-selected="true"] { background-color: rgba(0,0,0,0.035); }
-        [data-color-scheme="dark"] .bn-suggestion-menu-item:hover,
-        [data-color-scheme="dark"] .bn-suggestion-menu-item[aria-selected="true"] { background-color: rgba(255,255,255,0.05); }
-        /* Hover/selected: icon box turns anthracite, icon goes white */
-        .bn-mantine .bn-suggestion-menu-item:hover .bn-mt-suggestion-menu-item-section[data-position="left"],
-        .bn-mantine .bn-suggestion-menu-item[aria-selected="true"] .bn-mt-suggestion-menu-item-section[data-position="left"] { background-color: #15151c; color: #fff; }
+        /* Highlight on real mouse hover only — so the auto-selected first item (Diktieren) isn't permanently highlighted */
+        .bn-mantine .bn-suggestion-menu-item:hover { background-color: rgba(0,0,0,0.035); }
+        [data-color-scheme="dark"] .bn-suggestion-menu-item:hover { background-color: rgba(255,255,255,0.05); }
+        .bn-mantine .bn-suggestion-menu-item:hover .bn-mt-suggestion-menu-item-section[data-position="left"] { background-color: #15151c; color: #fff; }
         .avatar-edit:hover .avatar-edit-overlay { opacity: 1 !important; }
         /* Brand imagery: prompt overlay fades in on hover */
         .imagery-overlay { opacity: 0; transition: opacity 0.18s ease; }
