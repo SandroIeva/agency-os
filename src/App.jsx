@@ -18919,7 +18919,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   const [refUploading, setRefUploading] = useState(false); // uploading a reference image on the final step
   const [dlHover, setDlHover] = useState(false);       // download button hover (darken bg)
   const [detailOpen, setDetailOpen] = useState(false); // fullscreen avatar detail view (reuses MoodboardItemDetail)
-  const [storyOpen, setStoryOpen] = useState(false); const [storyDraft, setStoryDraft] = useState(""); // brand-avatar story overlay
+  const [storyOpen, setStoryOpen] = useState(false); const [storyDraft, setStoryDraft] = useState(""); const [storyFocus, setStoryFocus] = useState(false); // brand-avatar story overlay
   const [updateOpen, setUpdateOpen] = useState(false); // "Avatar aktualisieren" overlay (recreate / new version / new pose + gallery)
   const [styleOpen, setStyleOpen] = useState(false); const [styleDraft, setStyleDraft] = useState(null);   // style picker
   const [notesOpen, setNotesOpen] = useState(false); const [notesDraft, setNotesDraft] = useState("");     // extra-details picker
@@ -19367,7 +19367,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
             initial={{ scale: 1.06 }} animate={{ scale: 1 }} exit={{ scale: 1.04 }}
             transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
             style={{ position: "relative", width: `min(${panelW}px, 94vw)`, borderRadius: 24, padding: 34,
-              background: "rgba(255,255,255,0.1)", backdropFilter: "blur(30px) saturate(1.4)", WebkitBackdropFilter: "blur(30px) saturate(1.4)",
+              background: "rgba(255,255,255,0.25)", backdropFilter: "blur(30px) saturate(1.4)", WebkitBackdropFilter: "blur(30px) saturate(1.4)",
               boxShadow: "0 24px 70px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)",
               border: "1px solid rgba(255,255,255,0.45)", isolation: "isolate", willChange: "transform", WebkitBackfaceVisibility: "hidden" }}>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.32, ease: "easeOut", delay: 0.04 }}>
@@ -19540,9 +19540,12 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           )}
         </motion.div>
       </div>
-      <textarea value={storyDraft} onChange={e => setStoryDraft(e.target.value)} rows={8}
+      <textarea value={storyDraft} onChange={e => setStoryDraft(e.target.value)} rows={8} className="story-textarea"
+        onFocus={() => setStoryFocus(true)} onBlur={() => setStoryFocus(false)}
         placeholder={de ? "Erzähl die Story deines Brand-Avatars…" : "Tell your brand avatar's story…"}
-        style={{ ...inputStyle, width: "100%", fontSize: 14, lineHeight: 1.6, resize: "vertical", minHeight: 220, background: "rgba(255,255,255,0.28)", border: "1px solid rgba(255,255,255,0.4)" }} />
+        style={{ ...inputStyle, width: "100%", fontSize: 14, lineHeight: 1.6, resize: "vertical", minHeight: 220, outline: "none",
+          background: storyFocus ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.28)", border: `1px solid ${storyFocus ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.4)"}`,
+          transition: "background 0.5s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.5s cubic-bezier(0.22, 1, 0.36, 1)" }} />
     </div>,
     () => { update({ story: storyDraft }); setStoryOpen(false); }, 560);
 
@@ -28918,6 +28921,9 @@ export default function CircularMenu() {
         .ov-close-light:hover { background: rgba(0,0,0,0.2); }
         .ov-close-dark { background: rgba(255,255,255,0.12); }
         .ov-close-dark:hover { background: rgba(255,255,255,0.2); }
+        /* Story textarea — placeholder fades out softly on focus */
+        .story-textarea::placeholder { opacity: 1; transition: opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
+        .story-textarea:focus::placeholder { opacity: 0; }
         .hover-back {
           transition: background 0.5s cubic-bezier(0.16, 1, 0.3, 1);
         }
