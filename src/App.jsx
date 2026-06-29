@@ -28814,6 +28814,11 @@ export default function CircularMenu() {
            space inline; override it. shift() keeps the (shorter) menu fully in view. */
         .bn-suggestion-menu { max-height: min(44vh, 420px) !important; overflow-y: auto; border-radius: 14px !important; box-shadow: 0 18px 50px rgba(0,0,0,0.12), 0 4px 14px rgba(0,0,0,0.05) !important; border: 1px solid rgba(0,0,0,0.04) !important; }
         [data-color-scheme="dark"] .bn-suggestion-menu { box-shadow: 0 18px 50px rgba(0,0,0,0.45), 0 4px 14px rgba(0,0,0,0.25) !important; border-color: rgba(255,255,255,0.06) !important; }
+        /* Slash menu polish: more air between sections, rounder icon boxes, soft fade on hover */
+        .bn-mantine .bn-suggestion-menu-label { margin-top: 15px; margin-bottom: 3px; }
+        .bn-mantine .bn-suggestion-menu-label:first-child { margin-top: 2px; }
+        .bn-mantine .bn-mt-suggestion-menu-item-section[data-position="left"] { border-radius: 12px; }
+        .bn-mantine .bn-suggestion-menu-item { transition: background-color 0.9s cubic-bezier(0.22, 1, 0.36, 1); }
         .avatar-edit:hover .avatar-edit-overlay { opacity: 1 !important; }
         /* Brand imagery: prompt overlay fades in on hover */
         .imagery-overlay { opacity: 0; transition: opacity 0.18s ease; }
