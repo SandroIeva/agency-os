@@ -19698,7 +19698,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
               style={{ display: "flex", alignItems: "center", gap: 12, cursor: busy ? "default" : "pointer", opacity: busy ? 0.7 : 1 }}>
               <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{busy ? (de ? "Wird erstellt…" : "Creating…") : (cfg.imageUrl ? (de ? "Avatar aktualisieren" : "Update avatar") : (de ? "Avatar finalisieren" : "Finalize avatar"))}</span>
               <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points={cfg.imageUrl ? "6 15 12 9 18 15" : "9 18 15 12 9 6"}/></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points={cfg.imageUrl ? "6 9 12 15 18 9" : "9 18 15 12 9 6"}/></svg>
               </div>
             </motion.div>
             <AnimatePresence>
@@ -19706,19 +19706,19 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                 <>
                   <div onClick={() => setUpdateOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
                   <motion.div initial={{ opacity: 0, y: 6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
-                    style={{ position: "absolute", bottom: "calc(100% + 10px)", right: 0, zIndex: 5001, minWidth: 256, borderRadius: 14, overflow: "hidden", padding: 6, whiteSpace: "nowrap",
-                      background: darkMode ? "rgba(28,28,38,0.72)" : "rgba(255,255,255,0.72)", backdropFilter: "blur(20px) saturate(1.3)", WebkitBackdropFilter: "blur(20px) saturate(1.3)",
-                      border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.55)"}`, boxShadow: "0 16px 44px rgba(0,0,0,0.2)" }}>
+                    style={{ position: "absolute", bottom: "calc(100% + 20px)", right: 0, zIndex: 5001, minWidth: 256, borderRadius: 14, overflow: "hidden", padding: 6, whiteSpace: "nowrap",
+                      background: darkMode ? "rgba(28,28,38,0.88)" : "rgba(255,255,255,0.88)", backdropFilter: "blur(20px) saturate(1.3)", WebkitBackdropFilter: "blur(20px) saturate(1.3)",
+                      border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.55)"}`, boxShadow: "0 10px 26px rgba(0,0,0,0.12)" }}>
                     {[
                       { key: "recreate", label: de ? "Avatar erneut erstellen" : "Recreate avatar", sub: de ? "Neu mit denselben Merkmalen" : "Fresh take, same traits",
                         icon: <><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>, run: () => generate() },
                       { key: "version", label: de ? "Weitere Version erstellen" : "Create another version", sub: de ? "Eine zusätzliche Variante" : "An additional variation",
-                        icon: <><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></>, run: () => generate() },
+                        icon: <><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>, run: () => generate() },
                       { key: "pose", label: de ? "Andere Pose erstellen" : "Create a different pose", sub: de ? "Gleiche Person, neue Pose" : "Same person, new pose",
                         icon: <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>, run: () => generate("in a clearly different pose and camera angle, different body posture and head tilt — same person, same outfit, same style") },
                     ].map(it => (
                       <div key={it.key} className="hover-row" onClick={() => { setUpdateOpen(false); it.run(); }}
-                        style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
+                        style={{ display: "flex", alignItems: "center", gap: 12, padding: 12, borderRadius: 10, cursor: "pointer" }}>
                         <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", color: theme.text }}>
                           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>
                         </div>
