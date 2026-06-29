@@ -13803,7 +13803,8 @@ function MoodboardItemDetail({ item, items = [], containers = [], currentContain
 
         {/* Close */}
         <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); close(); }} title={de ? "Schließen" : "Close"}
-          style={{ position: "absolute", top: 18, left: 18, width: 38, height: 38, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.12)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.18)", color: "#fff", cursor: "pointer" }}>
+          className={"ov-close " + (darkMode ? "ov-close-dark" : "ov-close-light")}
+          style={{ position: "absolute", top: 18, left: 18, width: 38, height: 38, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.18)", color: "#fff", cursor: "pointer" }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
         </motion.div>
 
@@ -19372,7 +19373,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.32, ease: "easeOut", delay: 0.04 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 30 }}>
                 <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, letterSpacing: -0.2, color: "#1c1c24" }}>{title}</div>
-                <div onClick={onClose} style={{ width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.25)" }}>
+                <div onClick={onClose} className="ov-close ov-close-light" style={{ width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: "1px solid rgba(255,255,255,0.25)" }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </div>
               </div>
@@ -28911,6 +28912,12 @@ export default function CircularMenu() {
           border-color: ${darkMode ? "rgba(232, 67, 147, 0.22)" : "rgba(232, 67, 147, 0.30)"} !important;
           transition: background 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), border-color 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
+        /* Overlay close button (X circle) — subtle by default, darkens softly on hover */
+        .ov-close { transition: background 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+        .ov-close-light { background: rgba(0,0,0,0.14); }
+        .ov-close-light:hover { background: rgba(0,0,0,0.34); }
+        .ov-close-dark { background: rgba(255,255,255,0.14); }
+        .ov-close-dark:hover { background: rgba(255,255,255,0.32); }
         .hover-back {
           transition: background 0.5s cubic-bezier(0.16, 1, 0.3, 1);
         }
