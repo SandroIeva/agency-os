@@ -77,6 +77,7 @@ export default function PublicBrandLanding({ token }) {
   const [active, setActive] = useState(null);
   const [copied, setCopied] = useState(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [hoverNav, setHoverNav] = useState(null); // icon-rail tooltip
   const [voiceSub, setVoiceSub] = useState("intro"); // inner nav within Voice & Tone
   const voiceRefs = React.useRef({});
   const de = typeof navigator !== "undefined" ? (navigator.language || "de").toLowerCase().startsWith("de") : true;
@@ -422,58 +423,69 @@ export default function PublicBrandLanding({ token }) {
 
   const sectionTitle = current === "downloads" ? "Download Assets" : (NAV.find(n => n.key === current)?.label || "");
 
-  const navItem = (num, key, label) => {
-    const on = current === key;
+  // ── Icon rail (left navigation) ──
+  const railIcon = (key) => {
+    const p = {
+      strategy: <><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></>,
+      taglines: <><path d="M10 11H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v8a4 4 0 0 1-4 4"/><path d="M20 11h-4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v8a4 4 0 0 1-4 4"/></>,
+      voice: <><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></>,
+      logo: <><path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1Z"/><rect x="3" y="14" width="7" height="7" rx="1"/><circle cx="17.5" cy="17.5" r="3.5"/></>,
+      colors: <><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></>,
+      typography: <><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></>,
+      imagery: <><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></>,
+      personas: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,
+      downloads: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
+      share: <><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></>,
+    }[key];
+    return <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{p}</svg>;
+  };
+
+  const railBtn = (key, label, onClick, isActive) => {
+    const hov = hoverNav === key;
     return (
-      <div key={key} onClick={() => setActive(key)} style={{ display: "flex", alignItems: "baseline", gap: 12, padding: "7px 0", cursor: "pointer" }}>
-        <span style={{ fontSize: 11.5, color: "rgba(255,255,255,0.32)", width: 26, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{num}</span>
-        <span style={{ fontSize: 13.5, color: on ? "#fff" : "rgba(255,255,255,0.62)", fontWeight: on ? 600 : 400, transition: "color 0.15s" }}>{label}</span>
+      <div key={key} style={{ position: "relative" }} onMouseEnter={() => setHoverNav(key)} onMouseLeave={() => setHoverNav(h => (h === key ? null : h))}>
+        <div onClick={onClick}
+          style={{ width: 40, height: 40, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+            background: isActive ? "#15151c" : hov ? "rgba(0,0,0,0.05)" : "transparent",
+            color: isActive ? "#fff" : hov ? "#15151c" : "#9a9aa5",
+            transition: "background 0.45s cubic-bezier(0.22, 1, 0.36, 1), color 0.45s cubic-bezier(0.22, 1, 0.36, 1)" }}>
+          {railIcon(key)}
+        </div>
+        {/* Tooltip */}
+        <div style={{ position: "absolute", left: "calc(100% + 14px)", top: "50%", zIndex: 20, pointerEvents: "none",
+          transform: `translateY(-50%) translateX(${hov ? 0 : -4}px)`, opacity: hov ? 1 : 0,
+          transition: "opacity 0.25s ease, transform 0.25s ease",
+          background: "#15151c", color: "#fff", fontSize: 12, fontWeight: 600, fontFamily: FONT, padding: "6px 11px", borderRadius: 8, whiteSpace: "nowrap", boxShadow: "0 6px 18px rgba(0,0,0,0.18)" }}>
+          {label}
+        </div>
       </div>
     );
   };
 
   return (
-    <div style={{ fontFamily: FONT, color: "#15151c", background: "#eef0f2", position: "fixed", inset: 0, display: "flex", flexDirection: "column" }}>
-      {/* Top bar */}
-      <div style={{ flexShrink: 0, height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", background: "#fff", borderBottom: "1px solid #e7e8ec" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-          {primaryLogo && <div style={{ width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: "#f3f3f6", overflow: "hidden" }}><img src={primaryLogo.url} alt="" style={{ maxWidth: "76%", maxHeight: "76%", objectFit: "contain" }} /></div>}
-          <span style={{ fontSize: 15, fontWeight: 700, color: "#15151c", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{brand.name}</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={copyLink} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 15px", borderRadius: 999, border: "1px solid #e6e6ea", background: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: FONT, color: "#333" }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-            {linkCopied ? "Link kopiert!" : "Teilen"}
-          </button>
-        </div>
-      </div>
+    <div style={{ fontFamily: FONT, color: "#15151c", background: "#eef0f2", position: "fixed", inset: 0, display: "flex", gap: 14, padding: 14 }}>
+      {/* Icon rail */}
+      <aside style={{ width: 64, flexShrink: 0, background: "#fff", borderRadius: 18, border: "1px solid #e9eaee", padding: "18px 0 14px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+        <img src="/i7OS-Logo.png" alt="i7 OS" style={{ width: 34, marginBottom: 16 }} />
+        {NAV.map(n => railBtn(n.key, n.label, () => setActive(n.key), current === n.key))}
+        <div style={{ width: 24, height: 1, background: "#e9eaee", margin: "8px 0" }} />
+        {railBtn("downloads", "Download Assets", () => setActive("downloads"), current === "downloads")}
+        <div style={{ flex: 1 }} />
+        {railBtn("share", linkCopied ? "Link kopiert!" : "Teilen", copyLink, false)}
+      </aside>
 
-      {/* Body: sidebar + content */}
-      <div style={{ flex: 1, minHeight: 0, display: "flex", gap: 14, padding: 14 }}>
-        {/* Sidebar */}
-        <aside style={{ width: 232, flexShrink: 0, background: "#14161b", borderRadius: 16, padding: "22px 18px", display: "flex", flexDirection: "column", overflowY: "auto" }} className="no-scrollbar">
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", marginBottom: 18 }}>The Brand</div>
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            {NAV.map((n, i) => navItem(`${i + 1}.0`, n.key, n.label))}
-          </div>
-          <div style={{ height: 1, background: "rgba(255,255,255,0.1)", margin: "16px 0" }} />
-          <div onClick={() => setActive("downloads")} style={{ cursor: "pointer", fontSize: 13.5, fontWeight: current === "downloads" ? 600 : 500, color: current === "downloads" ? "#fff" : "rgba(255,255,255,0.7)" }}>Download Assets</div>
-        </aside>
-
-        {/* Content */}
-        <main style={{ flex: 1, minWidth: 0, background: "#fff", borderRadius: 16, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div style={{ flexShrink: 0, padding: "20px 28px", borderBottom: "1px solid #eeeef1" }}>
-            <div style={{ fontSize: 17, fontWeight: 700 }}>{sectionTitle}</div>
-          </div>
-          <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "28px 28px 20px" }}>
-            {renderSection()}
-          </div>
-          <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", borderTop: "1px solid #eeeef1", fontSize: 12.5, color: "#a0a0aa" }}>
-            <span>{brand.claim || "Brand Guidelines"}</span>
-            <span>erstellt mit i7&nbsp;OS</span>
-          </div>
-        </main>
-      </div>
+      {/* Content */}
+      <main style={{ flex: 1, minWidth: 0, background: "#fff", borderRadius: 18, border: "1px solid #e9eaee", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "34px 38px 26px" }}>
+          <div style={{ fontSize: 11, letterSpacing: 1.6, textTransform: "uppercase", fontWeight: 600, color: "#9a9aa5", marginBottom: 8 }}>{brand.name}</div>
+          <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.4, marginBottom: 28 }}>{sectionTitle}</div>
+          {renderSection()}
+        </div>
+        <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 38px", borderTop: "1px solid #eeeef1", fontSize: 12.5, color: "#a0a0aa" }}>
+          <span>{brand.claim || "Brand Guidelines"}</span>
+          <span>erstellt mit i7&nbsp;OS</span>
+        </div>
+      </main>
     </div>
   );
 }
