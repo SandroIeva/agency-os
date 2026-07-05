@@ -48,6 +48,7 @@ function pickBrand(row) {
     logos,
     colors,
     typography: row.typography?.primary || (row.typography && !row.typography.primary ? row.typography : null),
+    typographySecondary: row.typography?.secondary || null,
     imagery: Array.isArray(row.imagery) ? row.imagery.filter(i => i?.url) : [],
     personas: Array.isArray(row.personas) ? row.personas : [],
     values: Array.isArray(row.brand_values) ? row.brand_values : [],
@@ -78,6 +79,8 @@ export default function PublicBrandLanding({ token }) {
   const [copied, setCopied] = useState(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [hoverNav, setHoverNav] = useState(null); // icon-rail tooltip
+  const [colorNames, setColorNames] = useState({}); // hex -> human colour name (api.color.pizza)
+  const [copiedPrompt, setCopiedPrompt] = useState(null); // imagery: index whose prompt was copied
   const [voiceSub, setVoiceSub] = useState("intro"); // inner nav within Voice & Tone
   const voiceRefs = React.useRef({});
   const de = typeof navigator !== "undefined" ? (navigator.language || "de").toLowerCase().startsWith("de") : true;
@@ -107,6 +110,20 @@ export default function PublicBrandLanding({ token }) {
     if (brand?.typography?.kind === "google" && brand?.typography?.url) add(brand.typography.url);
     document.title = brand?.name ? `${brand.name} — Brand` : "Brand";
     return () => links.forEach(l => l.remove());
+  }, [brand]);
+
+  // Human-readable colour names (same service the hair-colour picker uses).
+  useEffect(() => {
+    const hexes = (brand?.colors || []).map(c => (c.hex || "").replace("#", "")).filter(Boolean);
+    if (!hexes.length) return;
+    fetch(`https://api.color.pizza/v1/?values=${hexes.join(",")}&list=bestOf`)
+      .then(r => r.json())
+      .then(j => {
+        const map = {};
+        (j?.colors || []).forEach((c, i) => { if (hexes[i]) map[("#" + hexes[i]).toLowerCase()] = c.name; });
+        setColorNames(map);
+      })
+      .catch(() => {});
   }, [brand]);
 
   const hasSectionConfig = sections && Object.keys(sections).length > 0;
@@ -143,6 +160,8 @@ export default function PublicBrandLanding({ token }) {
 
   const copyHex = (hex) => { try { navigator.clipboard.writeText(hex); } catch {} setCopied(hex); setTimeout(() => setCopied(c => c === hex ? null : c), 1300); };
   const copyLink = () => { try { navigator.clipboard.writeText(window.location.href); } catch {} setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1600); };
+  const copyPrompt = (txt, i) => { try { navigator.clipboard.writeText(txt); } catch {} setCopiedPrompt(i); setTimeout(() => setCopiedPrompt(p => (p === i ? null : p)), 1300); };
+  const hexRgb = (hex) => { const h = (hex || "").replace("#", ""); const f = h.length === 3 ? h.split("").map(ch => ch + ch).join("") : h; const n = parseInt(f, 16); return isNaN(n) ? { r: 0, g: 0, b: 0 } : { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }; };
 
   const labelEyebrow = (txt) => <div style={{ fontSize: 11, letterSpacing: 1.6, textTransform: "uppercase", fontWeight: 600, color: "#9a9aa5", marginBottom: 16 }}>{txt}</div>;
   const dlBtn = (url, name, label) => (
@@ -173,19 +192,33 @@ export default function PublicBrandLanding({ token }) {
         )}
       </div>
     );
-    if (current === "taglines") return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 820 }}>
-        {brand.taglines.map((t, i) => (
-          <div key={i} style={{ display: "flex", gap: 22, borderRadius: 16, border: "1px solid #ececf0", padding: "22px 26px" }}>
-            <div style={{ fontSize: 26, fontWeight: 800, color: "#d7d7de", lineHeight: 1, flexShrink: 0, width: 44, fontVariantNumeric: "tabular-nums" }}>{String(i + 1).padStart(2, "0")}</div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: -0.3, lineHeight: 1.25, fontFamily: fontFamily ? `'${fontFamily}', ${FONT}` : FONT }}>{t.tagline}</div>
-              {t.desc && <div style={{ fontSize: 14, color: "#6a6a74", lineHeight: 1.6, marginTop: 8 }}>{t.desc}</div>}
+    if (current === "taglines") {
+      // Rows of three: big 01/02/03 numbers, one continuous rule, tagline + description below.
+      const chunks = [];
+      for (let i = 0; i < brand.taglines.length; i += 3) chunks.push(brand.taglines.slice(i, i + 3));
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 60 }}>
+          {chunks.map((chunk, ci) => (
+            <div key={ci}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 48 }}>
+                {chunk.map((t, i) => (
+                  <div key={i} style={{ fontSize: 54, fontWeight: 800, letterSpacing: -1.5, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{String(ci * 3 + i + 1).padStart(2, "0")}</div>
+                ))}
+              </div>
+              <div style={{ height: 1, background: "#d9d9df", margin: "24px 0 32px" }} />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 48 }}>
+                {chunk.map((t, i) => (
+                  <div key={i} style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: -0.4, lineHeight: 1.25, marginBottom: 14, fontFamily: fontFamily ? `'${fontFamily}', ${FONT}` : FONT }}>{t.tagline}</div>
+                    {t.desc && <div style={{ fontSize: 14.5, color: "#8a8a94", lineHeight: 1.65 }}>{t.desc}</div>}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-    );
+          ))}
+        </div>
+      );
+    }
     if (current === "voice") {
       const tone = brand.tone;
       const moments = Array.isArray(tone.moments) ? tone.moments : [];
@@ -296,11 +329,11 @@ export default function PublicBrandLanding({ token }) {
     }
     if (current === "logo") return (
       <div>
-        <div style={{ display: "flex", gap: 28, flexWrap: "wrap", alignItems: "stretch" }}>
-          <div style={{ flex: "2 1 360px", minWidth: 280, borderRadius: 16, background: "#f5f5f7", display: "flex", alignItems: "center", justifyContent: "center", padding: 48, minHeight: 320 }}>
-            <img src={primaryLogo.url} alt={brand.name} style={{ maxWidth: "80%", maxHeight: 220, objectFit: "contain" }} />
+        <div style={{ display: "flex", gap: 56, flexWrap: "wrap", alignItems: "stretch" }}>
+          <div style={{ flex: "2 1 360px", minWidth: 280, borderRadius: 16, background: "#f5f5f7", display: "flex", alignItems: "center", justifyContent: "center", padding: 56, minHeight: 432 }}>
+            <img src={primaryLogo.url} alt={brand.name} style={{ maxWidth: "80%", maxHeight: 300, objectFit: "contain" }} />
           </div>
-          <div style={{ flex: "1 1 220px", minWidth: 220 }}>
+          <div style={{ flex: "1 1 220px", minWidth: 220, paddingRight: 40 }}>
             <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 10 }}>{brand.name}</div>
             <p style={{ fontSize: 14.5, lineHeight: 1.65, color: "#5a5a66" }}>{brand.description || brand.claim || "Das primäre Logo der Marke. Nutze es mit ausreichend Abstand und auf neutralem Hintergrund."}</p>
             <div style={{ marginTop: 18 }}>{dlBtn(primaryLogo.url, `${brand.name || "logo"}.png`, "Logo herunterladen")}</div>
@@ -329,46 +362,148 @@ export default function PublicBrandLanding({ token }) {
       </div>
     );
     if (current === "colors") return (
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 16 }}>
-        {brand.colors.map((c, i) => (
-          <div key={i} onClick={() => copyHex(c.hex)} title="Hex kopieren" style={{ cursor: "pointer", borderRadius: 16, overflow: "hidden", border: "1px solid #ececf0" }}>
-            <div style={{ height: 120, background: c.hex }} />
-            <div style={{ padding: "12px 14px" }}>
-              {c.label && <div style={{ fontSize: 12, color: "#9a9aa5", marginBottom: 2 }}>{c.label}</div>}
-              <div style={{ fontSize: 13.5, fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase" }}>{copied === c.hex ? "Kopiert!" : c.hex}</div>
+      <div style={{ display: "flex", gap: 56, alignItems: "flex-start" }}>
+        {/* Colour panels — flush columns, vertical name top-right, RGB + hex bottom-left */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", borderRadius: 14, overflow: "hidden" }}>
+          {brand.colors.map((c, i) => {
+            const { r, g, b } = hexRgb(c.hex);
+            const dark = (0.299 * r + 0.587 * g + 0.114 * b) < 150;
+            const fg = dark ? "#fff" : "#15151c";
+            const sub = dark ? "rgba(255,255,255,0.72)" : "#6a6a74";
+            const name = colorNames[(c.hex || "").toLowerCase()] || c.label || c.hex;
+            return (
+              <div key={i} onClick={() => copyHex(c.hex)} title="Hex kopieren"
+                style={{ flex: 1, minWidth: 0, position: "relative", background: c.hex, height: "clamp(420px, 58vh, 560px)", cursor: "pointer" }}>
+                <div style={{ position: "absolute", top: 26, right: 24, writingMode: "vertical-rl", fontSize: 24, fontWeight: 600, letterSpacing: 0.2, color: fg, whiteSpace: "nowrap", maxHeight: "60%", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</div>
+                <div style={{ position: "absolute", left: 24, bottom: 22, display: "flex", gap: 26, alignItems: "flex-end" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "auto auto", columnGap: 12, rowGap: 2, fontSize: 12.5 }}>
+                    <span style={{ color: sub }}>R</span><span style={{ color: fg }}>{r}</span>
+                    <span style={{ color: sub }}>G</span><span style={{ color: fg }}>{g}</span>
+                    <span style={{ color: sub }}>B</span><span style={{ color: fg }}>{b}</span>
+                  </div>
+                  <div style={{ fontSize: 12.5 }}>
+                    <div style={{ color: sub }}>Hex code</div>
+                    <div style={{ color: fg, fontWeight: 500 }}>{copied === c.hex ? (de ? "Kopiert!" : "Copied!") : (c.hex || "").toUpperCase()}</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {/* Sidenote */}
+        <div style={{ width: 300, flexShrink: 0, paddingRight: 40 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.35, marginBottom: 14 }}>{de ? "Unsere Markenfarben" : "Our brand colors"}</div>
+          <p style={{ fontSize: 14, lineHeight: 1.7, color: "#8a8a94", margin: 0 }}>
+            {de
+              ? "Diese Farbwelt definiert den visuellen Charakter der Marke. Je konsistenter die Farben eingesetzt werden, desto stärker werden Wiedererkennung und Vertrauen — von der ersten Anzeige bis zum Produkt."
+              : "This palette defines the visual character of the brand. The more consistently the colors are used, the stronger recognition and trust become — from the first ad to the product."}
+          </p>
+          <p style={{ fontSize: 14, lineHeight: 1.7, color: "#8a8a94", marginTop: 16, marginBottom: 0 }}>
+            {de
+              ? "Primärfarben tragen die Identität, Sekundär- und Akzentfarben schaffen Hierarchie, Kontrast und Orientierung. Ein Klick auf eine Farbe kopiert den Hex-Wert."
+              : "Primary colors carry the identity; secondary and accent colors create hierarchy, contrast and orientation. Click a color to copy its hex value."}
+          </p>
+        </div>
+      </div>
+    );
+    if (current === "typography") {
+      const brandFF = fontFamily ? `'${fontFamily}', ${FONT}` : FONT;
+      const weights = (Array.isArray(brand.typography.weights) && brand.typography.weights.length ? brand.typography.weights : [300, 400, 500, 600, 700]).map(Number).filter(Boolean).slice(0, 8);
+      const wName = (w) => ({ 100: "Thin", 200: "ExtraLight", 300: "Light", 400: "Regular", 500: "Medium", 600: "SemiBold", 700: "Bold", 800: "ExtraBold", 900: "Black" })[w] || `${w}`;
+      const secondaryName = brand.typographySecondary?.family || brand.typographySecondary?.name || "None";
+      return (
+        <div style={{ display: "flex", gap: 64, alignItems: "stretch", flexWrap: "wrap" }}>
+          {/* Left: big Aa + font name */}
+          <div style={{ width: 250, flexShrink: 0, display: "flex", flexDirection: "column", minHeight: 480 }}>
+            <div style={{ fontFamily: brandFF, fontSize: 128, fontWeight: 700, lineHeight: 1, letterSpacing: -3 }}>Aa</div>
+            <div style={{ height: 1, background: "#d9d9df", margin: "28px 0 22px" }} />
+            <div style={{ fontFamily: brandFF, fontSize: 36, fontWeight: 500, letterSpacing: -0.5, overflowWrap: "break-word" }}>{fontFamily || "Systemschrift"}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10 }}>{de ? "Typografie für Texte." : "Typography for texts."}</div>
+            {brand.typography.kind === "google" ? (
+              <a href={`https://fonts.google.com/specimen/${encodeURIComponent((fontFamily || "").replace(/ /g, "+"))}`} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, fontWeight: 600, color: "#8a8a94", textDecoration: "none", marginTop: 8 }}>Google Fonts →</a>
+            ) : brand.typography.url ? (
+              <button onClick={() => download(brand.typography.url, fontFamily || "font")} style={{ fontSize: 12.5, fontWeight: 600, color: "#8a8a94", background: "transparent", border: "none", cursor: "pointer", padding: 0, textAlign: "left", marginTop: 8, fontFamily: FONT }}>{de ? "Schrift herunterladen ↓" : "Download font ↓"}</button>
+            ) : null}
+            <div style={{ flex: 1 }} />
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, paddingBottom: 12 }}>
+                <span style={{ fontWeight: 600 }}>Secondary</span>
+                <span style={{ color: "#8a8a94" }}>{secondaryName}</span>
+              </div>
+              <div style={{ height: 1, background: "#d9d9df" }} />
             </div>
           </div>
-        ))}
-      </div>
-    );
-    if (current === "typography") return (
-      <div>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 26 }}>
-          <div style={{ fontSize: 30, fontWeight: 700 }}>{fontFamily || "Schrift"}</div>
-          {brand.typography.kind === "google" ? (
-            <a href={`https://fonts.google.com/specimen/${encodeURIComponent((fontFamily || "").replace(/ /g, "+"))}`} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 600, color: accent, textDecoration: "none" }}>Auf Google Fonts ansehen →</a>
-          ) : brand.typography.url ? (
-            <button onClick={() => download(brand.typography.url, fontFamily || "font")} style={{ fontSize: 13, fontWeight: 600, color: accent, background: "transparent", border: "none", cursor: "pointer" }}>Schrift herunterladen ↓</button>
-          ) : null}
-        </div>
-        <div style={{ fontFamily: fontFamily ? `'${fontFamily}', ${FONT}` : FONT }}>
-          <div style={{ fontSize: 72, fontWeight: 700, letterSpacing: -1.5, lineHeight: 1.05 }}>Aa Bb Cc</div>
-          <div style={{ fontSize: 22, color: "#3a3a44", marginTop: 16 }}>ABCDEFGHIJKLMNOPQRSTUVWXYZ<br/>abcdefghijklmnopqrstuvwxyz 0123456789</div>
-          {Array.isArray(brand.typography.weights) && brand.typography.weights.length > 0 && (
-            <div style={{ marginTop: 28, display: "flex", flexDirection: "column", gap: 8 }}>
-              {brand.typography.weights.map(w => <div key={w} style={{ fontSize: 22, fontWeight: w }}>{w} — The quick brown fox jumps over the lazy dog</div>)}
+
+          {/* Middle: weights */}
+          <div style={{ width: 230, flexShrink: 0 }}>
+            {weights.map((w) => (
+              <div key={w}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 0" }}>
+                  <div style={{ fontSize: 12.5, color: "#6a6a74", lineHeight: 1.4 }}>{wName(w)}<br />{w}</div>
+                  <div style={{ fontFamily: brandFF, fontSize: 32, fontWeight: w, lineHeight: 1 }}>Aa</div>
+                </div>
+                <div style={{ height: 1, background: "#e3e3e8" }} />
+              </div>
+            ))}
+          </div>
+
+          {/* Right: specimen */}
+          <div style={{ flex: "1 1 340px", minWidth: 300, paddingRight: 40 }}>
+            <div style={{ fontFamily: brandFF, fontSize: 42, fontWeight: 600, letterSpacing: -0.8, lineHeight: 1.16, maxWidth: 580 }}>
+              {brand.claim || (de ? "Design und Architektur mit einer klaren Vision." : "Design and architecture with a branded vision.")}
             </div>
-          )}
+            {brand.description && (
+              <p style={{ fontFamily: brandFF, marginTop: 30, marginBottom: 0, fontSize: 13, lineHeight: 1.7, color: "#9a9aa5", columnCount: 2, columnGap: 34, textAlign: "justify", maxWidth: 640 }}>{brand.description}</p>
+            )}
+            <div style={{ fontFamily: brandFF, marginTop: 48, fontSize: 26, lineHeight: 1.45, letterSpacing: 0.2, overflowWrap: "break-word" }}>
+              ABCDEFGHIJKLMNOPQRSTUVWXYZ<br />abcdefghijklmnopqrstuvwxyz<br />0123456789
+            </div>
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
     if (current === "imagery") return (
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
-        {brand.imagery.map((img, i) => (
-          <div key={img.id || i} style={{ borderRadius: 14, overflow: "hidden", border: "1px solid #ececf0", aspectRatio: "4 / 3", background: "#f3f3f6" }}>
-            <img src={img.url} alt={img.name || "Bild"} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-          </div>
-        ))}
+      <div style={{ display: "flex", gap: 56, alignItems: "flex-start" }}>
+        {/* Image grid — larger tiles; hover reveals prompt copy + download */}
+        <div style={{ flex: 1, minWidth: 0, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+          {brand.imagery.map((img, i) => (
+            <div key={img.id || i} className="pb-img-tile" style={{ position: "relative", borderRadius: 14, overflow: "hidden", aspectRatio: "1 / 1", background: "#f3f3f6" }}>
+              <img src={img.url} alt={img.name || "Bild"} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+              <div className="pb-img-overlay" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 14, background: "linear-gradient(180deg, rgba(0,0,0,0) 32%, rgba(0,0,0,0.58) 100%)" }}>
+                {img.prompt && (
+                  <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.92)", lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", marginBottom: 10 }}>{img.prompt}</div>
+                )}
+                <div style={{ display: "flex", gap: 8 }}>
+                  {img.prompt && (
+                    <button onClick={() => copyPrompt(img.prompt, i)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.45)", background: "rgba(255,255,255,0.16)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", color: "#fff", fontSize: 12, fontWeight: 600, fontFamily: FONT, cursor: "pointer" }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                      {copiedPrompt === i ? (de ? "Kopiert!" : "Copied!") : (de ? "Prompt kopieren" : "Copy prompt")}
+                    </button>
+                  )}
+                  <button onClick={() => download(img.url, img.name || `imagery-${i + 1}.png`)} title={de ? "Herunterladen" : "Download"}
+                    style={{ width: 30, height: 30, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.45)", background: "rgba(255,255,255,0.16)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", color: "#fff", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Sidenote */}
+        <div style={{ width: 300, flexShrink: 0, paddingRight: 40 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.35, marginBottom: 14 }}>{de ? `Die Bildsprache von ${brand.name}` : `The imagery of ${brand.name}`}</div>
+          <p style={{ fontSize: 14, lineHeight: 1.7, color: "#8a8a94", margin: 0 }}>
+            {de
+              ? "Unsere Bildsprache macht die Marke fühlbar: Motive, Licht und Farbwelt folgen einem gemeinsamen Stil, damit jedes Bild als Teil derselben Geschichte erkennbar ist."
+              : "Our imagery makes the brand tangible: subjects, light and color follow one shared style so every image reads as part of the same story."}
+          </p>
+          <p style={{ fontSize: 14, lineHeight: 1.7, color: "#8a8a94", marginTop: 16, marginBottom: 0 }}>
+            {de
+              ? "Fahre über ein Bild, um den zugehörigen Prompt zu kopieren oder das Bild herunterzuladen — so bleiben neue Motive konsistent zur bestehenden Welt."
+              : "Hover over an image to copy its prompt or download it — keeping new visuals consistent with the existing world."}
+          </p>
+        </div>
       </div>
     );
     if (current === "personas") return (
@@ -464,6 +599,10 @@ export default function PublicBrandLanding({ token }) {
 
   return (
     <div style={{ fontFamily: FONT, color: "#15151c", background: "#eef0f2", position: "fixed", inset: 0, display: "flex", gap: 14, padding: 14 }}>
+      <style>{`
+        .pb-img-overlay { opacity: 0; transition: opacity 0.3s ease; }
+        .pb-img-tile:hover .pb-img-overlay { opacity: 1; }
+      `}</style>
       {/* Icon rail */}
       <aside style={{ width: 64, flexShrink: 0, background: "#fff", borderRadius: 18, border: "1px solid #e9eaee", padding: "18px 0 14px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
         <img src="/i7OS-Logo.png" alt="i7 OS" style={{ width: 34, marginBottom: 16 }} />
