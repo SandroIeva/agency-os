@@ -218,7 +218,7 @@ export default function PublicBrandLanding({ token }) {
 
   const labelEyebrow = (txt) => <div style={{ fontSize: 11, letterSpacing: 1.6, textTransform: "uppercase", fontWeight: 600, color: "#9a9aa5", marginBottom: 16 }}>{txt}</div>;
   const dlBtn = (url, name, label) => (
-    <button onClick={() => download(url, name)} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, border: "1px solid #e6e6ea", background: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: FONT, color: "#333" }}>
+    <button onClick={() => download(url, name)} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "12px 18px", borderRadius: 999, border: "1px solid #e6e6ea", background: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: FONT, color: "#333" }}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       {label || "Download"}
     </button>
@@ -463,7 +463,7 @@ export default function PublicBrandLanding({ token }) {
           <div style={{ flex: "1 1 220px", minWidth: 220, paddingRight: 40 }}>
             <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 10 }}>{brand.name}</div>
             <p style={{ fontSize: 14.5, lineHeight: 1.65, color: "#5a5a66" }}>{brand.description || brand.claim || "Das primäre Logo der Marke. Nutze es mit ausreichend Abstand und auf neutralem Hintergrund."}</p>
-            <div style={{ marginTop: 18 }}>{dlBtn(primaryLogo.url, `${brand.name || "logo"}.png`, "Logo herunterladen")}</div>
+            <div style={{ marginTop: 32 }}>{dlBtn(primaryLogo.url, `${brand.name || "logo"}.png`, "Logo herunterladen")}</div>
           </div>
         </div>
         {brand.logos.length > 1 && (
@@ -759,18 +759,18 @@ export default function PublicBrandLanding({ token }) {
       }
       // ── Overview — photo cards like the app's persona list; click opens the card ──
       return (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(320px, 1fr))", gap: 20 }}>
           {brand.personas.map((pp, i) => (
             <div key={pp.id || i} className="pb-card" onClick={() => setPersonaIdx(i)}
-              style={{ cursor: "pointer", borderRadius: 16, overflow: "hidden", background: "#fff", border: "1px solid #ececf0" }}>
-              <div style={{ height: 220, background: accent + "1a", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+              style={{ cursor: "pointer", borderRadius: 18, overflow: "hidden", background: "#fff", border: "1px solid #ececf0" }}>
+              <div style={{ height: 340, background: accent + "1a", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
                 {pp.photo_url ? <img src={pp.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  : <span style={{ fontSize: 40, fontWeight: 700, color: accent }}>{(pp.name || "?").charAt(0).toUpperCase()}</span>}
+                  : <span style={{ fontSize: 52, fontWeight: 700, color: accent }}>{(pp.name || "?").charAt(0).toUpperCase()}</span>}
               </div>
-              <div style={{ padding: "12px 14px" }}>
-                <div style={{ fontSize: 15, fontWeight: 700 }}>{pp.name || "Persona"}{pp.age ? <span style={{ fontWeight: 500, color: "#8a8a94", fontSize: 13 }}>  ·  {pp.age}</span> : null}</div>
-                {pp.role && <div style={{ fontSize: 12, color: "#8a8a94", marginTop: 2 }}>{pp.role}</div>}
-                {pp.consumer_behavior && <div style={{ marginTop: 8, display: "inline-block", padding: "3px 9px", borderRadius: 7, background: "rgba(0,0,0,0.05)", color: accent, fontSize: 11, fontWeight: 600 }}>{pp.consumer_behavior}</div>}
+              <div style={{ padding: "16px 18px" }}>
+                <div style={{ fontSize: 17, fontWeight: 700 }}>{pp.name || "Persona"}{pp.age ? <span style={{ fontWeight: 500, color: "#8a8a94", fontSize: 14 }}>  ·  {pp.age}</span> : null}</div>
+                {pp.role && <div style={{ fontSize: 13, color: "#8a8a94", marginTop: 3 }}>{pp.role}</div>}
+                {pp.consumer_behavior && <div style={{ marginTop: 10, display: "inline-block", padding: "4px 11px", borderRadius: 8, background: "rgba(0,0,0,0.05)", color: accent, fontSize: 12, fontWeight: 600 }}>{pp.consumer_behavior}</div>}
               </div>
             </div>
           ))}
@@ -886,13 +886,13 @@ export default function PublicBrandLanding({ token }) {
           )}
         </div>
       ) : (
-        /* ── Desktop: icon rail ── */
-        <aside style={{ width: 64, flexShrink: 0, background: "#fff", borderRadius: 18, border: "1px solid #e9eaee", padding: "18px 0 14px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-          <img src="/i7OS-Logo.png" alt="i7 OS" style={{ width: 34, marginBottom: 16 }} />
-          {NAV.map(n => railBtn(n.key, n.label, () => go(n.key), current === n.key))}
-          <div style={{ width: 24, height: 1, background: "#e9eaee", margin: "8px 0" }} />
-          {railBtn("downloads", "Download Assets", () => go("downloads"), current === "downloads")}
+        /* ── Desktop: icon rail — nav vertically centred, downloads + share pinned bottom ── */
+        <aside style={{ width: 72, flexShrink: 0, background: "#fff", borderRadius: 14, border: "1px solid #e9eaee", padding: "20px 0 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+          <img src="/i7OS-Logo.png" alt="i7 OS" style={{ width: 36, marginLeft: 3 }} />
           <div style={{ flex: 1 }} />
+          {NAV.map(n => railBtn(n.key, n.label, () => go(n.key), current === n.key))}
+          <div style={{ flex: 1 }} />
+          {railBtn("downloads", "Download Assets", () => go("downloads"), current === "downloads")}
           {railBtn("share", linkCopied ? "Link kopiert!" : "Teilen", copyLink, false)}
         </aside>
       )}
