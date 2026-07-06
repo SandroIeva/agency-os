@@ -134,6 +134,7 @@ export default function PublicBrandLanding({ token }) {
     return () => mq.removeEventListener("change", fn);
   }, []);
   const [voiceSub, setVoiceSub] = useState("intro"); // inner nav within Voice & Tone
+  const [voiceNavOpen, setVoiceNavOpen] = useState(false); // mobile: voice inner nav as dropdown
   const voiceRefs = React.useRef({});
   const de = typeof navigator !== "undefined" ? (navigator.language || "de").toLowerCase().startsWith("de") : true;
   const darkMode = false; // the public brand page is always light
@@ -194,6 +195,9 @@ export default function PublicBrandLanding({ token }) {
   }
 
   const accent = brand.accent;
+  // Decorative UI accents (timeline dots, arrows, bars, chips) use the app's lila
+  // accent — matching the in-app brand pages — instead of the brand's primary colour.
+  const uiAccent = "#8B7AFF";
   const primaryLogo = brand.logos.find(l => l.key === "primary") || brand.logos[0];
 
   // Available sections (only those with data + allowed by the share config).
@@ -255,7 +259,7 @@ export default function PublicBrandLanding({ token }) {
               <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
                 {brand.keyMessages.map((m, i) => (
                   <div key={i} style={{ display: "flex", gap: 11, alignItems: "center", fontSize: 14, lineHeight: 1.5 }}>
-                    <span style={{ width: 22, height: 22, borderRadius: 7, background: accent + "1f", color: accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <span style={{ width: 22, height: 22, borderRadius: 7, background: uiAccent + "1f", color: uiAccent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
                     </span>
                     {m}
@@ -288,10 +292,10 @@ export default function PublicBrandLanding({ token }) {
                 <div key={i} style={{ display: "flex", gap: 16 }}>
                   <div style={{ position: "relative", width: 14, flexShrink: 0, display: "flex", justifyContent: "center" }}>
                     <div style={{ position: "absolute", top: 0, bottom: i === sorted.length - 1 ? "auto" : 0, height: i === sorted.length - 1 ? 14 : "auto", width: 2, background: rail }} />
-                    <div style={{ position: "relative", marginTop: 4, width: 12, height: 12, borderRadius: "50%", background: accent, boxShadow: "0 0 0 3px #fff" }} />
+                    <div style={{ position: "relative", marginTop: 4, width: 12, height: 12, borderRadius: "50%", background: uiAccent, boxShadow: "0 0 0 3px #fff" }} />
                   </div>
                   <div style={{ flex: 1, paddingBottom: 26, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, color: accent, fontWeight: 600, letterSpacing: 0.2 }}>{e.year}{e.quarter ? ` · ${e.quarter}` : ""}</div>
+                    <div style={{ fontSize: 12, color: uiAccent, fontWeight: 600, letterSpacing: 0.2 }}>{e.year}{e.quarter ? ` · ${e.quarter}` : ""}</div>
                     <div style={{ fontSize: 15.5, fontWeight: 600, marginTop: 3 }}>{e.title}</div>
                     {e.desc && <div style={{ fontSize: 13.5, color: "#6a6a74", lineHeight: 1.6, marginTop: 4 }}>{e.desc}</div>}
                   </div>
@@ -347,35 +351,135 @@ export default function PublicBrandLanding({ token }) {
       );
     }
     if (current === "voice") {
+      // Mirrors the in-app Voice & Tone display: intro, journey-moment cards with
+      // tone bars, then one section per attribute with a big title + two columns.
       const tone = brand.tone;
       const moments = Array.isArray(tone.moments) ? tone.moments : [];
       const attrs = Array.isArray(tone.attributes) ? tone.attributes : [];
-      const sidenote = tone.intro?.body || "";
+      const intro = tone.intro || {};
+      const vLabel = { fontSize: 13, color: "#8a8a94", marginBottom: 10 };
+      const vListItem = { fontSize: 19, color: "#15151c", lineHeight: 1.55 };
+      const vDivider = "rgba(0,0,0,0.10)";
       const navItems = [
         { id: "intro", label: de ? "Übersicht" : "Overview" },
-        ...moments.map((m, i) => ({ id: `m${i}`, label: m.title })),
-        ...(attrs.length ? [{ id: "attrs", label: de ? "Attribute" : "Attributes" }] : []),
+        ...(moments.length ? [{ id: "moments", label: de ? "Momente" : "Moments" }] : []),
+        ...attrs.map((a, i) => ({ id: `a${i}`, label: a.name || a.label })),
       ];
-      const scrollTo = (id) => { setVoiceSub(id); const el = voiceRefs.current[id]; if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); };
-      const traitBar = (val) => (
-        <div style={{ height: 10, borderRadius: 999, background: darkMode ? "#2a2a30" : "#e3e3e8", overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${Math.max(0, Math.min(100, Number(val) || 0))}%`, borderRadius: 999, background: "#15151c" }} />
-        </div>
-      );
-      const traitCard = (m) => (
-        <div style={{ borderRadius: 18, background: darkMode ? "rgba(255,255,255,0.04)" : "#f3f3f5", padding: "22px 24px" }}>
-          <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 18 }}>{m.title}</div>
-          {m.desc && <p style={{ fontSize: 13.5, color: "#6a6a74", lineHeight: 1.55, marginTop: -8, marginBottom: 16 }}>{m.desc}</p>}
-          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-            {(m.traits || []).map((tr, j) => (
-              <div key={j}>
-                {traitBar(tr.value)}
-                <div style={{ fontSize: 13, color: "#8a8a94", marginTop: 8 }}>{tr.label}</div>
-              </div>
-            ))}
+      const scrollTo = (id) => { setVoiceSub(id); setVoiceNavOpen(false); const el = voiceRefs.current[id]; if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); };
+
+      const content = (
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: isMobile ? 48 : 72 }}>
+          {/* Intro — "Unser Ton" */}
+          <div ref={el => (voiceRefs.current.intro = el)} style={{ maxWidth: 640 }}>
+            <div style={{ fontSize: 32, fontWeight: 600, letterSpacing: -0.5, marginBottom: 18 }}>{de ? "Unser Ton" : "Our tone"}</div>
+            {intro.body && <p style={{ fontSize: 16, lineHeight: 1.6, color: "#5a5a66", margin: "0 0 18px" }}>{intro.body}</p>}
+            {(intro.questions || []).length > 0 && (
+              <>
+                <p style={{ fontSize: 16, color: "#15151c", margin: "0 0 12px" }}>{de ? "Beim Hoch- oder Runterregeln der Stimme frag dich:" : "When dialing the voice up or down, ask yourself:"}</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
+                  {(intro.questions || []).map((q, i) => <div key={i} style={{ fontSize: 16, color: "#15151c" }}>{i + 1}—{q}</div>)}
+                </div>
+              </>
+            )}
+            {intro.closing && <p style={{ fontSize: 16, lineHeight: 1.6, color: "#5a5a66", margin: 0 }}>{intro.closing}</p>}
           </div>
+
+          {/* Journey moments — cards with tone-level bars + touchpoints */}
+          {moments.length > 0 && (
+            <div ref={el => (voiceRefs.current.moments = el)} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+              {moments.map((m, mi) => (
+                <div key={mi} style={{ borderRadius: 18, background: "rgba(0,0,0,0.025)", padding: 22, display: "flex", flexDirection: "column" }}>
+                  <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: -0.3, marginBottom: 10 }}>{m.title}</div>
+                  <div style={{ fontSize: 13.5, color: "#5a5a66", lineHeight: 1.6, minHeight: isMobile ? 0 : 110 }}>{m.desc}</div>
+                  <div style={{ height: 1, background: vDivider, margin: "8px 0 16px" }} />
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {(m.traits || []).map((tr, j) => (
+                      <div key={j} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <span style={{ width: 96, flexShrink: 0, fontSize: 12.5, color: "#8a8a94" }}>{tr.label}</span>
+                        <div style={{ flex: 1, height: 10, borderRadius: 999, background: "rgba(0,0,0,0.08)", overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${Math.max(0, Math.min(100, Number(tr.value) || 0))}%`, borderRadius: 999, background: uiAccent }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {(m.channels || []).length > 0 && (
+                    <>
+                      <div style={{ height: 1, background: vDivider, margin: "16px 0 14px" }} />
+                      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Touchpoints & Channels</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                        {(m.channels || []).map((c, j) => <div key={j} style={{ fontSize: 13, color: "#8a8a94", display: "flex", gap: 8 }}><span style={{ color: "#c2c2ca" }}>•</span>{c}</div>)}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* One section per attribute — big title, overview + should/shouldn't, tactics */}
+          {attrs.map((a, ai) => (
+            <div key={ai} ref={el => (voiceRefs.current[`a${ai}`] = el)}>
+              <div style={{ fontSize: "clamp(30px, 4.6vw, 46px)", fontWeight: 700, letterSpacing: -1.2, lineHeight: 1.05, marginBottom: 40 }}>{a.name || a.label}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 48 }}>
+                <div>
+                  <div style={vLabel}>{de ? "Übersicht" : "Overview"}</div>
+                  <p style={{ fontSize: 18, lineHeight: 1.5, color: "#15151c", margin: "0 0 32px" }}>{a.overview || a.description}</p>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+                    <div>
+                      <div style={vLabel}>{de ? "So sollten wir sein" : "We should be"}</div>
+                      {(a.shouldBe || []).map((w, i) => <div key={i} style={vListItem}>{w}</div>)}
+                    </div>
+                    <div>
+                      <div style={vLabel}>{de ? "So sollten wir nicht sein" : "We shouldn't be"}</div>
+                      {(a.shouldntBe || []).map((w, i) => <div key={i} style={vListItem}>{w}</div>)}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div style={vLabel}>{de ? "Taktiken" : "Tactics"}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "30px 28px", marginTop: 6 }}>
+                    {(a.tactics || []).map((tc, i) => (
+                      <div key={i} style={{ borderTop: `1px solid ${vDivider}`, paddingTop: 14 }}>
+                        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>{tc.title}</div>
+                        <div style={{ fontSize: 13.5, lineHeight: 1.6, color: "#8a8a94" }}>{tc.desc}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       );
+
+      if (isMobile) {
+        const currentLabel = (navItems.find(n => n.id === voiceSub) || navItems[0])?.label;
+        return (
+          <div>
+            {/* Mobile: inner nav as a dropdown above the content */}
+            <div style={{ position: "relative", marginBottom: 26, zIndex: 5 }}>
+              <div onClick={() => setVoiceNavOpen(o => !o)}
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 15px", borderRadius: 999, border: "1px solid #e6e6ea", background: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+                {currentLabel}
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: voiceNavOpen ? "rotate(180deg)" : "none", transition: "transform 0.25s ease" }}><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+              {voiceNavOpen && (
+                <>
+                  <div onClick={() => setVoiceNavOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                  <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 41, minWidth: 220, background: "rgba(255,255,255,0.92)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", border: "1px solid #e9eaee", borderRadius: 14, boxShadow: "0 14px 36px rgba(0,0,0,0.14)", padding: 6 }}>
+                    {navItems.map(n => (
+                      <div key={n.id} onClick={() => scrollTo(n.id)}
+                        style={{ padding: "10px 12px", borderRadius: 9, cursor: "pointer", fontSize: 14, fontWeight: voiceSub === n.id ? 700 : 500, color: voiceSub === n.id ? "#15151c" : "#5a5a66", background: voiceSub === n.id ? "rgba(0,0,0,0.05)" : "transparent" }}>{n.label}</div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            {content}
+          </div>
+        );
+      }
+
       return (
         <div style={{ display: "flex", gap: 40 }}>
           {/* Inner navigation */}
@@ -387,70 +491,7 @@ export default function PublicBrandLanding({ token }) {
               })}
             </div>
           </div>
-
-          {/* Content */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {/* Header + sidenote — same 2-col grid as the cards below, so they align */}
-            <div ref={el => (voiceRefs.current.intro = el)} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 38, alignItems: "start" }}>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#15151c", paddingBottom: 12, borderBottom: "1px solid #e6e6ea", marginBottom: 20 }}>{de ? "Wie wir unsere Stimme anpassen" : "How We Adapt Our Voice"}</div>
-                <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: -0.6, lineHeight: 1.18, fontFamily: fontFamily ? `'${fontFamily}', ${FONT}` : FONT }}>
-                  {de ? "Unsere Persönlichkeit ist, wer wir sind — unser Ton ist, wie wir in jeder Situation klingen." : "While our personality is who we are, our tone of voice is how we sound in any given situation."}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Sidenote</div>
-                <p style={{ fontSize: 14, lineHeight: 1.65, color: "#6a6a74" }}>{sidenote}</p>
-              </div>
-            </div>
-
-            {/* Trait cards — two columns */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, alignItems: "start" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                {moments.map((m, i) => i % 2 === 0 ? <div key={i} ref={el => (voiceRefs.current[`m${i}`] = el)}>{traitCard(m)}</div> : null)}
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                {moments.map((m, i) => i % 2 === 1 ? <div key={i} ref={el => (voiceRefs.current[`m${i}`] = el)}>{traitCard(m)}</div> : null)}
-              </div>
-            </div>
-
-            {/* Attributes (do / don't), reachable via the inner nav */}
-            {attrs.length > 0 && (
-              <div ref={el => (voiceRefs.current.attrs = el)} style={{ marginTop: 40 }}>
-                {labelEyebrow(de ? "Attribute" : "Attributes")}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
-                  {attrs.map((a, i) => (
-                    <div key={i} style={{ borderRadius: 18, background: darkMode ? "rgba(255,255,255,0.04)" : "#f3f3f5", padding: "20px 22px" }}>
-                      <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 8 }}>{a.label || a.name}</div>
-                      {(a.overview || a.description) && <div style={{ fontSize: 13.5, color: "#5a5a66", lineHeight: 1.6 }}>{a.overview || a.description}</div>}
-                      {Array.isArray(a.shouldBe) && a.shouldBe.length > 0 && (
-                        <div style={{ marginTop: 14 }}>
-                          <div style={{ fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", color: "#3f9b6a", fontWeight: 600, marginBottom: 7 }}>Sollte sein</div>
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{a.shouldBe.map((s, j) => <span key={j} style={{ fontSize: 12, color: "#2f7d54", background: "#eaf6ee", padding: "4px 10px", borderRadius: 999 }}>{s}</span>)}</div>
-                        </div>
-                      )}
-                      {Array.isArray(a.shouldntBe) && a.shouldntBe.length > 0 && (
-                        <div style={{ marginTop: 12 }}>
-                          <div style={{ fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", color: "#b9536b", fontWeight: 600, marginBottom: 7 }}>Sollte nicht sein</div>
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{a.shouldntBe.map((s, j) => <span key={j} style={{ fontSize: 12, color: "#a23b54", background: "#fbeef1", padding: "4px 10px", borderRadius: 999 }}>{s}</span>)}</div>
-                        </div>
-                      )}
-                      {Array.isArray(a.tactics) && a.tactics.length > 0 && (
-                        <div style={{ marginTop: 16, borderTop: "1px solid #e6e6ea", paddingTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
-                          {a.tactics.map((tac, j) => (
-                            <div key={j}>
-                              <div style={{ fontSize: 13.5, fontWeight: 600, color: "#15151c", marginBottom: 3 }}>{tac.title}</div>
-                              {tac.desc && <div style={{ fontSize: 13, color: "#6a6a74", lineHeight: 1.55 }}>{tac.desc}</div>}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          {content}
         </div>
       );
     }
@@ -697,9 +738,9 @@ export default function PublicBrandLanding({ token }) {
 
             {/* Row 1: Photo | Name + Info */}
             <div style={twoCol}>
-              <div style={{ width: "100%", aspectRatio: "4/5", borderRadius: 18, overflow: "hidden", background: accent + "1a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ width: "100%", aspectRatio: "4/5", borderRadius: 18, overflow: "hidden", background: uiAccent + "1a", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  : <span style={{ fontSize: 56, fontWeight: 700, color: accent }}>{(p.name || "?").charAt(0).toUpperCase()}</span>}
+                  : <span style={{ fontSize: 56, fontWeight: 700, color: uiAccent }}>{(p.name || "?").charAt(0).toUpperCase()}</span>}
               </div>
               <div style={{ paddingTop: isMobile ? 0 : 36 }}>
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 28 }}>
@@ -723,7 +764,7 @@ export default function PublicBrandLanding({ token }) {
                       <div key={j}>
                         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 7 }}>{m.label}</div>
                         <div style={{ height: 6, borderRadius: 4, background: "rgba(0,0,0,0.08)", overflow: "hidden" }}>
-                          <div style={{ width: `${m.value}%`, height: "100%", borderRadius: 4, background: accent }} />
+                          <div style={{ width: `${m.value}%`, height: "100%", borderRadius: 4, background: uiAccent }} />
                         </div>
                       </div>
                     ))}
@@ -763,14 +804,14 @@ export default function PublicBrandLanding({ token }) {
           {brand.personas.map((pp, i) => (
             <div key={pp.id || i} className="pb-card" onClick={() => setPersonaIdx(i)}
               style={{ cursor: "pointer", borderRadius: 18, overflow: "hidden", background: "#fff", border: "1px solid #ececf0" }}>
-              <div style={{ height: 340, background: accent + "1a", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+              <div style={{ height: 340, background: uiAccent + "1a", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
                 {pp.photo_url ? <img src={pp.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  : <span style={{ fontSize: 52, fontWeight: 700, color: accent }}>{(pp.name || "?").charAt(0).toUpperCase()}</span>}
+                  : <span style={{ fontSize: 52, fontWeight: 700, color: uiAccent }}>{(pp.name || "?").charAt(0).toUpperCase()}</span>}
               </div>
               <div style={{ padding: "16px 18px" }}>
                 <div style={{ fontSize: 17, fontWeight: 700 }}>{pp.name || "Persona"}{pp.age ? <span style={{ fontWeight: 500, color: "#8a8a94", fontSize: 14 }}>  ·  {pp.age}</span> : null}</div>
                 {pp.role && <div style={{ fontSize: 13, color: "#8a8a94", marginTop: 3 }}>{pp.role}</div>}
-                {pp.consumer_behavior && <div style={{ marginTop: 10, display: "inline-block", padding: "4px 11px", borderRadius: 8, background: "rgba(0,0,0,0.05)", color: accent, fontSize: 12, fontWeight: 600 }}>{pp.consumer_behavior}</div>}
+                {pp.consumer_behavior && <div style={{ marginTop: 10, display: "inline-block", padding: "4px 11px", borderRadius: 8, background: "rgba(0,0,0,0.05)", color: uiAccent, fontSize: 12, fontWeight: 600 }}>{pp.consumer_behavior}</div>}
               </div>
             </div>
           ))}
@@ -790,7 +831,7 @@ export default function PublicBrandLanding({ token }) {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "14px 16px", borderRadius: 14, border: "1px solid #ececf0" }}>
             <span style={{ fontSize: 14, fontWeight: 500, color: "#333" }}>Schrift — {fontFamily}</span>
             {brand.typography.kind === "google"
-              ? <a href={`https://fonts.google.com/specimen/${encodeURIComponent((fontFamily || "").replace(/ /g, "+"))}`} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 600, color: accent, textDecoration: "none" }}>Google Fonts →</a>
+              ? <a href={`https://fonts.google.com/specimen/${encodeURIComponent((fontFamily || "").replace(/ /g, "+"))}`} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 600, color: uiAccent, textDecoration: "none" }}>Google Fonts →</a>
               : brand.typography.url ? dlBtn(brand.typography.url, fontFamily || "font", "Font") : <span style={{ fontSize: 13, color: "#aaa" }}>—</span>}
           </div>
         )}
@@ -892,19 +933,22 @@ export default function PublicBrandLanding({ token }) {
           <div style={{ flex: 1 }} />
           {NAV.map(n => railBtn(n.key, n.label, () => go(n.key), current === n.key))}
           <div style={{ flex: 1 }} />
-          {railBtn("downloads", "Download Assets", () => go("downloads"), current === "downloads")}
           {railBtn("share", linkCopied ? "Link kopiert!" : "Teilen", copyLink, false)}
+          {railBtn("downloads", "Download Assets", () => go("downloads"), current === "downloads")}
         </aside>
       )}
 
       {/* Content */}
-      <main style={{ flex: 1, minWidth: 0, background: "#fff", borderRadius: 18, border: "1px solid #e9eaee", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <div className="pb-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto", margin: "10px 4px 10px 0", padding: isMobile ? "12px 20px 20px" : "24px 38px 26px" }}>
+      <main style={{ position: "relative", flex: 1, minWidth: 0, background: "#fff", borderRadius: 18, border: "1px solid #e9eaee", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        {/* Content scrolls beneath the frosted footer — no white gap above the line */}
+        <div className="pb-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto", margin: "10px 4px 0 0", padding: isMobile ? "12px 20px 76px" : "24px 38px 84px" }}>
           <div style={{ fontSize: 11, letterSpacing: 1.6, textTransform: "uppercase", fontWeight: 600, color: "#9a9aa5", marginBottom: 8 }}>{brand.name}</div>
           <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.4, marginBottom: 28 }}>{sectionTitle}</div>
           {renderSection()}
         </div>
-        <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: isMobile ? "12px 20px" : "14px 38px", borderTop: "1px solid #eeeef1", fontSize: 12.5, color: "#a0a0aa" }}>
+        <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 3, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+          padding: isMobile ? "12px 20px" : "14px 38px", borderTop: "1px solid rgba(0,0,0,0.06)", fontSize: 12.5, color: "#a0a0aa",
+          background: "rgba(255,255,255,0.62)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", borderRadius: "0 0 17px 17px" }}>
           <span style={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{brand.claim || "Brand Guidelines"}</span>
           <span style={{ flexShrink: 0 }}>erstellt mit i7&nbsp;OS</span>
         </div>

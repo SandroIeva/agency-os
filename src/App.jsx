@@ -21590,7 +21590,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 <div style={{ position: "relative", flexShrink: 0 }}>
                   <button title={appLanguage === "de" ? "Teilen" : "Share"} onClick={() => setPubOpen(o => !o)}
                     style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${pubOpen ? "#15151c" : theme.borderFaint}`, background: pubOpen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent", color: pubOpen ? (darkMode ? "#fff" : "#15151c") : theme.textDim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
                   </button>
                   <AnimatePresence>
                     {pubOpen && (
