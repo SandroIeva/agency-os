@@ -15601,10 +15601,9 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="7.5" x2="12.01" y2="7.5"/></svg>
               </button>
               {/* Everyone with access sees this — non-owners get export only (see SharePopover) */}
-              <button className="doc-share-btn" onClick={(e) => { e.stopPropagation(); setInfoOpen(false); setShareOpen(o => !o); }}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, cursor: "pointer", background: shareOpen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent", color: theme.text, fontSize: 12.5, fontWeight: 600, fontFamily: FONT }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
-                Teilen
+              <button className="doc-share-btn" title="Teilen" onClick={(e) => { e.stopPropagation(); setInfoOpen(false); setShareOpen(o => !o); }}
+                style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${shareOpen ? accent : theme.borderFaint}`, background: shareOpen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent", color: shareOpen ? accent : theme.textDim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
               </button>
             </div>
             {shareOpen && (
@@ -19763,6 +19762,45 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
   const [brandSub, setBrandSub] = useState(pillarSubs[0]?.key);
   // Inline rich-text editing of the current section (Bearbeiten button toggles it).
   const [editingText, setEditingText] = useState(false);
+  // ── Publish (public brand page via brand_shares) ──
+  const PUB_SECTIONS = [
+    { key: "strategy", label: "Brand Strategy" }, { key: "taglines", label: "Taglines" },
+    { key: "voice", label: "Voice & Tone" }, { key: "logo", label: "Logo" },
+    { key: "colors", label: "Brand Colors" }, { key: "typography", label: appLanguage === "de" ? "Typografie" : "Typography" },
+    { key: "imagery", label: appLanguage === "de" ? "Bildsprache" : "Imagery" }, { key: "personas", label: "Personas" },
+  ];
+  const [pubOpen, setPubOpen] = useState(false);
+  const [pubSections, setPubSections] = useState(() => Object.fromEntries(PUB_SECTIONS.map(s => [s.key, true])));
+  const [pubToken, setPubToken] = useState(null); // existing share token, if published before
+  const [pubBusy, setPubBusy] = useState(false);
+  const [pubCopied, setPubCopied] = useState(false);
+  const pubLoaded = useRef(false);
+  useEffect(() => {
+    if (!pubOpen || pubLoaded.current || !userOrg?.id) return;
+    pubLoaded.current = true;
+    supabase.from("brand_shares").select("token, sections").eq("org_id", userOrg.id).is("project_id", null).maybeSingle()
+      .then(({ data }) => {
+        if (!data) return;
+        setPubToken(data.token);
+        if (data.sections && Object.keys(data.sections).length) setPubSections(s => ({ ...s, ...data.sections }));
+      });
+  }, [pubOpen, userOrg?.id]);
+  const pubUrl = pubToken ? `${window.location.origin}/?b=${pubToken}` : null;
+  const publishBrand = async () => {
+    if (pubBusy || !userOrg?.id || !profile) return;
+    setPubBusy(true);
+    try {
+      const token = pubToken
+        || ((profile.name || "brand").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "brand")
+          + "-" + Math.random().toString(36).slice(2, 6);
+      const { error } = await supabase.from("brand_shares").upsert(
+        { token, org_id: userOrg.id, project_id: null, data: profile, sections: pubSections, created_by: session?.user?.id, updated_at: new Date().toISOString() },
+        { onConflict: "token" });
+      if (!error) setPubToken(token);
+    } catch (e) { console.error("publish brand failed", e); }
+    setPubBusy(false);
+  };
+  const copyPubUrl = () => { try { navigator.clipboard.writeText(pubUrl); } catch {} setPubCopied(true); setTimeout(() => setPubCopied(false), 1500); };
   // Whether the Vision sub-view is in edit mode (reported by BrandVision) — controls
   // whether the content area may scroll on the Vision tab.
   const [visionEditing, setVisionEditing] = useState(false);
@@ -21547,6 +21585,52 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{BRAND_SUBVIEW_LABELS[brandTab] || ""}</span>
               </div>
               <div style={{ flex: 1 }} />
+              {/* Publish the public brand page — round share button + dropdown */}
+              {canEditBrand && (
+                <div style={{ position: "relative", flexShrink: 0 }}>
+                  <button title={appLanguage === "de" ? "Teilen" : "Share"} onClick={() => setPubOpen(o => !o)}
+                    style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${pubOpen ? "#15151c" : theme.borderFaint}`, background: pubOpen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent", color: pubOpen ? (darkMode ? "#fff" : "#15151c") : theme.textDim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
+                  </button>
+                  <AnimatePresence>
+                    {pubOpen && (
+                      <>
+                        <div onClick={() => setPubOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
+                        <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.18, ease: "easeOut" }}
+                          style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, zIndex: 5001, width: 300, borderRadius: 14, padding: 14,
+                            background: darkMode ? "rgba(28,28,38,0.88)" : "rgba(255,255,255,0.88)", backdropFilter: "blur(20px) saturate(1.3)", WebkitBackdropFilter: "blur(20px) saturate(1.3)",
+                            border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.55)"}`, boxShadow: "0 10px 26px rgba(0,0,0,0.12)" }}>
+                          <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 700, color: theme.text, padding: "2px 8px 0" }}>{appLanguage === "de" ? "Brand-Seite publizieren" : "Publish brand page"}</div>
+                          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, padding: "3px 8px 10px", lineHeight: 1.5 }}>{appLanguage === "de" ? "Wähle, welche Bereiche öffentlich sichtbar sind." : "Choose which sections are publicly visible."}</div>
+                          {PUB_SECTIONS.map(s => {
+                            const on = !!pubSections[s.key];
+                            return (
+                              <div key={s.key} className="hover-row" onClick={() => setPubSections(ps => ({ ...ps, [s.key]: !ps[s.key] }))}
+                                style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 8px", borderRadius: 8, cursor: "pointer" }}>
+                                <span style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                                  background: on ? "#15151c" : "transparent", border: `1.5px solid ${on ? "#15151c" : (darkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.25)")}`, transition: "background 0.2s ease, border-color 0.2s ease" }}>
+                                  {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                                </span>
+                                <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>{s.label}</span>
+                              </div>
+                            );
+                          })}
+                          {pubUrl && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, padding: "8px 10px", borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>
+                              <a href={pubUrl} target="_blank" rel="noreferrer" style={{ flex: 1, minWidth: 0, fontSize: 12, fontFamily: FONT, color: theme.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: "none" }}>{pubUrl.replace(/^https?:\/\//, "")}</a>
+                              <span onClick={copyPubUrl} style={{ cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.text, flexShrink: 0 }}>{pubCopied ? (appLanguage === "de" ? "Kopiert!" : "Copied!") : (appLanguage === "de" ? "Kopieren" : "Copy")}</span>
+                            </div>
+                          )}
+                          <motion.div whileTap={{ scale: 0.97 }} onClick={publishBrand}
+                            style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center", padding: "10px 0", borderRadius: 10, cursor: pubBusy ? "wait" : "pointer", background: "#15151c", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: pubBusy ? 0.7 : 1 }}>
+                            {pubBusy ? (appLanguage === "de" ? "Publiziere…" : "Publishing…") : pubToken ? (appLanguage === "de" ? "Aktualisieren" : "Update") : (appLanguage === "de" ? "Publizieren" : "Publish")}
+                          </motion.div>
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
               {!canEditCurrent ? null : !((brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors" || brandSub === "positioning")) || (brandTab === "identity" && brandSub === "avatar")) ? (
               <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => setEditingText(v => !v)}
                 style={{
