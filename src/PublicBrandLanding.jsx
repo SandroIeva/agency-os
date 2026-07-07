@@ -482,8 +482,8 @@ export default function PublicBrandLanding({ token }) {
 
       return (
         <div style={{ display: "flex", gap: 40 }}>
-          {/* Inner navigation */}
-          <div style={{ width: 150, flexShrink: 0 }}>
+          {/* Inner navigation — nudged down to sit level with the "Unser Ton" title */}
+          <div style={{ width: 150, flexShrink: 0, paddingTop: 5 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 11, position: "sticky", top: 0 }}>
               {navItems.map(n => {
                 const on = voiceSub === n.id;
@@ -929,7 +929,7 @@ export default function PublicBrandLanding({ token }) {
       ) : (
         /* ── Desktop: icon rail — nav vertically centred, downloads + share pinned bottom ── */
         <aside style={{ width: 72, flexShrink: 0, background: "#fff", borderRadius: 14, border: "1px solid #e9eaee", padding: "20px 0 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-          <img src="/i7OS-Logo.png" alt="i7 OS" style={{ width: 36, marginLeft: 3 }} />
+          <img src="/i7OS-Logo.png" alt="i7 OS" style={{ width: 36, marginLeft: 3, marginTop: 5 }} />
           <div style={{ flex: 1 }} />
           {NAV.map(n => railBtn(n.key, n.label, () => go(n.key), current === n.key))}
           <div style={{ flex: 1 }} />
@@ -947,8 +947,9 @@ export default function PublicBrandLanding({ token }) {
           {renderSection()}
         </div>
         <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 3, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
-          padding: isMobile ? "12px 20px" : "14px 38px", borderTop: "1px solid rgba(0,0,0,0.06)", fontSize: 12.5, color: "#a0a0aa",
-          background: "rgba(255,255,255,0.62)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", borderRadius: "0 0 17px 17px" }}>
+          padding: isMobile ? "16px 20px 14px" : "20px 38px 15px", fontSize: 12.5, color: "#7a7a86",
+          background: "linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.85) 45%, rgba(255,255,255,0.98) 100%)",
+          backdropFilter: "blur(11px)", WebkitBackdropFilter: "blur(11px)", borderRadius: "0 0 17px 17px" }}>
           <span style={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{brand.claim || "Brand Guidelines"}</span>
           <span style={{ flexShrink: 0 }}>erstellt mit i7&nbsp;OS</span>
         </div>

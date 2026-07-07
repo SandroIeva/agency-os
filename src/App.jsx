@@ -10261,7 +10261,7 @@ function ProjectDetail({ project, onBack, onEdit, session, userOrg, theme, darkM
   );
 }
 
-function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKanban, orgMembers = [], myProjectIds = [], createNotification }) {
+function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", onOpenInKanban, orgMembers = [], myProjectIds = [], createNotification, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true, onNavigate, onOpenDoc }) {
   const [projects, setProjects] = useState([]);
   const [taskCounts, setTaskCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -10310,13 +10310,13 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
 
   const openNew = () => {
     setEditing({});
-    setForm({ name: "", logo_url: "", color: "#8B7AFF" });
+    setForm({ name: "", logo_url: "", color: "#8B7AFF", is_brand: false });
     setLogoPreview(null);
   };
 
   const openEdit = (proj) => {
     setEditing(proj);
-    setForm({ name: proj.name, logo_url: proj.logo_url || "", color: proj.color || "#8B7AFF" });
+    setForm({ name: proj.name, logo_url: proj.logo_url || "", color: proj.color || "#8B7AFF", is_brand: !!proj.is_brand });
     setLogoPreview(null);
     setInviteEmail("");
     loadMembers(proj.id);
@@ -10490,7 +10490,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
 
   const saveProject = async () => {
     if (!form.name.trim()) return;
-    const payload = { name: form.name.trim(), logo_url: form.logo_url || null, color: form.color };
+    const payload = { name: form.name.trim(), logo_url: form.logo_url || null, color: form.color, is_brand: !!form.is_brand };
     if (editing?.id) {
       // Update — also propagate rename to tasks
       if (editing.name !== payload.name) {
@@ -10500,6 +10500,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
     } else {
       await supabase.from("projects").insert({ ...payload, owner_id: session.user.id, org_id: userOrg?.id || null });
     }
+    if (editing?.id && openProject?.id === editing.id) setOpenProject(prev => ({ ...prev, ...payload }));
     closeEditor();
     loadProjects();
   };
@@ -10522,8 +10523,17 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
   const filtered = myProjects
     .filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
 
-  // A project opened in detail view (its files). Settings still reachable via the edit icon.
+  // A project opened in detail view. Brand-projects open the full brand workspace
+  // (same BrandView, scoped to this project); others show the file view.
   if (openProject) {
+    if (openProject.is_brand) {
+      return <BrandView projectId={openProject.id} projectName={openProject.name}
+        session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage}
+        llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken}
+        canEditBrand={canEditBrand} canEditDesign={canEditDesign}
+        onNavigate={onNavigate} onOpenDoc={onOpenDoc}
+        onBack={() => setOpenProject(null)} />;
+    }
     return <ProjectDetail project={openProject} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t}
       onBack={() => setOpenProject(null)} onEdit={() => openEdit(openProject)} />;
   }
@@ -10813,6 +10823,20 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, onOpenInKa
                     ) : (
                       <div style={{ width: 26, height: 26, borderRadius: "50%", background: form.color, border: `2px solid ${darkMode ? "#fff" : "#1a1a2e"}`, boxShadow: "0 1px 3px rgba(0,0,0,0.15)" }} />
                     )}
+                  </div>
+                </div>
+
+                {/* Define as Brand — turns this project into a full brand workspace */}
+                <div style={{ marginTop: 20, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Als Brand definieren</div>
+                    <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginTop: 3 }}>Öffnet dieses Projekt mit der vollen Brand-Struktur (Strategie, Identität, Designsystem …) — eigene Inhalte pro Projekt.</div>
+                  </div>
+                  <div onClick={() => canManageThisProject && setForm(prev => ({ ...prev, is_brand: !prev.is_brand }))}
+                    style={{ flexShrink: 0, width: 42, height: 24, borderRadius: 999, cursor: canManageThisProject ? "pointer" : "default", padding: 2, marginTop: 1,
+                      background: form.is_brand ? "#15151c" : (darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.14)"), transition: "background 0.25s ease", opacity: canManageThisProject ? 1 : 0.6 }}>
+                    <motion.div animate={{ x: form.is_brand ? 18 : 0 }} transition={{ type: "spring", stiffness: 500, damping: 34 }}
+                      style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }} />
                   </div>
                 </div>
 
@@ -19751,9 +19775,16 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   );
 }
 
-function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, darkMode, t, appLanguage = "de", brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true }) {
+function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, darkMode, t, appLanguage = "de", brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true, projectId = null, projectName = "" }) {
+  // Scope: null projectId = the org-level brand (unchanged). A projectId scopes
+  // every load/insert/realtime to that project's own brand_profile row, and the
+  // pillar switch becomes a local top-right dropdown instead of the app menu.
+  const isProjectBrand = !!projectId;
+  const scopeSel = (q) => isProjectBrand ? q.eq("project_id", projectId) : q.is("project_id", null);
+  const [localTab, setLocalTab] = useState("strategy");
+  const rawTab = isProjectBrand ? localTab : rawBrandTab;
   // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
-  const brandTab = BRAND_TAB_LEGACY_MAP[rawBrandTab] || rawBrandTab;
+  const brandTab = BRAND_TAB_LEGACY_MAP[rawTab] || rawTab;
   // Edit permission for the current pillar: Design System needs the Designer
   // role, everything else needs the Brand role (admins have both).
   const canEditCurrent = brandTab === "design" ? canEditDesign : canEditBrand;
@@ -19770,6 +19801,12 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
     { key: "imagery", label: appLanguage === "de" ? "Bildsprache" : "Imagery" }, { key: "personas", label: "Personas" },
   ];
   const [pubOpen, setPubOpen] = useState(false);
+  const [pillarOpen, setPillarOpen] = useState(false); // project-brand: top-right pillar switcher
+  const PROJECT_PILLARS = [
+    { key: "strategy", label: "Strategie" },
+    { key: "identity", label: "Identität" },
+    { key: "design", label: "Designsystem" },
+  ];
   const [pubSections, setPubSections] = useState(() => Object.fromEntries(PUB_SECTIONS.map(s => [s.key, true])));
   const [pubToken, setPubToken] = useState(null); // existing share token, if published before
   const [pubBusy, setPubBusy] = useState(false);
@@ -19778,7 +19815,7 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
   useEffect(() => {
     if (!pubOpen || pubLoaded.current || !userOrg?.id) return;
     pubLoaded.current = true;
-    supabase.from("brand_shares").select("token, sections").eq("org_id", userOrg.id).is("project_id", null).maybeSingle()
+    scopeSel(supabase.from("brand_shares").select("token, sections").eq("org_id", userOrg.id)).maybeSingle()
       .then(({ data }) => {
         if (!data) return;
         setPubToken(data.token);
@@ -19794,7 +19831,7 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
         || ((profile.name || "brand").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "brand")
           + "-" + Math.random().toString(36).slice(2, 6);
       const { error } = await supabase.from("brand_shares").upsert(
-        { token, org_id: userOrg.id, project_id: null, data: profile, sections: pubSections, created_by: session?.user?.id, updated_at: new Date().toISOString() },
+        { token, org_id: userOrg.id, project_id: projectId || null, data: profile, sections: pubSections, created_by: session?.user?.id, updated_at: new Date().toISOString() },
         { onConflict: "token" });
       if (!error) setPubToken(token);
     } catch (e) { console.error("publish brand failed", e); }
@@ -20004,7 +20041,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ personas: list }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", personas: list })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", personas: list })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20019,7 +20056,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ competitors: list }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", competitors: list })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", competitors: list })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20035,7 +20072,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ vision: v }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", vision: v })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", vision: v })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20051,7 +20088,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ soul: s }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", soul: s })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", soul: s })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20068,7 +20105,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ color_palette: pal, colors: colorsFlat }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", color_palette: pal, colors: colorsFlat })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", color_palette: pal, colors: colorsFlat })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20084,7 +20121,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ typography: typo }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", typography: typo })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", typography: typo })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20100,7 +20137,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ imagery: list }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", imagery: list })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", imagery: list })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20116,7 +20153,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ brand_avatar: cfg }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", brand_avatar: cfg })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", brand_avatar: cfg })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20180,7 +20217,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ logo_layout: cfg }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", logo_layout: cfg })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", logo_layout: cfg })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20196,7 +20233,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ brand_values: list }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, created_by: session?.user?.id, name: userOrg?.name || "", brand_values: list })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", brand_values: list })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20241,7 +20278,12 @@ If you don't know a field, infer a plausible value. Write all text values in the
   useEffect(() => {
     if (!userOrg?.id) { setLoading(false); return; }
     (async () => {
-      const { data } = await supabase.from("brand_profile").select("*").eq("org_id", userOrg.id).is("project_id", null).maybeSingle();
+      let { data } = await scopeSel(supabase.from("brand_profile").select("*").eq("org_id", userOrg.id)).maybeSingle();
+      // Project brands start empty but skip onboarding: use an in-memory stub
+      // (no id) so the pillar structure renders straight away. The first real
+      // edit persists the row via the existing "insert-if-no-id" save paths —
+      // avoids an insert-on-load race (StrictMode) creating duplicate rows.
+      if (!data && isProjectBrand) data = { org_id: userOrg.id, project_id: projectId, name: projectName || "" };
       setProfile(data);
       setForm({
         name: data?.name || userOrg?.name || "",
@@ -20266,20 +20308,20 @@ If you don't know a field, infer a plausible value. Write all text values in the
       });
       setLoading(false);
     })();
-  }, [userOrg?.id, userOrg?.name]);
+  }, [userOrg?.id, userOrg?.name, projectId]);
 
   // Realtime
   useEffect(() => {
     if (!userOrg?.id) return;
     const ch = supabase
-      .channel("brand-profile-" + userOrg.id)
+      .channel("brand-profile-" + userOrg.id + "-" + (projectId || "org"))
       .on("postgres_changes", { event: "*", schema: "public", table: "brand_profile", filter: `org_id=eq.${userOrg.id}` }, async () => {
-        const { data } = await supabase.from("brand_profile").select("*").eq("org_id", userOrg.id).is("project_id", null).maybeSingle();
+        const { data } = await scopeSel(supabase.from("brand_profile").select("*").eq("org_id", userOrg.id)).maybeSingle();
         if (data) setProfile(data);
       })
       .subscribe();
     return () => supabase.removeChannel(ch);
-  }, [userOrg?.id]);
+  }, [userOrg?.id, projectId]);
 
   // ── Upload helpers ──
   const uploadFile = async (file, pathPrefix) => {
@@ -20535,6 +20577,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
 
       const payload = {
         org_id: userOrg.id,
+        project_id: projectId || null,
         name: form.name.trim(),
         claim: form.claim.trim() || null,
         logo_url: persistedLogoUrl || null,
@@ -21575,21 +21618,57 @@ If you don't know a field, infer a plausible value. Write all text values in the
           // Post-onboarding: tabs + summary
           <>
             <div style={{ padding: "16px 24px", minHeight: 34, boxSizing: "content-box", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${theme.borderFaint}` }}>
+              {isProjectBrand && (
+                <motion.div whileTap={{ scale: 0.92 }} onClick={onBack} title={appLanguage === "de" ? "Zurück zu Projekten" : "Back to projects"} style={{ cursor: "pointer", color: theme.textDim, display: "flex", flexShrink: 0, marginRight: 2 }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+                </motion.div>
+              )}
               {(profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url) ? (
                 <img src={profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
               ) : (
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: theme.accent + "22", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{(profile.name || "?")[0]}</div>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: theme.accent + "22", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{((isProjectBrand ? (profile.name || projectName) : profile.name) || "?")[0]}</div>
               )}
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
-                <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{profile.name}</span>
+                <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{isProjectBrand ? (profile.name || projectName || "Brand") : profile.name}</span>
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{BRAND_SUBVIEW_LABELS[brandTab] || ""}</span>
               </div>
               <div style={{ flex: 1 }} />
-              {/* Publish the public brand page — round share button + dropdown */}
-              {canEditBrand && (
+              {/* Project brand: pillar switcher (top-right dropdown) */}
+              {isProjectBrand && (
                 <div style={{ position: "relative", flexShrink: 0 }}>
+                  <motion.div whileTap={{ scale: 0.97 }} onClick={() => setPillarOpen(o => !o)}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 999, cursor: "pointer", border: `1px solid ${pillarOpen ? "#15151c" : theme.borderFaint}`, background: pillarOpen ? (darkMode ? "rgba(255,255,255,0.06)" : "#f1f2f4") : "transparent", color: theme.text, fontSize: 13, fontFamily: FONT, fontWeight: 600 }}>
+                    {(PROJECT_PILLARS.find(p => p.key === brandTab) || PROJECT_PILLARS[0]).label}
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: pillarOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}><polyline points="6 9 12 15 18 9"/></svg>
+                  </motion.div>
+                  <AnimatePresence>
+                    {pillarOpen && (
+                      <>
+                        <div onClick={() => setPillarOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
+                        <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.18, ease: "easeOut" }}
+                          style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 5001, minWidth: 190, borderRadius: 12, padding: 6, whiteSpace: "nowrap",
+                            background: darkMode ? "rgba(28,28,38,0.9)" : "rgba(255,255,255,0.92)", backdropFilter: "blur(20px) saturate(1.3)", WebkitBackdropFilter: "blur(20px) saturate(1.3)",
+                            border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.55)"}`, boxShadow: "0 10px 26px rgba(0,0,0,0.12)" }}>
+                          {PROJECT_PILLARS.map(p => (
+                            <div key={p.key} className="hover-row" onClick={() => { setLocalTab(p.key); setPillarOpen(false); }}
+                              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "9px 11px", borderRadius: 8, cursor: "pointer" }}>
+                              <span style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: brandTab === p.key ? 700 : 500, color: theme.text }}>{p.label}</span>
+                              {brandTab === p.key && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#15151c" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                            </div>
+                          ))}
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+              {/* Right cluster: globe (publish) + Bearbeiten. The publish dropdown
+                  right-aligns to this whole cluster → flush with the Bearbeiten button. */}
+              <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+              {canEditBrand && (
+                <>
                   <button title={appLanguage === "de" ? "Teilen" : "Share"} onClick={() => setPubOpen(o => !o)}
-                    style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${pubOpen ? "#15151c" : theme.borderFaint}`, background: pubOpen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent", color: pubOpen ? (darkMode ? "#fff" : "#15151c") : theme.textDim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${pubOpen ? "#15151c" : theme.borderFaint}`, background: pubOpen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent", color: pubOpen ? (darkMode ? "#fff" : "#15151c") : theme.textDim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
                   </button>
                   <AnimatePresence>
@@ -21629,7 +21708,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                       </>
                     )}
                   </AnimatePresence>
-                </div>
+                </>
               )}
               {!canEditCurrent ? null : !((brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors" || brandSub === "positioning")) || (brandTab === "identity" && brandSub === "avatar")) ? (
               <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => setEditingText(v => !v)}
@@ -21640,6 +21719,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 }}
               >{editingText ? (appLanguage === "de" ? "Fertig" : "Done") : (appLanguage === "de" ? "Bearbeiten" : "Edit")}</motion.button>
               ) : null}
+              </div>
             </div>
 
             {/* This view IS one pillar (Strategie / Identität / Brand Design — set from
@@ -25730,7 +25810,7 @@ export default function CircularMenu() {
         {/* PROJECTS VIEW */}
         <AnimatePresence>
           {currentView === "projects" && (
-            <ProjectsView session={session} userOrg={userOrg} orgMembers={orgMembers} myProjectIds={myProjectIds} theme={theme} darkMode={darkMode} t={t} createNotification={createNotification} onBack={() => setCurrentView("dashboard")} onOpenInKanban={(projectName) => { setCurrentView("kanban"); }} />
+            <ProjectsView session={session} userOrg={userOrg} orgMembers={orgMembers} myProjectIds={myProjectIds} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} createNotification={createNotification} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} canEditBrand={canEditBrand} canEditDesign={canEditDesign} onNavigate={(v) => setCurrentView(v)} onOpenDoc={(id) => { setDocDeepLink({ documentId: id, blockId: null, ts: Date.now() }); setCurrentView("assets"); }} onBack={() => setCurrentView("dashboard")} onOpenInKanban={(projectName) => { setCurrentView("kanban"); }} />
           )}
         </AnimatePresence>
 
