@@ -10577,13 +10577,12 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
           <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
             onClick={openNew}
             style={{
-              padding: "7px 14px", borderRadius: 10, cursor: "pointer",
-              background: theme.accent + "22", border: `1px solid ${theme.accent}40`,
-              color: theme.accent, fontSize: 12, fontWeight: 500, fontFamily: FONT,
-              display: "flex", alignItems: "center", gap: 6,
+              display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer",
+              padding: "8px 14px", borderRadius: 999, fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
+              background: "#23232b", color: "#fff", border: "none",
             }}
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Neues Projekt
           </motion.button>
           )}
