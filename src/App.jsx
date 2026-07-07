@@ -10267,9 +10267,11 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [sortMode, setSortMode] = useState("updated"); // "updated" | "name" | "creator" — toolbar sort toggle
+  const [colorPickerOpen, setColorPickerOpen] = useState(false); // accent-colour popover in the editor
+  const PROJECT_ACCENTS = ["#15151C", "#64748B", "#EF4444", "#F97316", "#F59E0B", "#22C55E", "#14B8A6", "#0EA5E9", "#3B82F6", "#6366F1", "#8B5CF6", "#EC4899"];
   const [editing, setEditing] = useState(null); // null = closed, {} = new, {id, name, ...} = existing
   const [openProject, setOpenProject] = useState(null); // a project opened in detail view
-  const [form, setForm] = useState({ name: "", logo_url: "", color: "#8B7AFF" });
+  const [form, setForm] = useState({ name: "", logo_url: "", color: "#6366F1" });
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoPreview, setLogoPreview] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -10311,13 +10313,13 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
 
   const openNew = () => {
     setEditing({});
-    setForm({ name: "", logo_url: "", color: "#8B7AFF", is_brand: false });
+    setForm({ name: "", logo_url: "", color: "#6366F1", is_brand: false });
     setLogoPreview(null);
   };
 
   const openEdit = (proj) => {
     setEditing(proj);
-    setForm({ name: proj.name, logo_url: proj.logo_url || "", color: proj.color || "#8B7AFF", is_brand: !!proj.is_brand });
+    setForm({ name: proj.name, logo_url: proj.logo_url || "", color: proj.color || "#6366F1", is_brand: !!proj.is_brand });
     setLogoPreview(null);
     setInviteEmail("");
     loadMembers(proj.id);
@@ -10325,6 +10327,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
 
   const closeEditor = () => {
     setEditing(null);
+    setColorPickerOpen(false);
     setLogoPreview(null);
     setMembers([]);
     setPendingInvites([]);
@@ -10730,103 +10733,115 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                   style={{ width: 32, height: 32, borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 16 }}
                 >✕</motion.div>
               </div>
-              <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ padding: "22px 24px 24px", display: "flex", flexDirection: "column", gap: 22 }}>
                 {/* Name */}
                 <div>
-                  <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Name</label>
+                  <label style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", fontWeight: 600, letterSpacing: 0.2 }}>Name</label>
                   <input value={form.name} onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
-                    autoFocus={canManageThisProject} placeholder="z.B. Agency OS" readOnly={!canManageThisProject}
+                    autoFocus={canManageThisProject} placeholder="z. B. Agency OS" readOnly={!canManageThisProject}
+                    className="proj-input"
                     style={{
-                      width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                      border: `1px solid ${theme.borderFaint}`, borderRadius: 12,
-                      padding: "11px 14px", fontSize: 14, fontFamily: FONT,
-                      color: theme.text, outline: "none", caretColor: theme.accent,
+                      width: "100%", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.035)",
+                      border: "1px solid transparent", borderRadius: 12,
+                      padding: "12px 14px", fontSize: 14.5, fontFamily: FONT,
+                      color: theme.text, outline: "none", caretColor: theme.text,
                       cursor: canManageThisProject ? "text" : "default", opacity: canManageThisProject ? 1 : 0.7,
+                      transition: "border-color 0.18s ease, background 0.18s ease",
                     }}
                   />
                 </div>
-                {/* Logo upload */}
+                {/* Logo — the tile itself is the click target (upload / replace) */}
                 <div>
-                  <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Logo</label>
+                  <label style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", fontWeight: 600, letterSpacing: 0.2 }}>Logo</label>
                   <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                    {(logoPreview || form.logo_url) ? (
-                      <div style={{ position: "relative" }}>
-                        <img src={logoPreview || form.logo_url} alt="" style={{ width: 64, height: 64, borderRadius: 14, objectFit: "cover", border: `1px solid ${theme.borderFaint}` }} />
-                        {canManageThisProject && (
-                          <motion.div whileTap={{ scale: 0.9 }} onClick={removeLogo}
-                            style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: "#EF4444", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, cursor: "pointer", border: `2px solid ${darkMode ? "#16161e" : "#fff"}` }}
-                          >✕</motion.div>
-                        )}
-                      </div>
-                    ) : canManageThisProject ? (
-                      <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                        onClick={() => logoInputRef.current?.click()}
-                        style={{
-                          width: 64, height: 64, borderRadius: 14, cursor: "pointer",
-                          border: `2px dashed ${theme.border}`,
-                          background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
-                          display: "flex", alignItems: "center", justifyContent: "center", color: theme.textFaint,
-                        }}
-                      >
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                      </motion.div>
-                    ) : (
-                      <div style={{ width: 64, height: 64, borderRadius: 14, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textFaint }}>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>
-                      </div>
-                    )}
-                    <div style={{ flex: 1 }}>
-                      {canManageThisProject ? (
+                    <motion.div whileHover={canManageThisProject ? { scale: 1.03 } : {}} whileTap={canManageThisProject ? { scale: 0.97 } : {}}
+                      onClick={() => canManageThisProject && logoInputRef.current?.click()}
+                      className="proj-logo-tile"
+                      style={{ position: "relative", width: 60, height: 60, borderRadius: 14, flexShrink: 0, overflow: "hidden",
+                        cursor: canManageThisProject ? "pointer" : "default",
+                        border: (logoPreview || form.logo_url) ? `1px solid ${theme.borderFaint}` : `1.5px dashed ${theme.border}`,
+                        background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.025)",
+                        display: "flex", alignItems: "center", justifyContent: "center", color: theme.textFaint }}>
+                      {(logoPreview || form.logo_url) ? (
                         <>
-                          <motion.button whileTap={{ scale: 0.97 }}
-                            onClick={() => logoInputRef.current?.click()} disabled={logoUploading}
-                            style={{
-                              padding: "7px 14px", borderRadius: 10, cursor: "pointer",
-                              background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-                              border: `1px solid ${theme.borderFaint}`,
-                              fontSize: 12, fontFamily: FONT, color: theme.textSub,
-                              opacity: logoUploading ? 0.6 : 1,
-                            }}
-                          >{logoUploading ? "Lädt..." : (form.logo_url ? "Ersetzen" : "Logo hochladen")}</motion.button>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 6 }}>PNG/JPG/SVG, quadratisch ideal</div>
+                          <img src={logoPreview || form.logo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          {canManageThisProject && (
+                            <div className="proj-logo-hover" style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", opacity: 0, transition: "opacity 0.18s ease" }}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            </div>
+                          )}
                         </>
                       ) : (
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, lineHeight: 1.5 }}>Nur Admins, der Projekt-Ersteller oder Projektmanager können das Logo ändern.</div>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                      )}
+                    </motion.div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {canManageThisProject ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                          <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, cursor: "pointer" }} onClick={() => logoInputRef.current?.click()}>
+                            {logoUploading ? "Lädt…" : (logoPreview || form.logo_url) ? "Bild ersetzen" : "Bild hochladen"}
+                          </div>
+                          {(logoPreview || form.logo_url) && (
+                            <div onClick={removeLogo} style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textFaint, cursor: "pointer" }}>Entfernen</div>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, lineHeight: 1.5 }}>Nur Admins, der Projekt-Ersteller oder Projektmanager können das Logo ändern.</div>
                       )}
                     </div>
                   </div>
                   <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" style={{ display: "none" }} onChange={handleLogoUpload} />
                 </div>
-                {/* Color */}
+                {/* Accent colour — a single swatch opening a picker popover */}
                 <div>
-                  <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Akzentfarbe</label>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                    {canManageThisProject ? (
-                      <>
-                        {["#8B7AFF","#6C5CE7","#5BA889","#D67885","#D4A85A","#5A7AB5","#7A9560","#C68460"].map(c => (
-                          <motion.div key={c} whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.9 }}
-                            onClick={() => setForm(prev => ({ ...prev, color: c }))}
-                            style={{
-                              width: 26, height: 26, borderRadius: "50%", background: c, cursor: "pointer",
-                              border: form.color === c ? `2px solid ${darkMode ? "#fff" : "#1a1a2e"}` : "2px solid transparent",
-                              boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
-                            }}
-                          />
-                        ))}
-                        <label style={{
-                          width: 26, height: 26, borderRadius: "50%", cursor: "pointer",
-                          background: "conic-gradient(from 0deg, #ff5e3a, #ffdb4d, #5bd1d7, #8b7aff, #ff5e3a)",
-                          border: "2px solid transparent", marginLeft: 4,
-                        }}>
-                          <input type="color" value={form.color} onChange={(e) => setForm(prev => ({ ...prev, color: e.target.value }))}
-                            style={{ opacity: 0, width: 0, height: 0 }}
-                          />
-                        </label>
-                      </>
-                    ) : (
-                      <div style={{ width: 26, height: 26, borderRadius: "50%", background: form.color, border: `2px solid ${darkMode ? "#fff" : "#1a1a2e"}`, boxShadow: "0 1px 3px rgba(0,0,0,0.15)" }} />
-                    )}
-                  </div>
+                  <label style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", fontWeight: 600, letterSpacing: 0.2 }}>Akzentfarbe</label>
+                  {canManageThisProject ? (
+                    <div style={{ position: "relative", display: "inline-block" }}>
+                      <motion.div whileTap={{ scale: 0.97 }} onClick={() => setColorPickerOpen(o => !o)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "8px 12px 8px 10px", borderRadius: 12, cursor: "pointer",
+                          background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.035)", border: `1px solid ${colorPickerOpen ? "rgba(127,127,127,0.55)" : "transparent"}`, transition: "border-color 0.18s ease" }}>
+                        <span style={{ width: 22, height: 22, borderRadius: 7, background: form.color, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.08)" }} />
+                        <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, letterSpacing: 0.3, textTransform: "uppercase" }}>{form.color}</span>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: colorPickerOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}><polyline points="6 9 12 15 18 9"/></svg>
+                      </motion.div>
+                      <AnimatePresence>
+                        {colorPickerOpen && (
+                          <>
+                            <div onClick={() => setColorPickerOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 210 }} />
+                            <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
+                              style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 211, width: 232, padding: 14, borderRadius: 16,
+                                background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 18px 48px rgba(0,0,0,0.18)" }}>
+                              <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8 }}>
+                                {PROJECT_ACCENTS.map(c => {
+                                  const on = (form.color || "").toLowerCase() === c.toLowerCase();
+                                  return (
+                                    <motion.div key={c} whileHover={{ scale: 1.12 }} whileTap={{ scale: 0.9 }} onClick={() => { setForm(prev => ({ ...prev, color: c })); setColorPickerOpen(false); }}
+                                      style={{ width: 26, height: 26, borderRadius: "50%", background: c, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                                        boxShadow: on ? `0 0 0 2px ${darkMode ? "#1c1c26" : "#fff"}, 0 0 0 3.5px ${c}` : "inset 0 0 0 1px rgba(0,0,0,0.08)" }}>
+                                      {on && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                                    </motion.div>
+                                  );
+                                })}
+                              </div>
+                              <div style={{ height: 1, background: theme.borderFaint, margin: "13px 0" }} />
+                              <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, cursor: "pointer" }}>
+                                <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textSub }}>Eigene Farbe</span>
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                                  <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.3 }}>{form.color}</span>
+                                  <span style={{ position: "relative", width: 26, height: 26, borderRadius: 8, background: form.color, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.12)", overflow: "hidden" }}>
+                                    <input type="color" value={form.color} onChange={(e) => setForm(prev => ({ ...prev, color: e.target.value }))}
+                                      style={{ position: "absolute", inset: -4, width: 40, height: 40, border: "none", padding: 0, background: "transparent", cursor: "pointer", opacity: 0 }} />
+                                  </span>
+                                </span>
+                              </label>
+                            </motion.div>
+                          </>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  ) : (
+                    <span style={{ width: 24, height: 24, borderRadius: 8, background: form.color, display: "inline-block", boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.12)" }} />
+                  )}
                 </div>
 
                 {/* Define as Brand — turns this project into a full brand workspace */}
@@ -10846,7 +10861,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                 {/* Members section — only when editing an existing project */}
                 {editing?.id && (
                   <div style={{ marginTop: 4, paddingTop: 16, borderTop: `1px solid ${theme.borderFaint}` }}>
-                    <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 10, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    <label style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginBottom: 10, display: "block", fontWeight: 600, letterSpacing: 0.2 }}>
                       Mitglieder {members.length > 0 && <span style={{ color: theme.textFaint, fontWeight: 400 }}>· {members.length}</span>}
                     </label>
 
@@ -10903,10 +10918,10 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                             <div key={inv.id} style={{
                               display: "flex", alignItems: "center", gap: 10,
                               padding: "8px 10px", borderRadius: 10,
-                              background: darkMode ? "rgba(139, 122, 255, 0.06)" : "rgba(139, 122, 255, 0.05)",
-                              border: "1px solid rgba(139, 122, 255, 0.15)",
+                              background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+                              border: `1px solid ${theme.borderFaint}`,
                             }}>
-                              <div style={{ width: 28, height: 28, borderRadius: "50%", flexShrink: 0, background: "rgba(139, 122, 255, 0.18)", display: "flex", alignItems: "center", justifyContent: "center", color: "#8B7AFF" }}>
+                              <div style={{ width: 28, height: 28, borderRadius: "50%", flexShrink: 0, background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim }}>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
                               </div>
                               <div style={{ flex: 1, minWidth: 0 }}>
@@ -10949,12 +10964,12 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                           <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.97 }}
                             onClick={() => setShowAddPicker(!showAddPicker)}
                             style={{
-                              width: "100%", padding: "10px 14px", borderRadius: 10, cursor: "pointer",
-                              background: darkMode ? "rgba(139, 122, 255, 0.08)" : "rgba(139, 122, 255, 0.08)",
-                              border: "1px dashed rgba(139, 122, 255, 0.35)",
-                              color: "#8B7AFF",
+                              width: "100%", padding: "11px 14px", borderRadius: 12, cursor: "pointer",
+                              background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+                              border: `1px dashed ${theme.border}`,
+                              color: theme.textSub,
                               fontSize: 13, fontFamily: FONT, fontWeight: 500,
-                              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                              display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
                             }}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
@@ -11081,31 +11096,32 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                   </div>
                 )}
               </div>
-              {/* Actions */}
-              <div style={{ padding: "12px 24px 18px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", justifyContent: "space-between", gap: 10 }}>
+              {/* Actions — round pills, anthracite primary (app-wide style) */}
+              <div style={{ padding: "14px 24px 18px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", justifyContent: "space-between", gap: 10 }}>
                 {editing?.id && canManageThisProject ? (
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => setConfirmDelete(editing)}
+                  <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => setConfirmDelete(editing)}
                     style={{
-                      padding: "10px 18px", borderRadius: 12, cursor: "pointer",
-                      background: "transparent", border: "1px solid rgba(239, 68, 68, 0.25)",
+                      padding: "10px 20px", borderRadius: 999, cursor: "pointer",
+                      background: "transparent", border: "1px solid rgba(239, 68, 68, 0.3)",
                       color: "#EF4444", fontSize: 13, fontWeight: 500, fontFamily: FONT,
                     }}
                   >Löschen</motion.button>
                 ) : <div />}
                 {canSubmitForm ? (
-                <motion.button whileTap={{ scale: 0.97 }} onClick={saveProject}
+                <motion.button whileHover={{ scale: form.name.trim() ? 1.03 : 1 }} whileTap={{ scale: 0.97 }} onClick={saveProject}
                   disabled={!form.name.trim()}
                   style={{
-                    padding: "10px 22px", borderRadius: 12, cursor: form.name.trim() ? "pointer" : "not-allowed",
-                    background: form.name.trim() ? theme.accent + "22" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
-                    border: `1px solid ${form.name.trim() ? theme.accent + "40" : theme.borderFaint}`,
-                    color: form.name.trim() ? theme.accent : theme.textFaint,
-                    fontSize: 13, fontWeight: 500, fontFamily: FONT,
+                    padding: "10px 24px", borderRadius: 999, cursor: form.name.trim() ? "pointer" : "not-allowed",
+                    background: form.name.trim() ? "#15151c" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"),
+                    border: "none",
+                    color: form.name.trim() ? "#fff" : theme.textFaint,
+                    fontSize: 13, fontWeight: 600, fontFamily: FONT,
+                    transition: "background 0.18s ease",
                   }}
-                >{editing?.id ? "Speichern" : "Erstellen"}</motion.button>
+                >{editing?.id ? "Speichern" : "Projekt erstellen"}</motion.button>
                 ) : (
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={closeEditor}
-                    style={{ padding: "10px 22px", borderRadius: 12, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 13, fontWeight: 500, fontFamily: FONT }}
+                  <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={closeEditor}
+                    style={{ padding: "10px 24px", borderRadius: 999, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 13, fontWeight: 500, fontFamily: FONT }}
                   >Schließen</motion.button>
                 )}
               </div>
@@ -29145,6 +29161,9 @@ export default function CircularMenu() {
           border-color: ${darkMode ? "rgba(232, 67, 147, 0.22)" : "rgba(232, 67, 147, 0.30)"} !important;
           transition: background 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), border-color 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
+        /* Project editor inputs — subtle neutral focus ring (no purple) */
+        .proj-input:focus { border-color: rgba(127,127,127,0.55) !important; }
+        .proj-logo-tile:hover .proj-logo-hover { opacity: 1 !important; }
         /* Overlay close button (X circle) — subtle by default, darkens softly on hover */
         .ov-close { transition: background 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
         .ov-close-light { background: rgba(0,0,0,0.12); }
