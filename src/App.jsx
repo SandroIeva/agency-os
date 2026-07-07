@@ -12077,7 +12077,10 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
 // a Grid (overview of everything) and a freeform Canvas (drag images around).
 // Images upload to the public brand-assets bucket so their URLs can later be
 // reused as reference inputs for image/video generation (Higgsfield etc.).
-function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, docFullscreen, setDocFullscreen, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null, embedded = false }) {
+function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, docFullscreen, setDocFullscreen, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null, embedded = false, headerSlotRef = null }) {
+  // Embedded: action buttons portal into BrandView's header slot once it exists.
+  const [assetSlotReady, setAssetSlotReady] = useState(false);
+  useEffect(() => { setAssetSlotReady(true); }, []);
   // Assets has three tabs: Moodboards (curated boards), Creations (your generated
   // outputs) and Inspirations (saved references).
   const [tab, setTab] = useState("moodboards");
@@ -12483,28 +12486,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
       { id: "creations",    label: t("assets.creations") || "Creations" },
       { id: "docs",         label: t("assets.docs") || "Docs" },
     ];
-    return (
-      <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0, pointerEvents: "auto" }}
-        exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)", pointerEvents: "none" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
-        style={panelWrap}>
-        <div style={card}>
-          {/* Header + tabs — hidden while a document is open in the editor (full-screen writing) */}
-          {!(tab === "docs" && docOpen) && (<>
-          {/* Header */}
-          <div style={{ padding: embedded ? "14px 26px 0" : "18px 26px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            {embedded ? <div /> : (
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              {(brand?.logos?.find(l => l.key === "primary")?.url || brand?.logo_url) ? (
-                <img src={brand.logos?.find(l => l.key === "primary")?.url || brand.logo_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
-              ) : (
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: accent + "22", color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{((brand?.name || userOrg?.name || "?"))[0]}</div>
-              )}
-              <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
-                <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{brand?.name || userOrg?.name || ""}</span>
-                <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim }}>{t("assets.title") || "Files"}</span>
-              </div>
-            </div>
-            )}
+    const headerActions = (<>
             {tab === "moodboards" && (
               <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setCreating(true)}
                 style={{ ...iconBtn, background: "#23232b", color: "#fff", border: "none" }}>
@@ -12612,7 +12594,33 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                 </AnimatePresence>
               </div>
             )}
+    </>);
+    return (
+      <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0, pointerEvents: "auto" }}
+        exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)", pointerEvents: "none" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
+        style={panelWrap}>
+        <div style={card}>
+          {/* Header + tabs — hidden while a document is open in the editor (full-screen writing) */}
+          {!(tab === "docs" && docOpen) && (<>
+          {!embedded ? (<>
+          {/* Header */}
+          <div style={{ padding: embedded ? "14px 26px 0" : "18px 26px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            {embedded ? <div /> : (
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {(brand?.logos?.find(l => l.key === "primary")?.url || brand?.logo_url) ? (
+                <img src={brand.logos?.find(l => l.key === "primary")?.url || brand.logo_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+              ) : (
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: accent + "22", color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{((brand?.name || userOrg?.name || "?"))[0]}</div>
+              )}
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+                <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{brand?.name || userOrg?.name || ""}</span>
+                <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim }}>{t("assets.title") || "Files"}</span>
+              </div>
+            </div>
+            )}
+{headerActions}
           </div>
+          </>) : (assetSlotReady && headerSlotRef?.current ? createPortal(<div style={{ display: "flex", alignItems: "center", gap: 10 }}>{headerActions}</div>, headerSlotRef.current) : null)}
 
           {/* Tab switcher — text only, solid purple underline (no gradient, no icons) */}
           <div style={{ padding: "14px 26px 0", display: "flex", gap: 4, borderBottom: `1px solid ${theme.borderFaint}` }}>
@@ -19819,6 +19827,7 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
   const [pubOpen, setPubOpen] = useState(false);
   const [pillarOpen, setPillarOpen] = useState(false); // project-brand: top-right pillar switcher
   const [projDocFullscreen, setProjDocFullscreen] = useState(false); // embedded Dateien: doc editor fullscreen
+  const embedHeaderSlot = useRef(null); // embedded pillars portal their header actions here
   const PROJECT_PILLARS = [
     { key: "strategy", label: "Strategie" },
     { key: "identity", label: "Identität" },
@@ -21686,6 +21695,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
               {/* Right cluster: globe (publish) + Bearbeiten. The publish dropdown
                   right-aligns to this whole cluster → flush with the Bearbeiten button. */}
               <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+              {isEmbeddedPillar && <div ref={embedHeaderSlot} style={{ display: "flex", alignItems: "center", gap: 10 }} />}
               {canEditBrand && (
                 <>
                   <button title={appLanguage === "de" ? "Teilen" : "Share"} onClick={() => setPubOpen(o => !o)}
@@ -21769,7 +21779,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 {brandTab === "touchpoints" ? (
                   <TouchpointsView embedded projectId={projectId} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} canEdit={canEditBrand} />
                 ) : (
-                  <AssetsView embedded projectId={projectId} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage}
+                  <AssetsView embedded projectId={projectId} headerSlotRef={embedHeaderSlot} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage}
                     onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive} orgMembers={orgMembers} createNotification={createNotification}
                     docDeepLink={null} docFullscreen={projDocFullscreen} setDocFullscreen={setProjDocFullscreen}
                     getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin}
