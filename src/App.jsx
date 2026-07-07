@@ -11847,7 +11847,7 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
   );
 }
 
-function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", canEdit = true, projectId = null, embedded = false }) {
+function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", canEdit = true, projectId = null, projectName = "", embedded = false }) {
   const tpScope = (q) => projectId ? q.eq("project_id", projectId) : q.is("project_id", null);
   const [audTab, setAudTab] = useState("touchpoints"); // "touchpoints" | "people"
   const peopleHeaderSlot = useRef(null); // top-right header slot the People detail edit button portals into
@@ -11880,7 +11880,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
     if (profile?.id) {
       await supabase.from("brand_profile").update({ channels: next, updated_at: new Date().toISOString() }).eq("id", profile.id);
     } else {
-      const { data } = await supabase.from("brand_profile").insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, channels: next, name: userOrg?.name || "" }).select("id").single();
+      const { data } = await supabase.from("brand_profile").insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, channels: next, name: (projectId ? projectName : userOrg?.name) || "" }).select("id").single();
       if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
     }
   };
@@ -19858,7 +19858,7 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
     setPubBusy(true);
     try {
       const token = pubToken
-        || ((profile.name || "brand").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "brand")
+        || (((isProjectBrand ? projectName : profile.name) || profile.name || "brand").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "brand")
           + "-" + Math.random().toString(36).slice(2, 6);
       const { error } = await supabase.from("brand_shares").upsert(
         { token, org_id: userOrg.id, project_id: projectId || null, data: profile, sections: pubSections, created_by: session?.user?.id, updated_at: new Date().toISOString() },
@@ -20071,7 +20071,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ personas: list }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", personas: list })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: (projectId ? projectName : userOrg?.name) || "", personas: list })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20086,7 +20086,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ competitors: list }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", competitors: list })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: (projectId ? projectName : userOrg?.name) || "", competitors: list })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20102,7 +20102,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ vision: v }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", vision: v })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: (projectId ? projectName : userOrg?.name) || "", vision: v })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20118,7 +20118,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ soul: s }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", soul: s })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: (projectId ? projectName : userOrg?.name) || "", soul: s })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20135,7 +20135,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ color_palette: pal, colors: colorsFlat }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", color_palette: pal, colors: colorsFlat })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: (projectId ? projectName : userOrg?.name) || "", color_palette: pal, colors: colorsFlat })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20151,7 +20151,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ typography: typo }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", typography: typo })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: (projectId ? projectName : userOrg?.name) || "", typography: typo })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20167,7 +20167,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ imagery: list }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", imagery: list })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: (projectId ? projectName : userOrg?.name) || "", imagery: list })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20183,7 +20183,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ brand_avatar: cfg }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", brand_avatar: cfg })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: (projectId ? projectName : userOrg?.name) || "", brand_avatar: cfg })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20247,7 +20247,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ logo_layout: cfg }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", logo_layout: cfg })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: (projectId ? projectName : userOrg?.name) || "", logo_layout: cfg })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -20263,7 +20263,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         await supabase.from("brand_profile").update({ brand_values: list }).eq("id", cur.id);
       } else if (userOrg?.id) {
         const { data } = await supabase.from("brand_profile")
-          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: userOrg?.name || "", brand_values: list })
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: (projectId ? projectName : userOrg?.name) || "", brand_values: list })
           .select("id").single();
         if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
       }
@@ -21656,10 +21656,10 @@ If you don't know a field, infer a plausible value. Write all text values in the
               {(profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url) ? (
                 <img src={profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
               ) : (
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: theme.accent + "22", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{((isProjectBrand ? (profile.name || projectName) : profile.name) || "?")[0]}</div>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: theme.accent + "22", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{((isProjectBrand ? (projectName || profile.name) : profile.name) || "?")[0]}</div>
               )}
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
-                <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{isProjectBrand ? (profile.name || projectName || "Brand") : profile.name}</span>
+                <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{isProjectBrand ? (projectName || profile.name || "Brand") : profile.name}</span>
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{BRAND_SUBVIEW_LABELS[brandTab] || ""}</span>
               </div>
               <div style={{ flex: 1 }} />
@@ -21777,7 +21777,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
             {isEmbeddedPillar ? (
               <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
                 {brandTab === "touchpoints" ? (
-                  <TouchpointsView embedded projectId={projectId} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} canEdit={canEditBrand} />
+                  <TouchpointsView embedded projectId={projectId} projectName={projectName} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} canEdit={canEditBrand} />
                 ) : (
                   <AssetsView embedded projectId={projectId} headerSlotRef={embedHeaderSlot} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage}
                     onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive} orgMembers={orgMembers} createNotification={createNotification}
