@@ -10266,6 +10266,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
   const [taskCounts, setTaskCounts] = useState({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [sortMode, setSortMode] = useState("updated"); // "updated" | "name" | "creator" — toolbar sort toggle
   const [editing, setEditing] = useState(null); // null = closed, {} = new, {id, name, ...} = existing
   const [openProject, setOpenProject] = useState(null); // a project opened in detail view
   const [form, setForm] = useState({ name: "", logo_url: "", color: "#8B7AFF" });
@@ -10520,8 +10521,14 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
   // the header count — members only see/count their own projects, not the
   // workspace total).
   const myProjects = projects.filter(p => myIdSet.has(p.id));
+  const ownerName = (p) => { const m = orgMembers.find(m => (m.user_id || m.id) === p.owner_id); return (m?.display_name || m?.full_name || "").toLowerCase(); };
   const filtered = myProjects
-    .filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+    .filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      if (sortMode === "name") return (a.name || "").localeCompare(b.name || "");
+      if (sortMode === "creator") return ownerName(a).localeCompare(ownerName(b)) || (a.name || "").localeCompare(b.name || "");
+      return new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0);
+    });
 
   // A project opened in detail view. Brand-projects open the full brand workspace
   // (same BrandView, scoped to this project); others show the file view.
@@ -10560,11 +10567,11 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
         borderRadius: 24, overflow: "hidden",
         display: "flex", flexDirection: "column",
       }}>
-        {/* Header */}
+        {/* Header — bottom rule like the Dateien/Dokumente views */}
         <motion.div
           initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.03, duration: 0.3 }}
-          style={{ padding: "14px 20px 0", display: "flex", alignItems: "center", gap: 10 }}
+          style={{ padding: "16px 20px 14px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${theme.borderFaint}` }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
             <rect x="3" y="6" width="18" height="14" rx="2" stroke={theme.accent} strokeWidth="1.5"/>
@@ -10588,35 +10595,30 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
           )}
         </motion.div>
 
-        {/* Search bar */}
+        {/* Toolbar: search (left) · sort toggle (right) — mirrors the Dokumente toolbar */}
         <motion.div
           initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05, duration: 0.3 }}
-          style={{ padding: "10px 20px 8px" }}
+          style={{ padding: "18px 20px 10px", display: "flex", alignItems: "center", gap: 10 }}
         >
-          <div style={{
-            display: "flex", alignItems: "center", gap: 10,
-            background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
-            border: `1px solid ${theme.borderFaint}`,
-            borderRadius: 14, padding: "10px 14px",
-          }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <circle cx="11" cy="11" r="7" stroke={theme.textDim} strokeWidth="1.8" />
-              <path d="M16 16l4.5 4.5" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
+          <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "none", maxWidth: 340 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
             <input value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Projekt suchen..."
-              style={{
-                flex: 1, background: "none", border: "none", outline: "none",
-                fontSize: 13, fontFamily: FONT, color: theme.text, caretColor: theme.accent,
-              }}
+              placeholder="Projekt suchen…"
+              style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }}
             />
             {search && (
               <motion.div whileTap={{ scale: 0.9 }} onClick={() => setSearch("")}
-                style={{ width: 20, height: 20, borderRadius: "50%", background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 11 }}
+                style={{ width: 18, height: 18, borderRadius: "50%", background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 10, flexShrink: 0 }}
               >✕</motion.div>
             )}
           </div>
+          <div style={{ flex: 1 }} />
+          <motion.div whileTap={{ scale: 0.96 }} onClick={() => setSortMode(m => m === "updated" ? "name" : m === "name" ? "creator" : "updated")}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, whiteSpace: "nowrap" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+            {sortMode === "name" ? "Name" : sortMode === "creator" ? "Ersteller" : "Zuletzt geändert"}
+          </motion.div>
         </motion.div>
 
         {/* Grid */}
