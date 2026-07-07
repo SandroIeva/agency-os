@@ -10261,7 +10261,7 @@ function ProjectDetail({ project, onBack, onEdit, session, userOrg, theme, darkM
   );
 }
 
-function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", onOpenInKanban, orgMembers = [], myProjectIds = [], createNotification, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true, onNavigate, onOpenDoc }) {
+function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", onOpenInKanban, orgMembers = [], myProjectIds = [], createNotification, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true, onNavigate, onOpenDoc, onUploadStorage, onUploadDrive, getProviderToken, autoReLogin }) {
   const [projects, setProjects] = useState([]);
   const [taskCounts, setTaskCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -10531,6 +10531,8 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
         session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage}
         llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken}
         canEditBrand={canEditBrand} canEditDesign={canEditDesign}
+        orgMembers={orgMembers} createNotification={createNotification}
+        onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive} getProviderToken={getProviderToken} autoReLogin={autoReLogin}
         onNavigate={onNavigate} onOpenDoc={onOpenDoc}
         onBack={() => setOpenProject(null)} />;
     }
@@ -11890,8 +11892,8 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
   };
   const connectedCount = TOUCHPOINT_PLATFORMS.filter(p => channels[p.key]).length;
 
-  const panelWrap = embedded ? { width: "100%", height: "100%" } : { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 40px 80px" };
-  const card = embedded ? { width: "100%", height: "100%", display: "flex", flexDirection: "column" } : { width: "100%", maxWidth: 1050, height: "100%", ...frostedPanelStyle(darkMode), borderRadius: 26, overflow: "hidden", display: "flex", flexDirection: "column" };
+  const panelWrap = embedded ? { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" } : { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 40px 80px" };
+  const card = embedded ? { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" } : { width: "100%", maxWidth: 1050, height: "100%", ...frostedPanelStyle(darkMode), borderRadius: 26, overflow: "hidden", display: "flex", flexDirection: "column" };
 
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -11916,9 +11918,8 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
         </div>
         )}
 
-        {/* Tabs: Touchpoints · People (People isn't project-scoped → hidden when embedded) */}
-        {!embedded && (
-        <div style={{ padding: "0 24px", display: "flex", gap: 22, borderBottom: `1px solid ${theme.borderFaint}` }}>
+        {/* Tabs: Touchpoints · People (embedded gets the People header slot inline) */}
+        <div style={{ padding: "0 24px", display: "flex", alignItems: "center", gap: 22, borderBottom: `1px solid ${theme.borderFaint}` }}>
           {[["touchpoints", "Touchpoints"], ["people", "People"]].map(([k, lbl]) => {
             const on = audTab === k;
             return (
@@ -11928,10 +11929,10 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
               </div>
             );
           })}
+          {embedded && <><div style={{ flex: 1 }} /><div ref={peopleHeaderSlot} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }} /></>}
         </div>
-        )}
 
-        {(!embedded && audTab === "people") ? (
+        {audTab === "people" ? (
           <PeopleTab theme={theme} darkMode={darkMode} accent={accent} appLanguage={appLanguage} headerSlotRef={peopleHeaderSlot} />
         ) : (
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
@@ -12076,7 +12077,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
 // a Grid (overview of everything) and a freeform Canvas (drag images around).
 // Images upload to the public brand-assets bucket so their URLs can later be
 // reused as reference inputs for image/video generation (Higgsfield etc.).
-function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, docFullscreen, setDocFullscreen, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys }) {
+function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, docFullscreen, setDocFullscreen, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null, embedded = false }) {
   // Assets has three tabs: Moodboards (curated boards), Creations (your generated
   // outputs) and Inspirations (saved references).
   const [tab, setTab] = useState("moodboards");
@@ -12087,12 +12088,12 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   // Brand views: "<Brand> Assets".
   const [brand, setBrand] = useState(null);
   useEffect(() => {
-    if (!userOrg?.id) return;
+    if (!userOrg?.id || embedded) return; // embedded: BrandView shows its own header
     (async () => {
       const { data } = await supabase.from("brand_profile").select("name,logo_url,logos").eq("org_id", userOrg.id).is("project_id", null).maybeSingle();
       setBrand(data || null);
     })();
-  }, [userOrg?.id]);
+  }, [userOrg?.id, embedded]);
   // Creations upload is triggered from the header (same slot as the "New board"
   // button), but the file input + logic live in CreationsTab — so it registers a
   // picker fn here and reports its uploading state up.
@@ -12140,10 +12141,12 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const loadBoards = useCallback(async () => {
     if (!userOrg?.id) { setLoadingBoards(false); return; }
     setLoadingBoards(true);
-    const { data } = await supabase.from("moodboards").select("*").eq("org_id", userOrg.id).eq("archived", false).order("updated_at", { ascending: false });
+    let q = supabase.from("moodboards").select("*").eq("org_id", userOrg.id).eq("archived", false);
+    if (projectId) q = q.eq("project_id", projectId); // project brand: only this project's boards
+    const { data } = await q.order("updated_at", { ascending: false });
     setBoards(data || []);
     setLoadingBoards(false);
-  }, [userOrg?.id]);
+  }, [userOrg?.id, projectId]);
 
   useEffect(() => { loadBoards(); }, [loadBoards]);
 
@@ -12166,7 +12169,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     if (!userOrg?.id) return;
     setBusy(true);
     const { data, error } = await supabase.from("moodboards").insert({
-      org_id: userOrg.id, created_by: session?.user?.id, title,
+      org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, title,
     }).select().single();
     setBusy(false);
     setCreating(false); setNewTitle("");
@@ -12455,14 +12458,14 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     (!tagFilter || (i.tags || []).includes(tagFilter)) &&
     (!colorFilter || (i.colors || []).includes(colorFilter)));
 
-  const panelWrap = {
+  const panelWrap = embedded ? { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" } : {
     // zIndex 5 to match every other top-level view panel (Brand, Kanban, …).
     // Without it this panel sat at z:auto, so a sibling view still finishing its
     // exit animation (e.g. BrandView at z:5) painted on top and swallowed clicks.
     position: "absolute", inset: 0, zIndex: 5, display: "flex",
     alignItems: "center", justifyContent: "center", padding: "20px 40px 80px",
   };
-  const card = {
+  const card = embedded ? { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" } : {
     width: "100%", maxWidth: 1050, height: "100%",
     ...frostedPanelStyle(darkMode), borderRadius: 26, overflow: "hidden",
     display: "flex", flexDirection: "column",
@@ -12488,7 +12491,8 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           {/* Header + tabs — hidden while a document is open in the editor (full-screen writing) */}
           {!(tab === "docs" && docOpen) && (<>
           {/* Header */}
-          <div style={{ padding: "18px 26px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ padding: embedded ? "14px 26px 0" : "18px 26px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            {embedded ? <div /> : (
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               {(brand?.logos?.find(l => l.key === "primary")?.url || brand?.logo_url) ? (
                 <img src={brand.logos?.find(l => l.key === "primary")?.url || brand.logo_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
@@ -12500,6 +12504,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim }}>{t("assets.title") || "Files"}</span>
               </div>
             </div>
+            )}
             {tab === "moodboards" && (
               <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setCreating(true)}
                 style={{ ...iconBtn, background: "#23232b", color: "#fff", border: "none" }}>
@@ -12645,7 +12650,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           {/* ── CREATIONS tab ── */}
           {tab === "creations" && (
             <CreationsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} grad={grad} glow={glow} t={t}
-              appLanguage={appLanguage} onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive} orgMembers={orgMembers}
+              appLanguage={appLanguage} onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive} orgMembers={orgMembers} projectId={projectId}
               pickRef={creationsPick} drivePickRef={creationsDrivePick} newFolderRef={creationsNewFolder} onUploadingChange={setCreationsUploading}
               getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin}
               llmProvider={llmProvider} llmKeys={llmKeys} />
@@ -12653,7 +12658,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 
           {/* ── DOCS tab ── */}
           {tab === "docs" && (
-            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} orgMembers={orgMembers} createNotification={createNotification} deepLink={docDeepLink} fullscreen={docFullscreen} setFullscreen={setDocFullscreen} createRef={docsCreate} importRef={docsImport} onImportingChange={setDocsImporting} skillsRef={docsSkills} llmProvider={llmProvider} llmKeys={llmKeys} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} onOpenChange={setDocOpen} />
+            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} orgMembers={orgMembers} createNotification={createNotification} projectId={projectId} deepLink={docDeepLink} fullscreen={docFullscreen} setFullscreen={setDocFullscreen} createRef={docsCreate} importRef={docsImport} onImportingChange={setDocsImporting} skillsRef={docsSkills} llmProvider={llmProvider} llmKeys={llmKeys} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} onOpenChange={setDocOpen} />
           )}
 
           {/* ── MOODBOARDS tab (boards grid) ── */}
@@ -12942,7 +12947,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 // Top-level component (not inline) so framer-motion never re-mounts it per render.
 // Creations tab — gallery of the workspace's images AND videos (AI-generated +
 // user uploads). Filter by media type; upload your own via the button.
-function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, drivePickRef, newFolderRef, onUploadingChange, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys }) {
+function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, drivePickRef, newFolderRef, onUploadingChange, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null }) {
   const memberById = useMemo(() => {
     const m = {}; (orgMembers || []).forEach(om => { if (om.user_id) m[om.user_id] = { ...(om.profiles || {}) }; }); return m;
   }, [orgMembers]);
@@ -12976,24 +12981,26 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     if (!userOrg?.id) { setFiles([]); return; }
     // Fetch the org's files and filter to media client-side — avoids a fragile
     // PostgREST `.or(...ilike...)` string and is robust to query quirks.
-    const { data, error } = await supabase.from("user_files")
+    let q = supabase.from("user_files")
       .select("id,name,public_url,mime_type,size_bytes,created_at,user_id,storage_path,storage_provider,folder_id,note,tags,colors,metadata")
-      .eq("org_id", userOrg.id)
-      .order("created_at", { ascending: false }).limit(300);
+      .eq("org_id", userOrg.id);
+    if (projectId) q = q.eq("project_id", projectId); // project brand: only this project's assets
+    const { data, error } = await q.order("created_at", { ascending: false }).limit(300);
     if (error) { console.warn("[creations] load failed:", error.message); setFiles([]); return; }
     setFiles((data || []).filter(f => { const m = f.mime_type || ""; return m.startsWith("image/") || m.startsWith("video/"); }));
-  }, [userOrg?.id]);
+  }, [userOrg?.id, projectId]);
   useEffect(() => { load(); }, [load]);
 
   // Folders (user_folders) for the move-to-folder dropdown in the large view.
   const loadFolders = useCallback(async () => {
     if (!userOrg?.id) { setFolders([]); return; }
-    const { data, error } = await supabase.from("user_folders")
-      .select("id,name,created_at").eq("org_id", userOrg.id)
-      .order("name", { ascending: true });
+    let q = supabase.from("user_folders")
+      .select("id,name,created_at").eq("org_id", userOrg.id);
+    if (projectId) q = q.eq("project_id", projectId);
+    const { data, error } = await q.order("name", { ascending: true });
     if (error) { console.warn("[creations] folders load failed:", error.message); setFolders([]); return; }
     setFolders(data || []);
-  }, [userOrg?.id]);
+  }, [userOrg?.id, projectId]);
   useEffect(() => { loadFolders(); }, [loadFolders]);
 
   // Create a folder (wired to the AssetsView "Hinzufügen → Ordner erstellen" item).
@@ -13003,11 +13010,11 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     const name = (window.prompt(de ? "Name des Ordners:" : "Folder name:") || "").trim();
     if (!name) return;
     const { data, error } = await supabase.from("user_folders")
-      .insert({ name, org_id: userOrg.id, user_id: session.user.id })
+      .insert({ name, org_id: userOrg.id, project_id: projectId || null, user_id: session.user.id })
       .select("id,name,created_at").single();
     if (error) { alert((de ? "Ordner konnte nicht erstellt werden: " : "Couldn't create folder: ") + error.message); return; }
     if (data) setFolders(prev => [...prev, data].sort((a, b) => (a.name || "").localeCompare(b.name || "")));
-  }, [userOrg?.id, session?.user?.id, appLanguage]);
+  }, [userOrg?.id, session?.user?.id, appLanguage, projectId]);
   const createFolderRef = useRef(null);
   createFolderRef.current = createFolder;
   useEffect(() => { if (newFolderRef) newFolderRef.current = () => createFolderRef.current?.(); }, [newFolderRef]);
@@ -13024,7 +13031,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
       if (upErr) continue;
       const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(path, 60 * 60 * 24 * 365);
       const { data, error } = await supabase.from("user_files").insert({
-        user_id: session.user.id, org_id: userOrg.id, name: file.name,
+        user_id: session.user.id, org_id: userOrg.id, project_id: projectId || null, name: file.name,
         mime_type: file.type, size_bytes: file.size, storage_path: path,
         storage_provider: "supabase", public_url: signed?.signedUrl || null,
       }).select(FILE_COLS).single();
@@ -13095,7 +13102,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
         if (upErr) { console.error("[drive-import]", label, "storage upload failed", upErr); failures.push({ label, reason: de ? "konnte nicht gespeichert werden" : "couldn't be saved" }); continue; }
         const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(path, 60 * 60 * 24 * 365);
         const { data, error } = await supabase.from("user_files").insert({
-          user_id: session.user.id, org_id: userOrg.id, name: p.name || `drive.${ext}`,
+          user_id: session.user.id, org_id: userOrg.id, project_id: projectId || null, name: p.name || `drive.${ext}`,
           mime_type: mime, size_bytes: blob.size, storage_path: path,
           storage_provider: "supabase", public_url: signed?.signedUrl || null,
         }).select(FILE_COLS).single();
@@ -13132,7 +13139,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
         else { const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(newPath, 60 * 60 * 24 * 365); publicUrl = signed?.signedUrl || publicUrl; }
       }
       const { data, error } = await supabase.from("user_files").insert({
-        user_id: session.user.id, org_id: userOrg.id,
+        user_id: session.user.id, org_id: userOrg.id, project_id: projectId || null,
         name: (f.name || "datei").replace(/(\.[^.]+)?$/, " (Kopie)$1"),
         mime_type: f.mime_type, size_bytes: f.size_bytes,
         storage_path: newPath, storage_provider: provider, public_url: publicUrl,
@@ -15192,7 +15199,7 @@ const DOC_SKILLS = [
 
 // Docs tab — Google-Docs-style: a list of workspace documents + a rich-text
 // editor. Documents are stored in brand_documents (org-scoped).
-function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "de", orgMembers, createNotification, deepLink, fullscreen, setFullscreen, createRef, importRef, onImportingChange, skillsRef, llmProvider, llmKeys, getProviderToken, ensureValidToken, autoReLogin, onOpenChange }) {
+function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "de", orgMembers, createNotification, deepLink, fullscreen, setFullscreen, createRef, importRef, onImportingChange, skillsRef, llmProvider, llmKeys, getProviderToken, ensureValidToken, autoReLogin, onOpenChange, projectId = null }) {
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openDoc, setOpenDoc] = useState(null);
@@ -15360,11 +15367,13 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
 
   const load = async () => {
     if (!userOrg?.id) { setLoading(false); return; }
-    const { data } = await supabase.from("brand_documents").select("*").eq("org_id", userOrg.id).order("updated_at", { ascending: false });
+    let q = supabase.from("brand_documents").select("*").eq("org_id", userOrg.id);
+    if (projectId) q = q.eq("project_id", projectId); // project brand: only this project's docs
+    const { data } = await q.order("updated_at", { ascending: false });
     setDocs(data || []);
     setLoading(false);
   };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [userOrg?.id]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [userOrg?.id, projectId]);
   // Tell AssetsView whether a doc is open (so it can hide the header/tabs).
   useEffect(() => { onOpenChange?.(!!openDoc); /* eslint-disable-next-line */ }, [openDoc]);
   // Fullscreen: exit on Escape and whenever the document is closed.
@@ -15383,7 +15392,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
     let pref = "workspace"; try { pref = localStorage.getItem("agencyos-doc-default-visibility") || "workspace"; } catch (_) {}
     const visibility = pref === "private" ? "restricted" : "workspace";
     const { data, error } = await supabase.from("brand_documents")
-      .insert({ org_id: userOrg.id, title: "Unbenanntes Dokument", content: "", created_by: session?.user?.id, visibility })
+      .insert({ org_id: userOrg.id, project_id: projectId || null, title: "Unbenanntes Dokument", content: "", created_by: session?.user?.id, visibility })
       .select().single();
     if (error) { alert("Dokument konnte nicht erstellt werden: " + error.message); return; }
     setDocs(prev => [data, ...prev]);
@@ -15581,7 +15590,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
     e?.stopPropagation?.();
     if (!userOrg?.id) return;
     const { data, error } = await supabase.from("brand_documents")
-      .insert({ org_id: userOrg.id, title: (d.title || "Unbenanntes Dokument") + " (Kopie)", content: d.content || "", created_by: session?.user?.id, visibility: d.visibility || "workspace" })
+      .insert({ org_id: userOrg.id, project_id: projectId || d.project_id || null, title: (d.title || "Unbenanntes Dokument") + " (Kopie)", content: d.content || "", created_by: session?.user?.id, visibility: d.visibility || "workspace" })
       .select().single();
     if (error) { alert("Dokument konnte nicht dupliziert werden: " + error.message); return; }
     setDocs(prev => [data, ...prev]);
@@ -19780,89 +19789,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   );
 }
 
-// Bare project-files panel — the "Dateien" pillar of a project brand. Lists +
-// uploads project_files (the project's own store), embedded in BrandView's body.
-function ProjectFilesPanel({ projectId, session, userOrg, theme, darkMode, t, canEdit = true }) {
-  const [files, setFiles] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const inputRef = useRef(null);
-  const isImg = (f) => (f.mime_type || "").startsWith("image/");
-  const load = useCallback(async () => {
-    const { data } = await supabase.from("project_files").select("*").eq("project_id", projectId).order("created_at", { ascending: false });
-    setFiles(data || []);
-  }, [projectId]);
-  useEffect(() => { load(); }, [load]);
-  const upload = async (list) => {
-    const arr = Array.from(list || []);
-    if (!arr.length || !session?.user?.id) return;
-    setUploading(true);
-    const added = [];
-    for (const file of arr) {
-      const ext = (file.name.split(".").pop() || "bin").toLowerCase();
-      const path = `projects/${projectId}/${crypto.randomUUID()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type, upsert: true });
-      if (upErr) continue;
-      const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
-      const { data, error } = await supabase.from("project_files").insert({
-        project_id: projectId, org_id: userOrg?.id, user_id: session.user.id,
-        name: file.name, mime_type: file.type, size_bytes: file.size, url: pub?.publicUrl || null,
-      }).select().single();
-      if (!error && data) added.push(data);
-    }
-    setFiles(prev => [...added, ...(prev || [])]);
-    setUploading(false);
-  };
-  const removeFile = async (f) => { await supabase.from("project_files").delete().eq("id", f.id); setFiles(prev => prev.filter(x => x.id !== f.id)); };
-  const fmt = (f) => {
-    const ext = ((f.name || "").split(".").pop() || "").toUpperCase();
-    const mb = f.size_bytes ? `${Math.max(1, Math.round(f.size_bytes / 1e6))}MB` : null;
-    return [mb, ext].filter(Boolean).join(" · ");
-  };
-  return (
-    <div>
-      <input ref={inputRef} type="file" multiple style={{ display: "none" }} onChange={e => { upload(e.target.files); e.target.value = ""; }} />
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 18 }}>
-        <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{files == null ? "" : `${files.length} ${files.length === 1 ? "Datei" : "Dateien"}`}</div>
-        {canEdit && (
-          <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => inputRef.current?.click()}
-            style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, background: "#15151c", color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer", opacity: uploading ? 0.6 : 1 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            {uploading ? (t("common.loading") || "Lädt…") : "Hochladen"}
-          </motion.div>
-        )}
-      </div>
-      {files == null ? (
-        <div style={{ padding: 40, textAlign: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
-      ) : files.length === 0 ? (
-        <div style={{ padding: "48px 20px", textAlign: "center", borderRadius: 16, border: `1px dashed ${theme.borderFaint}`, color: theme.textDim, fontSize: 13, fontFamily: FONT }}>Noch keine Dateien in diesem Projekt.</div>
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 14 }}>
-          {files.map(f => (
-            <div key={f.id} style={{ position: "relative", borderRadius: 14, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)" }} className="pb-img-tile">
-              <a href={f.url} target="_blank" rel="noreferrer" style={{ textDecoration: "none", color: "inherit" }}>
-                <div style={{ height: 110, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-                  {isImg(f) && f.url ? <img src={f.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    : <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>}
-                </div>
-                <div style={{ padding: "10px 12px" }}>
-                  <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</div>
-                  <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 2 }}>{fmt(f)}</div>
-                </div>
-              </a>
-              {canEdit && (
-                <div onClick={() => removeFile(f)} title="Löschen" style={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: 8, background: "rgba(0,0,0,0.5)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, darkMode, t, appLanguage = "de", brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true, projectId = null, projectName = "" }) {
+function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, darkMode, t, appLanguage = "de", brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true, projectId = null, projectName = "", orgMembers = [], createNotification, onUploadStorage, onUploadDrive, getProviderToken, autoReLogin }) {
   // Scope: null projectId = the org-level brand (unchanged). A projectId scopes
   // every load/insert/realtime to that project's own brand_profile row, and the
   // pillar switch becomes a local top-right dropdown instead of the app menu.
@@ -19891,6 +19818,7 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
   ];
   const [pubOpen, setPubOpen] = useState(false);
   const [pillarOpen, setPillarOpen] = useState(false); // project-brand: top-right pillar switcher
+  const [projDocFullscreen, setProjDocFullscreen] = useState(false); // embedded Dateien: doc editor fullscreen
   const PROJECT_PILLARS = [
     { key: "strategy", label: "Strategie" },
     { key: "identity", label: "Identität" },
@@ -21837,11 +21765,15 @@ If you don't know a field, infer a plausible value. Write all text values in the
             )}
 
             {isEmbeddedPillar ? (
-              <div className="no-scrollbar" style={{ flex: 1, overflowY: "auto", padding: brandTab === "assets" ? "22px 26px 30px" : 0 }}>
+              <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
                 {brandTab === "touchpoints" ? (
                   <TouchpointsView embedded projectId={projectId} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} canEdit={canEditBrand} />
                 ) : (
-                  <ProjectFilesPanel projectId={projectId} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} canEdit={canEditBrand} />
+                  <AssetsView embedded projectId={projectId} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage}
+                    onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive} orgMembers={orgMembers} createNotification={createNotification}
+                    docDeepLink={null} docFullscreen={projDocFullscreen} setDocFullscreen={setProjDocFullscreen}
+                    getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin}
+                    llmProvider={llmProvider} llmKeys={llmKeys} onBack={() => {}} />
                 )}
               </div>
             ) : (
@@ -25916,7 +25848,7 @@ export default function CircularMenu() {
         {/* PROJECTS VIEW */}
         <AnimatePresence>
           {currentView === "projects" && (
-            <ProjectsView session={session} userOrg={userOrg} orgMembers={orgMembers} myProjectIds={myProjectIds} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} createNotification={createNotification} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} canEditBrand={canEditBrand} canEditDesign={canEditDesign} onNavigate={(v) => setCurrentView(v)} onOpenDoc={(id) => { setDocDeepLink({ documentId: id, blockId: null, ts: Date.now() }); setCurrentView("assets"); }} onBack={() => setCurrentView("dashboard")} onOpenInKanban={(projectName) => { setCurrentView("kanban"); }} />
+            <ProjectsView session={session} userOrg={userOrg} orgMembers={orgMembers} myProjectIds={myProjectIds} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} createNotification={createNotification} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} canEditBrand={canEditBrand} canEditDesign={canEditDesign} onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive} getProviderToken={getProviderToken} autoReLogin={autoReLogin} onNavigate={(v) => setCurrentView(v)} onOpenDoc={(id) => { setDocDeepLink({ documentId: id, blockId: null, ts: Date.now() }); setCurrentView("assets"); }} onBack={() => setCurrentView("dashboard")} onOpenInKanban={(projectName) => { setCurrentView("kanban"); }} />
           )}
         </AnimatePresence>
 
