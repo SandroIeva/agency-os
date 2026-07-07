@@ -19870,8 +19870,10 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
   const scopeSel = (q) => isProjectBrand ? q.eq("project_id", projectId) : q.is("project_id", null);
   const [localTab, setLocalTab] = useState("strategy");
   const rawTab = isProjectBrand ? localTab : rawBrandTab;
-  // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure
-  const brandTab = BRAND_TAB_LEGACY_MAP[rawTab] || rawTab;
+  // Map any legacy tab id (assets/guidelines/personas/knowledge/competitor) to the new 5-tab structure.
+  // NOT for project brands: there localTab is a fresh pillar key (e.g. "assets" = Dateien) that must
+  // stay as-is — otherwise the legacy map (assets→design) would swallow the embedded pillars.
+  const brandTab = isProjectBrand ? rawTab : (BRAND_TAB_LEGACY_MAP[rawTab] || rawTab);
   // Edit permission for the current pillar: Design System needs the Designer
   // role, everything else needs the Brand role (admins have both).
   const canEditCurrent = brandTab === "design" ? canEditDesign : canEditBrand;
