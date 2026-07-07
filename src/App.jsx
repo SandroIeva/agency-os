@@ -11845,7 +11845,8 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
   );
 }
 
-function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", canEdit = true }) {
+function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", canEdit = true, projectId = null, embedded = false }) {
+  const tpScope = (q) => projectId ? q.eq("project_id", projectId) : q.is("project_id", null);
   const [audTab, setAudTab] = useState("touchpoints"); // "touchpoints" | "people"
   const peopleHeaderSlot = useRef(null); // top-right header slot the People detail edit button portals into
   const [profile, setProfile] = useState(null);
@@ -11858,14 +11859,14 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
   useEffect(() => {
     if (!userOrg?.id) { setLoading(false); return; }
     (async () => {
-      const { data } = await supabase.from("brand_profile").select("id, channels, website_url, name, logo_url, logos").eq("org_id", userOrg.id).is("project_id", null).maybeSingle();
+      const { data } = await tpScope(supabase.from("brand_profile").select("id, channels, website_url, name, logo_url, logos").eq("org_id", userOrg.id)).maybeSingle();
       setProfile(data || null);
       const ch = { ...(data?.channels && typeof data.channels === "object" ? data.channels : {}) };
       if (data?.website_url && !ch.website) ch.website = data.website_url;
       setChannels(ch);
       setLoading(false);
     })();
-  }, [userOrg?.id]);
+  }, [userOrg?.id, projectId]);
 
   const saveChannel = async (key, value) => {
     const next = { ...channels };
@@ -11877,7 +11878,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
     if (profile?.id) {
       await supabase.from("brand_profile").update({ channels: next, updated_at: new Date().toISOString() }).eq("id", profile.id);
     } else {
-      const { data } = await supabase.from("brand_profile").insert({ org_id: userOrg.id, created_by: session?.user?.id, channels: next, name: userOrg?.name || "" }).select("id").single();
+      const { data } = await supabase.from("brand_profile").insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, channels: next, name: userOrg?.name || "" }).select("id").single();
       if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
     }
   };
@@ -11889,8 +11890,8 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
   };
   const connectedCount = TOUCHPOINT_PLATFORMS.filter(p => channels[p.key]).length;
 
-  const panelWrap = { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 40px 80px" };
-  const card = { width: "100%", maxWidth: 1050, height: "100%", ...frostedPanelStyle(darkMode), borderRadius: 26, overflow: "hidden", display: "flex", flexDirection: "column" };
+  const panelWrap = embedded ? { width: "100%", height: "100%" } : { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 40px 80px" };
+  const card = embedded ? { width: "100%", height: "100%", display: "flex", flexDirection: "column" } : { width: "100%", maxWidth: 1050, height: "100%", ...frostedPanelStyle(darkMode), borderRadius: 26, overflow: "hidden", display: "flex", flexDirection: "column" };
 
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -11898,6 +11899,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
       style={panelWrap}>
       <div style={card}>
         {/* Header — brand logo + "<Brand> Touchpoints" (consistent with Brand views) */}
+        {!embedded && (
         <div style={{ padding: "16px 24px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${theme.borderFaint}` }}>
           {(profile?.logos?.find(l => l.key === "primary")?.url || profile?.logo_url) ? (
             <img src={profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
@@ -11912,8 +11914,10 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
           <div style={{ flex: 1 }} />
           <div ref={peopleHeaderSlot} style={{ display: "flex", alignItems: "center", gap: 10 }} />
         </div>
+        )}
 
-        {/* Tabs: Touchpoints · People */}
+        {/* Tabs: Touchpoints · People (People isn't project-scoped → hidden when embedded) */}
+        {!embedded && (
         <div style={{ padding: "0 24px", display: "flex", gap: 22, borderBottom: `1px solid ${theme.borderFaint}` }}>
           {[["touchpoints", "Touchpoints"], ["people", "People"]].map(([k, lbl]) => {
             const on = audTab === k;
@@ -11925,8 +11929,9 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
             );
           })}
         </div>
+        )}
 
-        {audTab === "people" ? (
+        {(!embedded && audTab === "people") ? (
           <PeopleTab theme={theme} darkMode={darkMode} accent={accent} appLanguage={appLanguage} headerSlotRef={peopleHeaderSlot} />
         ) : (
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
@@ -19775,6 +19780,88 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   );
 }
 
+// Bare project-files panel — the "Dateien" pillar of a project brand. Lists +
+// uploads project_files (the project's own store), embedded in BrandView's body.
+function ProjectFilesPanel({ projectId, session, userOrg, theme, darkMode, t, canEdit = true }) {
+  const [files, setFiles] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const inputRef = useRef(null);
+  const isImg = (f) => (f.mime_type || "").startsWith("image/");
+  const load = useCallback(async () => {
+    const { data } = await supabase.from("project_files").select("*").eq("project_id", projectId).order("created_at", { ascending: false });
+    setFiles(data || []);
+  }, [projectId]);
+  useEffect(() => { load(); }, [load]);
+  const upload = async (list) => {
+    const arr = Array.from(list || []);
+    if (!arr.length || !session?.user?.id) return;
+    setUploading(true);
+    const added = [];
+    for (const file of arr) {
+      const ext = (file.name.split(".").pop() || "bin").toLowerCase();
+      const path = `projects/${projectId}/${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type, upsert: true });
+      if (upErr) continue;
+      const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
+      const { data, error } = await supabase.from("project_files").insert({
+        project_id: projectId, org_id: userOrg?.id, user_id: session.user.id,
+        name: file.name, mime_type: file.type, size_bytes: file.size, url: pub?.publicUrl || null,
+      }).select().single();
+      if (!error && data) added.push(data);
+    }
+    setFiles(prev => [...added, ...(prev || [])]);
+    setUploading(false);
+  };
+  const removeFile = async (f) => { await supabase.from("project_files").delete().eq("id", f.id); setFiles(prev => prev.filter(x => x.id !== f.id)); };
+  const fmt = (f) => {
+    const ext = ((f.name || "").split(".").pop() || "").toUpperCase();
+    const mb = f.size_bytes ? `${Math.max(1, Math.round(f.size_bytes / 1e6))}MB` : null;
+    return [mb, ext].filter(Boolean).join(" · ");
+  };
+  return (
+    <div>
+      <input ref={inputRef} type="file" multiple style={{ display: "none" }} onChange={e => { upload(e.target.files); e.target.value = ""; }} />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 18 }}>
+        <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{files == null ? "" : `${files.length} ${files.length === 1 ? "Datei" : "Dateien"}`}</div>
+        {canEdit && (
+          <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => inputRef.current?.click()}
+            style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, background: "#15151c", color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer", opacity: uploading ? 0.6 : 1 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            {uploading ? (t("common.loading") || "Lädt…") : "Hochladen"}
+          </motion.div>
+        )}
+      </div>
+      {files == null ? (
+        <div style={{ padding: 40, textAlign: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
+      ) : files.length === 0 ? (
+        <div style={{ padding: "48px 20px", textAlign: "center", borderRadius: 16, border: `1px dashed ${theme.borderFaint}`, color: theme.textDim, fontSize: 13, fontFamily: FONT }}>Noch keine Dateien in diesem Projekt.</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 14 }}>
+          {files.map(f => (
+            <div key={f.id} style={{ position: "relative", borderRadius: 14, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)" }} className="pb-img-tile">
+              <a href={f.url} target="_blank" rel="noreferrer" style={{ textDecoration: "none", color: "inherit" }}>
+                <div style={{ height: 110, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                  {isImg(f) && f.url ? <img src={f.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>}
+                </div>
+                <div style={{ padding: "10px 12px" }}>
+                  <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</div>
+                  <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 2 }}>{fmt(f)}</div>
+                </div>
+              </a>
+              {canEdit && (
+                <div onClick={() => removeFile(f)} title="Löschen" style={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: 8, background: "rgba(0,0,0,0.5)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, darkMode, t, appLanguage = "de", brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true, projectId = null, projectName = "" }) {
   // Scope: null projectId = the org-level brand (unchanged). A projectId scopes
   // every load/insert/realtime to that project's own brand_profile row, and the
@@ -19806,7 +19893,11 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
     { key: "strategy", label: "Strategie" },
     { key: "identity", label: "Identität" },
     { key: "design", label: "Designsystem" },
+    { key: "touchpoints", label: "Audience" },
+    { key: "assets", label: "Dateien" },
   ];
+  // Pillars that render a bare embedded view (no brand sub-tabs / edit button).
+  const isEmbeddedPillar = isProjectBrand && (brandTab === "touchpoints" || brandTab === "assets");
   const [pubSections, setPubSections] = useState(() => Object.fromEntries(PUB_SECTIONS.map(s => [s.key, true])));
   const [pubToken, setPubToken] = useState(null); // existing share token, if published before
   const [pubBusy, setPubBusy] = useState(false);
@@ -21710,7 +21801,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                   </AnimatePresence>
                 </>
               )}
-              {!canEditCurrent ? null : !((brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors" || brandSub === "positioning")) || (brandTab === "identity" && brandSub === "avatar")) ? (
+              {!canEditCurrent || isEmbeddedPillar ? null : !((brandTab === "strategy" && (brandSub === "personas" || brandSub === "competitors" || brandSub === "positioning")) || (brandTab === "identity" && brandSub === "avatar")) ? (
               <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => setEditingText(v => !v)}
                 style={{
                   padding: "9px 18px", borderRadius: 999, cursor: "pointer",
@@ -21724,7 +21815,9 @@ If you don't know a field, infer a plausible value. Write all text values in the
 
             {/* This view IS one pillar (Strategie / Identität / Brand Design — set from
                 the menu). The tab bar shows ONLY this pillar's sub-points; switching
-                pillars happens via the main menu, not here. */}
+                pillars happens via the main menu, not here. Audience/Dateien (project
+                brand) render a bare embedded view, so no sub-tab bar. */}
+            {!isEmbeddedPillar && (
             <div style={{ display: "flex", gap: 4, padding: "10px 26px 0", borderBottom: `1px solid ${theme.borderFaint}` }}>
               {pillarSubs.map(({ key, label }) => {
                 const active = brandSub === key;
@@ -21739,7 +21832,17 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 );
               })}
             </div>
+            )}
 
+            {isEmbeddedPillar ? (
+              <div className="no-scrollbar" style={{ flex: 1, overflowY: "auto", padding: brandTab === "assets" ? "22px 26px 30px" : 0 }}>
+                {brandTab === "touchpoints" ? (
+                  <TouchpointsView embedded projectId={projectId} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} canEdit={canEditBrand} />
+                ) : (
+                  <ProjectFilesPanel projectId={projectId} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} canEdit={canEditBrand} />
+                )}
+              </div>
+            ) : (
             <div className="no-scrollbar" style={{ flex: 1, overflowY: ((brandTab === "strategy" && brandSub === "positioning" && !visionEditing) ? "hidden" : "auto"), padding: "24px 30px 32px 30px" }}>
               <div style={{ maxWidth: 770, minHeight: "100%", display: "flex", flexDirection: "column", gap: 20 }}>
                 {(() => {
@@ -21921,6 +22024,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
 
               </div>
             </div>
+            )}
           </>
         )}
       </div>
