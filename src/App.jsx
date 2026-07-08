@@ -10581,7 +10581,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
             <path d="M3 10h18M9 6V4h6v2" stroke={theme.accent} strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
           <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>Projekte</span>
-          <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{myProjects.length}</span>
+          <span style={{ minWidth: 22, height: 22, padding: "0 7px", borderRadius: 999, background: "#4D34E4", color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600, display: "inline-flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>{myProjects.length}</span>
           <div style={{ flex: 1 }} />
           {canCreateNewProject && (
           <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
