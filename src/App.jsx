@@ -2384,13 +2384,20 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                                 {task.is_ai_task && <span style={{ fontSize: 9, fontFamily: FONT, fontWeight: 500, color: "#E84393", padding: "2px 6px", borderRadius: 4, background: "#E8439315", letterSpacing: 0.5 }}>AI</span>}
                                 <div style={{ width: 6, height: 6, borderRadius: "50%", background: priColors[task.priority] }} />
                                 <motion.div
+                                  whileHover={{ scale: 1.08 }}
                                   whileTap={{ scale: 0.9 }}
                                   onClick={(e) => { e.stopPropagation(); requestDelete(task.id); }}
-                                  className="hover-row"
                                   title="Löschen"
-                                  style={{ cursor: "pointer", color: theme.textFaint, width: 20, height: 20, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center" }}
+                                  style={{
+                                    cursor: "pointer", width: 20, height: 20, borderRadius: 7, flexShrink: 0,
+                                    background: darkMode ? "rgba(255,255,255,0.09)" : "#fff",
+                                    border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.07)"}`,
+                                    boxShadow: darkMode ? "none" : "0 1px 3px rgba(0,0,0,0.14)",
+                                    color: darkMode ? "#fff" : "#1a1a2e",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                  }}
                                 >
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                                 </motion.div>
                               </div>
                             </div>
