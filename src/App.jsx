@@ -8306,7 +8306,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       setConversations(prev => [
         {
           id: conv.id, name: other?.display_name || "Unbekannt", avatar_url: other?.avatar_url || null,
-          color: other?.color || "#8B7AFF", initials: other?.initials || "?", is_group: false,
+          color: other?.color || "#64748B", initials: other?.initials || "?", is_group: false,
           lastMsg: "", time: "", lastMsgAt: conv.created_at,
           participants: [myId, otherUserId], otherIds: [otherUserId],
         },
@@ -8487,7 +8487,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                 placeholder="Suchen..."
                 style={{
                   flex: 1, background: "none", border: "none", outline: "none",
-                  fontSize: 13, fontFamily: FONT, color: theme.text, caretColor: "#8B7AFF",
+                  fontSize: 13, fontFamily: FONT, color: theme.text, caretColor: theme.text,
                 }}
               />
               {search && (
@@ -8553,8 +8553,8 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                       style={{
                         display: "flex", alignItems: "center", gap: 12,
                         padding: "12px 12px", borderRadius: 12, cursor: "pointer",
-                        background: isActive ? (darkMode ? "rgba(139, 122, 255, 0.12)" : "rgba(139, 122, 255, 0.1)") : "transparent",
-                        border: `1px solid ${isActive ? "rgba(139, 122, 255, 0.2)" : "transparent"}`,
+                        background: isActive ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.055)") : "transparent",
+                        border: `1px solid ${isActive ? (darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)") : "transparent"}`,
                         transition: "all 0.2s ease",
                       }}
                     >
@@ -8575,13 +8575,13 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                                 {unreadN > 0 && (
                                   <div style={{
                                     minWidth: 18, height: 18, borderRadius: 9, padding: "0 5px",
-                                    background: "#8B7AFF", color: "#fff",
+                                    background: "#15151c", color: "#fff",
                                     fontSize: 10, fontWeight: 700, fontFamily: FONT,
                                     display: "flex", alignItems: "center", justifyContent: "center",
                                   }}>{unreadN > 9 ? "9+" : unreadN}</div>
                                 )}
                               </div>
-                              <div style={{ fontSize: 10, fontFamily: FONT, color: unreadN > 0 ? "#8B7AFF" : theme.textDim, flexShrink: 0 }}>{item.time}</div>
+                              <div style={{ fontSize: 10, fontFamily: FONT, color: unreadN > 0 ? theme.text : theme.textDim, flexShrink: 0 }}>{item.time}</div>
                             </div>
                             <div style={{
                               fontSize: 12, fontFamily: FONT, color: unreadN > 0 ? theme.text : theme.textDim, marginTop: 2,
@@ -8707,12 +8707,12 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                       </div>
                       <div style={{
                         padding: msg.attachment_url && !msg.text ? 4 : "10px 16px",
-                        borderRadius: isMe ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                        borderRadius: isMe ? "18px 18px 5px 18px" : "18px 18px 18px 5px",
                         background: isMe
-                          ? (darkMode ? "linear-gradient(135deg, rgba(139, 122, 255, 0.2), rgba(100, 80, 220, 0.15))" : "linear-gradient(135deg, rgba(139, 122, 255, 0.15), rgba(100, 80, 220, 0.1))")
-                          : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
-                        border: `1px solid ${isMe ? "rgba(139, 122, 255, 0.15)" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)")}`,
-                        fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.55,
+                          ? "#15151c"
+                          : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.045)"),
+                        border: isMe ? "none" : `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"}`,
+                        fontSize: 13.5, fontFamily: FONT, color: isMe ? "#fff" : theme.text, lineHeight: 1.55,
                         overflow: "hidden",
                       }}>
                         {msg.attachment_url && (
@@ -8725,20 +8725,20 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                               style={{
                                 display: "flex", alignItems: "center", gap: 10,
                                 padding: "8px 10px", borderRadius: 10,
-                                background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                                border: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}`,
-                                textDecoration: "none", color: theme.text,
+                                background: isMe ? "rgba(255,255,255,0.12)" : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)"),
+                                border: `1px solid ${isMe ? "rgba(255,255,255,0.16)" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)")}`,
+                                textDecoration: "none", color: isMe ? "#fff" : theme.text,
                                 marginBottom: msg.text ? 8 : 0,
                                 minWidth: 200,
                               }}
                             >
-                              <div style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(139,122,255,0.18)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8B7AFF" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                              <div style={{ width: 32, height: 32, borderRadius: 8, background: isMe ? "rgba(255,255,255,0.16)" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isMe ? "#fff" : theme.textDim} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                               </div>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{msg.attachment_name}</div>
                                 {msg.attachment_size && (
-                                  <div style={{ fontSize: 11, color: theme.textDim }}>
+                                  <div style={{ fontSize: 11, color: isMe ? "rgba(255,255,255,0.65)" : theme.textDim }}>
                                     {msg.attachment_size < 1024 ? msg.attachment_size + " B" : msg.attachment_size < 1048576 ? (msg.attachment_size/1024).toFixed(1) + " KB" : (msg.attachment_size/1048576).toFixed(1) + " MB"}
                                   </div>
                                 )}
@@ -8748,7 +8748,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                         )}
                         {msg.text && (
                           <div style={{ padding: msg.attachment_url ? "0 12px 6px" : 0, wordBreak: "break-word" }}>
-                            {renderTextWithLinks(msg.text, false, "#8B7AFF")}
+                            {renderTextWithLinks(msg.text, false, isMe ? "#fff" : "#15151c")}
                             {(() => { const u = firstUrlIn(msg.text); return u ? <LinkPreviewCard url={u} theme={theme} darkMode={darkMode} /> : null; })()}
                           </div>
                         )}
@@ -8770,14 +8770,14 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                   style={{
                     display: "inline-flex", alignItems: "center", gap: 10, marginBottom: 10,
                     padding: 6, paddingRight: 10, borderRadius: 12,
-                    background: darkMode ? "rgba(139,122,255,0.10)" : "rgba(139,122,255,0.10)",
-                    border: "1px solid rgba(139,122,255,0.25)",
+                    background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.035)",
+                    border: `1px solid ${theme.borderFaint}`,
                   }}
                 >
                   {pendingAttachment.previewUrl ? (
                     <img src={pendingAttachment.previewUrl} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover" }} />
                   ) : (
-                    <div style={{ width: 40, height: 40, borderRadius: 8, background: "rgba(139,122,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", color: "#8B7AFF" }}>
+                    <div style={{ width: 40, height: 40, borderRadius: 8, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                     </div>
                   )}
@@ -8843,7 +8843,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                   style={{
                     flex: 1, background: "none", border: "none", outline: "none",
                     padding: "0 8px",
-                    fontSize: 14, fontFamily: FONT, color: theme.text, caretColor: "#8B7AFF",
+                    fontSize: 14, fontFamily: FONT, color: theme.text, caretColor: theme.text,
                   }}
                 />
                 {/* Emoji picker button — right side */}
@@ -8931,7 +8931,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                       onClick={canSend ? sendMessage : undefined}
                       style={{
                         width: 36, height: 36, borderRadius: "50%",
-                        background: canSend ? "#8B7AFF" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"),
+                        background: canSend ? "#15151c" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"),
                         display: "flex", alignItems: "center", justifyContent: "center",
                         cursor: canSend ? "pointer" : "default",
                         transition: "all 0.2s ease",
@@ -8993,7 +8993,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                   width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 12,
                   background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
                   border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
-                  outline: "none", fontSize: 14, fontFamily: FONT, color: theme.text, caretColor: "#8B7AFF",
+                  outline: "none", fontSize: 14, fontFamily: FONT, color: theme.text, caretColor: theme.text,
                 }}
               />
             </div>
@@ -9018,7 +9018,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
             {/* Members */}
             <div style={{ padding: "8px 22px 4px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>Mitglieder</span>
-              <span style={{ fontSize: 12, fontFamily: FONT, color: "#8B7AFF" }}>{groupSelected.length} ausgewählt</span>
+              <span style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textSub }}>{groupSelected.length} ausgewählt</span>
             </div>
             <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "4px 14px 8px" }}>
               {otherMembers.length === 0 ? (
@@ -9038,8 +9038,8 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                     <div style={{ flex: 1, fontSize: 13.5, fontFamily: FONT, color: theme.text, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.display_name}</div>
                     <div style={{
                       width: 20, height: 20, borderRadius: 6, flexShrink: 0,
-                      background: sel ? "#8B7AFF" : "transparent",
-                      border: `1.5px solid ${sel ? "#8B7AFF" : (darkMode ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.25)")}`,
+                      background: sel ? "#15151c" : "transparent",
+                      border: `1.5px solid ${sel ? "#15151c" : (darkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.25)")}`,
                       display: "flex", alignItems: "center", justifyContent: "center",
                     }}>
                       {sel && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>}
@@ -9059,7 +9059,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                 style={{
                   padding: "10px 22px", borderRadius: 999,
                   cursor: (!groupName.trim() || groupSelected.length === 0 || creatingGroup) ? "not-allowed" : "pointer",
-                  background: (!groupName.trim() || groupSelected.length === 0) ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)") : "#8B7AFF",
+                  background: (!groupName.trim() || groupSelected.length === 0) ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)") : "#15151c",
                   border: "none", color: (!groupName.trim() || groupSelected.length === 0) ? theme.textDim : "#fff",
                   fontSize: 13, fontWeight: 600, fontFamily: FONT, opacity: creatingGroup ? 0.7 : 1,
                 }}>
@@ -9099,7 +9099,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                       flex: 1, boxSizing: "border-box", padding: "11px 14px", borderRadius: 12,
                       background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
                       border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
-                      outline: "none", fontSize: 14, fontFamily: FONT, color: theme.text, caretColor: "#8B7AFF",
+                      outline: "none", fontSize: 14, fontFamily: FONT, color: theme.text, caretColor: theme.text,
                     }}
                   />
                   <motion.button whileTap={{ scale: 0.97 }} onClick={() => renameGroup(activeConv.id)}
@@ -9107,7 +9107,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                     style={{
                       padding: "0 18px", borderRadius: 12, border: "none",
                       cursor: (!renameValue.trim() || renameValue.trim() === activeConv.name || savingName) ? "not-allowed" : "pointer",
-                      background: (!renameValue.trim() || renameValue.trim() === activeConv.name) ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)") : "#8B7AFF",
+                      background: (!renameValue.trim() || renameValue.trim() === activeConv.name) ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)") : "#15151c",
                       color: (!renameValue.trim() || renameValue.trim() === activeConv.name) ? theme.textDim : "#fff",
                       fontSize: 13, fontWeight: 600, fontFamily: FONT,
                     }}>{savingName ? "…" : "Speichern"}</motion.button>
@@ -9120,7 +9120,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               </div>
               <div style={{ padding: "0 14px" }}>
                 {(activeConv.participants || []).map(id => {
-                  const m = id === myId ? { display_name: "Du", color: "#8B7AFF", initials: "Du", avatar_url: null } : (memberMap[id] || { display_name: "Unbekannt", color: "#888", initials: "?" });
+                  const m = id === myId ? { display_name: "Du", color: "#64748B", initials: "Du", avatar_url: null } : (memberMap[id] || { display_name: "Unbekannt", color: "#888", initials: "?" });
                   return (
                     <div key={id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 10px", borderRadius: 12 }}>
                       {m.avatar_url ? (
@@ -9160,7 +9160,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                             <InitialsAvatar color={m.color} initials={m.initials} size={34} fontSize={12} />
                           )}
                           <div style={{ flex: 1, fontSize: 13.5, fontFamily: FONT, color: theme.text, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.display_name}</div>
-                          <div style={{ flexShrink: 0, color: "#8B7AFF", display: "flex" }}>
+                          <div style={{ flexShrink: 0, color: theme.textDim, display: "flex" }}>
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
                           </div>
                         </div>
@@ -9185,7 +9185,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                 </motion.button>
               )}
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => setManageOpen(false)}
-                style={{ padding: "10px 22px", borderRadius: 999, cursor: "pointer", background: "#8B7AFF", border: "none", color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT }}>
+                style={{ padding: "10px 22px", borderRadius: 999, cursor: "pointer", background: "#15151c", border: "none", color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT }}>
                 Fertig
               </motion.button>
             </div>
