@@ -2122,14 +2122,15 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
             <motion.button key={p} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
               onClick={() => setFilter(p)}
               style={{
-                display: "flex", alignItems: "center", gap: 6,
-                fontSize: 12, fontFamily: FONT, fontWeight: 400, padding: "6px 14px", borderRadius: 20, cursor: "pointer",
-                background: filter === p ? (darkMode ? "#ffffff0F" : "rgba(0,0,0,0.06)") : "transparent",
-                border: `1px solid ${filter === p ? theme.border : theme.borderFaint}`,
-                color: filter === p ? theme.text : theme.textDim,
+                display: "flex", alignItems: "center", gap: 7,
+                fontSize: 12.5, fontFamily: FONT, fontWeight: 500, padding: "8px 15px", borderRadius: 999, cursor: "pointer",
+                background: filter === p ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+                border: "none",
+                color: filter === p ? "#fff" : theme.textSub,
+                transition: "background 0.2s ease, color 0.2s ease",
               }}
             >
-              {logo && <img src={logo} alt="" style={{ width: 16, height: 16, borderRadius: 4, objectFit: "cover" }} />}
+              {logo && <img src={logo} alt="" style={{ width: 17, height: 17, borderRadius: "50%", objectFit: "cover" }} />}
               {p === "all" ? "All projects" : p}
             </motion.button>
           );
@@ -2150,12 +2151,13 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
             onClick={() => setShowMemberDropdown(prev => !prev)}
             style={{
-              display: "flex", alignItems: "center", gap: 5, cursor: "pointer",
-              padding: "6px 14px 6px 10px", borderRadius: 20,
-              background: memberFilter !== "all" ? (theme.accent + "15") : "transparent",
-              border: `1px solid ${memberFilter !== "all" ? (theme.accent + "30") : theme.borderFaint}`,
-              color: memberFilter !== "all" ? theme.accent : theme.textDim,
-              fontSize: 12, fontFamily: FONT, fontWeight: 400,
+              display: "flex", alignItems: "center", gap: 6, cursor: "pointer",
+              padding: "8px 13px 8px 11px", borderRadius: 999,
+              background: memberFilter !== "all" ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+              border: "none",
+              color: memberFilter !== "all" ? "#fff" : theme.textSub,
+              fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
+              transition: "background 0.2s ease, color 0.2s ease",
             }}
           >
             {memberFilter !== "all" ? (() => {
@@ -2164,9 +2166,9 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
               return (
                 <>
                   {m?.profiles?.avatar_url ? (
-                    <img src={m.profiles.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 16, height: 16, borderRadius: "50%" }} />
+                    <img src={m.profiles.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 17, height: 17, borderRadius: "50%" }} />
                   ) : (
-                    <div style={{ width: 16, height: 16, borderRadius: "50%", background: theme.accent + "30", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 600, color: theme.accent }}>
+                    <div style={{ width: 17, height: 17, borderRadius: "50%", background: "rgba(255,255,255,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 600, color: "#fff" }}>
                       {(name).slice(0, 2).toUpperCase()}
                     </div>
                   )}
@@ -2214,7 +2216,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                     style={{
                       display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
                       borderRadius: 10, cursor: "pointer",
-                      background: memberFilter === "all" ? (darkMode ? "rgba(139,122,255,0.1)" : "rgba(139,122,255,0.08)") : "transparent",
+                      background: memberFilter === "all" ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") : "transparent",
                     }}
                     className={memberFilter === "all" ? "" : "hover-row"}
                   >
@@ -2250,7 +2252,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                         style={{
                           display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
                           borderRadius: 10, cursor: "pointer",
-                          background: isActive ? (darkMode ? "rgba(139,122,255,0.1)" : "rgba(139,122,255,0.08)") : "transparent",
+                          background: isActive ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") : "transparent",
                         }}
                       >
                         {p.avatar_url ? (
@@ -2277,13 +2279,17 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
           </AnimatePresence>
         </div>
 
-        <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+        <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
           onClick={() => openNewTask("todo")}
           style={{
-            fontSize: 12, fontFamily: FONT, fontWeight: 500, padding: "6px 14px", borderRadius: 20, cursor: "pointer",
-            background: theme.accent + "15", border: `1px solid ${theme.accent}30`, color: theme.accent, marginLeft: "auto",
+            display: "inline-flex", alignItems: "center", gap: 7,
+            fontSize: 12.5, fontFamily: FONT, fontWeight: 500, padding: "8px 14px", borderRadius: 999, cursor: "pointer",
+            background: "#23232b", border: "none", color: "#fff", marginLeft: "auto",
           }}
-        >+ New task</motion.button>
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New task
+        </motion.button>
       </div>
 
       {/* Columns — always visible */}
@@ -2304,20 +2310,22 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
               }}
               style={{
                 flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
-                background: dragOverCol === col.key ? (theme.accent + "0A") : "transparent",
-                borderRadius: 16, transition: "background 0.2s",
-                padding: dragOverCol === col.key ? "8px" : "0",
+                background: dragOverCol === col.key
+                  ? (darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.055)")
+                  : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.028)"),
+                borderRadius: 18, transition: "background 0.2s",
+                padding: "12px 10px 10px",
               }}>
               {/* Column Header */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, padding: "0 4px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, padding: "0 6px" }}>
                 <div style={{ width: 7, height: 7, borderRadius: "50%", background: col.color }} />
-                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub, fontWeight: 500 }}>{t(col.labelKey)}</span>
-                <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>{colTasks.length}</span>
+                <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text, fontWeight: 600 }}>{t(col.labelKey)}</span>
+                <span style={{ fontSize: 11, fontFamily: FONT, fontWeight: 600, color: theme.textSub, background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)", padding: "2px 8px", borderRadius: 999 }}>{colTasks.length}</span>
                 <motion.div
-                  whileHover={{ scale: 1.15, color: theme.accent }}
+                  whileHover={{ scale: 1.15 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={() => openNewTask(col.key)}
-                  style={{ marginLeft: "auto", cursor: "pointer", color: theme.textFaint, fontSize: 16, fontFamily: FONT, lineHeight: 1 }}
+                  style={{ marginLeft: "auto", cursor: "pointer", color: theme.textFaint, fontSize: 16, fontFamily: FONT, lineHeight: 1, padding: "0 2px" }}
                 >+</motion.div>
               </div>
               {/* Cards */}
@@ -2344,7 +2352,10 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                             onDragStart={() => { if (canMoveTask(task)) dragItem.current = task.id; }}
                             onClick={() => openEditTask(task)}
                             style={{
-                              background: darkMode ? "#1A1A24" : "#ffffff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
+                              background: darkMode ? "#1A1A24" : "#ffffff",
+                              border: darkMode ? `1px solid ${theme.borderFaint}` : "none",
+                              borderRadius: 14,
+                              boxShadow: darkMode ? "none" : "0 1px 2px rgba(0,0,0,0.05)",
                               padding: "14px 16px", cursor: canMoveTask(task) ? "grab" : "not-allowed",
                             }}
                           >
@@ -2356,7 +2367,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                                   return creator?.avatar_url ? (
                                     <img src={creator.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 16, height: 16, borderRadius: "50%", border: `1px solid ${theme.borderFaint}`, flexShrink: 0 }} />
                                   ) : (
-                                    <div style={{ width: 16, height: 16, borderRadius: "50%", background: theme.accent + "25", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{creator?.initials || "?"}</div>
+                                    <div style={{ width: 16, height: 16, borderRadius: "50%", background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.07)", color: theme.textSub, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{creator?.initials || "?"}</div>
                                   );
                                 })()}
                                 <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, whiteSpace: "nowrap" }}>
@@ -2373,11 +2384,14 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                                 {task.is_ai_task && <span style={{ fontSize: 9, fontFamily: FONT, fontWeight: 500, color: "#E84393", padding: "2px 6px", borderRadius: 4, background: "#E8439315", letterSpacing: 0.5 }}>AI</span>}
                                 <div style={{ width: 6, height: 6, borderRadius: "50%", background: priColors[task.priority] }} />
                                 <motion.div
-                                  whileHover={{ scale: 1.2 }}
                                   whileTap={{ scale: 0.9 }}
                                   onClick={(e) => { e.stopPropagation(); requestDelete(task.id); }}
-                                  style={{ cursor: "pointer", color: theme.textFaint, fontSize: 12, fontFamily: FONT, padding: "0 2px" }}
-                                >✕</motion.div>
+                                  className="hover-row"
+                                  title="Löschen"
+                                  style={{ cursor: "pointer", color: theme.textFaint, width: 20, height: 20, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center" }}
+                                >
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                                </motion.div>
                               </div>
                             </div>
                             {/* Title + description */}
@@ -2392,7 +2406,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                                     <img src={assignee.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 22, height: 22, borderRadius: "50%", border: `1px solid ${theme.borderFaint}` }} />
                                   ) : (
                                     <div style={{
-                                      width: 22, height: 22, borderRadius: "50%", background: (assignee?.avatar_color || "#8B7AFF") + "25", color: assignee?.avatar_color || "#8B7AFF",
+                                      width: 22, height: 22, borderRadius: "50%", background: (assignee?.avatar_color || "#64748B") + "25", color: assignee?.avatar_color || "#64748B",
                                       display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontFamily: FONT, fontWeight: 600,
                                     }}>{assignee?.initials || "?"}</div>
                                   );
