@@ -8497,19 +8497,17 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               )}
             </div>
             <motion.div
-              whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98, backgroundColor: darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.09)" }}
+              whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }}
               onClick={() => { setGroupName(""); setGroupSelected([]); setGroupColor(GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)]); setGroupModalOpen(true); }}
               style={{
-                marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 9,
-                padding: "11px 12px", borderRadius: 999, cursor: "pointer",
-                background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
-                border: `1px solid ${theme.borderFaint}`,
-                color: theme.text, fontSize: 13, fontFamily: FONT, fontWeight: 500,
+                marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                padding: "11px 14px", borderRadius: 12, cursor: "pointer",
+                background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+                border: `1px dashed ${theme.border}`,
+                color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500,
               }}
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M19 8v6M22 11h-6" />
-              </svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
               Neue Gruppe
             </motion.div>
           </div>
