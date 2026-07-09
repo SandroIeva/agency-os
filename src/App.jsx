@@ -1891,600 +1891,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
   };
 
   // When triggered from To-Do submenu, only render the modal portals (no board UI)
-  if (triggerNewTask) {
-    return (<>
-      {createPortal(<AnimatePresence>
-        {showNewTask && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={resetForm}
-            style={{
-              position: "fixed", inset: 0, zIndex: 100,
-              background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              padding: 24,
-            }}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
-              onClick={e => e.stopPropagation()}
-              style={{
-                width: "100%", maxWidth: 520, maxHeight: "85vh",
-                background: darkMode ? "rgba(22, 22, 30, 0.97)" : "rgba(255, 255, 255, 0.98)",
-                backdropFilter: "blur(40px)", border: `1px solid ${theme.border}`,
-                borderRadius: 18, display: "flex", flexDirection: "column", overflow: "hidden",
-              }}
-            >
-              {/* Header: title · project dropdown · close */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "14px 18px", borderBottom: `1px solid ${theme.borderFaint}` }}>
-                <span style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap" }}>{editingTask ? "Aufgabe bearbeiten" : t("task.newTask")}</span>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                  <Dropdown
-                    value={taskForm.project_name}
-                    onChange={v => setTaskForm(p => ({ ...p, project_name: v }))}
-                    options={[
-                      { value: "", label: "Kein Projekt" },
-                      ...projects.map(p => ({ value: p.name, label: p.name,
-                        icon: p.logo_url
-                          ? <img src={p.logo_url} alt="" style={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover" }} />
-                          : <span style={{ width: 18, height: 18, borderRadius: "50%", background: (p.color || "#64748B") + "30", color: p.color || "#64748B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700 }}>{(p.name || "?")[0]}</span> })),
-                    ]}
-                    placeholder="Kein Projekt" theme={theme} darkMode={darkMode} align="right" minWidth={190} maxTriggerWidth={180}
-                  />
-                  <motion.div whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.9 }} onClick={resetForm}
-                    style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                  </motion.div>
-                </div>
-              </div>
-              {/* Body */}
-              <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-                <div style={{ flex: 1, padding: 24, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
-                  <input
-                    value={taskForm.title}
-                    onChange={e => setTaskForm(p => ({ ...p, title: e.target.value }))}
-                    placeholder={t("task.title")}
-                    autoFocus
-                    style={{
-                      background: "transparent", border: "none", borderBottom: `1px solid ${theme.borderFaint}`,
-                      padding: "4px 0 8px", fontSize: 20, fontFamily: FONT, fontWeight: 600,
-                      color: theme.text, outline: "none", caretColor: theme.text, width: "100%",
-                    }}
-                  />
-                  {/* Toolbar — row 1: assignee · deadline · column (same height); row 2: priority */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                      {/* Assignee */}
-                      <Dropdown
-                        value={taskForm.assignee_id || ""}
-                        onChange={v => setTaskForm(prev => ({ ...prev, assignee_id: v }))}
-                        options={Object.values(teamMembers).map(m => ({
-                          value: m.user_id, label: m.display_name,
-                          icon: m.avatar_url
-                            ? <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 18, height: 18, borderRadius: "50%" }} />
-                            : <span style={{ width: 18, height: 18, borderRadius: "50%", background: (m.avatar_color || "#64748B") + "30", color: m.avatar_color || "#64748B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 600 }}>{m.initials}</span>,
-                        }))}
-                        placeholder="Zuweisen"
-                        leadingIcon={<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke={theme.textDim} strokeWidth="1.6"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke={theme.textDim} strokeWidth="1.6" strokeLinecap="round"/></svg>}
-                        theme={theme} darkMode={darkMode} minWidth={200} maxTriggerWidth={170}
-                        triggerStyle={{ height: 36, padding: "0 11px 0 13px" }}
-                      />
-                      {/* Deadline */}
-                      <div style={{ position: "relative" }}>
-                        <motion.div whileTap={{ scale: 0.97 }}
-                          onClick={() => setShowDatePicker(!showDatePicker)}
-                          style={{
-                            display: "inline-flex", alignItems: "center", gap: 8, height: 36, padding: "0 11px 0 13px", borderRadius: 999, cursor: "pointer",
-                            fontSize: 13, fontFamily: FONT, fontWeight: 500,
-                            color: taskForm.due_date ? "#B77D0A" : theme.textDim,
-                            background: taskForm.due_date ? "#F59E0B1a" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
-                            border: `1px solid ${showDatePicker ? (darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.15)") : "transparent"}`,
-                          }}
-                        >
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.6"/><path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                          {taskForm.due_date ? new Date(taskForm.due_date).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" }) : "Frist"}
-                          {taskForm.due_date ? (
-                            <span onClick={e => { e.stopPropagation(); setTaskForm(prev => ({ ...prev, due_date: "" })); }} style={{ cursor: "pointer", opacity: 0.6, display: "flex" }}>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                            </span>
-                          ) : (
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ transform: showDatePicker ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                          )}
-                        </motion.div>
-                        {showDatePicker && (
-                          <>
-                            <div onClick={() => setShowDatePicker(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
-                            <div style={{
-                              position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 5001,
-                              background: darkMode ? "rgba(28,28,38,0.96)" : "rgba(255,255,255,0.97)", border: `1px solid ${theme.borderFaint}`,
-                              borderRadius: 12, padding: 12, boxShadow: "0 12px 32px rgba(0,0,0,0.16)",
-                            }}>
-                              <input type="date"
-                                value={taskForm.due_date}
-                                onChange={e => { setTaskForm(prev => ({ ...prev, due_date: e.target.value })); setShowDatePicker(false); }}
-                                style={{
-                                  background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`,
-                                  borderRadius: 9, padding: "9px 12px", fontSize: 13, fontFamily: FONT,
-                                  color: theme.text, outline: "none", colorScheme: darkMode ? "dark" : "light",
-                                }}
-                                autoFocus
-                              />
-                            </div>
-                          </>
-                        )}
-                      </div>
-                      {/* Column / Einordnung */}
-                      <Dropdown
-                        value={taskForm.column_key}
-                        onChange={v => setTaskForm(prev => ({ ...prev, column_key: v }))}
-                        options={colEntries.filter(c => c.key !== "done" || taskForm.column_key === "done").map(c => ({
-                          value: c.key, label: t(c.labelKey),
-                          icon: <span style={{ width: 8, height: 8, borderRadius: "50%", background: c.color, flexShrink: 0 }} />,
-                        }))}
-                        placeholder={t("kanban.todo")} theme={theme} darkMode={darkMode} minWidth={170}
-                        triggerStyle={{ height: 36, padding: "0 11px 0 13px" }}
-                      />
-                    </div>
-                    {/* Priority */}
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                      {["high", "medium", "low"].map(p => (
-                        <motion.div key={p} whileTap={{ scale: 0.95 }}
-                          onClick={() => setTaskForm(prev => ({ ...prev, priority: p }))}
-                          style={{
-                            display: "inline-flex", alignItems: "center", gap: 7, height: 36, padding: "0 14px", borderRadius: 999, cursor: "pointer", fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
-                            background: taskForm.priority === p ? priColors[p] + "1a" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
-                            color: taskForm.priority === p ? priColors[p] : theme.textDim,
-                            border: "none",
-                          }}
-                        >
-                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: taskForm.priority === p ? priColors[p] : theme.textFaint }} />
-                          {p === "high" ? "Hoch" : p === "medium" ? "Mittel" : "Niedrig"}
-                        </motion.div>
-                      ))}
-                    </div>
-                  </div>
-                  {/* Description */}
-                  <textarea
-                    value={taskForm.description}
-                    onChange={e => setTaskForm(p => ({ ...p, description: e.target.value }))}
-                    placeholder={t("task.description")}
-                    style={{
-                      background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "1px solid transparent",
-                      borderRadius: 12, padding: "12px 14px", fontSize: 14, fontFamily: FONT,
-                      color: theme.text, outline: "none", resize: "vertical", minHeight: 100,
-                      caretColor: theme.text, lineHeight: 1.6,
-                    }}
-                  />
-                  {/* Checklist */}
-                  <div>
-                    <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.textSub, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.6"/><path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      Checkliste {taskChecklist.length > 0 && (<span style={{ fontWeight: 400, color: theme.textFaint }}>({taskChecklist.filter(i => i.checked).length}/{taskChecklist.length})</span>)}
-                    </div>
-                    {taskChecklist.length > 0 && (
-                      <div style={{ height: 3, borderRadius: 2, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", marginBottom: 8, overflow: "hidden" }}>
-                        <div style={{ height: "100%", borderRadius: 2, background: "#00B894", width: `${(taskChecklist.filter(i => i.checked).length / taskChecklist.length) * 100}%`, transition: "width 0.3s ease" }} />
-                      </div>
-                    )}
-                    <div style={{ display: "flex", flexDirection: "column", gap: 2, marginBottom: 8 }}>
-                      {taskChecklist.map((item, idx) => (
-                        <div key={item._localId || idx} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8 }}
-                          onMouseEnter={e => e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)"}
-                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                        >
-                          <div onClick={() => setTaskChecklist(prev => prev.map((it, i) => i === idx ? { ...it, checked: !it.checked } : it))}
-                            style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, cursor: "pointer", border: item.checked ? "none" : `1.5px solid ${theme.textFaint}`, background: item.checked ? "#00B894" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s ease" }}
-                          >
-                            {item.checked && <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                          </div>
-                          <span style={{ flex: 1, fontSize: 14, fontFamily: FONT, color: item.checked ? theme.textFaint : theme.text, textDecoration: item.checked ? "line-through" : "none" }}>{item.text}</span>
-                          <motion.div whileTap={{ scale: 0.85 }} onClick={() => setTaskChecklist(prev => prev.filter((_, i) => i !== idx))}
-                            style={{ cursor: "pointer", padding: "0 2px", opacity: 0.4, fontSize: 13, color: theme.textDim }}
-                          >✕</motion.div>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, border: `1.5px dashed ${theme.textFaint}40`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke={theme.textFaint} strokeWidth="2" strokeLinecap="round"/></svg>
-                      </div>
-                      <input
-                        value={newChecklistText}
-                        onChange={e => setNewChecklistText(e.target.value)}
-                        onKeyDown={e => {
-                          // Ignore IME composition Enter (Asian/special keyboards)
-                          if (e.nativeEvent?.isComposing || e.keyCode === 229) return;
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            const text = newChecklistText.trim();
-                            if (!text) return;
-                            setTaskChecklist(prev => [...prev, { _localId: Date.now() + Math.random(), text, checked: false }]);
-                            setNewChecklistText("");
-                          }
-                        }}
-                        placeholder="Neuer Punkt..."
-                        style={{ flex: 1, background: "transparent", border: "none", borderBottom: "1px solid transparent", padding: "4px 0", fontSize: 14, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.text }}
-                        onFocus={e => e.currentTarget.style.borderBottomColor = theme.borderFaint}
-                        onBlur={e => {
-                          e.currentTarget.style.borderBottomColor = "transparent";
-                          const text = newChecklistText.trim();
-                          if (text) {
-                            setTaskChecklist(prev => [...prev, { _localId: Date.now() + Math.random(), text, checked: false }]);
-                            setNewChecklistText("");
-                          }
-                        }}
-                      />
-                    </div>
-                  </div>
-                  {/* Create button */}
-                  <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 4, paddingBottom: 8 }}>
-                    <motion.button whileHover={taskForm.title.trim() ? { scale: 1.03 } : {}} whileTap={{ scale: 0.97 }} onClick={editingTask ? updateTask : createTask}
-                      disabled={!taskForm.title.trim()}
-                      style={{
-                        padding: "11px 26px", borderRadius: 999, cursor: taskForm.title.trim() ? "pointer" : "not-allowed",
-                        background: taskForm.title.trim() ? "#15151c" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"),
-                        border: "none",
-                        fontSize: 13, fontFamily: FONT, fontWeight: 600,
-                        color: taskForm.title.trim() ? "#fff" : theme.textFaint,
-                        transition: "background 0.18s ease",
-                      }}
-                    >{editingTask ? "Speichern" : t("task.create")}</motion.button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>, document.body)}
-    </>);
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
-      style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", zIndex: 5 }}
-    >
-      {/* Top bar */}
-      <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "24px 32px 0" }}>
-        <motion.div
-          whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-          onClick={onBack}
-          style={{
-            width: 32, height: 32, borderRadius: "50%", cursor: "pointer",
-            border: `1px solid ${theme.border}`, display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 14, color: theme.textDim, fontFamily: FONT,
-          }}>←</motion.div>
-        <div style={{ fontSize: 22, fontWeight: 500, color: theme.text, fontFamily: FONT, letterSpacing: -0.5 }}>Kanban</div>
-      </div>
-
-      {/* Filters */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "24px 32px 14px", flexWrap: "wrap" }}>
-        {["all", ...projectNames].map(p => {
-          const logo = p !== "all" ? getProjectLogo(p) : null;
-          return (
-            <motion.button key={p} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-              onClick={() => setFilter(p)}
-              style={{
-                display: "flex", alignItems: "center", gap: 7,
-                fontSize: 12.5, fontFamily: FONT, fontWeight: 500, padding: "8px 15px 8px 11px", borderRadius: 999, cursor: "pointer",
-                background: filter === p ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
-                border: "none",
-                color: filter === p ? "#fff" : theme.textSub,
-                transition: "background 0.2s ease, color 0.2s ease",
-              }}
-            >
-              {logo && <img src={logo} alt="" style={{ width: 17, height: 17, borderRadius: "50%", objectFit: "cover" }} />}
-              {p === "all" ? "All projects" : p}
-            </motion.button>
-          );
-        })}
-
-        {/* Member filter dropdown */}
-        <div style={{ position: "relative" }}>
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-            onClick={() => setShowMemberDropdown(prev => !prev)}
-            style={{
-              display: "flex", alignItems: "center", gap: 9, cursor: "pointer",
-              padding: "8px 11px 8px 15px", borderRadius: 999,
-              background: memberFilter !== "all" ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
-              border: "none",
-              color: memberFilter !== "all" ? "#fff" : theme.textSub,
-              fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
-              transition: "background 0.2s ease, color 0.2s ease",
-            }}
-          >
-            {memberFilter !== "all" ? (() => {
-              const m = (orgMembers || []).find(om => om.user_id === memberFilter);
-              const name = m?.profiles?.display_name || "User";
-              return (
-                <>
-                  {m?.profiles?.avatar_url ? (
-                    <img src={m.profiles.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 17, height: 17, borderRadius: "50%" }} />
-                  ) : (
-                    <div style={{ width: 17, height: 17, borderRadius: "50%", background: "rgba(255,255,255,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 600, color: "#fff" }}>
-                      {(name).slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                  {name}
-                </>
-              );
-            })() : (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                  <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                Alle
-              </>
-            )}
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ marginLeft: -2 }}>
-              <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </motion.div>
-
-          {/* Dropdown */}
-          <AnimatePresence>
-            {showMemberDropdown && (
-              <>
-                <div onClick={() => setShowMemberDropdown(false)} style={{ position: "fixed", inset: 0, zIndex: 98 }} />
-                <motion.div
-                  initial={{ opacity: 0, y: -6, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -6, scale: 0.96 }}
-                  transition={{ duration: 0.15 }}
-                  style={{
-                    position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 99,
-                    minWidth: 210, maxHeight: 300, overflowY: "auto",
-                    background: darkMode ? "rgba(22,22,30,0.98)" : "rgba(255,255,255,0.99)",
-                    backdropFilter: "blur(40px)",
-                    border: `1px solid ${theme.border}`,
-                    borderRadius: 14, padding: "6px",
-                    boxShadow: "0 12px 40px rgba(0,0,0,0.2)",
-                  }}
-                >
-                  {/* All members option — clean text row, modern check (no icon bubble) */}
-                  <motion.div whileTap={{ scale: 0.97 }}
-                    onClick={() => { setMemberFilter("all"); setShowMemberDropdown(false); }}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
-                      borderRadius: 10, cursor: "pointer",
-                      background: memberFilter === "all" ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") : "transparent",
-                    }}
-                    className={memberFilter === "all" ? "" : "hover-row"}
-                  >
-                    <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontFamily: FONT, fontWeight: memberFilter === "all" ? 600 : 500, color: theme.text }}>Alle Mitglieder</div>
-                    {memberFilter === "all" && (
-                      <span style={{ width: 18, height: 18, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                      </span>
-                    )}
-                  </motion.div>
-
-                  {/* Divider */}
-                  <div style={{ height: 1, background: theme.borderFaint, margin: "4px 8px" }} />
-
-                  {/* Individual members */}
-                  {(orgMembers || []).map(m => {
-                    const p = m.profiles || {};
-                    const name = p.display_name || "User";
-                    const isActive = memberFilter === m.user_id;
-                    const taskCount = tasks.filter(tk => tk.assignee_id === m.user_id).length;
-                    return (
-                      <motion.div key={m.user_id} whileTap={{ scale: 0.97 }}
-                        onClick={() => { setMemberFilter(m.user_id); setShowMemberDropdown(false); }}
-                        className={isActive ? "" : "hover-row"}
-                        style={{
-                          display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
-                          borderRadius: 10, cursor: "pointer",
-                          background: isActive ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") : "transparent",
-                        }}
-                      >
-                        {p.avatar_url ? (
-                          <img src={p.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 28, height: 28, borderRadius: "50%" }} />
-                        ) : (
-                          <div style={{
-                            width: 28, height: 28, borderRadius: "50%",
-                            background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 10, fontWeight: 600, fontFamily: FONT, color: theme.textDim,
-                          }}>{(p.initials || name.slice(0, 2)).toUpperCase()}</div>
-                        )}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: isActive ? 600 : 400, color: theme.text }}>{name}</div>
-                          <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim }}>{taskCount} {taskCount === 1 ? "Task" : "Tasks"}</div>
-                        </div>
-                        {isActive && (
-                          <span style={{ width: 18, height: 18, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                          </span>
-                        )}
-                      </motion.div>
-                    );
-                  })}
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
-        </div>
-
-        <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-          onClick={() => openNewTask("todo")}
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 7,
-            fontSize: 12.5, fontFamily: FONT, fontWeight: 500, padding: "8px 17px 9px 11px", borderRadius: 999, cursor: "pointer",
-            background: "#23232b", border: "none", color: "#fff", marginLeft: "auto",
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          New task
-        </motion.button>
-      </div>
-
-      {/* Columns — always visible */}
-      <div style={{ display: "flex", gap: 14, padding: "0 32px 24px", flex: 1, overflow: "auto" }}>
-        {colEntries.map(col => {
-          const colTasks = filtered.filter(t => t.column_key === col.key);
-          return (
-            <div key={col.id}
-              onDragOver={e => { e.preventDefault(); setDragOverCol(col.key); }}
-              onDragLeave={() => setDragOverCol(null)}
-              onDrop={e => {
-                e.preventDefault();
-                setDragOverCol(null);
-                if (dragItem.current) {
-                  moveTask(dragItem.current, col.key);
-                  dragItem.current = null;
-                }
-              }}
-              style={{
-                flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
-                background: dragOverCol === col.key
-                  ? (darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.055)")
-                  : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.028)"),
-                borderRadius: 18, transition: "background 0.2s",
-                padding: "12px 10px 10px",
-              }}>
-              {/* Column Header */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, padding: "0 6px" }}>
-                <div style={{ width: 7, height: 7, borderRadius: "50%", background: col.color }} />
-                <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text, fontWeight: 600 }}>{t(col.labelKey)}</span>
-                <span style={{ fontSize: 11, fontFamily: FONT, fontWeight: 600, color: theme.textSub, background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)", padding: "2px 8px", borderRadius: 999 }}>{colTasks.length}</span>
-              </div>
-              {/* Cards */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minHeight: 80, overflowY: "auto" }}>
-                {loading ? (
-                  <motion.div
-                    animate={{ opacity: [0.15, 0.3, 0.15] }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                    style={{ height: 80, borderRadius: 14, background: theme.hoverBg }}
-                  />
-                ) : (
-                  <>
-                    <AnimatePresence>
-                      {colTasks.map((task, i) => {
-                        const member = teamMembers[task.assignee_id];
-                        return (
-                          <motion.div key={task.id}
-                            layout
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0], delay: i * 0.03 }}
-                            draggable={canMoveTask(task)}
-                            onDragStart={() => { if (canMoveTask(task)) dragItem.current = task.id; }}
-                            onClick={() => openEditTask(task)}
-                            style={{
-                              background: darkMode ? "#1A1A24" : "#ffffff",
-                              border: darkMode ? `1px solid ${theme.borderFaint}` : "none",
-                              borderRadius: 14,
-                              boxShadow: darkMode ? "none" : "0 1px 2px rgba(0,0,0,0.05)",
-                              padding: "14px 16px", cursor: canMoveTask(task) ? "grab" : "not-allowed",
-                            }}
-                          >
-                            {/* Top row: Creator avatar + name · date · project | priority + delete */}
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 5, flex: 1, minWidth: 0 }}>
-                                {(() => {
-                                  const creator = task.creator || teamMembers[task.creator_id];
-                                  return creator?.avatar_url ? (
-                                    <img src={creator.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 16, height: 16, borderRadius: "50%", border: `1px solid ${theme.borderFaint}`, flexShrink: 0 }} />
-                                  ) : (
-                                    <div style={{ width: 16, height: 16, borderRadius: "50%", background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.07)", color: theme.textSub, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{creator?.initials || "?"}</div>
-                                  );
-                                })()}
-                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, whiteSpace: "nowrap" }}>
-                                  {(task.creator?.display_name || teamMembers[task.creator_id]?.display_name || "Unknown")}
-                                </span>
-                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, opacity: 0.4 }}>·</span>
-                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, whiteSpace: "nowrap" }}>
-                                  {task.created_at ? new Date(task.created_at).toLocaleDateString("de-DE", { day: "2-digit", month: "short" }) + " " + new Date(task.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : ""}
-                                </span>
-                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, opacity: 0.4 }}>·</span>
-                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{task.project_name || "General"}</span>
-                              </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginLeft: 8 }}>
-                                {task.is_ai_task && <span style={{ fontSize: 9, fontFamily: FONT, fontWeight: 500, color: "#E84393", padding: "2px 6px", borderRadius: 4, background: "#E8439315", letterSpacing: 0.5 }}>AI</span>}
-                                {task.priority === "high" && <div title="Hohe Priorität" style={{ width: 6, height: 6, borderRadius: "50%", background: priColors.high, marginRight: 5, flexShrink: 0 }} />}
-                                <motion.div
-                                  whileHover={{ scale: 1.08 }}
-                                  whileTap={{ scale: 0.9 }}
-                                  onClick={(e) => { e.stopPropagation(); requestDelete(task.id); }}
-                                  title="Löschen"
-                                  style={{
-                                    cursor: "pointer", width: 20, height: 20, borderRadius: 7, flexShrink: 0,
-                                    background: darkMode ? "rgba(255,255,255,0.09)" : "#fff",
-                                    border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.07)"}`,
-                                    boxShadow: darkMode ? "none" : "0 1px 2px rgba(0,0,0,0.07)",
-                                    color: darkMode ? "#fff" : "#1a1a2e",
-                                    display: "flex", alignItems: "center", justifyContent: "center",
-                                  }}
-                                >
-                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                                </motion.div>
-                              </div>
-                            </div>
-                            {/* Title + description */}
-                            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 4, lineHeight: 1.4 }}>{task.title}</div>
-                            {task.description && <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginBottom: 8 }}>{task.description}</div>}
-                            {/* Bottom: Assignee + meta */}
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                {(() => {
-                                  const assignee = task.assignee || member;
-                                  return assignee?.avatar_url ? (
-                                    <img src={assignee.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 22, height: 22, borderRadius: "50%", border: `1px solid ${theme.borderFaint}` }} />
-                                  ) : (
-                                    <div style={{
-                                      width: 22, height: 22, borderRadius: "50%", background: (assignee?.avatar_color || "#64748B") + "25", color: assignee?.avatar_color || "#64748B",
-                                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontFamily: FONT, fontWeight: 600,
-                                    }}>{assignee?.initials || "?"}</div>
-                                  );
-                                })()}
-                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim }}>{(task.assignee?.display_name || member?.display_name || "")}</span>
-                              </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                {task.time_tracked && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>⏱ {task.time_tracked}</span>}
-                                {task.due_date && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>{new Date(task.due_date).toLocaleDateString("de-DE", { day: "2-digit", month: "short" })}</span>}
-                              </div>
-                            </div>
-                          </motion.div>
-                        );
-                      })}
-                    </AnimatePresence>
-                    {colTasks.length === 0 && (
-                      <div
-                        onClick={() => openNewTask(col.key)}
-                        style={{
-                          flex: 1, border: `1px dashed ${dragOverCol === col.key ? theme.accent + "30" : theme.borderFaint}`,
-                          borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 12, fontFamily: FONT, cursor: "pointer",
-                          color: dragOverCol === col.key ? theme.accent + "60" : theme.textFaint,
-                          minHeight: 80, transition: "all 0.2s",
-                        }}
-                      >
-                        {dragOverCol === col.key ? "Hier ablegen" : "Drop here"}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* New / Edit Task Modal — Portal to body so it covers everything */}
-      {createPortal(<AnimatePresence>
+  const taskModalPortal = createPortal(<AnimatePresence>
         {showNewTask && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -3007,7 +2414,354 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>, document.body)}
+      </AnimatePresence>, document.body);
+
+  if (triggerNewTask) {
+    return (<>
+      {taskModalPortal}
+    </>);
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+      style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", zIndex: 5 }}
+    >
+      {/* Top bar */}
+      <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "24px 32px 0" }}>
+        <motion.div
+          whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+          onClick={onBack}
+          style={{
+            width: 32, height: 32, borderRadius: "50%", cursor: "pointer",
+            border: `1px solid ${theme.border}`, display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 14, color: theme.textDim, fontFamily: FONT,
+          }}>←</motion.div>
+        <div style={{ fontSize: 22, fontWeight: 500, color: theme.text, fontFamily: FONT, letterSpacing: -0.5 }}>Kanban</div>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "24px 32px 14px", flexWrap: "wrap" }}>
+        {["all", ...projectNames].map(p => {
+          const logo = p !== "all" ? getProjectLogo(p) : null;
+          return (
+            <motion.button key={p} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+              onClick={() => setFilter(p)}
+              style={{
+                display: "flex", alignItems: "center", gap: 7,
+                fontSize: 12.5, fontFamily: FONT, fontWeight: 500, padding: "8px 15px 8px 11px", borderRadius: 999, cursor: "pointer",
+                background: filter === p ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+                border: "none",
+                color: filter === p ? "#fff" : theme.textSub,
+                transition: "background 0.2s ease, color 0.2s ease",
+              }}
+            >
+              {logo && <img src={logo} alt="" style={{ width: 17, height: 17, borderRadius: "50%", objectFit: "cover" }} />}
+              {p === "all" ? "All projects" : p}
+            </motion.button>
+          );
+        })}
+
+        {/* Member filter dropdown */}
+        <div style={{ position: "relative" }}>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+            onClick={() => setShowMemberDropdown(prev => !prev)}
+            style={{
+              display: "flex", alignItems: "center", gap: 9, cursor: "pointer",
+              padding: "8px 11px 8px 15px", borderRadius: 999,
+              background: memberFilter !== "all" ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+              border: "none",
+              color: memberFilter !== "all" ? "#fff" : theme.textSub,
+              fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
+              transition: "background 0.2s ease, color 0.2s ease",
+            }}
+          >
+            {memberFilter !== "all" ? (() => {
+              const m = (orgMembers || []).find(om => om.user_id === memberFilter);
+              const name = m?.profiles?.display_name || "User";
+              return (
+                <>
+                  {m?.profiles?.avatar_url ? (
+                    <img src={m.profiles.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 17, height: 17, borderRadius: "50%" }} />
+                  ) : (
+                    <div style={{ width: 17, height: 17, borderRadius: "50%", background: "rgba(255,255,255,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 600, color: "#fff" }}>
+                      {(name).slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                  {name}
+                </>
+              );
+            })() : (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                  <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Alle
+              </>
+            )}
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ marginLeft: -2 }}>
+              <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </motion.div>
+
+          {/* Dropdown */}
+          <AnimatePresence>
+            {showMemberDropdown && (
+              <>
+                <div onClick={() => setShowMemberDropdown(false)} style={{ position: "fixed", inset: 0, zIndex: 98 }} />
+                <motion.div
+                  initial={{ opacity: 0, y: -6, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.96 }}
+                  transition={{ duration: 0.15 }}
+                  style={{
+                    position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 99,
+                    minWidth: 210, maxHeight: 300, overflowY: "auto",
+                    background: darkMode ? "rgba(22,22,30,0.98)" : "rgba(255,255,255,0.99)",
+                    backdropFilter: "blur(40px)",
+                    border: `1px solid ${theme.border}`,
+                    borderRadius: 14, padding: "6px",
+                    boxShadow: "0 12px 40px rgba(0,0,0,0.2)",
+                  }}
+                >
+                  {/* All members option — clean text row, modern check (no icon bubble) */}
+                  <motion.div whileTap={{ scale: 0.97 }}
+                    onClick={() => { setMemberFilter("all"); setShowMemberDropdown(false); }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
+                      borderRadius: 10, cursor: "pointer",
+                      background: memberFilter === "all" ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") : "transparent",
+                    }}
+                    className={memberFilter === "all" ? "" : "hover-row"}
+                  >
+                    <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontFamily: FONT, fontWeight: memberFilter === "all" ? 600 : 500, color: theme.text }}>Alle Mitglieder</div>
+                    {memberFilter === "all" && (
+                      <span style={{ width: 18, height: 18, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      </span>
+                    )}
+                  </motion.div>
+
+                  {/* Divider */}
+                  <div style={{ height: 1, background: theme.borderFaint, margin: "4px 8px" }} />
+
+                  {/* Individual members */}
+                  {(orgMembers || []).map(m => {
+                    const p = m.profiles || {};
+                    const name = p.display_name || "User";
+                    const isActive = memberFilter === m.user_id;
+                    const taskCount = tasks.filter(tk => tk.assignee_id === m.user_id).length;
+                    return (
+                      <motion.div key={m.user_id} whileTap={{ scale: 0.97 }}
+                        onClick={() => { setMemberFilter(m.user_id); setShowMemberDropdown(false); }}
+                        className={isActive ? "" : "hover-row"}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
+                          borderRadius: 10, cursor: "pointer",
+                          background: isActive ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") : "transparent",
+                        }}
+                      >
+                        {p.avatar_url ? (
+                          <img src={p.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 28, height: 28, borderRadius: "50%" }} />
+                        ) : (
+                          <div style={{
+                            width: 28, height: 28, borderRadius: "50%",
+                            background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 10, fontWeight: 600, fontFamily: FONT, color: theme.textDim,
+                          }}>{(p.initials || name.slice(0, 2)).toUpperCase()}</div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: isActive ? 600 : 400, color: theme.text }}>{name}</div>
+                          <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim }}>{taskCount} {taskCount === 1 ? "Task" : "Tasks"}</div>
+                        </div>
+                        {isActive && (
+                          <span style={{ width: 18, height: 18, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                          </span>
+                        )}
+                      </motion.div>
+                    );
+                  })}
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+          onClick={() => openNewTask("todo")}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 7,
+            fontSize: 12.5, fontFamily: FONT, fontWeight: 500, padding: "8px 17px 9px 11px", borderRadius: 999, cursor: "pointer",
+            background: "#23232b", border: "none", color: "#fff", marginLeft: "auto",
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New task
+        </motion.button>
+      </div>
+
+      {/* Columns — always visible */}
+      <div style={{ display: "flex", gap: 14, padding: "0 32px 24px", flex: 1, overflow: "auto" }}>
+        {colEntries.map(col => {
+          const colTasks = filtered.filter(t => t.column_key === col.key);
+          return (
+            <div key={col.id}
+              onDragOver={e => { e.preventDefault(); setDragOverCol(col.key); }}
+              onDragLeave={() => setDragOverCol(null)}
+              onDrop={e => {
+                e.preventDefault();
+                setDragOverCol(null);
+                if (dragItem.current) {
+                  moveTask(dragItem.current, col.key);
+                  dragItem.current = null;
+                }
+              }}
+              style={{
+                flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
+                background: dragOverCol === col.key
+                  ? (darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.055)")
+                  : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.028)"),
+                borderRadius: 18, transition: "background 0.2s",
+                padding: "12px 10px 10px",
+              }}>
+              {/* Column Header */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, padding: "0 6px" }}>
+                <div style={{ width: 7, height: 7, borderRadius: "50%", background: col.color }} />
+                <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text, fontWeight: 600 }}>{t(col.labelKey)}</span>
+                <span style={{ fontSize: 11, fontFamily: FONT, fontWeight: 600, color: theme.textSub, background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)", padding: "2px 8px", borderRadius: 999 }}>{colTasks.length}</span>
+              </div>
+              {/* Cards */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minHeight: 80, overflowY: "auto" }}>
+                {loading ? (
+                  <motion.div
+                    animate={{ opacity: [0.15, 0.3, 0.15] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                    style={{ height: 80, borderRadius: 14, background: theme.hoverBg }}
+                  />
+                ) : (
+                  <>
+                    <AnimatePresence>
+                      {colTasks.map((task, i) => {
+                        const member = teamMembers[task.assignee_id];
+                        return (
+                          <motion.div key={task.id}
+                            layout
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0], delay: i * 0.03 }}
+                            draggable={canMoveTask(task)}
+                            onDragStart={() => { if (canMoveTask(task)) dragItem.current = task.id; }}
+                            onClick={() => openEditTask(task)}
+                            style={{
+                              background: darkMode ? "#1A1A24" : "#ffffff",
+                              border: darkMode ? `1px solid ${theme.borderFaint}` : "none",
+                              borderRadius: 14,
+                              boxShadow: darkMode ? "none" : "0 1px 2px rgba(0,0,0,0.05)",
+                              padding: "14px 16px", cursor: canMoveTask(task) ? "grab" : "not-allowed",
+                            }}
+                          >
+                            {/* Top row: Creator avatar + name · date · project | priority + delete */}
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 5, flex: 1, minWidth: 0 }}>
+                                {(() => {
+                                  const creator = task.creator || teamMembers[task.creator_id];
+                                  return creator?.avatar_url ? (
+                                    <img src={creator.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 16, height: 16, borderRadius: "50%", border: `1px solid ${theme.borderFaint}`, flexShrink: 0 }} />
+                                  ) : (
+                                    <div style={{ width: 16, height: 16, borderRadius: "50%", background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.07)", color: theme.textSub, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{creator?.initials || "?"}</div>
+                                  );
+                                })()}
+                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, whiteSpace: "nowrap" }}>
+                                  {(task.creator?.display_name || teamMembers[task.creator_id]?.display_name || "Unknown")}
+                                </span>
+                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, opacity: 0.4 }}>·</span>
+                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, whiteSpace: "nowrap" }}>
+                                  {task.created_at ? new Date(task.created_at).toLocaleDateString("de-DE", { day: "2-digit", month: "short" }) + " " + new Date(task.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : ""}
+                                </span>
+                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, opacity: 0.4 }}>·</span>
+                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{task.project_name || "General"}</span>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginLeft: 8 }}>
+                                {task.is_ai_task && <span style={{ fontSize: 9, fontFamily: FONT, fontWeight: 500, color: "#E84393", padding: "2px 6px", borderRadius: 4, background: "#E8439315", letterSpacing: 0.5 }}>AI</span>}
+                                {task.priority === "high" && <div title="Hohe Priorität" style={{ width: 6, height: 6, borderRadius: "50%", background: priColors.high, marginRight: 5, flexShrink: 0 }} />}
+                                <motion.div
+                                  whileHover={{ scale: 1.08 }}
+                                  whileTap={{ scale: 0.9 }}
+                                  onClick={(e) => { e.stopPropagation(); requestDelete(task.id); }}
+                                  title="Löschen"
+                                  style={{
+                                    cursor: "pointer", width: 20, height: 20, borderRadius: 7, flexShrink: 0,
+                                    background: darkMode ? "rgba(255,255,255,0.09)" : "#fff",
+                                    border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.07)"}`,
+                                    boxShadow: darkMode ? "none" : "0 1px 2px rgba(0,0,0,0.07)",
+                                    color: darkMode ? "#fff" : "#1a1a2e",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                  }}
+                                >
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                                </motion.div>
+                              </div>
+                            </div>
+                            {/* Title + description */}
+                            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 4, lineHeight: 1.4 }}>{task.title}</div>
+                            {task.description && <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginBottom: 8 }}>{task.description}</div>}
+                            {/* Bottom: Assignee + meta */}
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                {(() => {
+                                  const assignee = task.assignee || member;
+                                  return assignee?.avatar_url ? (
+                                    <img src={assignee.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 22, height: 22, borderRadius: "50%", border: `1px solid ${theme.borderFaint}` }} />
+                                  ) : (
+                                    <div style={{
+                                      width: 22, height: 22, borderRadius: "50%", background: (assignee?.avatar_color || "#64748B") + "25", color: assignee?.avatar_color || "#64748B",
+                                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontFamily: FONT, fontWeight: 600,
+                                    }}>{assignee?.initials || "?"}</div>
+                                  );
+                                })()}
+                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim }}>{(task.assignee?.display_name || member?.display_name || "")}</span>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                {task.time_tracked && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>⏱ {task.time_tracked}</span>}
+                                {task.due_date && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>{new Date(task.due_date).toLocaleDateString("de-DE", { day: "2-digit", month: "short" })}</span>}
+                              </div>
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </AnimatePresence>
+                    {colTasks.length === 0 && (
+                      <div
+                        onClick={() => openNewTask(col.key)}
+                        style={{
+                          flex: 1, border: `1px dashed ${dragOverCol === col.key ? theme.accent + "30" : theme.borderFaint}`,
+                          borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 12, fontFamily: FONT, cursor: "pointer",
+                          color: dragOverCol === col.key ? theme.accent + "60" : theme.textFaint,
+                          minHeight: 80, transition: "all 0.2s",
+                        }}
+                      >
+                        {dragOverCol === col.key ? "Hier ablegen" : "Drop here"}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* New / Edit Task Modal — Portal to body so it covers everything */}
+      {taskModalPortal}
 
       {/* Custom Delete Confirm Dialog — Portal to body */}
       {createPortal(<AnimatePresence>
