@@ -2106,16 +2106,11 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
             border: `1px solid ${theme.border}`, display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 14, color: theme.textDim, fontFamily: FONT,
           }}>←</motion.div>
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 500, color: theme.text, fontFamily: FONT, letterSpacing: -0.5 }}>Aufgaben</div>
-          <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, marginTop: 2 }}>
-            {loading ? "Loading..." : `${filtered.length} tasks across ${colEntries.length} columns`}
-          </div>
-        </div>
+        <div style={{ fontSize: 22, fontWeight: 500, color: theme.text, fontFamily: FONT, letterSpacing: -0.5 }}>Kanban</div>
       </div>
 
       {/* Filters */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 32px", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "24px 32px 14px", flexWrap: "wrap" }}>
         {["all", ...projectNames].map(p => {
           const logo = p !== "all" ? getProjectLogo(p) : null;
           return (
@@ -5631,10 +5626,11 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             {loading ? "Loading..." : `${googleEvents.length + teamEvents.length} Events · ${tasks.length} Tasks`}
           </div>
         </div>
-        <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+        <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
           onClick={() => openNewEvent(selectedDay)}
-          style={{ cursor: "pointer", fontSize: 12, fontFamily: FONT, color: theme.accent, padding: "6px 14px", borderRadius: 20, background: theme.accent + "15", border: `1px solid ${theme.accent}30`, fontWeight: 500 }}>
-          + {t("cal.newEvent")}
+          style={{ display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, color: "#fff", padding: "9px 16px 9px 13px", borderRadius: 999, background: "#23232b", border: "none" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          {t("cal.newEvent")}
         </motion.div>
       </div>
 
