@@ -2382,7 +2382,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                               </div>
                               <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginLeft: 8 }}>
                                 {task.is_ai_task && <span style={{ fontSize: 9, fontFamily: FONT, fontWeight: 500, color: "#E84393", padding: "2px 6px", borderRadius: 4, background: "#E8439315", letterSpacing: 0.5 }}>AI</span>}
-                                {task.priority === "high" && <div title="Hohe Priorität" style={{ width: 6, height: 6, borderRadius: "50%", background: priColors.high, marginRight: 12, flexShrink: 0 }} />}
+                                {task.priority === "high" && <div title="Hohe Priorität" style={{ width: 6, height: 6, borderRadius: "50%", background: priColors.high, marginRight: 5, flexShrink: 0 }} />}
                                 <motion.div
                                   whileHover={{ scale: 1.08 }}
                                   whileTap={{ scale: 0.9 }}
