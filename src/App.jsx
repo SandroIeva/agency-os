@@ -2655,30 +2655,12 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                               padding: "14px 16px", cursor: canMoveTask(task) ? "grab" : "not-allowed",
                             }}
                           >
-                            {/* Top row: Creator avatar + name · date · project | priority + delete */}
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 5, flex: 1, minWidth: 0 }}>
-                                {(() => {
-                                  const creator = task.creator || teamMembers[task.creator_id];
-                                  return creator?.avatar_url ? (
-                                    <img src={creator.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 16, height: 16, borderRadius: "50%", border: `1px solid ${theme.borderFaint}`, flexShrink: 0 }} />
-                                  ) : (
-                                    <div style={{ width: 16, height: 16, borderRadius: "50%", background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.07)", color: theme.textSub, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{creator?.initials || "?"}</div>
-                                  );
-                                })()}
-                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, whiteSpace: "nowrap" }}>
-                                  {(task.creator?.display_name || teamMembers[task.creator_id]?.display_name || "Unknown")}
-                                </span>
-                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, opacity: 0.4 }}>·</span>
-                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, whiteSpace: "nowrap" }}>
-                                  {task.created_at ? new Date(task.created_at).toLocaleDateString("de-DE", { day: "2-digit", month: "short" }) + " " + new Date(task.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : ""}
-                                </span>
-                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, opacity: 0.4 }}>·</span>
-                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{task.project_name || "General"}</span>
-                              </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginLeft: 8 }}>
+                            {/* Title · priority (high) · delete */}
+                            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                              <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, lineHeight: 1.4, minWidth: 0, flex: 1 }}>{task.title}</div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                                 {task.is_ai_task && <span style={{ fontSize: 9, fontFamily: FONT, fontWeight: 500, color: "#E84393", padding: "2px 6px", borderRadius: 4, background: "#E8439315", letterSpacing: 0.5 }}>AI</span>}
-                                {task.priority === "high" && <div title="Hohe Priorität" style={{ width: 6, height: 6, borderRadius: "50%", background: priColors.high, marginRight: 5, flexShrink: 0 }} />}
+                                {task.priority === "high" && <div title="Hohe Priorität" style={{ width: 6, height: 6, borderRadius: "50%", background: priColors.high, marginRight: 1, flexShrink: 0 }} />}
                                 <motion.div
                                   whileHover={{ scale: 1.08 }}
                                   whileTap={{ scale: 0.9 }}
@@ -2697,30 +2679,33 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                                 </motion.div>
                               </div>
                             </div>
-                            {/* Title + description */}
-                            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 4, lineHeight: 1.4 }}>{task.title}</div>
-                            {task.description && <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginBottom: 8 }}>{task.description}</div>}
-                            {/* Bottom: Assignee + meta */}
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                {(() => {
-                                  const assignee = task.assignee || member;
-                                  return assignee?.avatar_url ? (
-                                    <img src={assignee.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 22, height: 22, borderRadius: "50%", border: `1px solid ${theme.borderFaint}` }} />
-                                  ) : (
-                                    <div style={{
-                                      width: 22, height: 22, borderRadius: "50%", background: (assignee?.avatar_color || "#64748B") + "25", color: assignee?.avatar_color || "#64748B",
-                                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontFamily: FONT, fontWeight: 600,
-                                    }}>{assignee?.initials || "?"}</div>
-                                  );
-                                })()}
-                                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim }}>{(task.assignee?.display_name || member?.display_name || "")}</span>
-                              </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                {task.time_tracked && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>⏱ {task.time_tracked}</span>}
-                                {task.due_date && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>{new Date(task.due_date).toLocaleDateString("de-DE", { day: "2-digit", month: "short" })}</span>}
-                              </div>
-                            </div>
+                            {task.description && <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginTop: 5 }}>{task.description}</div>}
+                            {/* Bottom: creator → assignee (avatars only) + project · date chip */}
+                            {(() => {
+                              const creator = task.creator || teamMembers[task.creator_id];
+                              const assignee = task.assignee || member;
+                              const delegated = task.assignee_id && task.assignee_id !== task.creator_id;
+                              const av = (m) => m?.avatar_url
+                                ? <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 22, height: 22, borderRadius: "50%", border: `1px solid ${theme.borderFaint}`, flexShrink: 0 }} />
+                                : <div style={{ width: 22, height: 22, borderRadius: "50%", background: (m?.avatar_color || "#64748B") + "25", color: m?.avatar_color || "#64748B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{m?.initials || "?"}</div>;
+                              const dateStr = task.created_at ? new Date(task.created_at).toLocaleDateString("de-DE", { day: "2-digit", month: "short" }) + " " + new Date(task.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "";
+                              return (
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 14 }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+                                    {av(creator)}
+                                    {delegated && (<>
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.textFaint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                                      {av(assignee)}
+                                    </>)}
+                                  </div>
+                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0, padding: "5px 11px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", fontSize: 10.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden" }}>
+                                    {task.project_name && <span style={{ fontWeight: 600, color: theme.textSub, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{task.project_name}</span>}
+                                    {task.project_name && dateStr && <span style={{ opacity: 0.4, flexShrink: 0 }}>·</span>}
+                                    {dateStr && <span style={{ flexShrink: 0 }}>{dateStr}</span>}
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </motion.div>
                         );
                       })}
