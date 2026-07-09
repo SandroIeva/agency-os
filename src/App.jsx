@@ -2130,16 +2130,6 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
             </motion.button>
           );
         })}
-        {/* Edit projects button */}
-        <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}
-          onClick={() => { setShowProjectEditor(true); setEditingProject(null); setProjectForm({ name: "", logo_url: "", color: "#8B7AFF" }); setLogoPreview(null); }}
-          style={{
-            width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: "pointer", color: theme.textDim,
-          }}
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </motion.div>
 
         {/* Member filter dropdown */}
         <div style={{ position: "relative" }}>
