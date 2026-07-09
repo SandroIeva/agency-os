@@ -2283,7 +2283,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
           onClick={() => openNewTask("todo")}
           style={{
             display: "inline-flex", alignItems: "center", gap: 7,
-            fontSize: 12.5, fontFamily: FONT, fontWeight: 500, padding: "8px 17px 9px 12px", borderRadius: 999, cursor: "pointer",
+            fontSize: 12.5, fontFamily: FONT, fontWeight: 500, padding: "8px 17px 9px 11px", borderRadius: 999, cursor: "pointer",
             background: "#23232b", border: "none", color: "#fff", marginLeft: "auto",
           }}
         >
