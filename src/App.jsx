@@ -9528,7 +9528,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
           minHeight: span.row * 90,
           background: bg,
           border: `1px solid ${border}`,
-          borderRadius: 18,
+          borderRadius: 14,
           padding: "16px 18px",
           cursor: "pointer",
           position: "relative",
@@ -9536,8 +9536,8 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
           flexDirection: "column",
           gap: 6,
           boxShadow: isHovered
-            ? (darkMode ? "0 16px 40px rgba(0,0,0,0.45), 0 0 0 1px " + border : "0 18px 38px rgba(0,0,0,0.12), 0 6px 14px rgba(0,0,0,0.06)")
-            : (darkMode ? "0 4px 14px rgba(0,0,0,0.2)" : "0 3px 10px rgba(0,0,0,0.05)"),
+            ? (darkMode ? "0 10px 28px rgba(0,0,0,0.35)" : "0 8px 20px rgba(0,0,0,0.07)")
+            : (darkMode ? "0 2px 8px rgba(0,0,0,0.16)" : "0 1px 3px rgba(0,0,0,0.035)"),
           transform: `perspective(1000px) rotateX(${tiltX}deg) rotateY(${tiltY}deg)`,
           transformStyle: "preserve-3d",
           transition: "box-shadow 0.25s ease, transform 0.15s ease",
@@ -9699,27 +9699,27 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
               <motion.div key={chip.id} whileTap={{ scale: 0.96 }} whileHover={{ y: -1 }}
                 onClick={() => setFilterMode(chip.id)}
                 style={{
-                  padding: chip.logo ? "4px 12px 4px 6px" : "6px 12px", borderRadius: 999, cursor: "pointer",
-                  fontSize: 12, fontFamily: FONT, fontWeight: 500,
-                  background: active ? (darkMode ? "rgba(255,255,255,0.12)" : "#1a1a2e") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
-                  color: active ? "#fff" : theme.textDim,
-                  border: `1px solid ${active ? "transparent" : theme.borderFaint}`,
-                  display: "flex", alignItems: "center", gap: 6,
+                  padding: (chip.logo || chip.icon) ? "8px 15px 8px 11px" : "8px 15px", borderRadius: 999, cursor: "pointer",
+                  fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
+                  background: active ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+                  color: active ? "#fff" : theme.textSub,
+                  border: "none",
+                  display: "flex", alignItems: "center", gap: 7,
                   transition: "background 0.2s ease, color 0.2s ease",
                 }}
               >
                 {chip.icon === "pin" && (
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z"/></svg>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z"/></svg>
                 )}
                 {chip.icon === "lock" && (
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.6"/><path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
                 )}
                 {chip.logo && (
-                  <img src={chip.logo} alt="" style={{ width: 18, height: 18, borderRadius: 4, objectFit: "cover", flexShrink: 0 }} />
+                  <img src={chip.logo} alt="" style={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
                 )}
                 {chip.label}
                 {chip.count > 0 && (
-                  <span style={{ fontSize: 10, opacity: 0.7 }}>{chip.count}</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 600, opacity: active ? 0.75 : 0.55 }}>{chip.count}</span>
                 )}
               </motion.div>
             );
@@ -9731,13 +9731,13 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
           <motion.div whileTap={{ scale: 0.95 }} whileHover={{ y: -1 }}
             onClick={() => setSortMenuOpen(!sortMenuOpen)}
             style={{
-              width: 32, height: 32, borderRadius: 10, cursor: "pointer",
+              width: 36, height: 36, borderRadius: 11, cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center",
-              color: theme.textDim, background: sortMenuOpen ? (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)") : "transparent",
+              color: theme.textSub, background: sortMenuOpen ? (darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.035)"),
             }}
             title="Sortieren"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M6 12h12M10 18h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M6 12h12M10 18h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
           </motion.div>
           <AnimatePresence>
             {sortMenuOpen && (
@@ -9778,26 +9778,26 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
 
         {/* Search — clean width expand, no shape morph */}
         <motion.div
-          animate={{ width: searchOpen ? 220 : 32 }}
+          animate={{ width: searchOpen ? 240 : 36 }}
           transition={{ type: "spring", stiffness: 320, damping: 28 }}
           style={{
             display: "flex", alignItems: "center",
-            height: 32,
-            background: searchOpen ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)") : "transparent",
-            border: `1px solid ${searchOpen ? theme.borderFaint : "transparent"}`,
-            borderRadius: 10,
+            height: 36,
+            background: searchOpen ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.035)"),
+            border: "none",
+            borderRadius: 11,
             overflow: "hidden",
           }}
         >
           <motion.div whileTap={{ scale: 0.95 }} whileHover={{ y: -1 }}
             onClick={() => { setSearchOpen(true); }}
             style={{
-              width: 32, height: 32, cursor: "pointer", flexShrink: 0,
+              width: 36, height: 36, cursor: "pointer", flexShrink: 0,
               display: "flex", alignItems: "center", justifyContent: "center",
-              color: theme.textDim,
+              color: theme.textSub,
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M21 21l-4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8"/><path d="M21 21l-4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
           </motion.div>
           <AnimatePresence>
             {searchOpen && (
@@ -9825,13 +9825,13 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
           transition={{ type: "spring", stiffness: 400, damping: 22 }}
           onClick={() => createNote()}
           style={{
-            padding: "8px 16px", borderRadius: 12,
-            background: theme.accent + "22", border: `1px solid ${theme.accent}40`,
-            color: theme.accent, fontSize: 13, fontWeight: 500, fontFamily: FONT,
-            cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
+            padding: "9px 16px 9px 13px", borderRadius: 999,
+            background: "#23232b", border: "none",
+            color: "#fff", fontSize: 12.5, fontWeight: 500, fontFamily: FONT,
+            cursor: "pointer", display: "flex", alignItems: "center", gap: 7,
           }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Neue Notiz
         </motion.button>
       </div>
@@ -9862,9 +9862,9 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
             {!search && filterMode === "all" && (
               <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => createNote()}
                 style={{
-                  padding: "10px 22px", borderRadius: 12,
-                  background: theme.accent + "22", border: `1px solid ${theme.accent}40`,
-                  color: theme.accent, fontSize: 14, fontWeight: 500, fontFamily: FONT, cursor: "pointer",
+                  padding: "11px 22px", borderRadius: 999,
+                  background: "#15151c", border: "none",
+                  color: "#fff", fontSize: 13.5, fontWeight: 500, fontFamily: FONT, cursor: "pointer",
                 }}
               >Erste Notiz erstellen</motion.button>
             )}
