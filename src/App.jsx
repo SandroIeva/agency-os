@@ -2625,7 +2625,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                 <span style={{ fontSize: 11, fontFamily: FONT, fontWeight: 600, color: theme.textSub, background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)", padding: "2px 8px", borderRadius: 999 }}>{colTasks.length}</span>
               </div>
               {/* Cards */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minHeight: 80, overflowY: "auto", padding: "0 10px", scrollbarGutter: "stable both-edges" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minHeight: 80, overflowY: "auto", padding: "0 5px", scrollbarGutter: "stable both-edges" }}>
                 {loading ? (
                   <motion.div
                     animate={{ opacity: [0.15, 0.3, 0.15] }}
