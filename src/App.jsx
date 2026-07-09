@@ -2661,7 +2661,6 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                               <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, lineHeight: 1.4, minWidth: 0, flex: 1 }}>{task.title}</div>
                               <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                                 {task.is_ai_task && <span style={{ fontSize: 9, fontFamily: FONT, fontWeight: 500, color: "#E84393", padding: "2px 6px", borderRadius: 4, background: "#E8439315", letterSpacing: 0.5 }}>AI</span>}
-                                {task.priority === "high" && <div title="Hohe Priorität" style={{ width: 6, height: 6, borderRadius: "50%", background: priColors.high, marginRight: 1, flexShrink: 0 }} />}
                                 <motion.div
                                   whileHover={{ scale: 1.08 }}
                                   whileTap={{ scale: 0.9 }}
@@ -2703,6 +2702,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                                     {task.project_name && <span style={{ fontWeight: 600, color: theme.textSub, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{task.project_name}</span>}
                                     {task.project_name && dateStr && <span style={{ opacity: 0.4, flexShrink: 0 }}>·</span>}
                                     {dateStr && <span style={{ flexShrink: 0 }}>{dateStr}</span>}
+                                    {task.priority === "high" && <div title="Hohe Priorität" style={{ width: 6, height: 6, borderRadius: "50%", background: priColors.high, flexShrink: 0, marginLeft: 1 }} />}
                                   </div>
                                 </div>
                               );
