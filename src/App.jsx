@@ -1957,73 +1957,96 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                       color: theme.text, outline: "none", caretColor: theme.text, width: "100%",
                     }}
                   />
-                  {/* Toolbar row */}
-                  <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
-                    {/* Assignee */}
-                    <Dropdown
-                      value={taskForm.assignee_id || ""}
-                      onChange={v => setTaskForm(prev => ({ ...prev, assignee_id: v }))}
-                      options={Object.values(teamMembers).map(m => ({
-                        value: m.user_id, label: m.display_name,
-                        icon: m.avatar_url
-                          ? <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 18, height: 18, borderRadius: "50%" }} />
-                          : <span style={{ width: 18, height: 18, borderRadius: "50%", background: (m.avatar_color || "#64748B") + "30", color: m.avatar_color || "#64748B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 600 }}>{m.initials}</span>,
-                      }))}
-                      placeholder="Zuweisen"
-                      leadingIcon={<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke={theme.textDim} strokeWidth="1.6"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke={theme.textDim} strokeWidth="1.6" strokeLinecap="round"/></svg>}
-                      theme={theme} darkMode={darkMode} minWidth={200} maxTriggerWidth={170}
-                    />
-                    {/* Priority */}
-                    {["high", "medium", "low"].map(p => (
-                      <motion.div key={p} whileTap={{ scale: 0.95 }}
-                        onClick={() => setTaskForm(prev => ({ ...prev, priority: p }))}
-                        style={{
-                          display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
-                          background: taskForm.priority === p ? priColors[p] + "1a" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
-                          color: taskForm.priority === p ? priColors[p] : theme.textDim,
-                          border: "none",
-                        }}
-                      >
-                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: taskForm.priority === p ? priColors[p] : theme.textFaint }} />
-                        {p === "high" ? "Hoch" : p === "medium" ? "Mittel" : "Niedrig"}
-                      </motion.div>
-                    ))}
-                    {/* Date */}
-                    <div style={{ position: "relative" }}>
-                      <motion.div whileTap={{ scale: 0.95 }}
-                        onClick={() => setShowDatePicker(!showDatePicker)}
-                        style={{
-                          display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 999,
-                          border: "none", cursor: "pointer",
-                          fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
-                          color: taskForm.due_date ? "#B77D0A" : theme.textDim,
-                          background: taskForm.due_date ? "#F59E0B1a" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
-                        }}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                        {taskForm.due_date ? new Date(taskForm.due_date).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" }) : "Frist setzen"}
-                        {taskForm.due_date && (
-                          <span onClick={e => { e.stopPropagation(); setTaskForm(prev => ({ ...prev, due_date: "" })); }} style={{ cursor: "pointer", marginLeft: 2, opacity: 0.6 }}>✕</span>
+                  {/* Toolbar — row 1: assignee · deadline · column (same height); row 2: priority */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      {/* Assignee */}
+                      <Dropdown
+                        value={taskForm.assignee_id || ""}
+                        onChange={v => setTaskForm(prev => ({ ...prev, assignee_id: v }))}
+                        options={Object.values(teamMembers).map(m => ({
+                          value: m.user_id, label: m.display_name,
+                          icon: m.avatar_url
+                            ? <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 18, height: 18, borderRadius: "50%" }} />
+                            : <span style={{ width: 18, height: 18, borderRadius: "50%", background: (m.avatar_color || "#64748B") + "30", color: m.avatar_color || "#64748B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 600 }}>{m.initials}</span>,
+                        }))}
+                        placeholder="Zuweisen"
+                        leadingIcon={<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke={theme.textDim} strokeWidth="1.6"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke={theme.textDim} strokeWidth="1.6" strokeLinecap="round"/></svg>}
+                        theme={theme} darkMode={darkMode} minWidth={200} maxTriggerWidth={170}
+                        triggerStyle={{ height: 36, padding: "0 11px 0 13px" }}
+                      />
+                      {/* Deadline */}
+                      <div style={{ position: "relative" }}>
+                        <motion.div whileTap={{ scale: 0.97 }}
+                          onClick={() => setShowDatePicker(!showDatePicker)}
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 8, height: 36, padding: "0 11px 0 13px", borderRadius: 999, cursor: "pointer",
+                            fontSize: 13, fontFamily: FONT, fontWeight: 500,
+                            color: taskForm.due_date ? "#B77D0A" : theme.textDim,
+                            background: taskForm.due_date ? "#F59E0B1a" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+                            border: `1px solid ${showDatePicker ? (darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.15)") : "transparent"}`,
+                          }}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.6"/><path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                          {taskForm.due_date ? new Date(taskForm.due_date).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" }) : "Frist"}
+                          {taskForm.due_date ? (
+                            <span onClick={e => { e.stopPropagation(); setTaskForm(prev => ({ ...prev, due_date: "" })); }} style={{ cursor: "pointer", opacity: 0.6, display: "flex" }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                            </span>
+                          ) : (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ transform: showDatePicker ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          )}
+                        </motion.div>
+                        {showDatePicker && (
+                          <>
+                            <div onClick={() => setShowDatePicker(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
+                            <div style={{
+                              position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 5001,
+                              background: darkMode ? "rgba(28,28,38,0.96)" : "rgba(255,255,255,0.97)", border: `1px solid ${theme.borderFaint}`,
+                              borderRadius: 12, padding: 12, boxShadow: "0 12px 32px rgba(0,0,0,0.16)",
+                            }}>
+                              <input type="date"
+                                value={taskForm.due_date}
+                                onChange={e => { setTaskForm(prev => ({ ...prev, due_date: e.target.value })); setShowDatePicker(false); }}
+                                style={{
+                                  background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`,
+                                  borderRadius: 9, padding: "9px 12px", fontSize: 13, fontFamily: FONT,
+                                  color: theme.text, outline: "none", colorScheme: darkMode ? "dark" : "light",
+                                }}
+                                autoFocus
+                              />
+                            </div>
+                          </>
                         )}
-                      </motion.div>
-                      {showDatePicker && (
-                        <div style={{
-                          position: "absolute", top: "100%", left: 0, marginTop: 4, zIndex: 10,
-                          background: darkMode ? "rgba(30,30,40,0.98)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.border}`,
-                          borderRadius: 12, padding: 12, boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
-                        }}>
-                          <input type="date"
-                            value={taskForm.due_date}
-                            onChange={e => { setTaskForm(prev => ({ ...prev, due_date: e.target.value })); setShowDatePicker(false); }}
-                            style={{
-                              background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`,
-                              borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: FONT,
-                              color: theme.text, outline: "none", colorScheme: darkMode ? "dark" : "light",
-                            }}
-                            autoFocus
-                          />
-                        </div>
-                      )}
+                      </div>
+                      {/* Column / Einordnung */}
+                      <Dropdown
+                        value={taskForm.column_key}
+                        onChange={v => setTaskForm(prev => ({ ...prev, column_key: v }))}
+                        options={colEntries.filter(c => c.key !== "done" || taskForm.column_key === "done").map(c => ({
+                          value: c.key, label: t(c.labelKey),
+                          icon: <span style={{ width: 8, height: 8, borderRadius: "50%", background: c.color, flexShrink: 0 }} />,
+                        }))}
+                        placeholder={t("kanban.todo")} theme={theme} darkMode={darkMode} minWidth={170}
+                        triggerStyle={{ height: 36, padding: "0 11px 0 13px" }}
+                      />
+                    </div>
+                    {/* Priority */}
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      {["high", "medium", "low"].map(p => (
+                        <motion.div key={p} whileTap={{ scale: 0.95 }}
+                          onClick={() => setTaskForm(prev => ({ ...prev, priority: p }))}
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 7, height: 36, padding: "0 14px", borderRadius: 999, cursor: "pointer", fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
+                            background: taskForm.priority === p ? priColors[p] + "1a" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+                            color: taskForm.priority === p ? priColors[p] : theme.textDim,
+                            border: "none",
+                          }}
+                        >
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: taskForm.priority === p ? priColors[p] : theme.textFaint }} />
+                          {p === "high" ? "Hoch" : p === "medium" ? "Mittel" : "Niedrig"}
+                        </motion.div>
+                      ))}
                     </div>
                   </div>
                   {/* Description */}
