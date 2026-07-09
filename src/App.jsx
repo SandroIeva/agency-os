@@ -2066,85 +2066,79 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                     </div>
                     {/* Priority */}
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                      {["high", "medium", "low"].map(p => (
-                        <motion.div key={p} whileTap={isTaskOwner ? { scale: 0.95 } : {}}
-                          onClick={() => { if (isTaskOwner) setTaskForm(prev => ({ ...prev, priority: p })); }}
-                          style={{
-                            display: "inline-flex", alignItems: "center", gap: 7, height: 36, padding: "0 14px", borderRadius: 999, cursor: isTaskOwner ? "pointer" : "default", fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
-                            background: taskForm.priority === p ? priColors[p] + "1a" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
-                            color: taskForm.priority === p ? priColors[p] : theme.textDim,
-                            border: "none",
-                            opacity: !isTaskOwner && taskForm.priority !== p ? 0.4 : 1,
-                          }}
-                        >
-                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: taskForm.priority === p ? priColors[p] : theme.textFaint }} />
-                          {p === "high" ? "Hoch" : p === "medium" ? "Mittel" : "Niedrig"}
-                        </motion.div>
-                      ))}
+                      {["high", "medium", "low"].map(p => {
+                        const on = taskForm.priority === p;
+                        const activeBg = { high: "#EF444429", medium: "#F59E0B30", low: (darkMode ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.13)") }[p];
+                        const activeFg = { high: "#D42A2A", medium: "#B26A05", low: theme.text }[p];
+                        const activeDot = { high: "#EF4444", medium: "#F59E0B", low: "#5A6472" }[p];
+                        return (
+                          <motion.div key={p} whileTap={isTaskOwner ? { scale: 0.95 } : {}}
+                            onClick={() => { if (isTaskOwner) setTaskForm(prev => ({ ...prev, priority: p })); }}
+                            style={{
+                              display: "inline-flex", alignItems: "center", gap: 7, height: 36, padding: "0 14px", borderRadius: 999, cursor: isTaskOwner ? "pointer" : "default", fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500,
+                              background: on ? activeBg : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+                              color: on ? activeFg : theme.textDim,
+                              border: "none",
+                              opacity: !isTaskOwner && !on ? 0.4 : 1,
+                            }}
+                          >
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: on ? activeDot : theme.textFaint }} />
+                            {p === "high" ? "Hoch" : p === "medium" ? "Mittel" : "Niedrig"}
+                          </motion.div>
+                        );
+                      })}
                     </div>
                   </div>
 
                   {/* Description */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h10M4 18h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                        Beschreibung
-                      </span>
-                      {isTaskOwner && (
-                        <motion.div
-                          whileTap={{ scale: 0.9 }}
-                          onClick={startDictation}
-                          style={{
-                            display: "flex", alignItems: "center", gap: 4, cursor: "pointer",
-                            color: isRecording ? "#EF4444" : theme.accent, fontSize: 11, fontFamily: FONT,
-                          }}
-                        >
-                          {isRecording ? (
-                            <><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="6" y="6" width="12" height="12" rx="2" fill="#EF4444"/></svg> Stopp</>
-                          ) : (
-                            <><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M5 10a7 7 0 0014 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M12 17v4M8 21h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> Diktieren</>
-                          )}
-                        </motion.div>
-                      )}
-                    </div>
-                    <div style={{ position: "relative" }}>
-                      <textarea
-                        ref={descRef}
-                        value={taskForm.description}
-                        onChange={e => { if (isTaskOwner) setTaskForm(p => ({ ...p, description: e.target.value })); }}
-                        placeholder={isTaskOwner ? "Beschreibung hinzufügen..." : "Keine Beschreibung"}
-                        readOnly={!isTaskOwner}
-                        spellCheck={true}
+                  <div style={{ position: "relative" }}>
+                    <textarea
+                      ref={descRef}
+                      value={taskForm.description}
+                      onChange={e => { if (isTaskOwner) setTaskForm(p => ({ ...p, description: e.target.value })); }}
+                      placeholder={isTaskOwner ? "Beschreibung hinzufügen..." : "Keine Beschreibung"}
+                      readOnly={!isTaskOwner}
+                      spellCheck={true}
+                      style={{
+                        background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                        border: `1px solid ${isRecording ? "#EF444450" : "transparent"}`,
+                        borderRadius: 12, padding: "12px 52px 12px 16px", fontSize: 14, fontFamily: FONT, lineHeight: 1.6,
+                        color: theme.text, outline: "none", resize: "none", caretColor: theme.text,
+                        width: "100%", height: 120, cursor: isTaskOwner ? "text" : "default",
+                        transition: "border-color 0.2s ease",
+                      }}
+                    />
+                    {/* Dictation mic — round bubble in the textarea's bottom-right corner */}
+                    {isTaskOwner && (
+                      <motion.div whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.9 }} onClick={startDictation}
+                        title={isRecording ? "Aufnahme stoppen" : "Diktieren"}
                         style={{
-                          background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                          border: `1px solid ${isRecording ? "#EF444450" : "transparent"}`,
-                          borderRadius: 12, padding: "12px 16px", fontSize: 14, fontFamily: FONT, lineHeight: 1.6,
-                          color: theme.text, outline: "none", resize: "none", caretColor: theme.text,
-                          width: "100%", height: 120, cursor: isTaskOwner ? "text" : "default",
-                          transition: "border-color 0.2s ease",
+                          position: "absolute", bottom: 10, right: 10, width: 30, height: 30, borderRadius: "50%",
+                          display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                          background: isRecording ? "#EF4444" : "#15151c", color: "#fff",
+                          boxShadow: "0 2px 6px rgba(0,0,0,0.18)",
                         }}
-                      />
-                      {isRecording && (
-                        <div style={{
-                          position: "absolute", bottom: 10, right: 12, display: "flex", alignItems: "center", gap: 6,
-                          fontSize: 10, fontFamily: FONT, color: "#EF4444",
-                        }}>
-                          <div style={{
-                            width: 6, height: 6, borderRadius: "50%", background: "#EF4444",
-                            animation: "pulse 1.2s ease-in-out infinite",
-                          }} />
-                          Aufnahme läuft...
-                        </div>
-                      )}
-                    </div>
+                      >
+                        {isRecording ? (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>
+                        ) : (
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4M8 21h8"/></svg>
+                        )}
+                      </motion.div>
+                    )}
+                    {isRecording && (
+                      <div style={{ position: "absolute", bottom: 13, left: 14, display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, fontFamily: FONT, color: "#EF4444" }}>
+                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#EF4444", animation: "pulse 1.2s ease-in-out infinite" }} />
+                        Aufnahme läuft…
+                      </div>
+                    )}
                   </div>
 
                   {/* Checklist */}
                   <div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.6"/><path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                         Checkliste {taskChecklist.length > 0 && (<span style={{ fontWeight: 400, color: theme.textFaint }}>({taskChecklist.filter(i => i.checked).length}/{taskChecklist.length})</span>)}
                       </span>
                     </div>
@@ -2191,7 +2185,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                               autoFocus
                               style={{
                                 flex: 1, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.accent}40`,
-                                borderRadius: 6, padding: "3px 8px", fontSize: 13, fontFamily: FONT,
+                                borderRadius: 6, padding: "3px 8px", fontSize: 14, fontFamily: FONT,
                                 color: theme.text, outline: "none", caretColor: theme.accent,
                               }}
                             />
@@ -2199,7 +2193,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                             <span
                               onClick={() => { if (isTaskOwner) { setEditingChecklistId(item.id); setEditingChecklistText(item.text); } }}
                               style={{
-                                flex: 1, fontSize: 13, fontFamily: FONT, cursor: isTaskOwner ? "text" : "default",
+                                flex: 1, fontSize: 14, fontFamily: FONT, cursor: isTaskOwner ? "text" : "default",
                                 color: item.checked ? theme.textFaint : theme.text,
                                 textDecoration: item.checked ? "line-through" : "none",
                                 transition: "all 0.2s ease",
@@ -2239,7 +2233,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                           placeholder="Neuer Punkt..."
                           style={{
                             flex: 1, background: "transparent", border: "none", borderBottom: `1px solid transparent`,
-                            padding: "4px 0", fontSize: 13, fontFamily: FONT,
+                            padding: "4px 0", fontSize: 14, fontFamily: FONT,
                             color: theme.text, outline: "none", caretColor: theme.accent,
                           }}
                           onFocus={e => e.currentTarget.style.borderBottomColor = theme.accent + "40"}
