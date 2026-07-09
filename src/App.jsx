@@ -2653,7 +2653,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                               borderRadius: 14,
                               boxShadow: darkMode ? "none" : "0 1px 2px rgba(0,0,0,0.05)",
                               padding: "14px 16px", cursor: canMoveTask(task) ? "grab" : "not-allowed",
-                              height: 150, display: "flex", flexDirection: "column", overflow: "hidden",
+                              minHeight: 140, display: "flex", flexDirection: "column",
                             }}
                           >
                             {/* Title · priority (high) · delete */}
