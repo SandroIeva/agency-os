@@ -2123,7 +2123,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
               onClick={() => setFilter(p)}
               style={{
                 display: "flex", alignItems: "center", gap: 7,
-                fontSize: 12.5, fontFamily: FONT, fontWeight: 500, padding: "8px 15px", borderRadius: 999, cursor: "pointer",
+                fontSize: 12.5, fontFamily: FONT, fontWeight: 500, padding: "8px 15px 8px 11px", borderRadius: 999, cursor: "pointer",
                 background: filter === p ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
                 border: "none",
                 color: filter === p ? "#fff" : theme.textSub,
@@ -2283,7 +2283,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
           onClick={() => openNewTask("todo")}
           style={{
             display: "inline-flex", alignItems: "center", gap: 7,
-            fontSize: 12.5, fontFamily: FONT, fontWeight: 500, padding: "8px 14px", borderRadius: 999, cursor: "pointer",
+            fontSize: 12.5, fontFamily: FONT, fontWeight: 500, padding: "8px 17px 9px 12px", borderRadius: 999, cursor: "pointer",
             background: "#23232b", border: "none", color: "#fff", marginLeft: "auto",
           }}
         >
