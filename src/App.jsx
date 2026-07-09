@@ -1920,7 +1920,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
             >
               {/* Header: title · project dropdown · close */}
               {(() => { const isTaskOwner = !editingTask || editingTask.creator_id === session?.user?.id; return (<>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "14px 18px", borderBottom: `1px solid ${theme.borderFaint}` }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "16px 22px", borderBottom: `1px solid ${theme.borderFaint}` }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                   <span style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap" }}>
                     {editingTask ? "Aufgabe bearbeiten" : t("task.newTask")}
@@ -1961,7 +1961,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
               {/* Body: split layout for edit, single for new */}
               <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
                 {/* Left panel — main content */}
-                <div style={{ flex: 1, padding: 24, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ flex: 1, padding: "20px 22px 16px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
                   {/* Title — view mode for existing tasks, edit on click */}
                   {editingTask && !editingTitle ? (
                     <div
@@ -2102,7 +2102,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                       style={{
                         background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
                         border: `1px solid ${isRecording ? "#EF444450" : "transparent"}`,
-                        borderRadius: 12, padding: "12px 52px 12px 16px", fontSize: 14, fontFamily: FONT, lineHeight: 1.6,
+                        borderRadius: 16, padding: "14px 52px 14px 18px", fontSize: 14, fontFamily: FONT, lineHeight: 1.6,
                         color: theme.text, outline: "none", resize: "none", caretColor: theme.text,
                         width: "100%", height: 120, cursor: isTaskOwner ? "text" : "default",
                         transition: "border-color 0.2s ease",
@@ -2312,18 +2312,11 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                       )}
                     </div>
                     <div style={{ display: "flex", gap: 10 }}>
-                      <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={resetForm}
-                        style={{
-                          padding: "11px 22px", borderRadius: 999, cursor: "pointer",
-                          background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: "none",
-                          fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.textSub,
-                        }}
-                      >{t("common.cancel")}</motion.button>
                       <motion.button whileHover={taskForm.title.trim() ? { scale: 1.03 } : {}} whileTap={{ scale: 0.97 }}
                         onClick={editingTask ? updateTask : createTask}
                         disabled={!taskForm.title.trim()}
                         style={{
-                          padding: "11px 26px", borderRadius: 999, cursor: taskForm.title.trim() ? "pointer" : "not-allowed",
+                          padding: "11px 24px 12px", borderRadius: 999, cursor: taskForm.title.trim() ? "pointer" : "not-allowed",
                           background: taskForm.title.trim() ? "#15151c" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"),
                           border: "none",
                           fontSize: 13, fontFamily: FONT, fontWeight: 600,
