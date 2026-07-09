@@ -2653,6 +2653,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                               borderRadius: 14,
                               boxShadow: darkMode ? "none" : "0 1px 2px rgba(0,0,0,0.05)",
                               padding: "14px 16px", cursor: canMoveTask(task) ? "grab" : "not-allowed",
+                              height: 120, display: "flex", flexDirection: "column", overflow: "hidden",
                             }}
                           >
                             {/* Title · priority (high) · delete */}
@@ -2679,7 +2680,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                                 </motion.div>
                               </div>
                             </div>
-                            {task.description && <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginTop: 5 }}>{task.description}</div>}
+                            {task.description && <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginTop: 5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{task.description}</div>}
                             {/* Bottom: creator → assignee (avatars only) + project · date chip */}
                             {(() => {
                               const creator = task.creator || teamMembers[task.creator_id];
@@ -2690,7 +2691,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                                 : <div style={{ width: 22, height: 22, borderRadius: "50%", background: (m?.avatar_color || "#64748B") + "25", color: m?.avatar_color || "#64748B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{m?.initials || "?"}</div>;
                               const dateStr = task.created_at ? new Date(task.created_at).toLocaleDateString("de-DE", { day: "2-digit", month: "short" }) + " " + new Date(task.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "";
                               return (
-                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 14 }}>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: "auto", paddingTop: 10, flexShrink: 0 }}>
                                   <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
                                     {av(creator)}
                                     {delegated && (<>
