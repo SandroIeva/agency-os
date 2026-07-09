@@ -2321,12 +2321,6 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                 <div style={{ width: 7, height: 7, borderRadius: "50%", background: col.color }} />
                 <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text, fontWeight: 600 }}>{t(col.labelKey)}</span>
                 <span style={{ fontSize: 11, fontFamily: FONT, fontWeight: 600, color: theme.textSub, background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)", padding: "2px 8px", borderRadius: 999 }}>{colTasks.length}</span>
-                <motion.div
-                  whileHover={{ scale: 1.15 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => openNewTask(col.key)}
-                  style={{ marginLeft: "auto", cursor: "pointer", color: theme.textFaint, fontSize: 16, fontFamily: FONT, lineHeight: 1, padding: "0 2px" }}
-                >+</motion.div>
               </div>
               {/* Cards */}
               <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minHeight: 80, overflowY: "auto" }}>
@@ -2392,7 +2386,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                                     cursor: "pointer", width: 20, height: 20, borderRadius: 7, flexShrink: 0,
                                     background: darkMode ? "rgba(255,255,255,0.09)" : "#fff",
                                     border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.07)"}`,
-                                    boxShadow: darkMode ? "none" : "0 1px 3px rgba(0,0,0,0.14)",
+                                    boxShadow: darkMode ? "none" : "0 1px 2px rgba(0,0,0,0.07)",
                                     color: darkMode ? "#fff" : "#1a1a2e",
                                     display: "flex", alignItems: "center", justifyContent: "center",
                                   }}
