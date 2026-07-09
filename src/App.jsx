@@ -2508,54 +2508,47 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                 width: "100%", maxWidth: editingTask ? 860 : 520, maxHeight: "85vh",
                 background: darkMode ? "rgba(22, 22, 30, 0.97)" : "rgba(255, 255, 255, 0.98)",
                 backdropFilter: "blur(40px)", border: `1px solid ${theme.border}`,
-                borderRadius: 20, display: "flex", flexDirection: "column", overflow: "hidden",
+                borderRadius: 18, display: "flex", flexDirection: "column", overflow: "hidden",
               }}
             >
-              {/* Header bar with project selector */}
+              {/* Header: title · project dropdown · close */}
               {(() => { const isTaskOwner = !editingTask || editingTask.creator_id === session?.user?.id; return (<>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderBottom: `1px solid ${theme.border}` }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  {/* Project selector — compact, in header */}
-                  {isTaskOwner ? (
-                    <div style={{ position: "relative" }}>
-                      <select
-                        value={taskForm.project_name}
-                        onChange={e => setTaskForm(p => ({ ...p, project_name: e.target.value }))}
-                        style={{
-                          background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-                          border: `1px solid ${theme.borderFaint}`, borderRadius: 8,
-                          padding: "4px 26px 4px 8px", fontSize: 12, fontFamily: FONT,
-                          color: taskForm.project_name ? theme.text : theme.textFaint, outline: "none",
-                          appearance: "none", WebkitAppearance: "none", cursor: "pointer",
-                          maxWidth: 160,
-                        }}
-                      >
-                        <option value="">Kein Projekt</option>
-                        {projects.map(p => (
-                          <option key={p.id} value={p.name}>{p.name}</option>
-                        ))}
-                      </select>
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
-                        <path d="M6 9l6 6 6-6" stroke={theme.textDim} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </div>
-                  ) : taskForm.project_name ? (
-                    <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", padding: "4px 10px", borderRadius: 8 }}>
-                      {taskForm.project_name}
-                    </span>
-                  ) : null}
-                  <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.textDim }}>
-                    {editingTask ? t("task.editTask") : t("task.newTask")}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "14px 18px", borderBottom: `1px solid ${theme.borderFaint}` }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                  <span style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap" }}>
+                    {editingTask ? "Aufgabe bearbeiten" : t("task.newTask")}
                   </span>
                   {editingTask && (
-                    <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", padding: "2px 8px", borderRadius: 6 }}>
-                      {new Date(editingTask.created_at).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" })} · {new Date(editingTask.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+                    <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", padding: "3px 9px", borderRadius: 999, whiteSpace: "nowrap" }}>
+                      {new Date(editingTask.created_at).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" })}
                     </span>
                   )}
                 </div>
-                <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={resetForm}
-                  style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 16 }}
-                >✕</motion.div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                  {isTaskOwner ? (
+                    <Dropdown
+                      value={taskForm.project_name}
+                      onChange={v => setTaskForm(p => ({ ...p, project_name: v }))}
+                      options={[
+                        { value: "", label: "Kein Projekt" },
+                        ...projects.map(p => ({ value: p.name, label: p.name,
+                          icon: p.logo_url
+                            ? <img src={p.logo_url} alt="" style={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover" }} />
+                            : <span style={{ width: 18, height: 18, borderRadius: "50%", background: (p.color || "#64748B") + "30", color: p.color || "#64748B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700 }}>{(p.name || "?")[0]}</span> })),
+                      ]}
+                      placeholder="Kein Projekt" theme={theme} darkMode={darkMode} align="right" minWidth={190} maxTriggerWidth={170}
+                    />
+                  ) : taskForm.project_name ? (
+                    <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textSub, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", padding: "7px 12px", borderRadius: 999, whiteSpace: "nowrap" }}>
+                      {taskForm.project_name}
+                    </span>
+                  ) : null}
+                  <motion.div whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.9 }} onClick={resetForm}
+                    style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  </motion.div>
+                </div>
               </div>
 
               {/* Body: split layout for edit, single for new */}
@@ -2578,134 +2571,110 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                       placeholder={t("task.title")}
                       autoFocus
                       style={{
-                        background: "transparent", border: "none", borderBottom: `1px solid ${theme.accent}40`,
-                        padding: "4px 0", fontSize: 20, fontFamily: FONT, fontWeight: 600,
-                        color: theme.text, outline: "none", caretColor: theme.accent, width: "100%",
+                        background: "transparent", border: "none", borderBottom: `1px solid ${theme.borderFaint}`,
+                        padding: "4px 0 8px", fontSize: 20, fontFamily: FONT, fontWeight: 600,
+                        color: theme.text, outline: "none", caretColor: theme.text, width: "100%",
                         transition: "border-color 0.2s",
                       }}
                       onBlur={() => { if (editingTask) setEditingTitle(false); }}
                     />
                   )}
 
-                  {/* Toolbar row: labels, date, column, assignee chips */}
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                    {/* Assignee button */}
-                    <div style={{ position: "relative" }}>
-                      <motion.div whileTap={{ scale: 0.95 }}
-                        onClick={() => setAssigneeDropdownOpen(!assigneeDropdownOpen)}
-                        style={{
-                          display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8,
-                          border: `1px solid ${theme.borderFaint}`, cursor: "pointer", fontSize: 12, fontFamily: FONT, color: theme.textDim,
-                          background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
-                        }}
-                      >
-                        {(() => {
-                          const sel = teamMembers[taskForm.assignee_id];
-                          return sel ? (<>
-                            {sel.avatar_url ? <img src={sel.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 16, height: 16, borderRadius: "50%" }} /> : <div style={{ width: 16, height: 16, borderRadius: "50%", background: (sel.avatar_color || "#8B7AFF") + "30", color: sel.avatar_color || "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontFamily: FONT, fontWeight: 600 }}>{sel.initials}</div>}
-                            <span style={{ color: theme.text }}>{sel.display_name}</span>
-                          </>) : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke={theme.textDim} strokeWidth="1.5"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round"/></svg><span>Zuweisen</span></>;
-                        })()}
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      </motion.div>
-                      {assigneeDropdownOpen && (
-                        <div style={{
-                          position: "absolute", top: "100%", left: 0, marginTop: 4, zIndex: 10,
-                          background: darkMode ? "rgba(30,30,40,0.98)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.border}`,
-                          borderRadius: 12, padding: 6, minWidth: 200, boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
-                        }}>
-                          {Object.values(teamMembers).map(m => (
-                            <div key={m.user_id}
-                              onClick={() => { setTaskForm(prev => ({ ...prev, assignee_id: m.user_id })); setAssigneeDropdownOpen(false); }}
-                              style={{
-                                display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, cursor: "pointer",
-                                background: taskForm.assignee_id === m.user_id ? theme.accent + "12" : "transparent",
-                              }}
-                              onMouseEnter={e => { if (taskForm.assignee_id !== m.user_id) e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)"; }}
-                              onMouseLeave={e => { if (taskForm.assignee_id !== m.user_id) e.currentTarget.style.background = "transparent"; }}
-                            >
-                              {m.avatar_url ? <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 22, height: 22, borderRadius: "50%" }} /> : <div style={{ width: 22, height: 22, borderRadius: "50%", background: (m.avatar_color || "#8B7AFF") + "30", color: m.avatar_color || "#8B7AFF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontFamily: FONT, fontWeight: 600 }}>{m.initials}</div>}
-                              <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, flex: 1 }}>{m.display_name}</span>
-                              {taskForm.assignee_id === m.user_id && <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={theme.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Priority dropdown-like */}
-                    {["high", "medium", "low"].map(p => (
-                      <motion.div key={p} whileTap={isTaskOwner ? { scale: 0.95 } : {}}
-                        onClick={() => { if (isTaskOwner) setTaskForm(prev => ({ ...prev, priority: p })); }}
-                        style={{
-                          padding: "5px 10px", borderRadius: 8, cursor: isTaskOwner ? "pointer" : "default", fontSize: 11, fontFamily: FONT,
-                          background: taskForm.priority === p ? priColors[p] + "18" : "transparent",
-                          color: taskForm.priority === p ? priColors[p] : theme.textFaint,
-                          border: `1px solid ${taskForm.priority === p ? priColors[p] + "35" : theme.borderFaint}`,
-                          opacity: !isTaskOwner && taskForm.priority !== p ? 0.4 : 1,
-                        }}
-                      >{p === "high" ? "Hoch" : p === "medium" ? "Mittel" : "Niedrig"}</motion.div>
-                    ))}
-
-                    {/* Date chip */}
-                    <div style={{ position: "relative" }}>
-                      <motion.div whileTap={isTaskOwner ? { scale: 0.95 } : {}}
-                        onClick={() => { if (isTaskOwner) setShowDatePicker(!showDatePicker); }}
-                        style={{
-                          display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: 8,
-                          border: `1px solid ${taskForm.due_date ? "#F59E0B35" : theme.borderFaint}`, cursor: isTaskOwner ? "pointer" : "default",
-                          fontSize: 12, fontFamily: FONT,
-                          color: taskForm.due_date ? "#F59E0B" : theme.textDim,
-                          background: taskForm.due_date ? "#F59E0B12" : "transparent",
-                        }}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                        {taskForm.due_date ? new Date(taskForm.due_date).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" }) : "Frist setzen"}
-                        {taskForm.due_date && (
-                          <span onClick={e => { e.stopPropagation(); setTaskForm(prev => ({ ...prev, due_date: "" })); }} style={{ cursor: "pointer", marginLeft: 2, opacity: 0.6 }}>✕</span>
-                        )}
-                      </motion.div>
-                      {showDatePicker && (
-                        <div style={{
-                          position: "absolute", top: "100%", left: 0, marginTop: 4, zIndex: 10,
-                          background: darkMode ? "rgba(30,30,40,0.98)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.border}`,
-                          borderRadius: 12, padding: 12, boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
-                        }}>
-                          <input type="date"
-                            value={taskForm.due_date}
-                            onChange={e => { setTaskForm(prev => ({ ...prev, due_date: e.target.value })); setShowDatePicker(false); }}
-                            style={{
-                              background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`,
-                              borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: FONT,
-                              color: theme.text, outline: "none", caretColor: theme.accent,
-                              colorScheme: darkMode ? "dark" : "light",
-                            }}
-                            autoFocus
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                  </div>
-
-                  {/* Column selector — separate row */}
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {colEntries.map(c => {
-                      const active = taskForm.column_key === c.key;
-                      return (
-                        <motion.div key={c.key} whileTap={isTaskOwner ? { scale: 0.95 } : {}}
-                          onClick={() => { if (isTaskOwner) setTaskForm(prev => ({ ...prev, column_key: c.key })); }}
+                  {/* Toolbar — row 1: assignee · deadline · column (same height); row 2: priority */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      {/* Assignee */}
+                      <Dropdown
+                        value={taskForm.assignee_id || ""}
+                        onChange={v => setTaskForm(prev => ({ ...prev, assignee_id: v }))}
+                        disabled={!isTaskOwner}
+                        options={Object.values(teamMembers).map(m => ({
+                          value: m.user_id, label: m.display_name,
+                          icon: m.avatar_url
+                            ? <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 18, height: 18, borderRadius: "50%" }} />
+                            : <span style={{ width: 18, height: 18, borderRadius: "50%", background: (m.avatar_color || "#64748B") + "30", color: m.avatar_color || "#64748B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 600 }}>{m.initials}</span>,
+                        }))}
+                        placeholder="Zuweisen"
+                        leadingIcon={<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke={theme.textDim} strokeWidth="1.6"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke={theme.textDim} strokeWidth="1.6" strokeLinecap="round"/></svg>}
+                        theme={theme} darkMode={darkMode} minWidth={200} maxTriggerWidth={170}
+                        triggerStyle={{ height: 36, padding: "0 11px 0 13px" }}
+                      />
+                      {/* Deadline */}
+                      <div style={{ position: "relative" }}>
+                        <motion.div whileTap={isTaskOwner ? { scale: 0.97 } : {}}
+                          onClick={() => { if (isTaskOwner) setShowDatePicker(!showDatePicker); }}
                           style={{
-                            padding: "5px 10px", borderRadius: 8, cursor: isTaskOwner ? "pointer" : "default", fontSize: 11, fontFamily: FONT,
-                            background: active ? c.color + "1F" : "transparent",
-                            color: active ? c.color : theme.textFaint,
-                            border: `1px solid ${active ? c.color + "55" : theme.borderFaint}`,
-                            opacity: !isTaskOwner && !active ? 0.4 : 1,
-                            transition: "background 0.15s, color 0.15s, border-color 0.15s",
+                            display: "inline-flex", alignItems: "center", gap: 8, height: 36, padding: "0 11px 0 13px", borderRadius: 999, cursor: isTaskOwner ? "pointer" : "default",
+                            fontSize: 13, fontFamily: FONT, fontWeight: 500,
+                            color: taskForm.due_date ? "#B77D0A" : theme.textDim,
+                            background: taskForm.due_date ? "#F59E0B1a" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+                            border: `1px solid ${showDatePicker ? (darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.15)") : "transparent"}`,
+                            opacity: isTaskOwner ? 1 : 0.7,
                           }}
-                        >{t(c.labelKey)}</motion.div>
-                      );
-                    })}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.6"/><path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                          {taskForm.due_date ? new Date(taskForm.due_date).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" }) : "Frist"}
+                          {taskForm.due_date ? (
+                            <span onClick={e => { e.stopPropagation(); setTaskForm(prev => ({ ...prev, due_date: "" })); }} style={{ cursor: "pointer", opacity: 0.6, display: "flex" }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                            </span>
+                          ) : (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ transform: showDatePicker ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          )}
+                        </motion.div>
+                        {showDatePicker && (
+                          <>
+                            <div onClick={() => setShowDatePicker(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
+                            <div style={{
+                              position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 5001,
+                              background: darkMode ? "rgba(28,28,38,0.96)" : "rgba(255,255,255,0.97)", border: `1px solid ${theme.borderFaint}`,
+                              borderRadius: 12, padding: 12, boxShadow: "0 12px 32px rgba(0,0,0,0.16)",
+                            }}>
+                              <input type="date"
+                                value={taskForm.due_date}
+                                onChange={e => { setTaskForm(prev => ({ ...prev, due_date: e.target.value })); setShowDatePicker(false); }}
+                                style={{
+                                  background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`,
+                                  borderRadius: 9, padding: "9px 12px", fontSize: 13, fontFamily: FONT,
+                                  color: theme.text, outline: "none", colorScheme: darkMode ? "dark" : "light",
+                                }}
+                                autoFocus
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      {/* Column / Einordnung */}
+                      <Dropdown
+                        value={taskForm.column_key}
+                        onChange={v => setTaskForm(prev => ({ ...prev, column_key: v }))}
+                        disabled={!isTaskOwner}
+                        options={colEntries.filter(c => c.key !== "done" || taskForm.column_key === "done").map(c => ({
+                          value: c.key, label: t(c.labelKey),
+                          icon: <span style={{ width: 8, height: 8, borderRadius: "50%", background: c.color, flexShrink: 0 }} />,
+                        }))}
+                        placeholder={t("kanban.todo")} theme={theme} darkMode={darkMode} minWidth={170}
+                        triggerStyle={{ height: 36, padding: "0 11px 0 13px" }}
+                      />
+                    </div>
+                    {/* Priority */}
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      {["high", "medium", "low"].map(p => (
+                        <motion.div key={p} whileTap={isTaskOwner ? { scale: 0.95 } : {}}
+                          onClick={() => { if (isTaskOwner) setTaskForm(prev => ({ ...prev, priority: p })); }}
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 7, height: 36, padding: "0 14px", borderRadius: 999, cursor: isTaskOwner ? "pointer" : "default", fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
+                            background: taskForm.priority === p ? priColors[p] + "1a" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+                            color: taskForm.priority === p ? priColors[p] : theme.textDim,
+                            border: "none",
+                            opacity: !isTaskOwner && taskForm.priority !== p ? 0.4 : 1,
+                          }}
+                        >
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: taskForm.priority === p ? priColors[p] : theme.textFaint }} />
+                          {p === "high" ? "Hoch" : p === "medium" ? "Mittel" : "Niedrig"}
+                        </motion.div>
+                      ))}
+                    </div>
                   </div>
 
                   {/* Description */}
@@ -2741,10 +2710,10 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                         readOnly={!isTaskOwner}
                         spellCheck={true}
                         style={{
-                          background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
-                          border: `1px solid ${isRecording ? "#EF444450" : theme.borderFaint}`,
-                          borderRadius: 12, padding: "12px 16px", fontSize: 13, fontFamily: FONT, lineHeight: 1.6,
-                          color: theme.text, outline: "none", resize: "none", caretColor: theme.accent,
+                          background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                          border: `1px solid ${isRecording ? "#EF444450" : "transparent"}`,
+                          borderRadius: 12, padding: "12px 16px", fontSize: 14, fontFamily: FONT, lineHeight: 1.6,
+                          color: theme.text, outline: "none", resize: "none", caretColor: theme.text,
                           width: "100%", height: 120, cursor: isTaskOwner ? "text" : "default",
                           transition: "border-color 0.2s ease",
                         }}
@@ -2942,23 +2911,25 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                       )}
                     </div>
                     <div style={{ display: "flex", gap: 10 }}>
-                      <motion.button whileTap={{ scale: 0.97 }} onClick={resetForm}
+                      <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={resetForm}
                         style={{
-                          padding: "10px 20px", borderRadius: 12, cursor: "pointer",
-                          background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`,
-                          fontSize: 13, fontFamily: FONT, color: theme.textSub,
+                          padding: "11px 22px", borderRadius: 999, cursor: "pointer",
+                          background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: "none",
+                          fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.textSub,
                         }}
                       >{t("common.cancel")}</motion.button>
-                      <motion.button whileTap={{ scale: 0.97 }}
+                      <motion.button whileHover={taskForm.title.trim() ? { scale: 1.03 } : {}} whileTap={{ scale: 0.97 }}
                         onClick={editingTask ? updateTask : createTask}
+                        disabled={!taskForm.title.trim()}
                         style={{
-                          padding: "10px 24px", borderRadius: 12, cursor: "pointer",
-                          background: taskForm.title.trim() ? theme.accent + "25" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"),
-                          border: `1px solid ${taskForm.title.trim() ? theme.accent + "40" : theme.borderFaint}`,
-                          fontSize: 13, fontFamily: FONT, fontWeight: 500,
-                          color: taskForm.title.trim() ? theme.accent : theme.textFaint,
+                          padding: "11px 26px", borderRadius: 999, cursor: taskForm.title.trim() ? "pointer" : "not-allowed",
+                          background: taskForm.title.trim() ? "#15151c" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"),
+                          border: "none",
+                          fontSize: 13, fontFamily: FONT, fontWeight: 600,
+                          color: taskForm.title.trim() ? "#fff" : theme.textFaint,
+                          transition: "background 0.18s ease",
                         }}
-                      >{editingTask ? t("task.save") : t("task.create")}</motion.button>
+                      >{editingTask ? "Speichern" : t("task.create")}</motion.button>
                     </div>
                   </div>
                 </div>
