@@ -2151,8 +2151,8 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
             onClick={() => setShowMemberDropdown(prev => !prev)}
             style={{
-              display: "flex", alignItems: "center", gap: 6, cursor: "pointer",
-              padding: "8px 13px 8px 11px", borderRadius: 999,
+              display: "flex", alignItems: "center", gap: 9, cursor: "pointer",
+              padding: "8px 11px 8px 15px", borderRadius: 999,
               background: memberFilter !== "all" ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
               border: "none",
               color: memberFilter !== "all" ? "#fff" : theme.textSub,
@@ -2185,7 +2185,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                 Alle
               </>
             )}
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 1 }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ marginLeft: -2 }}>
               <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </motion.div>
@@ -2202,7 +2202,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                   transition={{ duration: 0.15 }}
                   style={{
                     position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 99,
-                    minWidth: 200, maxHeight: 300, overflowY: "auto",
+                    minWidth: 210, maxHeight: 300, overflowY: "auto",
                     background: darkMode ? "rgba(22,22,30,0.98)" : "rgba(255,255,255,0.99)",
                     backdropFilter: "blur(40px)",
                     border: `1px solid ${theme.border}`,
@@ -2210,30 +2210,22 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                     boxShadow: "0 12px 40px rgba(0,0,0,0.2)",
                   }}
                 >
-                  {/* All members option */}
+                  {/* All members option — clean text row, modern check (no icon bubble) */}
                   <motion.div whileTap={{ scale: 0.97 }}
                     onClick={() => { setMemberFilter("all"); setShowMemberDropdown(false); }}
                     style={{
-                      display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
+                      display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
                       borderRadius: 10, cursor: "pointer",
                       background: memberFilter === "all" ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") : "transparent",
                     }}
                     className={memberFilter === "all" ? "" : "hover-row"}
                   >
-                    <div style={{
-                      width: 28, height: 28, borderRadius: "50%",
-                      background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                        <circle cx="9" cy="7" r="4" stroke={theme.textDim} strokeWidth="1.8"/>
-                      </svg>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: memberFilter === "all" ? 600 : 400, color: theme.text }}>Alle Mitglieder</div>
-                    </div>
-                    {memberFilter === "all" && <div style={{ marginLeft: "auto", color: theme.accent, fontSize: 13 }}>✓</div>}
+                    <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontFamily: FONT, fontWeight: memberFilter === "all" ? 600 : 500, color: theme.text }}>Alle Mitglieder</div>
+                    {memberFilter === "all" && (
+                      <span style={{ width: 18, height: 18, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      </span>
+                    )}
                   </motion.div>
 
                   {/* Divider */}
@@ -2269,7 +2261,11 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                           <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: isActive ? 600 : 400, color: theme.text }}>{name}</div>
                           <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim }}>{taskCount} {taskCount === 1 ? "Task" : "Tasks"}</div>
                         </div>
-                        {isActive && <div style={{ color: theme.accent, fontSize: 13 }}>✓</div>}
+                        {isActive && (
+                          <span style={{ width: 18, height: 18, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                          </span>
+                        )}
                       </motion.div>
                     );
                   })}
