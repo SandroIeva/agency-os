@@ -5555,7 +5555,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                 // Base background per state, plus a hover variant that is a touch less
                 // transparent (instead of scaling the cell up on hover).
                 const baseBg = isSelected ? (darkMode ? "rgba(255,255,255,0.10)" : "rgba(21,21,28,0.08)") : todayHighlight ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(21,21,28,0.05)") : weekend ? (darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.03)") : (darkMode ? "rgba(25,23,38,0.92)" : "rgba(255,255,255,0.85)");
-                const hoverBg = isSelected ? (darkMode ? "rgba(255,255,255,0.15)" : "rgba(21,21,28,0.12)") : todayHighlight ? (darkMode ? "rgba(255,255,255,0.09)" : "rgba(21,21,28,0.09)") : weekend ? (darkMode ? "rgba(255,255,255,0.055)" : "rgba(0,0,0,0.06)") : (darkMode ? "rgba(40,38,56,1)" : "rgba(255,255,255,1)");
+                const hoverBg = isSelected ? (darkMode ? "rgba(255,255,255,0.15)" : "rgba(21,21,28,0.12)") : todayHighlight ? (darkMode ? "rgba(255,255,255,0.09)" : "rgba(21,21,28,0.09)") : weekend ? (darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)") : (darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.055)");
                 return (
                   <motion.div
                     key={i}
