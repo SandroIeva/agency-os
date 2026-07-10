@@ -19480,7 +19480,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                 </div>
               )}
               {stepIdx === 3 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 26, paddingTop: 10 }}>
                   {/* 'More details' field — dictation control above the field, right-aligned (same pattern as elsewhere) */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
@@ -19512,7 +19512,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                     </div>
                   ) : (
                     <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 9, padding: "14px 0", borderRadius: 12, cursor: refUploading ? "default" : "pointer",
-                      background: "#15151c", color: "#fff", fontSize: 14, fontFamily: FONT, fontWeight: 600, opacity: refUploading ? 0.7 : 1 }}>
+                      background: "transparent", color: theme.text, border: `1px solid ${theme.border}`, fontSize: 14, fontFamily: FONT, fontWeight: 600, opacity: refUploading ? 0.7 : 1 }}>
                       <input type="file" accept="image/*" disabled={refUploading} style={{ display: "none" }} onChange={handleRefUpload} />
                       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                       {refUploading ? (de ? "Wird hochgeladen…" : "Uploading…") : (de ? "Referenzbild hochladen" : "Upload reference image")}
