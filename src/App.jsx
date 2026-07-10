@@ -4526,7 +4526,7 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
 
         {/* 4. Description */}
         <div style={{ position: "relative", marginBottom: 14 }}>
-          <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Beschreibung (optional)" rows={3}
+          <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Beschreibung (optional)" rows={7}
             style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${isRecording ? "#EF444450" : theme.borderFaint}`, borderRadius: 12, padding: "10px 44px 10px 14px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.text, resize: "vertical", lineHeight: 1.55, display: "block" }}
           />
           <motion.div onClick={startDictation} whileTap={{ scale: 0.92 }}
@@ -4564,68 +4564,6 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
             <input type="date" value={endDate} onChange={e => { setEndDate(e.target.value); setAutoEnd(false); }} min={startDate} disabled={autoEnd && creating}
               style={{ width: "100%", background: autoEnd && creating ? (darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.01)") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)"), border: `1px solid ${theme.borderFaint}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: FONT, color: autoEnd && creating ? theme.textDim : theme.text, outline: "none", colorScheme: darkMode ? "dark" : "light", opacity: autoEnd && creating ? 0.7 : 1 }}
             />
-          </div>
-        </div>
-
-        {/* 9. Assignees / Team */}
-        <div style={{ marginBottom: 0 }}>
-          <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 8, display: "block" }}>Team</label>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-            {assigneeIds.map(uid => {
-              const m = memberById(uid);
-              if (!m) return null;
-              const av = getMemberAvatar(m);
-              return (
-                <div key={uid} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 4px 4px 4px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", border: `1px solid ${theme.borderFaint}` }}>
-                  {av ? (
-                    <img src={av} alt="" referrerPolicy="no-referrer" style={{ width: 20, height: 20, borderRadius: "50%" }} />
-                  ) : (
-                    <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#15151c", color: "#fff", fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{getMemberName(m)[0]}</div>
-                  )}
-                  <span style={{ fontSize: 11, fontFamily: FONT, color: theme.text, marginRight: 4 }}>{getMemberName(m)}</span>
-                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => setAssigneeIds(prev => prev.filter(x => x !== uid))} style={{ cursor: "pointer", color: theme.textDim, fontSize: 11, padding: "0 4px" }}>✕</motion.div>
-                </div>
-              );
-            })}
-            <div style={{ position: "relative" }}>
-              <motion.div onClick={() => setAssigneeMenuOpen(v => !v)} whileTap={{ scale: 0.96 }}
-                style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 12px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px dashed ${theme.borderFaint}`, cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Person hinzufügen
-              </motion.div>
-              <AnimatePresence>
-                {assigneeMenuOpen && (
-                  <>
-                    <div onClick={() => setAssigneeMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 9 }} />
-                    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.15 }}
-                      style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, zIndex: 10, minWidth: 240, maxHeight: 280, overflow: "auto", background: theme.cardBg, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, boxShadow: "0 10px 30px rgba(0,0,0,0.20)", padding: 4 }}
-                    >
-                      {orgMembers.length === 0 && (
-                        <div style={{ padding: 12, fontSize: 11, fontFamily: FONT, color: theme.textFaint, textAlign: "center" }}>Keine Team-Mitglieder</div>
-                      )}
-                      {orgMembers.filter(m => !assigneeIds.includes(m.user_id || m.id)).map(m => {
-                        const uid = m.user_id || m.id;
-                        const av = getMemberAvatar(m);
-                        return (
-                          <motion.div key={uid} onClick={() => { setAssigneeIds(prev => [...prev, uid]); setAssigneeMenuOpen(false); }}
-                            whileTap={{ scale: 0.99 }}
-                            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", cursor: "pointer", borderRadius: 8, fontSize: 12, fontFamily: FONT, color: theme.text }}
-                          >
-                            {av ? (
-                              <img src={av} alt="" referrerPolicy="no-referrer" style={{ width: 24, height: 24, borderRadius: "50%" }} />
-                            ) : (
-                              <div style={{ width: 24, height: 24, borderRadius: "50%", background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", color: theme.text, fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{getMemberName(m)[0]}</div>
-                            )}
-                            <span>{getMemberName(m)}</span>
-                          </motion.div>
-                        );
-                      })}
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
-            </div>
           </div>
         </div>
 
@@ -4731,6 +4669,68 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
                           </div>
                         </motion.div>
                       ))}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        </div>
+
+        {/* 9. Assignees / Team */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 8, display: "block" }}>Team</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+            {assigneeIds.map(uid => {
+              const m = memberById(uid);
+              if (!m) return null;
+              const av = getMemberAvatar(m);
+              return (
+                <div key={uid} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 5px 5px 5px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", border: `1px solid ${theme.borderFaint}` }}>
+                  {av ? (
+                    <img src={av} alt="" referrerPolicy="no-referrer" style={{ width: 22, height: 22, borderRadius: "50%" }} />
+                  ) : (
+                    <div style={{ width: 22, height: 22, borderRadius: "50%", background: "#15151c", color: "#fff", fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{getMemberName(m)[0]}</div>
+                  )}
+                  <span style={{ fontSize: 12, fontFamily: FONT, color: theme.text, marginRight: 4 }}>{getMemberName(m)}</span>
+                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => setAssigneeIds(prev => prev.filter(x => x !== uid))} style={{ cursor: "pointer", color: theme.textDim, fontSize: 11, padding: "0 4px" }}>✕</motion.div>
+                </div>
+              );
+            })}
+            <div style={{ position: "relative" }}>
+              <motion.div onClick={() => setAssigneeMenuOpen(v => !v)} whileTap={{ scale: 0.96 }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 15px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px dashed ${theme.borderFaint}`, cursor: "pointer", fontSize: 12, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Person hinzufügen
+              </motion.div>
+              <AnimatePresence>
+                {assigneeMenuOpen && (
+                  <>
+                    <div onClick={() => setAssigneeMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 9 }} />
+                    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.15 }}
+                      style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, zIndex: 10, minWidth: 240, maxHeight: 280, overflow: "auto", background: theme.cardBg, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, boxShadow: "0 10px 30px rgba(0,0,0,0.20)", padding: 4 }}
+                    >
+                      {orgMembers.length === 0 && (
+                        <div style={{ padding: 12, fontSize: 11, fontFamily: FONT, color: theme.textFaint, textAlign: "center" }}>Keine Team-Mitglieder</div>
+                      )}
+                      {orgMembers.filter(m => !assigneeIds.includes(m.user_id || m.id)).map(m => {
+                        const uid = m.user_id || m.id;
+                        const av = getMemberAvatar(m);
+                        return (
+                          <motion.div key={uid} onClick={() => { setAssigneeIds(prev => [...prev, uid]); setAssigneeMenuOpen(false); }}
+                            whileTap={{ scale: 0.99 }}
+                            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", cursor: "pointer", borderRadius: 8, fontSize: 12, fontFamily: FONT, color: theme.text }}
+                          >
+                            {av ? (
+                              <img src={av} alt="" referrerPolicy="no-referrer" style={{ width: 24, height: 24, borderRadius: "50%" }} />
+                            ) : (
+                              <div style={{ width: 24, height: 24, borderRadius: "50%", background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", color: theme.text, fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{getMemberName(m)[0]}</div>
+                            )}
+                            <span>{getMemberName(m)}</span>
+                          </motion.div>
+                        );
+                      })}
                     </motion.div>
                   </>
                 )}
