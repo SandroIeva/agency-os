@@ -12985,19 +12985,22 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     await supabase.from("user_folders").update({ name }).eq("id", fo.id);
     setFolders(prev => prev.map(x => x.id === fo.id ? { ...x, name } : x).sort((a, b) => (a.name || "").localeCompare(b.name || "")));
   };
-  const deleteFolder = async (fo) => {
-    const de = appLanguage === "de";
-    const n = folderCounts[fo.id] || 0;
-    const ok = window.confirm(de
-      ? `Ordner „${fo.name}" löschen?${n ? ` Die ${n} enthaltenen Assets bleiben erhalten und landen unter „Kein Ordner".` : ""}`
-      : `Delete folder “${fo.name}”?${n ? ` Its ${n} asset(s) are kept and moved to “No folder”.` : ""}`);
-    if (!ok) return;
+  // Delete a folder — opens a custom confirm modal (replaces window.confirm).
+  const [folderToDelete, setFolderToDelete] = useState(null);
+  const [deletingFolder, setDeletingFolder] = useState(false);
+  const deleteFolder = (fo) => setFolderToDelete(fo);
+  const performDeleteFolder = async () => {
+    const fo = folderToDelete;
+    if (!fo || deletingFolder) return;
+    setDeletingFolder(true);
     // Detach files first (keep the assets), then remove the folder.
     await supabase.from("user_files").update({ folder_id: null }).eq("folder_id", fo.id);
     await supabase.from("user_folders").delete().eq("id", fo.id);
     setFiles(prev => (prev || []).map(f => f.folder_id === fo.id ? { ...f, folder_id: null } : f));
     setFolders(prev => prev.filter(x => x.id !== fo.id));
     if (currentFolder === fo.id) setCurrentFolder(null);
+    setDeletingFolder(false);
+    setFolderToDelete(null);
   };
   const fmtMeta = (f) => {
     const ext = ((f.name || "").split(".").pop() || (f.mime_type || "").split("/")[1] || "").toUpperCase();
@@ -13296,6 +13299,35 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                 <motion.button onClick={submitFolder} whileTap={{ scale: 0.97 }} disabled={!folderName.trim() || creatingFolder}
                   style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: (!folderName.trim() || creatingFolder) ? "not-allowed" : "pointer", minWidth: 128, boxSizing: "border-box", textAlign: "center", background: (!folderName.trim() || creatingFolder) ? (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)") : "#15151c", border: "none", color: (!folderName.trim() || creatingFolder) ? theme.textFaint : "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, transition: "background 0.18s ease" }}
                 >{creatingFolder ? (appLanguage === "de" ? "Erstellt…" : "Creating…") : (appLanguage === "de" ? "Erstellen" : "Create")}</motion.button>
+              </div>
+            </motion.div>
+          </motion.div>, document.body)}
+      </AnimatePresence>
+
+      {/* Delete-folder confirm modal — custom overlay (replaces window.confirm) */}
+      <AnimatePresence>
+        {folderToDelete && createPortal(
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+            onClick={() => !deletingFolder && setFolderToDelete(null)}
+            style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 8 }}
+              transition={{ duration: 0.2, ease: [0.22, 0.68, 0.35, 1.0] }} onClick={e => e.stopPropagation()}
+              style={{ width: "100%", maxWidth: 420, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26, boxShadow: "0 25px 80px rgba(0,0,0,0.4)" }}>
+              <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8, letterSpacing: -0.2 }}>{appLanguage === "de" ? "Ordner löschen?" : "Delete folder?"}</div>
+              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 22, lineHeight: 1.55 }}>
+                {(() => {
+                  const n = folderCounts[folderToDelete.id] || 0;
+                  if (appLanguage === "de") return <>„{folderToDelete.name}" wird gelöscht.{n ? ` Die ${n} enthaltenen Assets bleiben erhalten und landen unter „Kein Ordner".` : ""}</>;
+                  return <>“{folderToDelete.name}” will be deleted.{n ? ` Its ${n} asset(s) are kept and moved to “No folder”.` : ""}</>;
+                })()}
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                <motion.button onClick={() => !deletingFolder && setFolderToDelete(null)} whileTap={{ scale: 0.97 }}
+                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: deletingFolder ? "not-allowed" : "pointer", background: "transparent", border: `1px solid ${theme.border}`, color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: deletingFolder ? 0.5 : 1 }}
+                >{appLanguage === "de" ? "Abbrechen" : "Cancel"}</motion.button>
+                <motion.button onClick={performDeleteFolder} whileTap={{ scale: 0.97 }} disabled={deletingFolder}
+                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: deletingFolder ? "not-allowed" : "pointer", minWidth: 128, boxSizing: "border-box", textAlign: "center", background: "#EF4444", border: "none", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: deletingFolder ? 0.6 : 1 }}
+                >{deletingFolder ? (appLanguage === "de" ? "Löscht…" : "Deleting…") : (appLanguage === "de" ? "Löschen" : "Delete")}</motion.button>
               </div>
             </motion.div>
           </motion.div>, document.body)}
