@@ -4423,13 +4423,13 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       transition={{ duration: 0.18 }}
       onClick={onClose}
-      style={{ position: "fixed", inset: 0, zIndex: 99998, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 24px", overflowY: "auto" }}
+      style={{ position: "fixed", inset: 0, zIndex: 99998, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, overflowY: "auto" }}
     >
       <motion.div
         initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }}
         transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1.0] }}
         onClick={e => e.stopPropagation()}
-        style={{ width: "100%", maxWidth: 900, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 0, overflow: "hidden", boxShadow: "0 25px 80px rgba(0,0,0,0.4)", marginBottom: 24 }}
+        style={{ width: "100%", maxWidth: 900, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 0, boxShadow: "0 25px 80px rgba(0,0,0,0.4)", margin: "auto" }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 16px 22px", borderBottom: `1px solid ${theme.borderFaint}`, gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
@@ -4469,7 +4469,7 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
               backgroundSize: "12px 12px",
             }}
           >
-            <option value="">— Kein Projekt —</option>
+            <option value="">Kein Projekt</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
@@ -4510,7 +4510,7 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
                   backgroundSize: "12px 12px",
                 }}
               >
-                <option value="">— Keine Gruppe —</option>
+                <option value="">Keine Gruppe</option>
                 {availableGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                 <option value="__new__">+ Neue Gruppe…</option>
               </select>
@@ -4555,9 +4555,8 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
               <span>Ende</span>
               {creating && (
                 <motion.span onClick={() => setAutoEnd(v => !v)} whileTap={{ scale: 0.96 }}
-                  style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, color: autoEnd ? theme.text : theme.textFaint, textTransform: "none", letterSpacing: 0, fontWeight: 500 }}
+                  style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: autoEnd ? theme.textSub : theme.textFaint, textTransform: "none", letterSpacing: 0, fontWeight: 500 }}
                 >
-                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: autoEnd ? "#15151c" : theme.borderFaint }} />
                   {autoEnd ? `Auto (${sprintDays} Tage)` : "Manuell"}
                 </motion.span>
               )}
@@ -4599,8 +4598,8 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
                 {assigneeMenuOpen && (
                   <>
                     <div onClick={() => setAssigneeMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 9 }} />
-                    <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }}
-                      style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 10, minWidth: 240, maxHeight: 280, overflow: "auto", background: theme.cardBg, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, boxShadow: "0 10px 30px rgba(0,0,0,0.20)", padding: 4 }}
+                    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.15 }}
+                      style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, zIndex: 10, minWidth: 240, maxHeight: 280, overflow: "auto", background: theme.cardBg, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, boxShadow: "0 10px 30px rgba(0,0,0,0.20)", padding: 4 }}
                     >
                       {orgMembers.length === 0 && (
                         <div style={{ padding: 12, fontSize: 11, fontFamily: FONT, color: theme.textFaint, textAlign: "center" }}>Keine Team-Mitglieder</div>
