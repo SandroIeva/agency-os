@@ -2138,7 +2138,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
 
                   {/* Checklist */}
                   <div>
-                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, marginBottom: 0, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.6"/><path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                         Checkliste {taskChecklist.length > 0 && (<span style={{ fontWeight: 400, color: theme.textFaint }}>({taskChecklist.filter(i => i.checked).length}/{taskChecklist.length})</span>)}
