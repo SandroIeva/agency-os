@@ -3154,6 +3154,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
   const [createForProject, setCreateForProject] = useState(null); // project_id passed to modal when '+' clicked next to a project row
   const [chainFrom, setChainFrom] = useState(null); // { projectId, predecessorId, startDate, endDate } when chaining a new sprint
   const [anchorDate, setAnchorDate] = useState(() => tlStartOfWeek(new Date()));
+  const [centerDate, setCenterDate] = useState(() => new Date()); // date at the viewport centre (drives the month label as you scroll)
   const [visibleProjectIds, setVisibleProjectIds] = useState(null); // null = all
   const [showNoProject, setShowNoProject] = useState(true);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -3673,10 +3674,22 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
   };
 
   // ── Header navigation ─────────────────────────────────
-  const todayAnchor = () => setAnchorDate(tlStartOfWeek(new Date()));
+  // Navigation scrolls the canvas directly (decoupled from anchorDate, which only
+  // defines the fixed 2-year window origin). "Heute" recenters on today; the arrows
+  // pan left/right by ~60 % of the viewport. The month label follows the scroll
+  // position via centerDate (updated in handleTlScroll below).
+  const todayAnchor = () => {
+    const el = scrollRef.current; if (!el) return;
+    el.scrollTo({ left: Math.max(0, todayLeft - el.clientWidth / 3), behavior: "smooth" });
+  };
   const navStep = (dir) => {
-    const step = { day: 7, week: 14, month: 60, quarter: 180 }[zoom];
-    setAnchorDate(prev => tlAddDays(prev, dir * step));
+    const el = scrollRef.current; if (!el) return;
+    el.scrollBy({ left: dir * el.clientWidth * 0.6, behavior: "smooth" });
+  };
+  const handleTlScroll = () => {
+    const el = scrollRef.current; if (!el) return;
+    const centerPx = el.scrollLeft + el.clientWidth / 2;
+    setCenterDate(tlAddDays(viewStart, Math.round(centerPx / pxPerDay)));
   };
 
   const visibleProjects = projects.filter(p => visibleProjectIds === null || visibleProjectIds.includes(p.id));
@@ -3832,7 +3845,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>Timeline</div>
           <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginLeft: 4 }}>
-            {tlMonthLabel(anchorDate)}
+            {tlMonthLabel(centerDate)}
           </div>
         </div>
 
@@ -3894,7 +3907,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                     <div onClick={() => setShowNoProject(v => !v)}
                       style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", cursor: "pointer", borderRadius: 8, fontSize: 12, fontFamily: FONT, color: theme.textSub, borderTop: `1px solid ${theme.borderFaint}`, marginTop: 4, paddingTop: 10 }}
                     >
-                      <span style={{ width: 14, height: 14, borderRadius: 4, border: `1.5px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", justifyContent: "center", background: showNoProject ? theme.accent : "transparent" }}>
+                      <span style={{ width: 14, height: 14, borderRadius: 4, border: `1.5px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", justifyContent: "center", background: showNoProject ? "#15151c" : "transparent" }}>
                         {showNoProject && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                       </span>
                       <span style={{ fontStyle: "italic" }}>Ohne Projekt</span>
@@ -3944,7 +3957,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
             <motion.div onClick={() => setSettingsOpen(v => !v)} whileTap={{ scale: 0.94 }}
               style={{ width: 28, height: 28, borderRadius: "50%", background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textSub }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
             </motion.div>
             <AnimatePresence>
               {settingsOpen && (
@@ -3965,7 +3978,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                         const active = sprintDays === opt.v;
                         return (
                           <motion.div key={opt.v} onClick={() => setSprintDays(opt.v)} whileTap={{ scale: 0.96 }}
-                            style={{ flex: 1, padding: "7px 6px", borderRadius: 7, cursor: "pointer", fontSize: 11, fontFamily: FONT, fontWeight: active ? 600 : 500, color: active ? "#fff" : theme.textDim, background: active ? theme.accent : "transparent", textAlign: "center", transition: "background 0.15s" }}
+                            style={{ flex: 1, padding: "7px 6px", borderRadius: 7, cursor: "pointer", fontSize: 11, fontFamily: FONT, fontWeight: active ? 600 : 500, color: active ? "#fff" : theme.textDim, background: active ? "#15151c" : "transparent", textAlign: "center", transition: "background 0.15s" }}
                           >{opt.label}</motion.div>
                         );
                       })}
@@ -3976,7 +3989,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                     <motion.div onClick={() => setShowHolidays(v => !v)} whileTap={{ scale: 0.99 }}
                       style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "4px 0" }}
                     >
-                      <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${showHolidays ? theme.accent : theme.borderFaint}`, background: showHolidays ? theme.accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.15s" }}>
+                      <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${showHolidays ? "#15151c" : theme.borderFaint}`, background: showHolidays ? "#15151c" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.15s" }}>
                         {showHolidays && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                       </div>
                       <div style={{ fontSize: 11, fontFamily: FONT, color: theme.text, flex: 1 }}>Feiertage anzeigen</div>
@@ -4001,7 +4014,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
       </div>
 
       {/* Scrollable timeline body */}
-      <div ref={scrollRef} style={{ flex: 1, overflow: "auto", marginTop: 14, padding: "0 28px 32px" }}>
+      <div ref={scrollRef} onScroll={handleTlScroll} style={{ flex: 1, overflow: "auto", marginTop: 14, padding: "0 28px 32px" }}>
         {loading ? (
           <div style={{ padding: 60, textAlign: "center", color: theme.textDim, fontFamily: FONT, fontSize: 13 }}>Lädt…</div>
         ) : (
