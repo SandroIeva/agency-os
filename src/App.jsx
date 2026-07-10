@@ -5503,10 +5503,9 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
         </motion.div>
         <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={navigateNext}
           style={{ cursor: "pointer", color: theme.textDim, fontSize: 18, fontFamily: FONT, padding: "4px 8px" }}>›</motion.div>
-        <div style={{ flex: 1 }} />
-        {/* Today — sits just left of the view switch */}
         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={goToday}
-          style={{ marginRight: 3, cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 500, color: theme.text, padding: "6px 14px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(21,21,28,0.07)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(21,21,28,0.14)"}` }}>Heute</motion.div>
+          style={{ marginLeft: 8, cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 500, color: theme.text, padding: "6px 14px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(21,21,28,0.07)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(21,21,28,0.14)"}` }}>Heute</motion.div>
+        <div style={{ flex: 1 }} />
         {/* View mode switcher — same clean white-pill style as the Timeline switch */}
         <div style={{ display: "inline-flex", alignItems: "center", gap: 2, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", borderRadius: 999, padding: 3, border: `1px solid ${theme.borderFaint}` }}>
           {[{ key: "month", labelKey: "cal.month" }, { key: "week", labelKey: "cal.week" }, { key: "day", labelKey: "cal.day" }].map(v => {
