@@ -3849,7 +3849,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative", marginTop: -2 }}>
           {false && (
             <div style={{ position: "relative" }}>
             <motion.div onClick={() => setFilterMenuOpen(v => !v)} whileTap={{ scale: 0.97 }}
@@ -3918,13 +3918,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
             </AnimatePresence>
           </div>
           )}
-          {/* Today + nav */}
-          <motion.div onClick={todayAnchor} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-            style={{ padding: "6px 13px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(21,21,28,0.07)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(21,21,28,0.14)"}`, fontSize: 12, fontFamily: FONT, color: theme.text, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
-            Heute
-          </motion.div>
+          {/* nav arrows */}
           <motion.div onClick={() => navStep(-1)} whileTap={{ scale: 0.94 }} style={{ width: 28, height: 28, borderRadius: "50%", background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textSub }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
           </motion.div>
@@ -3952,6 +3946,13 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
               );
             })}
           </div>
+          {/* Today — jumps the scroll back to today */}
+          <motion.div onClick={todayAnchor} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+            style={{ padding: "6px 13px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(21,21,28,0.07)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(21,21,28,0.14)"}`, fontSize: 12, fontFamily: FONT, color: theme.text, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+            Heute
+          </motion.div>
           {/* Settings cog */}
           <div style={{ position: "relative" }}>
             <motion.div onClick={() => setSettingsOpen(v => !v)} whileTap={{ scale: 0.94 }}
