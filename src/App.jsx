@@ -1967,7 +1967,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                     <div
                       onClick={() => { if (isTaskOwner) setEditingTitle(true); }}
                       style={{
-                        padding: "4px 0", fontSize: 20, fontFamily: FONT, fontWeight: 600,
+                        padding: "4px 0", fontSize: 20, fontFamily: FONT, fontWeight: 500,
                         color: theme.text, cursor: isTaskOwner ? "text" : "default", minHeight: 32,
                       }}
                     >{taskForm.title || <span style={{ color: theme.textFaint }}>{t("task.title")}</span>}</div>
@@ -1979,7 +1979,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                       autoFocus
                       style={{
                         background: "transparent", border: "none", borderBottom: `1px solid ${theme.borderFaint}`,
-                        padding: "4px 0 8px", fontSize: 20, fontFamily: FONT, fontWeight: 600,
+                        padding: "4px 0 8px", fontSize: 20, fontFamily: FONT, fontWeight: 500,
                         color: theme.text, outline: "none", caretColor: theme.text, width: "100%",
                         transition: "border-color 0.2s",
                       }}
@@ -2136,7 +2136,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
 
                   {/* Checklist */}
                   <div>
-                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.6"/><path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                         Checkliste {taskChecklist.length > 0 && (<span style={{ fontWeight: 400, color: theme.textFaint }}>({taskChecklist.filter(i => i.checked).length}/{taskChecklist.length})</span>)}
@@ -2246,14 +2246,14 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                   {/* Attachments section (only in edit mode) */}
                   {editingTask && (
                     <div>
-                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M13.5 6L5.5 14c-1.5 1.5-1.5 4 0 5.5s4 1.5 5.5 0l10-10c1-1 1-3 0-4s-3-1-4 0l-10 10c-.5.5-.5 1.5 0 2s1.5.5 2 0l8-8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                           Anhänge {taskAttachments.length > 0 && `(${taskAttachments.length})`}
                         </span>
                         <motion.span whileTap={{ scale: 0.95 }}
                           onClick={() => setShowAttachInput(!showAttachInput)}
-                          style={{ fontSize: 11, color: theme.accent, cursor: "pointer" }}
+                          style={{ fontSize: 14, fontWeight: 400, color: theme.accent, cursor: "pointer" }}
                         >+ Link hinzufügen</motion.span>
                       </div>
                       {showAttachInput && (
@@ -2263,7 +2263,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                             onKeyDown={e => { if (e.key === "Enter") addAttachment(); }}
                             style={{
                               flex: 1, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`,
-                              borderRadius: 8, padding: "7px 12px", fontSize: 12, fontFamily: FONT,
+                              borderRadius: 8, padding: "7px 12px", fontSize: 14, fontFamily: FONT,
                               color: theme.text, outline: "none", caretColor: theme.accent,
                             }}
                           />
@@ -2272,12 +2272,12 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                             onKeyDown={e => { if (e.key === "Enter") addAttachment(); }}
                             style={{
                               width: 120, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`,
-                              borderRadius: 8, padding: "7px 12px", fontSize: 12, fontFamily: FONT,
+                              borderRadius: 8, padding: "7px 12px", fontSize: 14, fontFamily: FONT,
                               color: theme.text, outline: "none", caretColor: theme.accent,
                             }}
                           />
                           <motion.button whileTap={{ scale: 0.95 }} onClick={addAttachment}
-                            style={{ padding: "7px 14px", borderRadius: 8, background: theme.accent + "20", border: `1px solid ${theme.accent}30`, color: theme.accent, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}
+                            style={{ padding: "7px 14px", borderRadius: 8, background: theme.accent + "20", border: `1px solid ${theme.accent}30`, color: theme.accent, fontSize: 14, fontFamily: FONT, cursor: "pointer" }}
                           >+</motion.button>
                         </div>
                       )}
@@ -2290,7 +2290,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                             {a.type === "image" ? <><rect x="3" y="3" width="18" height="18" rx="3" stroke={theme.textDim} strokeWidth="1.5"/><circle cx="8.5" cy="8.5" r="2" stroke={theme.textDim} strokeWidth="1.5"/><path d="M3 16l5-5 4 4 3-3 6 6" stroke={theme.textDim} strokeWidth="1.5"/></> : <><circle cx="12" cy="12" r="9" stroke={theme.textDim} strokeWidth="1.5"/><path d="M12 8v4l3 3" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round"/></>}
                           </svg>
-                          <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, fontSize: 12, fontFamily: FONT, color: theme.accent, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</a>
+                          <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, fontSize: 14, fontFamily: FONT, color: theme.accent, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</a>
                           <motion.span whileTap={{ scale: 0.9 }} onClick={() => deleteAttachment(a.id)} style={{ cursor: "pointer", fontSize: 12, color: theme.textFaint, padding: "0 4px" }}>✕</motion.span>
                         </div>
                       ))}
@@ -2334,9 +2334,9 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                     width: 300, borderLeft: `1px solid ${theme.border}`, display: "flex", flexDirection: "column",
                     background: darkMode ? "rgba(255,255,255,0.015)" : "rgba(0,0,0,0.015)",
                   }}>
-                    <div style={{ padding: "14px 16px", borderBottom: `1px solid ${theme.border}`, fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text, display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ padding: "14px 16px", borderBottom: `1px solid ${theme.border}`, fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, display: "flex", alignItems: "center", gap: 6 }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 12c0 5-4.5 9-9.9 9a10.5 10.5 0 01-4.2-.9L3 21l.9-3.9A9.3 9.3 0 013 12c0-5 4.5-9 9-9s9 4 9 9z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      Kommentare {taskComments.length > 0 && <span style={{ fontSize: 11, color: theme.textFaint, fontWeight: 400 }}>({taskComments.length})</span>}
+                      Kommentare {taskComments.length > 0 && <span style={{ color: theme.textFaint, fontWeight: 400 }}>({taskComments.length})</span>}
                     </div>
                     {/* Comment list */}
                     <div style={{ flex: 1, overflowY: "auto", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
@@ -2363,7 +2363,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                                   <motion.span whileTap={{ scale: 0.9 }} onClick={() => deleteComment(c.id)} style={{ fontSize: 10, color: theme.textFaint, cursor: "pointer", marginLeft: "auto" }}>✕</motion.span>
                                 )}
                               </div>
-                              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5, wordBreak: "break-word" }}>{c.text}</div>
+                              <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5, wordBreak: "break-word" }}>{c.text}</div>
                             </div>
                           </div>
                         );
@@ -2380,7 +2380,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                           style={{
                             flex: 1, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
                             border: `1px solid ${theme.border}`, borderRadius: 10, padding: "8px 12px",
-                            fontSize: 12, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent,
+                            fontSize: 14, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent,
                           }}
                         />
                         <motion.button whileTap={{ scale: 0.9 }} onClick={addComment}
@@ -2389,7 +2389,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                             background: commentText.trim() ? theme.accent + "20" : "transparent",
                             border: `1px solid ${commentText.trim() ? theme.accent + "40" : theme.borderFaint}`,
                             color: commentText.trim() ? theme.accent : theme.textFaint,
-                            fontSize: 12, fontFamily: FONT,
+                            fontSize: 14, fontFamily: FONT,
                           }}
                         >↩</motion.button>
                       </div>
@@ -2439,7 +2439,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
               onClick={() => setFilter(p)}
               style={{
                 display: "flex", alignItems: "center", gap: 7,
-                fontSize: 12.5, fontFamily: FONT, fontWeight: 500, padding: "8px 15px 8px 11px", borderRadius: 999, cursor: "pointer",
+                fontSize: 12.5, fontFamily: FONT, fontWeight: 500, padding: logo ? "8px 15px 8px 11px" : "8px 15px", borderRadius: 999, cursor: "pointer",
                 background: filter === p ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
                 border: "none",
                 color: filter === p ? "#fff" : theme.textSub,
