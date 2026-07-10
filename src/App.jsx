@@ -11875,6 +11875,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     return () => window.removeEventListener("keydown", onKey);
   }, [boardFullscreen]);
   const docsCreate = useRef(null); // DocsTab registers its "new document" fn here
+  const docsNewFolder = useRef(null); // DocsTab registers its "create folder" fn here
   const [boards, setBoards] = useState([]);
   const [loadingBoards, setLoadingBoards] = useState(true);
   const [activeBoard, setActiveBoard] = useState(null);
@@ -12332,6 +12333,10 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             sub: appLanguage === "de" ? "Mit einem KI-Skill generieren" : "Generate with an AI skill",
                             icon: <><path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z"/><path d="M19 14l.9 2.2L22 17l-2.1.8L19 20l-.9-2.2L16 17l2.1-.8z"/></>,
                             onClick: () => { setDocsAddOpen(false); docsSkills.current?.(); } },
+                          { key: "folder", label: appLanguage === "de" ? "Ordner erstellen" : "Create folder",
+                            sub: appLanguage === "de" ? "Dokumente in Ordnern organisieren" : "Organise documents in folders",
+                            icon: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>,
+                            onClick: () => { setDocsAddOpen(false); docsNewFolder.current?.(); } },
                         ].map(it => (
                           <div key={it.key} onClick={it.onClick} className="hover-row"
                             style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
@@ -12438,7 +12443,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 
           {/* ── DOCS tab ── */}
           {tab === "docs" && (
-            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} orgMembers={orgMembers} createNotification={createNotification} projectId={projectId} deepLink={docDeepLink} fullscreen={docFullscreen} setFullscreen={setDocFullscreen} createRef={docsCreate} importRef={docsImport} onImportingChange={setDocsImporting} skillsRef={docsSkills} llmProvider={llmProvider} llmKeys={llmKeys} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} onOpenChange={setDocOpen} />
+            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} orgMembers={orgMembers} createNotification={createNotification} projectId={projectId} deepLink={docDeepLink} fullscreen={docFullscreen} setFullscreen={setDocFullscreen} createRef={docsCreate} importRef={docsImport} onImportingChange={setDocsImporting} skillsRef={docsSkills} newFolderRef={docsNewFolder} llmProvider={llmProvider} llmKeys={llmKeys} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} onOpenChange={setDocOpen} />
           )}
 
           {/* ── MOODBOARDS tab (boards grid) ── */}
@@ -15049,8 +15054,20 @@ const DOC_SKILLS = [
 
 // Docs tab — Google-Docs-style: a list of workspace documents + a rich-text
 // editor. Documents are stored in brand_documents (org-scoped).
-function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "de", orgMembers, createNotification, deepLink, fullscreen, setFullscreen, createRef, importRef, onImportingChange, skillsRef, llmProvider, llmKeys, getProviderToken, ensureValidToken, autoReLogin, onOpenChange, projectId = null }) {
+function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "de", orgMembers, createNotification, deepLink, fullscreen, setFullscreen, createRef, importRef, onImportingChange, skillsRef, newFolderRef, llmProvider, llmKeys, getProviderToken, ensureValidToken, autoReLogin, onOpenChange, projectId = null }) {
   const [docs, setDocs] = useState([]);
+  // Folders (document_folders) — same principle as the Assets/Creations tab.
+  const [folders, setFolders] = useState([]);
+  const [currentFolder, setCurrentFolder] = useState(null); // null = root
+  const [folderMenu, setFolderMenu] = useState(null);       // folder id whose kebab is open
+  const [moveMenuFor, setMoveMenuFor] = useState(null);     // doc id whose move-to-folder menu is open
+  const [folderModalOpen, setFolderModalOpen] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [folderToDelete, setFolderToDelete] = useState(null);
+  const [deletingFolder, setDeletingFolder] = useState(false);
+  const [renameFolderObj, setRenameFolderObj] = useState(null);
+  const [renameFolderName, setRenameFolderName] = useState("");
   const [loading, setLoading] = useState(true);
   const [openDoc, setOpenDoc] = useState(null);
   const [title, setTitle] = useState("");
@@ -15242,7 +15259,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
     let pref = "workspace"; try { pref = localStorage.getItem("agencyos-doc-default-visibility") || "workspace"; } catch (_) {}
     const visibility = pref === "private" ? "restricted" : "workspace";
     const { data, error } = await supabase.from("brand_documents")
-      .insert({ org_id: userOrg.id, project_id: projectId || null, title: "Unbenanntes Dokument", content: "", created_by: session?.user?.id, visibility })
+      .insert({ org_id: userOrg.id, project_id: projectId || null, folder_id: currentFolder || null, title: "Unbenanntes Dokument", content: "", created_by: session?.user?.id, visibility })
       .select().single();
     if (error) { alert("Dokument konnte nicht erstellt werden: " + error.message); return; }
     setDocs(prev => [data, ...prev]);
@@ -15252,6 +15269,57 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   // Expose create to the AssetsView header (keeps the action in the same slot
   // as Moodboards/Creations for consistency).
   if (createRef) createRef.current = createDoc;
+
+  // ── Folders (document_folders) ──────────────────────────
+  const loadFolders = useCallback(async () => {
+    if (!userOrg?.id) { setFolders([]); return; }
+    let q = supabase.from("document_folders").select("id,name,created_at").eq("org_id", userOrg.id);
+    q = projectId ? q.eq("project_id", projectId) : q.is("project_id", null);
+    const { data, error } = await q.order("name");
+    if (error) { console.warn("[docs] folders load failed:", error.message); setFolders([]); return; }
+    setFolders(data || []);
+  }, [userOrg?.id, projectId]);
+  useEffect(() => { loadFolders(); }, [loadFolders]);
+  const createFolder = useCallback(() => { setFolderName(""); setFolderModalOpen(true); }, []);
+  const createFolderRef = useRef(null); createFolderRef.current = createFolder;
+  useEffect(() => { if (newFolderRef) newFolderRef.current = () => createFolderRef.current?.(); }, [newFolderRef]);
+  const submitFolder = async () => {
+    const name = folderName.trim();
+    if (!name || creatingFolder || !userOrg?.id) return;
+    setCreatingFolder(true);
+    const { data, error } = await supabase.from("document_folders")
+      .insert({ name, org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id })
+      .select("id,name,created_at").single();
+    setCreatingFolder(false);
+    if (error) { alert((appLanguage === "de" ? "Ordner konnte nicht erstellt werden: " : "Couldn't create folder: ") + error.message); return; }
+    if (data) setFolders(prev => [...prev, data].sort((a, b) => (a.name || "").localeCompare(b.name || "")));
+    setFolderModalOpen(false);
+  };
+  const submitRenameFolder = async () => {
+    const fo = renameFolderObj; const name = renameFolderName.trim();
+    if (!fo || !name || name === fo.name) { setRenameFolderObj(null); return; }
+    await supabase.from("document_folders").update({ name }).eq("id", fo.id);
+    setFolders(prev => prev.map(x => x.id === fo.id ? { ...x, name } : x).sort((a, b) => (a.name || "").localeCompare(b.name || "")));
+    setRenameFolderObj(null);
+  };
+  const performDeleteFolder = async () => {
+    const fo = folderToDelete;
+    if (!fo || deletingFolder) return;
+    setDeletingFolder(true);
+    // Keep the documents — detach them from the folder, then remove the folder.
+    await supabase.from("brand_documents").update({ folder_id: null }).eq("folder_id", fo.id);
+    await supabase.from("document_folders").delete().eq("id", fo.id);
+    setDocs(prev => prev.map(d => d.folder_id === fo.id ? { ...d, folder_id: null } : d));
+    setFolders(prev => prev.filter(x => x.id !== fo.id));
+    if (currentFolder === fo.id) setCurrentFolder(null);
+    setDeletingFolder(false);
+    setFolderToDelete(null);
+  };
+  const moveDocToFolder = async (docId, folderId) => {
+    setMoveMenuFor(null);
+    await supabase.from("brand_documents").update({ folder_id: folderId }).eq("id", docId);
+    setDocs(prev => prev.map(d => d.id === docId ? { ...d, folder_id: folderId } : d));
+  };
 
   // Best-effort: re-host Google's exported image URLs into our storage so they
   // persist (the original googleusercontent links expire). On any failure, keep
@@ -15526,14 +15594,22 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   }
 
   // ── LIST ──
+  const searching = search.trim().length > 0;
   const visibleDocs = docs
     .filter(d => (d.title || "").toLowerCase().includes(search.trim().toLowerCase()))
+    // Folder scope: while searching span all folders; otherwise show only the
+    // current folder's docs (root = unfiled, folder_id null).
+    .filter(d => searching || (d.folder_id ?? null) === (currentFolder ?? null))
     .slice()
     .sort((a, b) => sortMode === "name"
       ? (a.title || "").localeCompare(b.title || "", "de")
       : sortMode === "creator"
       ? (memberById[a.created_by]?.display_name || "").localeCompare(memberById[b.created_by]?.display_name || "", "de")
       : new Date(b.updated_at) - new Date(a.updated_at));
+  const docFolderCounts = {};
+  for (const d of docs) { const k = d.folder_id; if (k) docFolderCounts[k] = (docFolderCounts[k] || 0) + 1; }
+  const showDocFolders = !searching && currentFolder == null && folders.length > 0;
+  const currentFolderObj = folders.find(f => f.id === currentFolder) || null;
   const docIcon = (size) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg>
   );
@@ -15560,8 +15636,40 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
       </motion.div>
     );
   };
+  const moveBtn = (d) => (
+    <div style={{ position: "relative" }} onClick={e => e.stopPropagation()}>
+      <motion.div whileTap={{ scale: 0.9 }} onClick={() => setMoveMenuFor(m => m === d.id ? null : d.id)} title={appLanguage === "de" ? "In Ordner verschieben" : "Move to folder"} style={actBtnStyle}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </motion.div>
+      <AnimatePresence>
+        {moveMenuFor === d.id && (
+          <>
+            <div onClick={(e) => { e.stopPropagation(); setMoveMenuFor(null); }} style={{ position: "fixed", inset: 0, zIndex: 60 }} />
+            <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.14 }} onClick={(e) => e.stopPropagation()}
+              style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 61, minWidth: 190, maxHeight: 260, overflowY: "auto", background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 11, boxShadow: "0 16px 44px rgba(0,0,0,0.2)", padding: 5 }}>
+              <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.6, padding: "6px 9px 4px" }}>{appLanguage === "de" ? "In Ordner verschieben" : "Move to folder"}</div>
+              {d.folder_id != null && (
+                <div onClick={() => moveDocToFolder(d.id, null)} className="hover-row" style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 9px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontFamily: FONT, color: theme.text }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  {appLanguage === "de" ? "Kein Ordner" : "No folder"}
+                </div>
+              )}
+              {folders.length === 0 && <div style={{ padding: "8px 9px", fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>{appLanguage === "de" ? "Noch keine Ordner" : "No folders yet"}</div>}
+              {folders.map(fo => (
+                <div key={fo.id} onClick={() => moveDocToFolder(d.id, fo.id)} className="hover-row" style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 9px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontFamily: FONT, color: theme.text }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={d.folder_id === fo.id ? accent : theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                  <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fo.name}</span>
+                  {d.folder_id === fo.id && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                </div>
+              ))}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
   const rowActions = (d) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0 }}>{dupBtn(d)}{delBtn(d)}</div>
+    <div style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0 }}>{moveBtn(d)}{dupBtn(d)}{delBtn(d)}</div>
   );
   const viewBtn = (mode, title, children) => {
     const on = viewMode === mode;
@@ -15595,9 +15703,70 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
 
       {loading ? (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 60, color: theme.textDim, fontSize: 13, fontFamily: FONT }}>Lädt…</div>
-      ) : visibleDocs.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "60px 20px" }}>
-          <div style={{ fontSize: 16, fontFamily: FONT, color: theme.text, marginBottom: 6 }}>{search ? "Keine Treffer" : "Noch keine Dokumente"}</div>
+      ) : (
+      <>
+        {/* Breadcrumb when inside a folder */}
+        {currentFolder != null && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <motion.div whileTap={{ scale: 0.96 }} onClick={() => { setCurrentFolder(null); setFolderMenu(null); }}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12.5, fontFamily: FONT }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+              {appLanguage === "de" ? "Alle Dokumente" : "All documents"}
+            </motion.div>
+            <div style={{ flex: 1 }} />
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, minWidth: 0 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+              <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentFolderObj?.name || (appLanguage === "de" ? "Ordner" : "Folder")}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 400, color: theme.textDim, flexShrink: 0 }}>· {visibleDocs.length}</span>
+            </span>
+          </div>
+        )}
+        {/* Folders (root level only) */}
+        {showDocFolders && (
+          <div style={{ marginBottom: 22 }}>
+            <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>{appLanguage === "de" ? "Ordner" : "Folders"}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+              {folders.map(fo => (
+                <motion.div key={fo.id} whileHover={{ y: -2 }} onClick={() => { setCurrentFolder(fo.id); setFolderMenu(null); }}
+                  style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 11, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={theme.text} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fo.name}</div>
+                    <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{(docFolderCounts[fo.id] || 0)} {appLanguage === "de" ? "Dokumente" : "documents"}</div>
+                  </div>
+                  <div style={{ position: "relative", flexShrink: 0 }}>
+                    <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); setFolderMenu(m => m === fo.id ? null : fo.id); }} title={appLanguage === "de" ? "Optionen" : "Options"} style={actBtnStyle}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>
+                    </motion.div>
+                    <AnimatePresence>
+                      {folderMenu === fo.id && (
+                        <>
+                          <div onClick={(e) => { e.stopPropagation(); setFolderMenu(null); }} style={{ position: "fixed", inset: 0, zIndex: 60 }} />
+                          <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.14 }} onClick={(e) => e.stopPropagation()}
+                            style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 61, minWidth: 168, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 11, boxShadow: "0 16px 44px rgba(0,0,0,0.2)", overflow: "hidden", padding: 5 }}>
+                            <div onClick={() => { setFolderMenu(null); setRenameFolderObj(fo); setRenameFolderName(fo.name || ""); }} className="hover-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 8, cursor: "pointer" }}>
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                              <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>{appLanguage === "de" ? "Umbenennen" : "Rename"}</span>
+                            </div>
+                            <div onClick={() => { setFolderMenu(null); setFolderToDelete(fo); }} className="hover-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 8, cursor: "pointer" }}>
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#e5484d" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                              <span style={{ fontSize: 13, fontFamily: FONT, color: "#e5484d" }}>{appLanguage === "de" ? "Löschen" : "Delete"}</span>
+                            </div>
+                          </motion.div>
+                        </>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        )}
+        {visibleDocs.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "48px 20px" }}>
+          <div style={{ fontSize: 16, fontFamily: FONT, color: theme.text, marginBottom: 6 }}>{search ? "Keine Treffer" : currentFolder != null ? (appLanguage === "de" ? "Dieser Ordner ist leer" : "This folder is empty") : "Noch keine Dokumente"}</div>
           <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{search ? "Versuche einen anderen Suchbegriff." : "Klicke auf Neues Dokument, um loszulegen."}</div>
         </div>
       ) : viewMode === "grid" ? (
@@ -15610,6 +15779,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div className="doc-row-icon" style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16)}</div>
                 <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || "Unbenanntes Dokument"}</div>
+                {moveBtn(d)}
                 {dupBtn(d)}
               </div>
               <div style={{ flex: 1 }} />
@@ -15639,6 +15809,91 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
           ); })}
         </div>
       )}
+      </>
+      )}
+
+      {/* New-folder modal */}
+      <AnimatePresence>
+        {folderModalOpen && createPortal(
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+            onClick={() => !creatingFolder && setFolderModalOpen(false)}
+            style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 8 }}
+              transition={{ duration: 0.2, ease: [0.22, 0.68, 0.35, 1.0] }} onClick={e => e.stopPropagation()}
+              style={{ width: "100%", maxWidth: 420, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26, boxShadow: "0 25px 80px rgba(0,0,0,0.4)" }}>
+              <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 6, letterSpacing: -0.2 }}>{appLanguage === "de" ? "Neuer Ordner" : "New folder"}</div>
+              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 18, lineHeight: 1.5 }}>{appLanguage === "de" ? "Gib dem Ordner einen Namen." : "Give the folder a name."}</div>
+              <input autoFocus value={folderName} onChange={e => setFolderName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && folderName.trim() && !creatingFolder) submitFolder(); if (e.key === "Escape" && !creatingFolder) setFolderModalOpen(false); }}
+                placeholder={appLanguage === "de" ? "z.B. Briefings" : "e.g. Briefings"}
+                style={{ width: "100%", boxSizing: "border-box", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 12, padding: "12px 14px", fontSize: 14, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.text }}
+              />
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
+                <motion.button onClick={() => !creatingFolder && setFolderModalOpen(false)} whileTap={{ scale: 0.97 }}
+                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: creatingFolder ? "not-allowed" : "pointer", background: "transparent", border: `1px solid ${theme.border}`, color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: creatingFolder ? 0.5 : 1 }}
+                >{appLanguage === "de" ? "Abbrechen" : "Cancel"}</motion.button>
+                <motion.button onClick={submitFolder} whileTap={{ scale: 0.97 }} disabled={!folderName.trim() || creatingFolder}
+                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: (!folderName.trim() || creatingFolder) ? "not-allowed" : "pointer", minWidth: 128, boxSizing: "border-box", textAlign: "center", background: (!folderName.trim() || creatingFolder) ? (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)") : "#15151c", border: "none", color: (!folderName.trim() || creatingFolder) ? theme.textFaint : "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, transition: "background 0.18s ease" }}
+                >{creatingFolder ? (appLanguage === "de" ? "Erstellt…" : "Creating…") : (appLanguage === "de" ? "Erstellen" : "Create")}</motion.button>
+              </div>
+            </motion.div>
+          </motion.div>, document.body)}
+      </AnimatePresence>
+
+      {/* Rename-folder modal */}
+      <AnimatePresence>
+        {renameFolderObj && createPortal(
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+            onClick={() => setRenameFolderObj(null)}
+            style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 8 }}
+              transition={{ duration: 0.2, ease: [0.22, 0.68, 0.35, 1.0] }} onClick={e => e.stopPropagation()}
+              style={{ width: "100%", maxWidth: 420, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26, boxShadow: "0 25px 80px rgba(0,0,0,0.4)" }}>
+              <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 18, letterSpacing: -0.2 }}>{appLanguage === "de" ? "Ordner umbenennen" : "Rename folder"}</div>
+              <input autoFocus value={renameFolderName} onChange={e => setRenameFolderName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && renameFolderName.trim()) submitRenameFolder(); if (e.key === "Escape") setRenameFolderObj(null); }}
+                style={{ width: "100%", boxSizing: "border-box", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 12, padding: "12px 14px", fontSize: 14, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.text }}
+              />
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
+                <motion.button onClick={() => setRenameFolderObj(null)} whileTap={{ scale: 0.97 }}
+                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.border}`, color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600 }}
+                >{appLanguage === "de" ? "Abbrechen" : "Cancel"}</motion.button>
+                <motion.button onClick={submitRenameFolder} whileTap={{ scale: 0.97 }} disabled={!renameFolderName.trim()}
+                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: !renameFolderName.trim() ? "not-allowed" : "pointer", minWidth: 128, boxSizing: "border-box", textAlign: "center", background: !renameFolderName.trim() ? (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)") : "#15151c", border: "none", color: !renameFolderName.trim() ? theme.textFaint : "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600 }}
+                >{appLanguage === "de" ? "Speichern" : "Save"}</motion.button>
+              </div>
+            </motion.div>
+          </motion.div>, document.body)}
+      </AnimatePresence>
+
+      {/* Delete-folder confirm modal */}
+      <AnimatePresence>
+        {folderToDelete && createPortal(
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+            onClick={() => !deletingFolder && setFolderToDelete(null)}
+            style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 8 }}
+              transition={{ duration: 0.2, ease: [0.22, 0.68, 0.35, 1.0] }} onClick={e => e.stopPropagation()}
+              style={{ width: "100%", maxWidth: 420, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26, boxShadow: "0 25px 80px rgba(0,0,0,0.4)" }}>
+              <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8, letterSpacing: -0.2 }}>{appLanguage === "de" ? "Ordner löschen?" : "Delete folder?"}</div>
+              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 22, lineHeight: 1.55 }}>
+                {(() => {
+                  const n = docFolderCounts[folderToDelete.id] || 0;
+                  if (appLanguage === "de") return <>„{folderToDelete.name}" wird gelöscht.{n ? ` Die ${n} enthaltenen Dokumente bleiben erhalten und landen unter „Kein Ordner".` : ""}</>;
+                  return <>“{folderToDelete.name}” will be deleted.{n ? ` Its ${n} document(s) are kept and moved to “No folder”.` : ""}</>;
+                })()}
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                <motion.button onClick={() => !deletingFolder && setFolderToDelete(null)} whileTap={{ scale: 0.97 }}
+                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: deletingFolder ? "not-allowed" : "pointer", background: "transparent", border: `1px solid ${theme.border}`, color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: deletingFolder ? 0.5 : 1 }}
+                >{appLanguage === "de" ? "Abbrechen" : "Cancel"}</motion.button>
+                <motion.button onClick={performDeleteFolder} whileTap={{ scale: 0.97 }} disabled={deletingFolder}
+                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: deletingFolder ? "not-allowed" : "pointer", minWidth: 128, boxSizing: "border-box", textAlign: "center", background: "#EF4444", border: "none", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: deletingFolder ? 0.6 : 1 }}
+                >{deletingFolder ? (appLanguage === "de" ? "Löscht…" : "Deleting…") : (appLanguage === "de" ? "Löschen" : "Delete")}</motion.button>
+              </div>
+            </motion.div>
+          </motion.div>, document.body)}
+      </AnimatePresence>
       {skillsOpen && createPortal(
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { if (!skillBusy) setSkillsOpen(false); }}
           style={{ position: "fixed", inset: 0, zIndex: 100001, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
