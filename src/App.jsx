@@ -1382,6 +1382,8 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
   const [editingChecklistId, setEditingChecklistId] = useState(null);
   const [editingChecklistText, setEditingChecklistText] = useState("");
   const [commentText, setCommentText] = useState("");
+  const [commentEmojiOpen, setCommentEmojiOpen] = useState(false);
+  const [commentEmojiTab, setCommentEmojiTab] = useState("smileys");
   const [attachmentUrl, setAttachmentUrl] = useState("");
   const [attachmentName, setAttachmentName] = useState("");
   const [showAttachInput, setShowAttachInput] = useState(false);
@@ -1961,7 +1963,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
               {/* Body: split layout for edit, single for new */}
               <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
                 {/* Left panel — main content */}
-                <div style={{ flex: 1, padding: "20px 22px 16px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ flex: 1, padding: "20px 22px 24px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
                   {/* Title — view mode for existing tasks, edit on click */}
                   {editingTask && !editingTitle ? (
                     <div
@@ -2304,9 +2306,9 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                         <motion.button whileTap={{ scale: 0.97 }}
                           onClick={() => { resetForm(); requestDelete(editingTask.id); }}
                           style={{
-                            padding: "10px 20px", borderRadius: 12, cursor: "pointer",
+                            padding: "11px 24px 12px", borderRadius: 999, cursor: "pointer",
                             background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)",
-                            fontSize: 13, fontFamily: FONT, color: "#EF4444",
+                            fontSize: 13, fontFamily: FONT, fontWeight: 600, color: "#EF4444",
                           }}
                         >{t("common.delete")}</motion.button>
                       )}
@@ -2369,29 +2371,117 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                         );
                       })}
                     </div>
-                    {/* Comment input */}
+                    {/* Comment input — same style as Messenger */}
                     <div style={{ padding: "16px 16px 24px", borderTop: `1px solid ${theme.border}` }}>
-                      <div style={{ display: "flex", gap: 8 }}>
+                      <div style={{
+                        display: "flex", alignItems: "center", gap: 8,
+                        background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                        border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
+                        borderRadius: 16, padding: 8,
+                      }}>
                         <input
                           value={commentText}
                           onChange={e => setCommentText(e.target.value)}
                           placeholder="Kommentar schreiben..."
                           onKeyDown={e => { if (e.key === "Enter" && commentText.trim()) addComment(); }}
                           style={{
-                            flex: 1, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
-                            border: `1px solid ${theme.border}`, borderRadius: 10, padding: "8px 12px",
-                            fontSize: 14, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent,
+                            flex: 1, minWidth: 0, background: "none", border: "none", outline: "none",
+                            padding: "0 6px", fontSize: 14, fontFamily: FONT, color: theme.text, caretColor: theme.text,
                           }}
                         />
-                        <motion.button whileTap={{ scale: 0.9 }} onClick={addComment}
+                        {/* Emoji picker button */}
+                        <div style={{ position: "relative" }}>
+                          <motion.div
+                            whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
+                            onClick={() => setCommentEmojiOpen(!commentEmojiOpen)}
+                            title="Emoji"
+                            style={{
+                              width: 32, height: 32, borderRadius: "50%",
+                              background: commentEmojiOpen ? (darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)") : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"),
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              cursor: "pointer", flexShrink: 0,
+                              color: darkMode ? "#ffffff90" : "#1a1a2eAA",
+                            }}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="9"/>
+                              <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                              <line x1="9" y1="9" x2="9.01" y2="9"/>
+                              <line x1="15" y1="9" x2="15.01" y2="9"/>
+                            </svg>
+                          </motion.div>
+                          <AnimatePresence>
+                            {commentEmojiOpen && (
+                              <>
+                                <div onClick={() => setCommentEmojiOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
+                                <motion.div
+                                  initial={{ opacity: 0, y: 10, scale: 0.96 }}
+                                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                                  exit={{ opacity: 0, y: 10, scale: 0.96 }}
+                                  transition={{ duration: 0.18 }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    position: "absolute", bottom: "calc(100% + 10px)", right: 0,
+                                    width: 260, height: 240,
+                                    background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
+                                    border: `1px solid ${theme.border}`,
+                                    borderRadius: 16, overflow: "hidden",
+                                    boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+                                    display: "flex", flexDirection: "column", zIndex: 31,
+                                  }}
+                                >
+                                  <div style={{ display: "flex", borderBottom: `1px solid ${theme.borderFaint}`, padding: 4 }}>
+                                    {[
+                                      { id: "smileys", icon: "😀" },
+                                      { id: "gestures", icon: "👋" },
+                                      { id: "hearts", icon: "❤️" },
+                                      { id: "objects", icon: "🎉" },
+                                    ].map(tb => (
+                                      <motion.div key={tb.id} whileTap={{ scale: 0.92 }}
+                                        onClick={() => setCommentEmojiTab(tb.id)}
+                                        style={{
+                                          flex: 1, padding: "6px 0", borderRadius: 10, cursor: "pointer",
+                                          textAlign: "center", fontSize: 16,
+                                          background: commentEmojiTab === tb.id ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") : "transparent",
+                                        }}
+                                      >{tb.icon}</motion.div>
+                                    ))}
+                                  </div>
+                                  <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
+                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 2 }}>
+                                      {EMOJI_GROUPS[commentEmojiTab].map((emoji, i) => (
+                                        <motion.div key={emoji + i} whileHover={{ scale: 1.25, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }} whileTap={{ scale: 0.9 }}
+                                          onClick={() => setCommentText(prev => prev + emoji)}
+                                          style={{
+                                            width: 32, height: 32, borderRadius: 8,
+                                            display: "flex", alignItems: "center", justifyContent: "center",
+                                            cursor: "pointer", fontSize: 18, lineHeight: 1,
+                                          }}
+                                        >{emoji}</motion.div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </motion.div>
+                              </>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                        {/* Send button */}
+                        <motion.div
+                          whileHover={commentText.trim() ? { scale: 1.05 } : {}} whileTap={commentText.trim() ? { scale: 0.9 } : {}}
+                          onClick={() => commentText.trim() && addComment()}
                           style={{
-                            padding: "8px 12px", borderRadius: 10, cursor: "pointer",
-                            background: commentText.trim() ? theme.accent + "20" : "transparent",
-                            border: `1px solid ${commentText.trim() ? theme.accent + "40" : theme.borderFaint}`,
-                            color: commentText.trim() ? theme.accent : theme.textFaint,
-                            fontSize: 14, fontFamily: FONT,
+                            width: 32, height: 32, borderRadius: "50%",
+                            background: commentText.trim() ? "#15151c" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"),
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            cursor: commentText.trim() ? "pointer" : "default", flexShrink: 0,
+                            transition: "all 0.2s ease",
                           }}
-                        >↩</motion.button>
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                            <path d="M5 12h14M12 5l7 7-7 7" stroke={commentText.trim() ? "#fff" : (darkMode ? "#ffffff30" : "#00000030")} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </motion.div>
                       </div>
                     </div>
                   </div>
