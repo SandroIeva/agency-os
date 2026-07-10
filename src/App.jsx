@@ -3990,12 +3990,12 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
 
           {/* New sprint — only with the create-sprint permission */}
           {canCreateSprints && (
-          <motion.div onClick={() => { setCreateForProject(null); setCreating(true); }} whileTap={{ scale: 0.97 }}
-            style={{ padding: "6px 14px", borderRadius: 999, background: theme.accent, color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, boxShadow: `0 4px 14px ${theme.accent}45` }}
+          <motion.button onClick={() => { setCreateForProject(null); setCreating(true); }} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+            style={{ padding: "8px 17px 9px 11px", borderRadius: 999, background: "#23232b", border: "none", color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Neuer Sprint
-          </motion.div>
+          </motion.button>
           )}
         </div>
       </div>
@@ -4429,22 +4429,22 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
         initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }}
         transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1.0] }}
         onClick={e => e.stopPropagation()}
-        style={{ width: "100%", maxWidth: 900, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26, boxShadow: "0 25px 80px rgba(0,0,0,0.4)", marginBottom: 24 }}
+        style={{ width: "100%", maxWidth: 900, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 0, overflow: "hidden", boxShadow: "0 25px 80px rgba(0,0,0,0.4)", marginBottom: 24 }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 16px 22px", borderBottom: `1px solid ${theme.borderFaint}`, gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-            <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.2 }}>{creating ? "Neuer Sprint" : "Sprint bearbeiten"}</div>
+            <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap" }}>{creating ? "Neuer Sprint" : "Sprint bearbeiten"}</div>
             <div title="Status wird automatisch aus den Daten berechnet" style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 999, background: TL_STATUS_COLORS[status] + "15", border: `1px solid ${TL_STATUS_COLORS[status]}30`, color: TL_STATUS_COLORS[status], fontSize: 11, fontFamily: FONT, fontWeight: 600, whiteSpace: "nowrap" }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: TL_STATUS_COLORS[status] }} />
               {TL_STATUS_LABEL[status]}
             </div>
           </div>
-          <motion.div onClick={onClose} whileTap={{ scale: 0.94 }} style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, flexShrink: 0 }}>
+          <motion.div onClick={onClose} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.9 }} style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </motion.div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 22, alignItems: "start" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 22, alignItems: "start", padding: "20px 22px 0" }}>
         <div>
         {/* 1. Projekt (full width) */}
         <div style={{ marginBottom: 14 }}>
@@ -4481,7 +4481,7 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
             {groupId === "__new__" ? (
               <div style={{ display: "flex", gap: 4 }}>
                 <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} autoFocus placeholder="Neue Gruppe…"
-                  style={{ flex: 1, minWidth: 0, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.accent}40`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent }}
+                  style={{ flex: 1, minWidth: 0, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.text }}
                 />
                 <motion.div whileTap={{ scale: 0.92 }} onClick={() => { setGroupId(""); setNewGroupName(""); }} title="Abbrechen"
                   style={{ width: 32, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 10, background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, cursor: "pointer", flexShrink: 0 }}
@@ -4519,7 +4519,7 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
           <div>
             <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Sprinttitel</label>
             <input value={title} onChange={e => setTitle(e.target.value)} autoFocus placeholder="Sprinttitel"
-              style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent }}
+              style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.text }}
             />
           </div>
         </div>
@@ -4527,11 +4527,11 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
         {/* 4. Description */}
         <div style={{ position: "relative", marginBottom: 14 }}>
           <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Beschreibung (optional)" rows={3}
-            style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${isRecording ? "#E84393" : theme.borderFaint}`, borderRadius: 12, padding: "10px 40px 10px 14px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.accent, resize: "vertical", lineHeight: 1.55, display: "block" }}
+            style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${isRecording ? "#EF444450" : theme.borderFaint}`, borderRadius: 12, padding: "10px 44px 10px 14px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.text, resize: "vertical", lineHeight: 1.55, display: "block" }}
           />
           <motion.div onClick={startDictation} whileTap={{ scale: 0.92 }}
             title={isRecording ? "Diktat stoppen" : "Diktieren"}
-            style={{ position: "absolute", right: 8, top: 8, width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: isRecording ? "#E84393" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"), color: isRecording ? "#fff" : theme.textDim, transition: "background 0.15s", animation: isRecording ? "pulse 1.4s ease-in-out infinite" : "none" }}
+            style={{ position: "absolute", right: 8, top: 8, width: 30, height: 30, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: isRecording ? "#EF4444" : "#15151c", color: "#fff", transition: "background 0.15s", animation: isRecording ? "pulse 1.4s ease-in-out infinite" : "none" }}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="9" y="2" width="6" height="12" rx="3"/>
@@ -4555,9 +4555,9 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
               <span>Ende</span>
               {creating && (
                 <motion.span onClick={() => setAutoEnd(v => !v)} whileTap={{ scale: 0.96 }}
-                  style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, color: autoEnd ? theme.accent : theme.textFaint, textTransform: "none", letterSpacing: 0, fontWeight: 500 }}
+                  style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, color: autoEnd ? theme.text : theme.textFaint, textTransform: "none", letterSpacing: 0, fontWeight: 500 }}
                 >
-                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: autoEnd ? theme.accent : theme.borderFaint }} />
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: autoEnd ? "#15151c" : theme.borderFaint }} />
                   {autoEnd ? `Auto (${sprintDays} Tage)` : "Manuell"}
                 </motion.span>
               )}
@@ -4577,11 +4577,11 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
               if (!m) return null;
               const av = getMemberAvatar(m);
               return (
-                <div key={uid} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 4px 4px 4px", borderRadius: 999, background: theme.accent + "15", border: `1px solid ${theme.accent}30` }}>
+                <div key={uid} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 4px 4px 4px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", border: `1px solid ${theme.borderFaint}` }}>
                   {av ? (
                     <img src={av} alt="" referrerPolicy="no-referrer" style={{ width: 20, height: 20, borderRadius: "50%" }} />
                   ) : (
-                    <div style={{ width: 20, height: 20, borderRadius: "50%", background: theme.accent, color: "#fff", fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{getMemberName(m)[0]}</div>
+                    <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#15151c", color: "#fff", fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{getMemberName(m)[0]}</div>
                   )}
                   <span style={{ fontSize: 11, fontFamily: FONT, color: theme.text, marginRight: 4 }}>{getMemberName(m)}</span>
                   <motion.div whileTap={{ scale: 0.9 }} onClick={() => setAssigneeIds(prev => prev.filter(x => x !== uid))} style={{ cursor: "pointer", color: theme.textDim, fontSize: 11, padding: "0 4px" }}>✕</motion.div>
@@ -4616,7 +4616,7 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
                             {av ? (
                               <img src={av} alt="" referrerPolicy="no-referrer" style={{ width: 24, height: 24, borderRadius: "50%" }} />
                             ) : (
-                              <div style={{ width: 24, height: 24, borderRadius: "50%", background: theme.accent + "40", color: theme.accent, fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{getMemberName(m)[0]}</div>
+                              <div style={{ width: 24, height: 24, borderRadius: "50%", background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", color: theme.text, fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{getMemberName(m)[0]}</div>
                             )}
                             <span>{getMemberName(m)}</span>
                           </motion.div>
@@ -4647,7 +4647,7 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
                   onClick={() => { if (onOpenTask) { onOpenTask(tk.id); onClose(); } }}
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, cursor: onOpenTask ? "pointer" : "default", transition: "background 0.15s" }}
                 >
-                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: tk.priority === "high" ? "#E84393" : tk.priority === "medium" ? "#F59E0B" : "#8B7AFF", flexShrink: 0 }} />
+                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: tk.priority === "high" ? priColors.high : tk.priority === "medium" ? priColors.medium : priColors.low, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tk.title}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
@@ -4668,11 +4668,11 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
             })}
             {/* Pending new tasks — created together with sprint on save */}
             {pendingNewTasks.map((nt) => (
-              <div key={nt.tempId} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", background: theme.accent + "10", border: `1px dashed ${theme.accent}40`, borderRadius: 10 }}>
-                <div style={{ width: 6, height: 6, borderRadius: "50%", background: theme.accent, flexShrink: 0 }} />
+              <div key={nt.tempId} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)", border: `1px dashed ${theme.border}`, borderRadius: 10 }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: theme.textDim, flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nt.title}</div>
-                  <div style={{ fontSize: 9, fontFamily: FONT, color: theme.accent, marginTop: 2, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 }}>Wird erstellt</div>
+                  <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textDim, marginTop: 2, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 }}>Wird erstellt</div>
                 </div>
                 <motion.div whileTap={{ scale: 0.9 }} onClick={() => setPendingNewTasks(prev => prev.filter(x => x.tempId !== nt.tempId))} style={{ cursor: "pointer", color: theme.textDim, fontSize: 12, padding: 4 }}>✕</motion.div>
               </div>
@@ -4689,14 +4689,14 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
                   }
                 }}
                 placeholder="Task erstellen (Enter)…"
-                style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontFamily: FONT, color: theme.text, caretColor: theme.accent }}
+                style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontFamily: FONT, color: theme.text, caretColor: theme.text }}
               />
               {newTaskText.trim() && (
                 <motion.div whileTap={{ scale: 0.95 }} onClick={() => {
                   setPendingNewTasks(prev => [...prev, { tempId: `tmp-${Date.now()}-${Math.random().toString(36).slice(2,7)}`, title: newTaskText.trim() }]);
                   setNewTaskText("");
                 }}
-                  style={{ cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.accent, fontWeight: 600, padding: "2px 8px" }}
+                  style={{ cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.text, fontWeight: 600, padding: "2px 8px" }}
                 >+ Erstellen</motion.div>
               )}
             </div>
@@ -4725,7 +4725,7 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
                           whileTap={{ scale: 0.99 }}
                           style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", cursor: "pointer", borderRadius: 8, fontSize: 12, fontFamily: FONT, color: theme.text }}
                         >
-                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: tk.priority === "high" ? "#E84393" : tk.priority === "medium" ? "#F59E0B" : "#8B7AFF", flexShrink: 0 }} />
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: tk.priority === "high" ? priColors.high : tk.priority === "medium" ? priColors.medium : priColors.low, flexShrink: 0 }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tk.title}</div>
                             {tk.project_name && <div style={{ fontSize: 10, color: theme.textDim, marginTop: 1 }}>{tk.project_name}</div>}
@@ -4747,12 +4747,12 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
             {checklist.map((c, idx) => (
               <div key={c.id || `new-${idx}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)" }}>
                 <motion.div whileTap={{ scale: 0.9 }} onClick={() => setChecklist(prev => prev.map((x, i) => i === idx ? { ...x, done: !x.done } : x))}
-                  style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${c.done ? theme.accent : theme.borderFaint}`, background: c.done ? theme.accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
+                  style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${c.done ? "#15151c" : theme.borderFaint}`, background: c.done ? "#15151c" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
                 >
                   {c.done && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                 </motion.div>
                 <input value={c.text} onChange={e => setChecklist(prev => prev.map((x, i) => i === idx ? { ...x, text: e.target.value } : x))}
-                  style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontFamily: FONT, color: c.done ? theme.textDim : theme.text, textDecoration: c.done ? "line-through" : "none", caretColor: theme.accent }}
+                  style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontFamily: FONT, color: c.done ? theme.textDim : theme.text, textDecoration: c.done ? "line-through" : "none", caretColor: theme.text }}
                 />
                 <motion.div whileTap={{ scale: 0.9 }} onClick={() => setChecklist(prev => prev.filter((_, i) => i !== idx))} style={{ cursor: "pointer", color: theme.textFaint, fontSize: 12, padding: 2 }}>✕</motion.div>
               </div>
@@ -4768,14 +4768,14 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
                   }
                 }}
                 placeholder="Eintrag hinzufügen (Enter)…"
-                style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontFamily: FONT, color: theme.text, caretColor: theme.accent }}
+                style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontFamily: FONT, color: theme.text, caretColor: theme.text }}
               />
               {newChecklistText.trim() && (
                 <motion.div whileTap={{ scale: 0.95 }} onClick={() => {
                   setChecklist(prev => [...prev, { text: newChecklistText.trim(), done: false, position: prev.length }]);
                   setNewChecklistText("");
                 }}
-                  style={{ cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.accent, fontWeight: 600, padding: "2px 8px" }}
+                  style={{ cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.text, fontWeight: 600, padding: "2px 8px" }}
                 >+ Hinzufügen</motion.div>
               )}
             </div>
@@ -4785,31 +4785,33 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
         </div>{/* end right column */}
         </div>{/* end two-column grid */}
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 18 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "18px 22px 22px" }}>
           {onDelete && canEdit && !confirmDel && (
-            <motion.div onClick={() => setConfirmDel(true)} whileTap={{ scale: 0.97 }}
-              style={{ padding: "10px 16px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: "#E84393", fontSize: 12, fontFamily: FONT, fontWeight: 500 }}
-            >Löschen</motion.div>
+            <motion.button onClick={() => setConfirmDel(true)} whileTap={{ scale: 0.97 }}
+              style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: "pointer", minWidth: 128, boxSizing: "border-box", textAlign: "center", background: "transparent", border: `1px solid ${theme.border}`, color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600 }}
+            >Löschen</motion.button>
           )}
           {onDelete && canEdit && confirmDel && (
-            <div style={{ display: "flex", gap: 6 }}>
-              <motion.div onClick={() => setConfirmDel(false)} whileTap={{ scale: 0.97 }}
-                style={{ padding: "10px 14px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 12, fontFamily: FONT }}
-              >Abbrechen</motion.div>
-              <motion.div onClick={() => { onDelete(); onClose(); }} whileTap={{ scale: 0.97 }}
-                style={{ padding: "10px 16px", borderRadius: 999, cursor: "pointer", background: "#E84393", color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600 }}
-              >Wirklich löschen</motion.div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <motion.button onClick={() => setConfirmDel(false)} whileTap={{ scale: 0.97 }}
+                style={{ padding: "11px 20px 12px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.border}`, color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600 }}
+              >Abbrechen</motion.button>
+              <motion.button onClick={() => { onDelete(); onClose(); }} whileTap={{ scale: 0.97 }}
+                style={{ padding: "11px 22px 12px", borderRadius: 999, cursor: "pointer", background: "#EF4444", border: "none", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600 }}
+              >Wirklich löschen</motion.button>
             </div>
           )}
           {!confirmDel && <div style={{ flex: 1 }} />}
-          <div style={{ display: "flex", gap: 8 }}>
-            <motion.div onClick={onClose} whileTap={{ scale: 0.97 }}
-              style={{ padding: "10px 18px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500 }}
-            >{canEdit ? "Abbrechen" : "Schließen"}</motion.div>
+          <div style={{ display: "flex", gap: 10 }}>
             {canEdit && (
-            <motion.div onClick={save} whileTap={{ scale: 0.97 }}
-              style={{ padding: "10px 22px", borderRadius: 999, cursor: (!title.trim() || saving) ? "not-allowed" : "pointer", background: title.trim() && !saving ? theme.accent : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"), color: title.trim() && !saving ? "#fff" : theme.textFaint, fontSize: 13, fontFamily: FONT, fontWeight: 600 }}
-            >{saving ? "Speichert…" : creating ? "Erstellen" : "Speichern"}</motion.div>
+            <motion.button onClick={save} whileHover={title.trim() && !saving ? { scale: 1.03 } : {}} whileTap={{ scale: 0.97 }} disabled={!title.trim() || saving}
+              style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: (!title.trim() || saving) ? "not-allowed" : "pointer", minWidth: 128, boxSizing: "border-box", textAlign: "center", border: "none", background: title.trim() && !saving ? "#15151c" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"), color: title.trim() && !saving ? "#fff" : theme.textFaint, fontSize: 13, fontFamily: FONT, fontWeight: 600, transition: "background 0.18s ease" }}
+            >{saving ? "Speichert…" : creating ? "Erstellen" : "Speichern"}</motion.button>
+            )}
+            {!canEdit && (
+            <motion.button onClick={onClose} whileTap={{ scale: 0.97 }}
+              style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.border}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600 }}
+            >Schließen</motion.button>
             )}
           </div>
         </div>
