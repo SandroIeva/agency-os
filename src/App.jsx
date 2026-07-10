@@ -4837,6 +4837,571 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
 const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const MONTH_NAMES = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
 
+// ──── Whiteboard / Brainstorm — FigJam-style infinite canvas ────
+// Elements live in whiteboard_items (one row each) so Supabase realtime keeps
+// every collaborator's board in sync (last write wins per element).
+const WB_STICKY_COLORS = ["#FFE066", "#F4A79D", "#B5E2B0", "#A9D7F2", "#F0EEEA"];
+const WB_STROKE_COLORS = ["#15151c", "#EF4444", "#F59E0B", "#0EA5E9", "#10B981"];
+
+function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage = "de", orgMembers = [], boardId = null }) {
+  const de = appLanguage === "de";
+  const [boards, setBoards] = useState([]);
+  const [board, setBoard] = useState(null);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [items, setItems] = useState([]);          // [{ id, type, data }]
+  const [tool, setTool] = useState("select");      // select | hand | pen | sticky | rect | ellipse | arrow | text
+  const [cam, setCam] = useState({ x: 0, y: 0, s: 1 });
+  const [sel, setSel] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [tempStroke, setTempStroke] = useState(null);
+  const [tempItem, setTempItem] = useState(null);
+  const [timerSec, setTimerSec] = useState(0);
+  const [timerOn, setTimerOn] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const canvasRef = useRef(null);
+  const dragRef = useRef(null);
+  const fileRef = useRef(null);
+  const camRef = useRef(cam); camRef.current = cam;
+  const itemsRef = useRef(items); itemsRef.current = items;
+  const editingRef = useRef(editing); editingRef.current = editing;
+
+  // ── Timer (stopwatch, local) ──
+  useEffect(() => {
+    if (!timerOn) return;
+    const iv = setInterval(() => setTimerSec(s => s + 1), 1000);
+    return () => clearInterval(iv);
+  }, [timerOn]);
+  const fmtTimer = `${String(Math.floor(timerSec / 60)).padStart(2, "0")}:${String(timerSec % 60).padStart(2, "0")}`;
+
+  // ── Boards ──
+  const loadBoards = useCallback(async () => {
+    if (!userOrg?.id) return [];
+    const { data } = await supabase.from("whiteboards").select("id,name,created_at,updated_at").eq("org_id", userOrg.id).order("updated_at", { ascending: false });
+    setBoards(data || []);
+    return data || [];
+  }, [userOrg?.id]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const list = await loadBoards();
+      if (!alive) return;
+      const target = (boardId && list.find(b => b.id === boardId)) || list[0] || null;
+      if (target) { setBoard(target); setTitleDraft(target.name || ""); }
+    })();
+    return () => { alive = false; };
+  }, [boardId, loadBoards]);
+  const createBoard = async () => {
+    if (!userOrg?.id) return;
+    const { data, error } = await supabase.from("whiteboards").insert({ org_id: userOrg.id, name: "Brainstorm", created_by: session?.user?.id }).select().single();
+    if (error) { alert((de ? "Board konnte nicht erstellt werden: " : "Couldn't create board: ") + error.message); return; }
+    setBoards(prev => [data, ...prev]);
+    setBoard(data); setTitleDraft(data.name || ""); setItems([]); setSel(null); setCam({ x: 0, y: 0, s: 1 });
+  };
+  const openBoard = (id) => {
+    const b = boards.find(x => x.id === id); if (!b || b.id === board?.id) return;
+    setBoard(b); setTitleDraft(b.name || ""); setSel(null); setEditing(null); setCam({ x: 0, y: 0, s: 1 });
+  };
+  const persistTitle = async () => {
+    if (!board) return;
+    const name = titleDraft.trim() || "Brainstorm";
+    setTitleDraft(name);
+    setBoards(prev => prev.map(b => b.id === board.id ? { ...b, name } : b));
+    await supabase.from("whiteboards").update({ name, updated_at: new Date().toISOString() }).eq("id", board.id);
+  };
+
+  // ── Items: load + realtime sync ──
+  useEffect(() => {
+    if (!board?.id) { setItems([]); return; }
+    let alive = true;
+    (async () => {
+      const { data } = await supabase.from("whiteboard_items").select("id,type,data").eq("board_id", board.id).order("created_at", { ascending: true });
+      if (alive) setItems(data || []);
+    })();
+    const ch = supabase.channel(`wb-${board.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "whiteboard_items", filter: `board_id=eq.${board.id}` }, (payload) => {
+        if (payload.eventType === "INSERT") {
+          const row = payload.new;
+          setItems(prev => prev.some(i => i.id === row.id) ? prev : [...prev, { id: row.id, type: row.type, data: row.data }]);
+        } else if (payload.eventType === "UPDATE") {
+          const row = payload.new;
+          if (dragRef.current?.id === row.id || editingRef.current === row.id) return; // don't fight a local drag/edit
+          setItems(prev => prev.map(i => i.id === row.id ? { id: row.id, type: row.type, data: row.data } : i));
+        } else if (payload.eventType === "DELETE") {
+          setItems(prev => prev.filter(i => i.id !== payload.old?.id));
+        }
+      })
+      .subscribe();
+    return () => { alive = false; supabase.removeChannel(ch); };
+  }, [board?.id]);
+
+  // ── Mutations (optimistic; realtime echoes are deduped by id) ──
+  const addItemLocal = (type, data) => {
+    const id = crypto.randomUUID();
+    setItems(prev => [...prev, { id, type, data }]);
+    supabase.from("whiteboard_items").insert({ id, board_id: board.id, org_id: userOrg.id, type, data, created_by: session?.user?.id }).then(({ error }) => {
+      if (error) console.warn("[wb] insert failed:", error.message);
+    });
+    return id;
+  };
+  const patchItem = (id, patch) => setItems(prev => prev.map(i => i.id === id ? { ...i, data: { ...i.data, ...patch } } : i));
+  const persistById = (id) => setTimeout(() => {
+    const it = itemsRef.current.find(i => i.id === id);
+    if (it) supabase.from("whiteboard_items").update({ data: it.data }).eq("id", id).then(() => {});
+  }, 0);
+  const deleteItem = (id) => {
+    setItems(prev => prev.filter(i => i.id !== id));
+    setSel(s => s === id ? null : s);
+    supabase.from("whiteboard_items").delete().eq("id", id).then(() => {});
+  };
+  const commitText = (id, text) => {
+    setEditing(null);
+    const it = itemsRef.current.find(i => i.id === id); if (!it) return;
+    const data = { ...it.data, text };
+    setItems(prev => prev.map(i => i.id === id ? { ...i, data } : i));
+    supabase.from("whiteboard_items").update({ data }).eq("id", id).then(() => {});
+  };
+
+  // ── Coordinate helpers ──
+  const toWorld = (e) => {
+    const r = canvasRef.current.getBoundingClientRect();
+    const c = camRef.current;
+    return { x: (e.clientX - r.left - c.x) / c.s, y: (e.clientY - r.top - c.y) / c.s };
+  };
+  const bboxOf = (it) => {
+    const d = it.data || {};
+    if (it.type === "arrow") return { x: Math.min(d.x1, d.x2), y: Math.min(d.y1, d.y2), w: Math.abs(d.x2 - d.x1), h: Math.abs(d.y2 - d.y1) };
+    if (it.type === "draw") {
+      const pts = d.points || [[0, 0]];
+      const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+      return { x: Math.min(...xs) + (d.ox || 0), y: Math.min(...ys) + (d.oy || 0), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+    }
+    return { x: d.x || 0, y: d.y || 0, w: d.w || 0, h: d.h || 0 };
+  };
+
+  // ── Placement ──
+  const placeSticky = (pt) => {
+    const id = addItemLocal("sticky", { x: pt.x - 95, y: pt.y - 95, w: 190, h: 190, text: "", color: WB_STICKY_COLORS[0] });
+    setSel(id); setEditing(id); setTool("select");
+  };
+  const placeText = (pt) => {
+    const id = addItemLocal("text", { x: pt.x, y: pt.y - 16, w: 260, h: 44, text: "", color: "#15151c" });
+    setSel(id); setEditing(id); setTool("select");
+  };
+
+  // ── Canvas pointer handlers ──
+  const onCanvasPointerDown = (e) => {
+    if (e.button !== 0 || !board) return;
+    canvasRef.current?.setPointerCapture?.(e.pointerId);
+    const pt = toWorld(e);
+    if (tool === "hand") { dragRef.current = { mode: "pan", sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y }; return; }
+    if (tool === "pen") { dragRef.current = { mode: "draw" }; setTempStroke({ points: [[pt.x, pt.y]], color: "#15151c" }); return; }
+    if (tool === "sticky") { placeSticky(pt); return; }
+    if (tool === "text") { placeText(pt); return; }
+    if (tool === "rect" || tool === "ellipse") { dragRef.current = { mode: "create", type: tool, sx: pt.x, sy: pt.y }; setTempItem({ type: tool, x: pt.x, y: pt.y, w: 1, h: 1 }); return; }
+    if (tool === "arrow") { dragRef.current = { mode: "arrow" }; setTempItem({ type: "arrow", x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y }); return; }
+    // select tool on empty canvas: deselect + pan
+    setSel(null); setEditing(null);
+    dragRef.current = { mode: "pan", sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y };
+  };
+  const onCanvasPointerMove = (e) => {
+    const d = dragRef.current; if (!d) return;
+    if (d.mode === "pan") { setCam(prev => ({ ...prev, x: d.cx + (e.clientX - d.sx), y: d.cy + (e.clientY - d.sy) })); return; }
+    const pt = toWorld(e);
+    if (d.mode === "draw") { setTempStroke(s => s ? { ...s, points: [...s.points, [pt.x, pt.y]] } : s); return; }
+    if (d.mode === "create") { setTempItem({ type: d.type, x: Math.min(d.sx, pt.x), y: Math.min(d.sy, pt.y), w: Math.abs(pt.x - d.sx), h: Math.abs(pt.y - d.sy) }); return; }
+    if (d.mode === "arrow") { setTempItem(t => t ? { ...t, x2: pt.x, y2: pt.y } : t); return; }
+    if (d.mode === "move") {
+      const nx = pt.x - d.grabX, ny = pt.y - d.grabY;
+      let patch;
+      if (d.type === "arrow") patch = { x1: nx, y1: ny, x2: nx + (d.base.x2 - d.base.x1), y2: ny + (d.base.y2 - d.base.y1) };
+      else if (d.type === "draw") patch = { ox: nx, oy: ny };
+      else patch = { x: nx, y: ny };
+      patchItem(d.id, patch); d.final = patch; d.persistId = d.id;
+      return;
+    }
+    if (d.mode === "resize") {
+      const patch = { w: Math.max(36, pt.x - d.base.x), h: Math.max(30, pt.y - d.base.y) };
+      patchItem(d.id, patch); d.final = patch; d.persistId = d.id;
+    }
+  };
+  const onCanvasPointerUp = () => {
+    const d = dragRef.current;
+    if (d?.mode === "draw" && tempStroke && tempStroke.points.length > 1) {
+      addItemLocal("draw", { points: tempStroke.points, ox: 0, oy: 0, color: tempStroke.color, sw: 2.5 });
+    }
+    if (d?.mode === "create" && tempItem) {
+      const w = Math.max(48, tempItem.w), h = Math.max(48, tempItem.h);
+      const id = addItemLocal(tempItem.type, { x: tempItem.x, y: tempItem.y, w, h, text: "", color: "#15151c" });
+      setSel(id); setTool("select");
+    }
+    if (d?.mode === "arrow" && tempItem) {
+      if (Math.hypot(tempItem.x2 - tempItem.x1, tempItem.y2 - tempItem.y1) > 12) {
+        const id = addItemLocal("arrow", { x1: tempItem.x1, y1: tempItem.y1, x2: tempItem.x2, y2: tempItem.y2, color: "#15151c", sw: 2.5 });
+        setSel(id);
+      }
+      setTool("select");
+    }
+    if (d?.persistId && d.final) {
+      const it = itemsRef.current.find(i => i.id === d.persistId);
+      if (it) supabase.from("whiteboard_items").update({ data: { ...it.data, ...d.final } }).eq("id", d.persistId).then(() => {});
+    }
+    setTempStroke(null); setTempItem(null);
+    dragRef.current = null;
+  };
+  const onItemPointerDown = (e, it) => {
+    if (tool !== "select" || e.button !== 0) return;
+    e.stopPropagation();
+    canvasRef.current?.setPointerCapture?.(e.pointerId);
+    setSel(it.id);
+    if (editing && editing !== it.id) setEditing(null);
+    const pt = toWorld(e);
+    const d = it.data || {};
+    if (it.type === "arrow") dragRef.current = { mode: "move", id: it.id, type: "arrow", grabX: pt.x - d.x1, grabY: pt.y - d.y1, base: { ...d } };
+    else if (it.type === "draw") dragRef.current = { mode: "move", id: it.id, type: "draw", grabX: pt.x - (d.ox || 0), grabY: pt.y - (d.oy || 0), base: { ...d } };
+    else dragRef.current = { mode: "move", id: it.id, type: it.type, grabX: pt.x - (d.x || 0), grabY: pt.y - (d.y || 0), base: { ...d } };
+  };
+
+  // ── Wheel: pan; ctrl/cmd+wheel or pinch: zoom around the cursor ──
+  useEffect(() => {
+    const el = canvasRef.current; if (!el) return;
+    const h = (e) => {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) {
+        const r = el.getBoundingClientRect();
+        const mx = e.clientX - r.left, my = e.clientY - r.top;
+        setCam(prev => {
+          const ns = Math.min(3, Math.max(0.2, prev.s * (e.deltaY < 0 ? 1.07 : 0.935)));
+          const k = ns / prev.s;
+          return { s: ns, x: mx - k * (mx - prev.x), y: my - k * (my - prev.y) };
+        });
+      } else {
+        setCam(prev => ({ ...prev, x: prev.x - e.deltaX, y: prev.y - e.deltaY }));
+      }
+    };
+    el.addEventListener("wheel", h, { passive: false });
+    return () => el.removeEventListener("wheel", h);
+  }, []);
+  const zoomBy = (dir) => {
+    const el = canvasRef.current; if (!el) return;
+    const r = el.getBoundingClientRect();
+    const mx = r.width / 2, my = r.height / 2;
+    setCam(prev => {
+      const ns = Math.min(3, Math.max(0.2, prev.s * (dir > 0 ? 1.2 : 1 / 1.2)));
+      const k = ns / prev.s;
+      return { s: ns, x: mx - k * (mx - prev.x), y: my - k * (my - prev.y) };
+    });
+  };
+
+  // ── Keyboard: delete selection, escape ──
+  useEffect(() => {
+    const onKey = (e) => {
+      if (/^(INPUT|TEXTAREA)$/.test(e.target?.tagName || "") || e.target?.isContentEditable) return;
+      if ((e.key === "Backspace" || e.key === "Delete") && sel) { e.preventDefault(); deleteItem(sel); }
+      if (e.key === "Escape") { setSel(null); setEditing(null); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }); // eslint-disable-line
+
+  // ── Images: upload via toolbar or drop ──
+  const handleImageFiles = async (files, at) => {
+    const file = Array.from(files || []).find(f => f.type.startsWith("image/"));
+    if (!file || !board || !userOrg?.id) return;
+    const ext = (file.name.split(".").pop() || "png").toLowerCase();
+    const path = `whiteboards/${userOrg.id}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type });
+    if (error) { alert((de ? "Bild-Upload fehlgeschlagen: " : "Image upload failed: ") + error.message); return; }
+    const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
+    const url = pub.publicUrl;
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 420 / img.naturalWidth);
+      const w = Math.max(60, img.naturalWidth * k), h = Math.max(60, img.naturalHeight * k);
+      let center = at;
+      if (!center) {
+        const r = canvasRef.current.getBoundingClientRect();
+        const c = camRef.current;
+        center = { x: (r.width / 2 - c.x) / c.s, y: (r.height / 2 - c.y) / c.s };
+      }
+      const id = addItemLocal("image", { x: center.x - w / 2, y: center.y - h / 2, w, h, src: url });
+      setSel(id);
+    };
+    img.src = url;
+  };
+
+  // ── Rendering ──
+  const renderBoxItem = (it) => {
+    const d = it.data || {};
+    const isSel = sel === it.id;
+    const isEdit = editing === it.id;
+    const { x = 0, y = 0, w = 160, h = 120 } = d;
+    let wrap = { position: "absolute", left: x, top: y, width: w, height: h, boxSizing: "border-box", cursor: "move", outline: isSel ? "1.5px solid #3B82F6" : "none", outlineOffset: 2 };
+    if (it.type === "sticky") wrap = { ...wrap, background: d.color || WB_STICKY_COLORS[0], borderRadius: 6, boxShadow: "0 8px 22px rgba(0,0,0,0.14)", padding: 14 };
+    if (it.type === "rect") wrap = { ...wrap, background: "transparent", border: `2px solid ${d.color || "#15151c"}`, borderRadius: 12, padding: 12, display: "flex", alignItems: "center", justifyContent: "center" };
+    if (it.type === "ellipse") wrap = { ...wrap, background: "transparent", border: `2px solid ${d.color || "#15151c"}`, borderRadius: "50%", padding: 16, display: "flex", alignItems: "center", justifyContent: "center" };
+    if (it.type === "text") wrap = { ...wrap, padding: 2 };
+    if (it.type === "image") wrap = { ...wrap, borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 22px rgba(0,0,0,0.12)" };
+    const textColor = it.type === "sticky" ? "#2c2c25" : (d.color || "#15151c");
+    const textStyle = { width: "100%", height: "100%", background: "transparent", border: "none", outline: "none", resize: "none", fontFamily: FONT, fontSize: it.type === "text" ? 16 : 14.5, lineHeight: 1.45, color: textColor, textAlign: (it.type === "rect" || it.type === "ellipse") ? "center" : "left", padding: 0, overflow: "hidden" };
+    return (
+      <div key={it.id}
+        onPointerDown={(e) => onItemPointerDown(e, it)}
+        onDoubleClick={(e) => { if (it.type !== "image") { e.stopPropagation(); setSel(it.id); setEditing(it.id); } }}
+        style={wrap}>
+        {it.type === "image" ? (
+          <img src={d.src} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none", display: "block" }} />
+        ) : isEdit ? (
+          <textarea autoFocus defaultValue={d.text || ""}
+            onPointerDown={e => e.stopPropagation()}
+            onBlur={(e) => commitText(it.id, e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); commitText(it.id, e.target.value); } if (e.key === "Enter" && it.type === "text") { e.preventDefault(); commitText(it.id, e.target.value); } }}
+            style={{ ...textStyle, cursor: "text" }} />
+        ) : (
+          <div style={{ ...textStyle, whiteSpace: "pre-wrap", wordBreak: "break-word", display: (it.type === "rect" || it.type === "ellipse") ? "flex" : "block", alignItems: "center", justifyContent: "center", userSelect: "none", pointerEvents: "none" }}>{d.text || ""}</div>
+        )}
+        {isSel && !isEdit && (
+          <div onPointerDown={(e) => { e.stopPropagation(); canvasRef.current?.setPointerCapture?.(e.pointerId); dragRef.current = { mode: "resize", id: it.id, base: { x, y, w, h } }; }}
+            style={{ position: "absolute", right: -7, bottom: -7, width: 13, height: 13, borderRadius: 3, background: "#fff", border: "1.5px solid #3B82F6", cursor: "nwse-resize" }} />
+        )}
+      </div>
+    );
+  };
+  const renderPath = (it) => {
+    const d = it.data || {};
+    const pts = d.points || [];
+    if (pts.length < 2) return null;
+    const ox = d.ox || 0, oy = d.oy || 0;
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    const minX = Math.min(...xs), minY = Math.min(...ys);
+    const pad = 8;
+    const path = pts.map((p, i) => `${i ? "L" : "M"}${(p[0] - minX + pad).toFixed(1)} ${(p[1] - minY + pad).toFixed(1)}`).join(" ");
+    return (
+      <svg key={it.id} width={Math.max(...xs) - minX + pad * 2} height={Math.max(...ys) - minY + pad * 2}
+        style={{ position: "absolute", left: minX + ox - pad, top: minY + oy - pad, overflow: "visible", pointerEvents: "none" }}>
+        <path d={path} stroke={d.color || "#15151c"} strokeWidth={(d.sw || 2.5) + (sel === it.id ? 0.8 : 0)} fill="none" strokeLinecap="round" strokeLinejoin="round"
+          style={{ pointerEvents: "stroke", cursor: "move" }} onPointerDown={(e) => onItemPointerDown(e, it)} />
+      </svg>
+    );
+  };
+  const renderArrow = (it) => {
+    const d = it.data || {};
+    const { x1 = 0, y1 = 0, x2 = 40, y2 = 0 } = d;
+    const minX = Math.min(x1, x2) - 10, minY = Math.min(y1, y2) - 10;
+    const ang = Math.atan2(y2 - y1, x2 - x1);
+    const hl = 11;
+    const hx1 = x2 - hl * Math.cos(ang - 0.46), hy1 = y2 - hl * Math.sin(ang - 0.46);
+    const hx2 = x2 - hl * Math.cos(ang + 0.46), hy2 = y2 - hl * Math.sin(ang + 0.46);
+    const col = d.color || "#15151c";
+    return (
+      <svg key={it.id} width={Math.abs(x2 - x1) + 20} height={Math.abs(y2 - y1) + 20}
+        style={{ position: "absolute", left: minX, top: minY, overflow: "visible", pointerEvents: "none" }}>
+        <g transform={`translate(${-minX}, ${-minY})`} stroke={col} strokeWidth={(d.sw || 2.5) + (sel === it.id ? 0.8 : 0)} strokeLinecap="round" fill="none"
+          style={{ pointerEvents: "stroke", cursor: "move" }} onPointerDown={(e) => onItemPointerDown(e, it)}>
+          <line x1={x1} y1={y1} x2={x2} y2={y2} />
+          <line x1={x2} y1={y2} x2={hx1} y2={hy1} />
+          <line x1={x2} y1={y2} x2={hx2} y2={hy2} />
+        </g>
+      </svg>
+    );
+  };
+  const renderItem = (it) => {
+    if (it.type === "draw") return renderPath(it);
+    if (it.type === "arrow") return renderArrow(it);
+    return renderBoxItem(it);
+  };
+
+  // Selection toolbar (screen space, above the selected element)
+  const selItem = items.find(i => i.id === sel) || null;
+  const selToolbar = (() => {
+    if (!selItem || editing) return null;
+    const b = bboxOf(selItem);
+    const left = b.x * cam.s + cam.x;
+    const top = b.y * cam.s + cam.y - 46;
+    const palette = selItem.type === "sticky" ? WB_STICKY_COLORS : (["rect", "ellipse", "arrow", "draw", "text"].includes(selItem.type) ? WB_STROKE_COLORS : null);
+    return (
+      <div onPointerDown={e => e.stopPropagation()}
+        style={{ position: "absolute", left, top, display: "flex", alignItems: "center", gap: 7, padding: "7px 10px", borderRadius: 999, zIndex: 20,
+          background: darkMode ? "rgba(28,28,38,0.92)" : "rgba(255,255,255,0.95)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}`,
+          boxShadow: "0 10px 28px rgba(0,0,0,0.16)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)" }}>
+        {palette && palette.map(c => (
+          <div key={c} onClick={() => { patchItem(selItem.id, { color: c }); persistById(selItem.id); }}
+            style={{ width: 17, height: 17, borderRadius: "50%", background: c, cursor: "pointer",
+              border: (selItem.data?.color || (selItem.type === "sticky" ? WB_STICKY_COLORS[0] : "#15151c")) === c ? "2px solid #3B82F6" : `1px solid ${darkMode ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.15)"}` }} />
+        ))}
+        {palette && <div style={{ width: 1, height: 16, background: darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)" }} />}
+        <motion.div whileTap={{ scale: 0.88 }} onClick={() => deleteItem(selItem.id)} title={de ? "Löschen" : "Delete"}
+          style={{ width: 24, height: 24, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#e5484d" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+        </motion.div>
+      </div>
+    );
+  })();
+
+  // ── Toolbar definition ──
+  const toolBtn = (id, title, icon) => {
+    const on = tool === id;
+    return (
+      <motion.div key={id} whileTap={{ scale: 0.9 }} onClick={() => { setTool(id); setEditing(null); }} title={title}
+        style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+          background: on ? "#15151c" : "transparent", color: on ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
+        {icon}
+      </motion.div>
+    );
+  };
+  const sw = 1.9;
+  const cursorForTool = tool === "hand" ? "grab" : tool === "select" ? "default" : "crosshair";
+  const avatars = (orgMembers || []).slice(0, 3);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+      style={{ position: "absolute", inset: 0, zIndex: 5, overflow: "hidden", background: theme.bg }}
+    >
+      {/* Canvas */}
+      <div ref={canvasRef}
+        onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp}
+        onDrop={(e) => { e.preventDefault(); handleImageFiles(e.dataTransfer.files, toWorld(e)); }}
+        onDragOver={(e) => e.preventDefault()}
+        style={{ position: "absolute", inset: 0, cursor: cursorForTool, touchAction: "none",
+          backgroundImage: `radial-gradient(circle, ${darkMode ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.10)"} 1px, transparent 1px)`,
+          backgroundSize: `${24 * cam.s}px ${24 * cam.s}px`, backgroundPosition: `${cam.x}px ${cam.y}px` }}>
+        <div style={{ position: "absolute", left: 0, top: 0, transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`, transformOrigin: "0 0", pointerEvents: tool === "select" ? "auto" : "none" }}>
+          {items.map(renderItem)}
+          {/* Live pen stroke */}
+          {tempStroke && tempStroke.points.length > 1 && (() => {
+            const xs = tempStroke.points.map(p => p[0]), ys = tempStroke.points.map(p => p[1]);
+            const minX = Math.min(...xs), minY = Math.min(...ys);
+            const path = tempStroke.points.map((p, i) => `${i ? "L" : "M"}${(p[0] - minX + 8).toFixed(1)} ${(p[1] - minY + 8).toFixed(1)}`).join(" ");
+            return <svg width={Math.max(...xs) - minX + 16} height={Math.max(...ys) - minY + 16} style={{ position: "absolute", left: minX - 8, top: minY - 8, overflow: "visible", pointerEvents: "none" }}>
+              <path d={path} stroke={tempStroke.color} strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+          })()}
+          {/* Live create-drag preview */}
+          {tempItem && (tempItem.type === "rect" || tempItem.type === "ellipse") && (
+            <div style={{ position: "absolute", left: tempItem.x, top: tempItem.y, width: tempItem.w, height: tempItem.h, border: "2px dashed #15151c", borderRadius: tempItem.type === "ellipse" ? "50%" : 12, pointerEvents: "none" }} />
+          )}
+          {tempItem && tempItem.type === "arrow" && (
+            <svg style={{ position: "absolute", left: 0, top: 0, overflow: "visible", pointerEvents: "none" }}>
+              <line x1={tempItem.x1} y1={tempItem.y1} x2={tempItem.x2} y2={tempItem.y2} stroke="#15151c" strokeWidth={2.5} strokeDasharray="6 5" strokeLinecap="round" />
+            </svg>
+          )}
+        </div>
+        {selToolbar}
+        {/* Empty hint */}
+        {board && items.length === 0 && !tempStroke && !tempItem && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textFaint, textAlign: "center", lineHeight: 1.7 }}>
+              {de ? <>Wähle unten ein Werkzeug und leg los.<br/>Notizen, Formen, Pfeile, Text, Zeichnen — oder zieh ein Bild rein.</> : <>Pick a tool below and go.<br/>Notes, shapes, arrows, text, drawing — or drop an image.</>}
+            </div>
+          </div>
+        )}
+        {!board && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", gap: 16, alignItems: "center", justifyContent: "center" }}>
+            <div style={{ fontSize: 15, fontFamily: FONT, color: theme.textDim }}>{de ? "Noch kein Board." : "No board yet."}</div>
+            <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={createBoard}
+              style={{ padding: "11px 24px 12px", borderRadius: 999, background: "#15151c", border: "none", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
+              {de ? "Neues Board" : "New board"}
+            </motion.button>
+          </div>
+        )}
+      </div>
+
+      {/* Header overlay */}
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, padding: "18px 24px 0", display: "flex", alignItems: "center", gap: 12, pointerEvents: "none" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, pointerEvents: "auto" }} onPointerDown={e => e.stopPropagation()}>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={onBack}
+            style={{ width: 32, height: 32, borderRadius: "50%", cursor: "pointer", border: `1px solid ${theme.border}`, background: darkMode ? "rgba(22,22,30,0.8)" : "rgba(255,255,255,0.85)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: theme.textDim, fontFamily: FONT, flexShrink: 0 }}>←</motion.div>
+          {board && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 14px", borderRadius: 12, background: darkMode ? "rgba(22,22,30,0.8)" : "rgba(255,255,255,0.85)", border: `1px solid ${theme.borderFaint}`, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}>
+              <input value={titleDraft} onChange={e => setTitleDraft(e.target.value)} onBlur={persistTitle}
+                onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                style={{ border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 14.5, fontWeight: 600, fontFamily: FONT, width: Math.max(90, Math.min(280, titleDraft.length * 8.5 + 20)) }} />
+              {boards.length > 1 && (
+                <Dropdown value={board.id} onChange={openBoard} theme={theme} darkMode={darkMode} align="left" minWidth={220} maxTriggerWidth={40}
+                  options={boards.map(b => ({ value: b.id, label: b.name || "Brainstorm" }))}
+                  triggerStyle={{ padding: "5px 8px", background: "transparent" }} />
+              )}
+              <motion.div whileTap={{ scale: 0.9 }} onClick={createBoard} title={de ? "Neues Board" : "New board"}
+                style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </motion.div>
+            </div>
+          )}
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 10, pointerEvents: "auto" }} onPointerDown={e => e.stopPropagation()}>
+          {/* Collaborator avatars */}
+          {avatars.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center" }}>
+              {avatars.map((m, i) => {
+                const av = m?.profiles?.avatar_url || m?.avatar_url;
+                const name = m?.profiles?.display_name || m?.display_name || "?";
+                return av
+                  ? <img key={i} src={av} alt="" referrerPolicy="no-referrer" title={name} style={{ width: 28, height: 28, borderRadius: "50%", border: `2px solid ${darkMode ? "#16161e" : "#fff"}`, marginLeft: i ? -8 : 0 }} />
+                  : <div key={i} title={name} style={{ width: 28, height: 28, borderRadius: "50%", background: "#15151c", color: "#fff", fontSize: 11, fontWeight: 600, fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${darkMode ? "#16161e" : "#fff"}`, marginLeft: i ? -8 : 0 }}>{name[0]}</div>;
+              })}
+            </div>
+          )}
+          {/* Stopwatch */}
+          <motion.div whileTap={{ scale: 0.96 }} onClick={() => setTimerOn(v => !v)} onDoubleClick={() => { setTimerOn(false); setTimerSec(0); }}
+            title={de ? "Klick: Start/Pause · Doppelklick: Zurücksetzen" : "Click: start/pause · double-click: reset"}
+            style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, cursor: "pointer",
+              background: darkMode ? "rgba(22,22,30,0.8)" : "rgba(255,255,255,0.85)", border: `1px solid ${theme.borderFaint}`,
+              backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", fontFamily: FONT, fontSize: 13, fontWeight: 600, color: theme.text, fontVariantNumeric: "tabular-nums" }}>
+            {timerOn
+              ? <span style={{ width: 8, height: 8, borderRadius: 2, background: "#EF4444", flexShrink: 0 }} />
+              : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>}
+            {fmtTimer}
+          </motion.div>
+          {/* Share */}
+          <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+            onClick={() => { try { navigator.clipboard.writeText(window.location.origin); } catch (_) {} setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+            title={de ? "Alle Team-Mitglieder können dieses Board öffnen (Erstellen → Brainstorm)" : "All team members can open this board (Create → Brainstorm)"}
+            style={{ padding: "9px 18px", borderRadius: 999, background: "#15151c", border: "none", color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
+            {copied ? (de ? "✓ Kopiert" : "✓ Copied") : (de ? "Teilen" : "Share")}
+          </motion.button>
+        </div>
+      </div>
+
+      {/* Bottom toolbar */}
+      <div style={{ position: "absolute", left: "50%", bottom: 22, transform: "translateX(-50%)", pointerEvents: "auto" }} onPointerDown={e => e.stopPropagation()}>
+        <div style={{ display: "flex", alignItems: "center", gap: 4, padding: 6, borderRadius: 16,
+          background: darkMode ? "rgba(22,22,30,0.9)" : "rgba(255,255,255,0.95)", border: `1px solid ${theme.borderFaint}`,
+          boxShadow: "0 14px 40px rgba(0,0,0,0.16)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
+          {toolBtn("select", de ? "Auswählen" : "Select", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M5 3l7.5 16 2-6.5L21 10.5z"/></svg>)}
+          {toolBtn("hand", de ? "Verschieben" : "Hand", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>)}
+          <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
+          {toolBtn("pen", de ? "Stift" : "Pen", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>)}
+          {toolBtn("sticky", "Sticky Note", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5z"/><path d="M15 3v6h6"/></svg>)}
+          {toolBtn("rect", de ? "Rechteck" : "Rectangle", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw}><rect x="3" y="3" width="18" height="18" rx="2.5"/></svg>)}
+          {toolBtn("ellipse", de ? "Kreis" : "Circle", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw}><circle cx="12" cy="12" r="9"/></svg>)}
+          {toolBtn("arrow", de ? "Pfeil" : "Arrow", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>)}
+          {toolBtn("text", "Text", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>)}
+          <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
+          <motion.div whileTap={{ scale: 0.9 }} onClick={() => fileRef.current?.click()} title={de ? "Bild einfügen" : "Insert image"}
+            style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          </motion.div>
+          <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { handleImageFiles(e.target.files); e.target.value = ""; }} />
+        </div>
+      </div>
+
+      {/* Zoom controls */}
+      <div style={{ position: "absolute", right: 22, bottom: 22, display: "flex", alignItems: "center", gap: 2, padding: 4, borderRadius: 999,
+        background: darkMode ? "rgba(22,22,30,0.9)" : "rgba(255,255,255,0.95)", border: `1px solid ${theme.borderFaint}`,
+        boxShadow: "0 10px 28px rgba(0,0,0,0.12)", pointerEvents: "auto" }} onPointerDown={e => e.stopPropagation()}>
+        <motion.div whileTap={{ scale: 0.9 }} onClick={() => zoomBy(-1)} style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textSub }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </motion.div>
+        <div onClick={() => setCam({ x: 0, y: 0, s: 1 })} title={de ? "Zoom zurücksetzen" : "Reset zoom"} style={{ minWidth: 44, textAlign: "center", fontSize: 11.5, fontFamily: FONT, fontWeight: 600, color: theme.textSub, cursor: "pointer", fontVariantNumeric: "tabular-nums" }}>{Math.round(cam.s * 100)}%</div>
+        <motion.div whileTap={{ scale: 0.9 }} onClick={() => zoomBy(1)} style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textSub }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+}
+
 function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReLogin, ensureValidToken, theme, darkMode, t, userOrg }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
@@ -22363,6 +22928,7 @@ export default function CircularMenu() {
   const [onboardingError, setOnboardingError] = useState(null);
   const [orgMembers, setOrgMembers] = useState([]);          // team members for chat etc.
   const [docDeepLink, setDocDeepLink] = useState(null);      // open a document from a notification: { documentId, blockId, ts }
+  const [whiteboardId, setWhiteboardId] = useState(null);    // board to open in the Brainstorm whiteboard view
   const [docFullscreen, setDocFullscreen] = useState(false); // document editor in full-viewport mode
   const [brandProfile, setBrandProfile] = useState(null);    // brand_profile row for current org — fed into AI context
   const [appProjects, setAppProjects] = useState([]);        // [{name}] — known project names for AI context + vocab correction
@@ -25094,7 +25660,7 @@ export default function CircularMenu() {
     }
 
     // Let views with their own scrolling handle scroll natively
-    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "timeline" || currentView === "settings" || currentView === "notes" || currentView === "projects" || currentView === "brand" || currentView === "assets" || currentView === "touchpoints") {
+    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "timeline" || currentView === "settings" || currentView === "notes" || currentView === "projects" || currentView === "brand" || currentView === "assets" || currentView === "touchpoints" || currentView === "whiteboard") {
       return;
     }
 
@@ -25187,12 +25753,24 @@ export default function CircularMenu() {
     if (subOpen) { setSubOpen(false); try { sounds.menuClose(); } catch(e) {} return; }
   };
 
+  // Create a fresh Brainstorm board and open the whiteboard view (Erstellen → Brainstorm).
+  const openBrainstorm = async () => {
+    if (!userOrg?.id) return;
+    const { data, error } = await supabase.from("whiteboards")
+      .insert({ org_id: userOrg.id, name: "Brainstorm", created_by: session?.user?.id })
+      .select().single();
+    if (error) { alert("Board konnte nicht erstellt werden: " + error.message); return; }
+    setWhiteboardId(data.id);
+    setCurrentView("whiteboard");
+  };
+
   const handleSubClick = (subItem) => {
     try { sounds.subSelect(); } catch(e) {}
     setSubOpen(false);
     setMenuOpen(false);
     setSubHover(-1);
 
+    if (subItem.id === "brief") { openBrainstorm(); return; }
     if (subItem.id === "todo") {
       setTriggerNewTask(true);
       setCurrentView("kanban");
@@ -26007,6 +26585,13 @@ export default function CircularMenu() {
         <AnimatePresence>
           {currentView === "notes" && (
             <NotesView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} ensureValidToken={ensureValidToken} llmKeys={llmKeys} llmProvider={llmProvider} />
+          )}
+        </AnimatePresence>
+
+        {/* WHITEBOARD / BRAINSTORM VIEW */}
+        <AnimatePresence>
+          {currentView === "whiteboard" && (
+            <WhiteboardView session={session} userOrg={userOrg} orgMembers={orgMembers} theme={theme} darkMode={darkMode} appLanguage={appLanguage} boardId={whiteboardId} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
@@ -26854,7 +27439,7 @@ export default function CircularMenu() {
                   return;
                 }
                 if (subId === "project") { setCurrentView("projects"); return; }
-                // "brief" not implemented yet — menu already closed.
+                if (subId === "brief") { openBrainstorm(); return; }
                 return;
               }
               setMenuOpen(false);

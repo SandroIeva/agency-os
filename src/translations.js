@@ -33,7 +33,7 @@ const translations = {
   "linearMenu.channels":      { de: "Kanäle",           en: "Channels" },
   // Create sub-items
   "linearMenu.project":       { de: "Projekt",          en: "Project" },
-  "linearMenu.brief":         { de: "Brief",            en: "Brief" },
+  "linearMenu.brief":         { de: "Brainstorm",       en: "Brainstorm" },
   "linearMenu.document":      { de: "Dokument",         en: "Document" },
   // Plan sub-items
   "linearMenu.kanban":        { de: "Kanban",           en: "Kanban" },
@@ -161,7 +161,7 @@ const translations = {
   // ── Plus Menu (Create) ───────────────────────
   "plus.create": { de: "ERSTELLEN", en: "CREATE" },
   "plus.project": { de: "Projekt", en: "Project" },
-  "plus.brief": { de: "Brief", en: "Brief" },
+  "plus.brief": { de: "Brainstorm", en: "Brainstorm" },
   "plus.document": { de: "Dokument", en: "Document" },
 
   // ── Plus Menu (Task) ─────────────────────────
