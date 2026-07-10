@@ -3919,8 +3919,8 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
           </div>
           )}
           {/* Today + nav */}
-          <motion.div onClick={todayAnchor} whileTap={{ scale: 0.97 }}
-            style={{ padding: "6px 12px", borderRadius: 999, background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`, fontSize: 12, fontFamily: FONT, color: theme.textSub, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
+          <motion.div onClick={todayAnchor} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+            style={{ padding: "6px 13px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(21,21,28,0.07)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(21,21,28,0.14)"}`, fontSize: 12, fontFamily: FONT, color: theme.text, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
             Heute
@@ -3941,8 +3941,8 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
               return (
                 <motion.div key={z.id} onClick={() => setZoom(z.id)} whileTap={{ scale: 0.96 }}
                   style={{
-                    padding: "5px 12px", borderRadius: 999, cursor: "pointer",
-                    fontSize: 11, fontFamily: FONT, fontWeight: active ? 600 : 500,
+                    padding: "5px 14px", borderRadius: 999, cursor: "pointer",
+                    fontSize: 11.5, fontFamily: FONT, fontWeight: active ? 600 : 500,
                     color: active ? theme.text : theme.textDim,
                     background: active ? (darkMode ? "rgba(255,255,255,0.08)" : "#ffffff") : "transparent",
                     boxShadow: active ? (darkMode ? "0 1px 4px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.08)") : "none",
@@ -5500,23 +5500,26 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
         <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={navigateNext}
           style={{ cursor: "pointer", color: theme.textDim, fontSize: 18, fontFamily: FONT, padding: "4px 8px" }}>›</motion.div>
         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={goToday}
-          style={{ marginLeft: 8, cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 500, color: theme.accent, padding: "6px 14px", borderRadius: 20, background: theme.accent + "15", border: `1px solid ${theme.accent}30` }}>Heute</motion.div>
+          style={{ marginLeft: 8, cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 500, color: theme.text, padding: "6px 14px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(21,21,28,0.07)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(21,21,28,0.14)"}` }}>Heute</motion.div>
         <div style={{ flex: 1 }} />
-        {/* View mode switcher */}
-        <div style={{ display: "flex", gap: 2, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", borderRadius: 10, padding: 3, border: `1px solid ${theme.borderFaint}` }}>
-          {[{ key: "month", labelKey: "cal.month" }, { key: "week", labelKey: "cal.week" }, { key: "day", labelKey: "cal.day" }].map(v => (
+        {/* View mode switcher — same clean white-pill style as the Timeline switch */}
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 2, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", borderRadius: 999, padding: 3, border: `1px solid ${theme.borderFaint}` }}>
+          {[{ key: "month", labelKey: "cal.month" }, { key: "week", labelKey: "cal.week" }, { key: "day", labelKey: "cal.day" }].map(v => {
+            const active = viewMode === v.key;
+            return (
             <motion.div key={v.key}
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
+              whileTap={{ scale: 0.96 }}
               onClick={() => setViewMode(v.key)}
               style={{
-                cursor: "pointer", padding: "5px 14px", borderRadius: 8, fontSize: 11, fontFamily: FONT, fontWeight: 500,
-                color: viewMode === v.key ? (darkMode ? "#fff" : "#1a1a2e") : theme.textDim,
-                background: viewMode === v.key ? (darkMode ? "rgba(139,122,255,0.25)" : "rgba(108,92,231,0.15)") : "transparent",
+                cursor: "pointer", padding: "5px 14px", borderRadius: 999, fontSize: 11.5, fontFamily: FONT, fontWeight: active ? 600 : 500,
+                color: active ? theme.text : theme.textDim,
+                background: active ? (darkMode ? "rgba(255,255,255,0.08)" : "#ffffff") : "transparent",
+                boxShadow: active ? (darkMode ? "0 1px 4px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.08)") : "none",
+                border: active ? `1px solid ${theme.borderFaint}` : "1px solid transparent",
                 transition: "all 0.15s",
               }}
             >{t(v.labelKey)}</motion.div>
-          ))}
+          ); })}
         </div>
       </div>
 
