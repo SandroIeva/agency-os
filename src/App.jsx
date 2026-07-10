@@ -18929,6 +18929,13 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     { de: "Wie funktioniert die Avatar-Generierung?", en: "How does avatar generation work?" },
   ];
 
+  // All generated avatar versions. Each generation ("Weitere Version", "Ganzkörper",
+  // "Erneut erstellen") appends to cfg.gallery; cfg.imageUrl is the one currently shown.
+  // Older versions are kept, not overwritten — dots in the preview + prev/next in the
+  // detail view flip between them.
+  const galleryList = (cfg.gallery && cfg.gallery.length) ? cfg.gallery : (cfg.imageUrl ? [cfg.imageUrl] : []);
+  const currentGalleryIdx = Math.max(0, galleryList.indexOf(cfg.imageUrl));
+
   // Avatar preview card — glass panel with the avatar image (swap cfg.imageUrl)
   // and HTML overlays: "Avatar" title, an editable name field, and the archetype
   // label bottom-left. Used in the right column + the read-only view.
@@ -18965,12 +18972,33 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
           <span style={{ color: "#fff", fontSize: 12.5, fontFamily: FONT }}>{de ? "Persona wird erschaffen…" : "Creating persona…"}</span>
         </div>
       )}
+
+      {/* Version dots — flip between generated versions (only shown when there are 2+). */}
+      {cfg.imageUrl && !busy && galleryList.length > 1 && (
+        <div style={{ position: "absolute", left: 0, right: 0, bottom: 18, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 12px", borderRadius: 999, background: "rgba(0,0,0,0.3)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.16)", pointerEvents: "auto" }}>
+            {galleryList.map((url, i) => (
+              <motion.div key={url + i} whileTap={{ scale: 0.85 }}
+                onClick={() => update({ imageUrl: url })}
+                title={`${de ? "Version" : "Version"} ${i + 1}`}
+                style={{ width: i === currentGalleryIdx ? 18 : 7, height: 7, borderRadius: 999, cursor: "pointer",
+                  background: i === currentGalleryIdx ? "#fff" : "rgba(255,255,255,0.5)", transition: "width .22s ease, background .22s ease" }} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 
   // Fullscreen avatar detail — large image + right panel (name, folder, palette, prompt, share, download).
   // Fullscreen avatar detail — reuses the Moodboard item detail (image + right sidebar) 1:1.
-  const avatarItem = {
+  const avatarItems = galleryList.map((url, i) => ({
+    id: "brand-avatar-" + i, type: "image", url,
+    name: cfg.name || "", note: cfg.notes || "",
+    colors: cfg.avatarColors || [], tags: cfg.avatarTags || [],
+    metadata: { prompt: cfg.prompt || "" },
+  }));
+  const avatarItem = avatarItems[currentGalleryIdx] || {
     id: "brand-avatar", type: "image", url: cfg.imageUrl,
     name: cfg.name || "", note: cfg.notes || "",
     colors: cfg.avatarColors || [], tags: cfg.avatarTags || [],
@@ -18978,13 +19006,18 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   };
   const avatarDetail = (detailOpen && cfg.imageUrl) ? (
     <MoodboardItemDetail
-      item={avatarItem} items={[avatarItem]}
+      item={avatarItem} items={avatarItems}
       containers={[{ id: "avatar", title: "Avatar", name: "Avatar" }]} currentContainerId="avatar" containerLabel="Avatar"
       theme={theme} darkMode={darkMode} accent={accent} t={() => ""} appLanguage={appLanguage}
       llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken}
       onClose={() => setDetailOpen(false)}
-      onDelete={() => { update({ imageUrl: "" }); setDetailOpen(false); }}
-      onSelect={() => {}} onMove={() => {}}
+      onDelete={() => {
+        // Remove just this version; fall back to the previous one, or clear if it was the last.
+        const list = galleryList.filter(u => u !== cfg.imageUrl);
+        if (list.length === 0) { update({ imageUrl: "", gallery: [] }); setDetailOpen(false); }
+        else { update({ imageUrl: list[Math.min(currentGalleryIdx, list.length - 1)], gallery: list }); }
+      }}
+      onSelect={(it) => update({ imageUrl: it.url })} onMove={() => {}}
       onSave={(id, patch) => {
         const u = {};
         if ("name" in patch) u.name = patch.name;
