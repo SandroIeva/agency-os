@@ -4911,8 +4911,11 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
   for (let i = 1; i <= daysInMonth; i++) {
     calendarDays.push({ day: i, month, isOtherMonth: false });
   }
-  // Next month head
-  const remaining = 42 - calendarDays.length;
+  // Next month head — only fill enough weeks to cover the month (5 rows when the
+  // month fits in five, otherwise 6). The grid stretches these rows to fill the
+  // available height, so fewer rows just means each row is taller.
+  const weekRows = Math.ceil(calendarDays.length / 7);
+  const remaining = weekRows * 7 - calendarDays.length;
   for (let i = 1; i <= remaining; i++) {
     calendarDays.push({ day: i, month: month + 1, isOtherMonth: true });
   }
@@ -5542,7 +5545,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               ))}
             </div>
             {/* Day cells */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, flex: 1 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gridTemplateRows: `repeat(${weekRows}, 1fr)`, gap: 2, flex: 1, minHeight: 0 }}>
               {calendarDays.map((dayObj, i) => {
                 const events = getEventsForDay(dayObj);
                 const isSelected = selectedDay && selectedDay.day === dayObj.day && selectedDay.month === dayObj.month && !dayObj.isOtherMonth;
