@@ -4677,6 +4677,48 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
           </div>
         </div>
 
+        {/* 6. Checklist */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 8, display: "block" }}>Checkliste ({checklist.filter(c => c.done).length}/{checklist.length})</label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {checklist.map((c, idx) => (
+              <div key={c.id || `new-${idx}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)" }}>
+                <motion.div whileTap={{ scale: 0.9 }} onClick={() => setChecklist(prev => prev.map((x, i) => i === idx ? { ...x, done: !x.done } : x))}
+                  style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${c.done ? "#15151c" : theme.borderFaint}`, background: c.done ? "#15151c" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
+                >
+                  {c.done && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                </motion.div>
+                <input value={c.text} onChange={e => setChecklist(prev => prev.map((x, i) => i === idx ? { ...x, text: e.target.value } : x))}
+                  style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontFamily: FONT, color: c.done ? theme.textDim : theme.text, textDecoration: c.done ? "line-through" : "none", caretColor: theme.text }}
+                />
+                <motion.div whileTap={{ scale: 0.9 }} onClick={() => setChecklist(prev => prev.filter((_, i) => i !== idx))} style={{ cursor: "pointer", color: theme.textFaint, fontSize: 12, padding: 2 }}>✕</motion.div>
+              </div>
+            ))}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px" }}>
+              <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px dashed ${theme.borderFaint}`, flexShrink: 0 }} />
+              <input value={newChecklistText} onChange={e => setNewChecklistText(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && newChecklistText.trim()) {
+                    e.preventDefault();
+                    setChecklist(prev => [...prev, { text: newChecklistText.trim(), done: false, position: prev.length }]);
+                    setNewChecklistText("");
+                  }
+                }}
+                placeholder="Eintrag hinzufügen (Enter)…"
+                style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontFamily: FONT, color: theme.text, caretColor: theme.text }}
+              />
+              {newChecklistText.trim() && (
+                <motion.div whileTap={{ scale: 0.95 }} onClick={() => {
+                  setChecklist(prev => [...prev, { text: newChecklistText.trim(), done: false, position: prev.length }]);
+                  setNewChecklistText("");
+                }}
+                  style={{ cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.text, fontWeight: 600, padding: "2px 8px" }}
+                >+ Hinzufügen</motion.div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* 9. Assignees / Team */}
         <div style={{ marginBottom: 14 }}>
           <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 8, display: "block" }}>Team</label>
@@ -4735,48 +4777,6 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
                   </>
                 )}
               </AnimatePresence>
-            </div>
-          </div>
-        </div>
-
-        {/* 6. Checklist */}
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 8, display: "block" }}>Checkliste ({checklist.filter(c => c.done).length}/{checklist.length})</label>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {checklist.map((c, idx) => (
-              <div key={c.id || `new-${idx}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)" }}>
-                <motion.div whileTap={{ scale: 0.9 }} onClick={() => setChecklist(prev => prev.map((x, i) => i === idx ? { ...x, done: !x.done } : x))}
-                  style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${c.done ? "#15151c" : theme.borderFaint}`, background: c.done ? "#15151c" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
-                >
-                  {c.done && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
-                </motion.div>
-                <input value={c.text} onChange={e => setChecklist(prev => prev.map((x, i) => i === idx ? { ...x, text: e.target.value } : x))}
-                  style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontFamily: FONT, color: c.done ? theme.textDim : theme.text, textDecoration: c.done ? "line-through" : "none", caretColor: theme.text }}
-                />
-                <motion.div whileTap={{ scale: 0.9 }} onClick={() => setChecklist(prev => prev.filter((_, i) => i !== idx))} style={{ cursor: "pointer", color: theme.textFaint, fontSize: 12, padding: 2 }}>✕</motion.div>
-              </div>
-            ))}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px" }}>
-              <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px dashed ${theme.borderFaint}`, flexShrink: 0 }} />
-              <input value={newChecklistText} onChange={e => setNewChecklistText(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === "Enter" && newChecklistText.trim()) {
-                    e.preventDefault();
-                    setChecklist(prev => [...prev, { text: newChecklistText.trim(), done: false, position: prev.length }]);
-                    setNewChecklistText("");
-                  }
-                }}
-                placeholder="Eintrag hinzufügen (Enter)…"
-                style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontFamily: FONT, color: theme.text, caretColor: theme.text }}
-              />
-              {newChecklistText.trim() && (
-                <motion.div whileTap={{ scale: 0.95 }} onClick={() => {
-                  setChecklist(prev => [...prev, { text: newChecklistText.trim(), done: false, position: prev.length }]);
-                  setNewChecklistText("");
-                }}
-                  style={{ cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.text, fontWeight: 600, padding: "2px 8px" }}
-                >+ Hinzufügen</motion.div>
-              )}
             </div>
           </div>
         </div>
