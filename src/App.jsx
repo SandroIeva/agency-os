@@ -5016,7 +5016,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
         id: t.id,
         title: t.title,
         start: t.due_date,
-        color: priColors[t.priority] || "#8B7AFF",
+        color: priColors[t.priority] || "#64748B",
         type: "task",
         priority: t.priority,
         project: t.project_name,
@@ -5039,7 +5039,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
           start: e.all_day ? e.start_time.split("T")[0] : e.start_time,
           end: e.all_day ? e.end_time.split("T")[0] : e.end_time,
           allDay: e.all_day,
-          color: e.color || "#8B7AFF",
+          color: e.color || "#64748B",
           type: "team",
           description: e.description,
           location: e.location,
@@ -5073,7 +5073,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               id: e.id, title: e.title,
               start: e.all_day ? e.start_time.split("T")[0] : e.start_time,
               end: e.all_day ? e.end_time.split("T")[0] : e.end_time,
-              allDay: e.all_day, color: e.color || "#8B7AFF", type: "team",
+              allDay: e.all_day, color: e.color || "#64748B", type: "team",
               description: e.description, location: e.location, creator_id: e.creator_id,
             })));
           };
@@ -5557,9 +5557,9 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                     onDoubleClick={() => { if (!dayObj.isOtherMonth) { setSelectedDay(dayObj); openNewEvent(dayObj); } }}
                     style={{
                       padding: 10, borderRadius: 10, cursor: dayObj.isOtherMonth ? "default" : "pointer",
-                      background: isSelected ? (darkMode ? "rgba(139,122,255,0.15)" : "rgba(108,92,231,0.1)") : todayHighlight ? (darkMode ? "rgba(139,122,255,0.08)" : "rgba(108,92,231,0.06)") : weekend ? (darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.03)") : (darkMode ? "rgba(25,23,38,0.92)" : "rgba(255,255,255,0.85)"),
+                      background: isSelected ? (darkMode ? "rgba(255,255,255,0.10)" : "rgba(21,21,28,0.08)") : todayHighlight ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(21,21,28,0.05)") : weekend ? (darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.03)") : (darkMode ? "rgba(25,23,38,0.92)" : "rgba(255,255,255,0.85)"),
                       backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-                      border: isSelected ? `1px solid ${darkMode ? "rgba(139,122,255,0.3)" : "rgba(108,92,231,0.25)"}` : todayHighlight ? `1px solid ${darkMode ? "rgba(139,122,255,0.15)" : "rgba(108,92,231,0.12)"}` : "1px solid transparent",
+                      border: isSelected ? `1px solid ${darkMode ? "rgba(255,255,255,0.2)" : "rgba(21,21,28,0.18)"}` : todayHighlight ? `1px solid ${darkMode ? "rgba(255,255,255,0.1)" : "rgba(21,21,28,0.1)"}` : "1px solid transparent",
                       display: "flex", flexDirection: "column", minHeight: 54, transition: "all 0.15s",
                       opacity: dayObj.isOtherMonth ? 0.25 : 1,
                     }}
@@ -5567,7 +5567,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                     <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
                       <span style={{
                         fontSize: 11, fontFamily: FONT, fontWeight: todayHighlight ? 600 : 400,
-                        color: todayHighlight ? "#8B7AFF" : weekend ? theme.textDim : isSelected ? theme.text : theme.textSub,
+                        color: todayHighlight ? theme.text : weekend ? theme.textDim : isSelected ? theme.text : theme.textSub,
                       }}>{dayObj.day}</span>
                       {holiday && (
                         <>
@@ -5612,7 +5612,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                 return (
                   <div key={di} style={{ textAlign: "center", fontFamily: FONT }}>
                     <div style={{ fontSize: 10, color: di >= 5 ? theme.textFaint : theme.textDim, fontWeight: 500 }}>{WEEKDAYS[di]}</div>
-                    <div style={{ fontSize: 16, fontWeight: isTd ? 700 : 500, color: isTd ? "#8B7AFF" : di >= 5 ? theme.textFaint : theme.text, marginTop: 2 }}>{d.getDate()}</div>
+                    <div style={{ fontSize: 16, fontWeight: isTd ? 700 : 500, color: isTd ? theme.text : di >= 5 ? theme.textFaint : theme.text, marginTop: 2 }}>{d.getDate()}</div>
                   </div>
                 );
               })}
@@ -5626,9 +5626,9 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                 return (
                   <div key={di} style={{
                     padding: 10, borderRadius: 10, display: "flex", flexDirection: "column", gap: 4,
-                    background: isTd ? (darkMode ? "rgba(139,122,255,0.06)" : "rgba(108,92,231,0.05)") : di >= 5 ? (darkMode ? "rgba(255,255,255,0.01)" : "rgba(0,0,0,0.015)") : (darkMode ? "rgba(20,18,30,0.65)" : "rgba(255,255,255,0.7)"),
+                    background: isTd ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(21,21,28,0.05)") : di >= 5 ? (darkMode ? "rgba(255,255,255,0.01)" : "rgba(0,0,0,0.015)") : (darkMode ? "rgba(20,18,30,0.65)" : "rgba(255,255,255,0.7)"),
                     backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-                    border: isTd ? `1px solid ${darkMode ? "rgba(139,122,255,0.15)" : "rgba(108,92,231,0.12)"}` : `1px solid ${theme.borderFaint}`,
+                    border: isTd ? `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(21,21,28,0.12)"}` : `1px solid ${theme.borderFaint}`,
                     overflowY: "auto",
                   }}>
                     {hol && (
@@ -5747,10 +5747,10 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                             <span style={{ fontSize: 10, fontFamily: FONT, color: "#5B8DEF", padding: "2px 8px", borderRadius: 4, background: "rgba(91,141,239,0.1)" }}>Google</span>
                           )}
                           {e.type === "team" && (
-                            <span style={{ fontSize: 10, fontFamily: FONT, color: "#8B7AFF", padding: "2px 8px", borderRadius: 4, background: "rgba(139,122,255,0.1)" }}>Team</span>
+                            <span style={{ fontSize: 10, fontFamily: FONT, color: "#64748B", padding: "2px 8px", borderRadius: 4, background: "rgba(100,116,139,0.12)" }}>Team</span>
                           )}
                           {e.type === "task" && (
-                            <span style={{ fontSize: 10, fontFamily: FONT, color: "#8B7AFF", padding: "2px 8px", borderRadius: 4, background: "rgba(139,122,255,0.1)" }}>Aufgabe</span>
+                            <span style={{ fontSize: 10, fontFamily: FONT, color: "#64748B", padding: "2px 8px", borderRadius: 4, background: "rgba(100,116,139,0.12)" }}>Aufgabe</span>
                           )}
                           {e.project && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>{e.project}</span>}
                           {e.location && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>📍 {e.location}</span>}
@@ -5858,7 +5858,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                         <span style={{ fontSize: 9, fontFamily: FONT, color: "#5B8DEF", padding: "1px 6px", borderRadius: 4, background: "rgba(91,141,239,0.1)" }}>Google</span>
                       )}
                       {e.type === "task" && (
-                        <span style={{ fontSize: 9, fontFamily: FONT, color: "#8B7AFF", padding: "1px 6px", borderRadius: 4, background: "rgba(139,122,255,0.1)" }}>Aufgabe</span>
+                        <span style={{ fontSize: 9, fontFamily: FONT, color: "#64748B", padding: "1px 6px", borderRadius: 4, background: "rgba(100,116,139,0.12)" }}>Aufgabe</span>
                       )}
                       {e.project && (
                         <span style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint }}>{e.project}</span>
