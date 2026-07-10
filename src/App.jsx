@@ -26500,8 +26500,25 @@ export default function CircularMenu() {
                 return;
               }
               if (catId === "create") {
-                // Sub-routes not wired up yet — close menu, stay on dashboard
                 setMenuOpen(false);
+                if (subId === "document") {
+                  // Create a fresh document, then open it in the Docs view via the
+                  // existing deep-link flow (DocsTab fetches it by id if not yet loaded).
+                  (async () => {
+                    if (!userOrg?.id) return;
+                    let pref = "workspace"; try { pref = localStorage.getItem("agencyos-doc-default-visibility") || "workspace"; } catch (_) {}
+                    const visibility = pref === "private" ? "restricted" : "workspace";
+                    const { data, error } = await supabase.from("brand_documents")
+                      .insert({ org_id: userOrg.id, project_id: null, title: "Unbenanntes Dokument", content: "", created_by: session?.user?.id, visibility })
+                      .select().single();
+                    if (error) { alert("Dokument konnte nicht erstellt werden: " + error.message); return; }
+                    setDocDeepLink({ documentId: data.id, blockId: null, ts: Date.now() });
+                    setCurrentView("assets");
+                  })();
+                  return;
+                }
+                if (subId === "project") { setCurrentView("projects"); return; }
+                // "brief" not implemented yet — menu already closed.
                 return;
               }
               setMenuOpen(false);
