@@ -5907,14 +5907,20 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             onClick={e => e.stopPropagation()}
             style={{ width: 420, background: darkMode ? "rgba(28,26,42,0.95)" : "rgba(255,255,255,0.97)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, borderRadius: 20, padding: "28px 28px 24px", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}
           >
-            <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 20, letterSpacing: -0.3 }}>{t("cal.newEvent")}</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 20 }}>
+              <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{t("cal.newEvent")}</div>
+              <motion.div whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.9 }} onClick={cancelNewEvent}
+                style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </motion.div>
+            </div>
 
             {/* Title */}
             <input
               value={eventForm.title}
               onChange={e => setEventForm(f => ({ ...f, title: e.target.value }))}
               placeholder={t("cal.title")}
-              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none", marginBottom: 12, boxSizing: "border-box" }}
+              style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none", marginBottom: 12, boxSizing: "border-box", caretColor: theme.text }}
             />
 
             {/* Date */}
@@ -5922,53 +5928,50 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               type="date"
               value={eventForm.date}
               onChange={e => setEventForm(f => ({ ...f, date: e.target.value }))}
-              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none", marginBottom: 12, boxSizing: "border-box", colorScheme: darkMode ? "dark" : "light" }}
+              style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none", marginBottom: 14, boxSizing: "border-box", colorScheme: darkMode ? "dark" : "light" }}
             />
 
             {/* Team Event toggle */}
             {userOrg?.id && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
+              <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 14 }}>
+                <div
                   onClick={() => setEventForm(f => ({ ...f, isTeamEvent: !f.isTeamEvent, withMeet: f.isTeamEvent ? f.withMeet : false }))}
-                  style={{ width: 36, height: 20, borderRadius: 10, background: eventForm.isTeamEvent ? "rgba(139,122,255,0.4)" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"), cursor: "pointer", position: "relative", transition: "background 0.2s" }}
+                  style={{ flexShrink: 0, width: 42, height: 24, borderRadius: 999, cursor: "pointer", padding: 2, background: eventForm.isTeamEvent ? "#15151c" : (darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.14)"), transition: "background 0.25s ease" }}
                 >
-                  <motion.div animate={{ x: eventForm.isTeamEvent ? 17 : 2 }} transition={{ duration: 0.2 }}
-                    style={{ width: 16, height: 16, borderRadius: "50%", background: eventForm.isTeamEvent ? "#8B7AFF" : theme.textDim, position: "absolute", top: 2 }} />
-                </motion.div>
-                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub }}>Team-Termin</span>
-                <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim }}>{eventForm.isTeamEvent ? "Sichtbar für alle" : "Nur Google Calendar"}</span>
+                  <motion.div animate={{ x: eventForm.isTeamEvent ? 18 : 0 }} transition={{ type: "spring", stiffness: 500, damping: 34 }}
+                    style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }} />
+                </div>
+                <span style={{ fontSize: 14, fontFamily: FONT, color: theme.text }}>Team-Termin</span>
+                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{eventForm.isTeamEvent ? "Sichtbar für alle" : "Nur Google Calendar"}</span>
               </div>
             )}
 
             {/* Toggles row */}
-            <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 22, marginBottom: 14 }}>
               {/* All day toggle */}
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
+              <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                <div
                   onClick={() => setEventForm(f => ({ ...f, allDay: !f.allDay }))}
-                  style={{ width: 36, height: 20, borderRadius: 10, background: eventForm.allDay ? "rgba(139,122,255,0.4)" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"), cursor: "pointer", position: "relative", transition: "background 0.2s" }}
+                  style={{ flexShrink: 0, width: 42, height: 24, borderRadius: 999, cursor: "pointer", padding: 2, background: eventForm.allDay ? "#15151c" : (darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.14)"), transition: "background 0.25s ease" }}
                 >
-                  <motion.div animate={{ x: eventForm.allDay ? 17 : 2 }} transition={{ duration: 0.2 }}
-                    style={{ width: 16, height: 16, borderRadius: "50%", background: eventForm.allDay ? "#8B7AFF" : theme.textDim, position: "absolute", top: 2 }} />
-                </motion.div>
-                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub }}>Ganztägig</span>
+                  <motion.div animate={{ x: eventForm.allDay ? 18 : 0 }} transition={{ type: "spring", stiffness: 500, damping: 34 }}
+                    style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }} />
+                </div>
+                <span style={{ fontSize: 14, fontFamily: FONT, color: theme.text }}>Ganztägig</span>
               </div>
 
               {/* Google Meet toggle (only for Google events) */}
               {!eventForm.isTeamEvent && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
+              <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                <div
                   onClick={() => toggleMeet(!eventForm.withMeet)}
-                  style={{ width: 36, height: 20, borderRadius: 10, background: eventForm.withMeet ? "rgba(0,184,148,0.4)" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"), cursor: meetLoading ? "wait" : "pointer", position: "relative", transition: "background 0.2s" }}
+                  style={{ flexShrink: 0, width: 42, height: 24, borderRadius: 999, cursor: meetLoading ? "wait" : "pointer", padding: 2, background: eventForm.withMeet ? "#15151c" : (darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.14)"), transition: "background 0.25s ease" }}
                 >
-                  <motion.div animate={{ x: eventForm.withMeet ? 17 : 2 }} transition={{ duration: 0.2 }}
-                    style={{ width: 16, height: 16, borderRadius: "50%", background: eventForm.withMeet ? "#00B894" : theme.textDim, position: "absolute", top: 2 }} />
-                </motion.div>
-                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textSub }}>Google Meet</span>
-                {meetLoading && <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>Erstelle Link...</span>}
+                  <motion.div animate={{ x: eventForm.withMeet ? 18 : 0 }} transition={{ type: "spring", stiffness: 500, damping: 34 }}
+                    style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }} />
+                </div>
+                <span style={{ fontSize: 14, fontFamily: FONT, color: theme.text }}>Google Meet</span>
+                {meetLoading && <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>Erstelle Link...</span>}
               </div>
               )}
             </div>
@@ -6004,7 +6007,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                 animate={{ opacity: 1, height: "auto" }}
                 style={{ marginBottom: 12 }}
               >
-                <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, marginBottom: 6 }}>Teilnehmer</div>
+                <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 7 }}>Teilnehmer</div>
                 {/* Attendee chips */}
                 {attendees.length > 0 && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
@@ -6012,7 +6015,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                       <motion.div key={i}
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px 4px 12px", borderRadius: 20, background: darkMode ? "rgba(139,122,255,0.1)" : "rgba(108,92,231,0.08)", border: `1px solid ${darkMode ? "rgba(139,122,255,0.2)" : "rgba(108,92,231,0.15)"}`, fontSize: 12, fontFamily: FONT, color: theme.text }}
+                        style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px 5px 12px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.text }}
                       >
                         <span>{email}</span>
                         <motion.span
@@ -6040,7 +6043,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                       }
                     }}
                     placeholder={t("cal.addGuest")}
-                    style={{ flex: 1, padding: "8px 12px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 12, fontFamily: FONT, outline: "none", boxSizing: "border-box" }}
+                    style={{ flex: 1, padding: "10px 12px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none", boxSizing: "border-box", caretColor: theme.text }}
                   />
                   <motion.div
                     whileHover={{ scale: 1.05 }}
@@ -6052,7 +6055,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                       }
                       setAttendeeInput("");
                     }}
-                    style={{ cursor: "pointer", padding: "8px 14px", borderRadius: 10, fontSize: 12, fontFamily: FONT, color: "#8B7AFF", background: darkMode ? "rgba(139,122,255,0.1)" : "rgba(108,92,231,0.08)", border: `1px solid ${darkMode ? "rgba(139,122,255,0.2)" : "rgba(108,92,231,0.15)"}`, whiteSpace: "nowrap" }}
+                    style={{ cursor: "pointer", padding: "10px 16px", borderRadius: 12, fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", border: `1px solid ${theme.borderFaint}`, whiteSpace: "nowrap" }}
                   >
                     Hinzufügen
                   </motion.div>
@@ -6064,21 +6067,21 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             {!eventForm.allDay && (
               <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, marginBottom: 4 }}>Von</div>
+                  <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 5 }}>Von</div>
                   <input
                     type="time"
                     value={eventForm.startTime}
                     onChange={e => setEventForm(f => ({ ...f, startTime: e.target.value }))}
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box", colorScheme: darkMode ? "dark" : "light" }}
+                    style={{ width: "100%", padding: "11px 12px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none", boxSizing: "border-box", colorScheme: darkMode ? "dark" : "light" }}
                   />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, marginBottom: 4 }}>Bis</div>
+                  <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 5 }}>Bis</div>
                   <input
                     type="time"
                     value={eventForm.endTime}
                     onChange={e => setEventForm(f => ({ ...f, endTime: e.target.value }))}
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box", colorScheme: darkMode ? "dark" : "light" }}
+                    style={{ width: "100%", padding: "11px 12px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none", boxSizing: "border-box", colorScheme: darkMode ? "dark" : "light" }}
                   />
                 </div>
               </div>
@@ -6090,21 +6093,17 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               onChange={e => setEventForm(f => ({ ...f, description: e.target.value }))}
               placeholder={t("cal.description")}
               rows={3}
-              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none", resize: "vertical", marginBottom: 20, boxSizing: "border-box" }}
+              style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none", resize: "vertical", marginBottom: 22, boxSizing: "border-box", lineHeight: 1.55, caretColor: theme.text }}
             />
 
-            {/* Buttons */}
+            {/* Button — anthracite primary, no cancel (close via the X) */}
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                onClick={cancelNewEvent}
-                style={{ cursor: "pointer", padding: "9px 20px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: theme.textSub, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}>
-                {t("common.cancel")}
-              </motion.div>
-              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+              <motion.button whileHover={eventForm.title.trim() && !savingEvent ? { scale: 1.03 } : {}} whileTap={{ scale: 0.97 }}
                 onClick={eventForm.isTeamEvent ? createTeamEvent : createGoogleEvent}
-                style={{ cursor: savingEvent ? "wait" : "pointer", padding: "9px 24px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: darkMode ? "#fff" : "#1a1a2e", fontWeight: 500, background: savingEvent ? (darkMode ? "rgba(139,122,255,0.15)" : "rgba(108,92,231,0.1)") : (darkMode ? "rgba(139,122,255,0.3)" : "rgba(108,92,231,0.2)"), border: `1px solid ${darkMode ? "rgba(139,122,255,0.4)" : "rgba(108,92,231,0.3)"}`, opacity: (!eventForm.title.trim() || savingEvent) ? 0.5 : 1 }}>
+                disabled={!eventForm.title.trim() || savingEvent}
+                style={{ cursor: (!eventForm.title.trim() || savingEvent) ? "not-allowed" : "pointer", padding: "11px 24px 12px", borderRadius: 999, minWidth: 128, boxSizing: "border-box", textAlign: "center", border: "none", fontSize: 13, fontFamily: FONT, fontWeight: 600, color: (eventForm.title.trim() && !savingEvent) ? "#fff" : theme.textFaint, background: (eventForm.title.trim() && !savingEvent) ? "#15151c" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"), transition: "background 0.18s ease" }}>
                 {savingEvent ? t("cal.saving") : t("cal.createEvent")}
-              </motion.div>
+              </motion.button>
             </div>
           </motion.div>
         </motion.div>,
