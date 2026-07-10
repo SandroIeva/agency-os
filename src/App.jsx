@@ -12784,17 +12784,27 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   useEffect(() => { loadFolders(); }, [loadFolders]);
 
   // Create a folder (wired to the AssetsView "Hinzufügen → Ordner erstellen" item).
-  const createFolder = useCallback(async () => {
+  // Opens a custom modal instead of the native window.prompt.
+  const [folderModalOpen, setFolderModalOpen] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const createFolder = useCallback(() => {
     if (!userOrg?.id || !session?.user?.id) return;
+    setFolderName(""); setFolderModalOpen(true);
+  }, [userOrg?.id, session?.user?.id]);
+  const submitFolder = async () => {
     const de = appLanguage === "de";
-    const name = (window.prompt(de ? "Name des Ordners:" : "Folder name:") || "").trim();
-    if (!name) return;
+    const name = folderName.trim();
+    if (!name || creatingFolder || !userOrg?.id || !session?.user?.id) return;
+    setCreatingFolder(true);
     const { data, error } = await supabase.from("user_folders")
       .insert({ name, org_id: userOrg.id, project_id: projectId || null, user_id: session.user.id })
       .select("id,name,created_at").single();
+    setCreatingFolder(false);
     if (error) { alert((de ? "Ordner konnte nicht erstellt werden: " : "Couldn't create folder: ") + error.message); return; }
     if (data) setFolders(prev => [...prev, data].sort((a, b) => (a.name || "").localeCompare(b.name || "")));
-  }, [userOrg?.id, session?.user?.id, appLanguage, projectId]);
+    setFolderModalOpen(false);
+  };
   const createFolderRef = useRef(null);
   createFolderRef.current = createFolder;
   useEffect(() => { if (newFolderRef) newFolderRef.current = () => createFolderRef.current?.(); }, [newFolderRef]);
@@ -13262,6 +13272,34 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
             </div>
           </motion.div>
         </motion.div>, document.body)}
+
+      {/* New-folder modal — custom overlay (replaces window.prompt) */}
+      <AnimatePresence>
+        {folderModalOpen && createPortal(
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+            onClick={() => !creatingFolder && setFolderModalOpen(false)}
+            style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 8 }}
+              transition={{ duration: 0.2, ease: [0.22, 0.68, 0.35, 1.0] }} onClick={e => e.stopPropagation()}
+              style={{ width: "100%", maxWidth: 420, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26, boxShadow: "0 25px 80px rgba(0,0,0,0.4)" }}>
+              <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 6, letterSpacing: -0.2 }}>{appLanguage === "de" ? "Neuer Ordner" : "New folder"}</div>
+              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 18, lineHeight: 1.5 }}>{appLanguage === "de" ? "Gib dem Ordner einen Namen." : "Give the folder a name."}</div>
+              <input autoFocus value={folderName} onChange={e => setFolderName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && folderName.trim() && !creatingFolder) submitFolder(); if (e.key === "Escape" && !creatingFolder) setFolderModalOpen(false); }}
+                placeholder={appLanguage === "de" ? "z.B. Logos" : "e.g. Logos"}
+                style={{ width: "100%", boxSizing: "border-box", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 12, padding: "12px 14px", fontSize: 14, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.text }}
+              />
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
+                <motion.button onClick={() => !creatingFolder && setFolderModalOpen(false)} whileTap={{ scale: 0.97 }}
+                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: creatingFolder ? "not-allowed" : "pointer", background: "transparent", border: `1px solid ${theme.border}`, color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: creatingFolder ? 0.5 : 1 }}
+                >{appLanguage === "de" ? "Abbrechen" : "Cancel"}</motion.button>
+                <motion.button onClick={submitFolder} whileTap={{ scale: 0.97 }} disabled={!folderName.trim() || creatingFolder}
+                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: (!folderName.trim() || creatingFolder) ? "not-allowed" : "pointer", minWidth: 128, boxSizing: "border-box", textAlign: "center", background: (!folderName.trim() || creatingFolder) ? (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)") : "#15151c", border: "none", color: (!folderName.trim() || creatingFolder) ? theme.textFaint : "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, transition: "background 0.18s ease" }}
+                >{creatingFolder ? (appLanguage === "de" ? "Erstellt…" : "Creating…") : (appLanguage === "de" ? "Erstellen" : "Create")}</motion.button>
+              </div>
+            </motion.div>
+          </motion.div>, document.body)}
+      </AnimatePresence>
     </div>
   );
 }
