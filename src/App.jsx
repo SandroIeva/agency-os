@@ -5555,7 +5555,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                 // Base background per state, plus a hover variant that is a touch less
                 // transparent (instead of scaling the cell up on hover).
                 const baseBg = isSelected ? (darkMode ? "rgba(255,255,255,0.10)" : "rgba(21,21,28,0.08)") : todayHighlight ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(21,21,28,0.05)") : weekend ? (darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.03)") : (darkMode ? "rgba(25,23,38,0.92)" : "rgba(255,255,255,0.85)");
-                const hoverBg = isSelected ? (darkMode ? "rgba(255,255,255,0.15)" : "rgba(21,21,28,0.12)") : todayHighlight ? (darkMode ? "rgba(255,255,255,0.09)" : "rgba(21,21,28,0.09)") : weekend ? (darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)") : (darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.055)");
+                const hoverBg = isSelected ? (darkMode ? "rgba(255,255,255,0.15)" : "rgba(21,21,28,0.12)") : todayHighlight ? (darkMode ? "rgba(255,255,255,0.09)" : "rgba(21,21,28,0.09)") : weekend ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.045)") : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.035)");
                 return (
                   <motion.div
                     key={i}
@@ -5568,7 +5568,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                       background: baseBg,
                       backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
                       border: isSelected ? `1px solid ${darkMode ? "rgba(255,255,255,0.2)" : "rgba(21,21,28,0.18)"}` : todayHighlight ? `1px solid ${darkMode ? "rgba(255,255,255,0.1)" : "rgba(21,21,28,0.1)"}` : "1px solid transparent",
-                      display: "flex", flexDirection: "column", minHeight: 54, transition: "all 0.15s",
+                      display: "flex", flexDirection: "column", minHeight: 54, transition: "background-color 0.8s ease, border-color 0.15s ease",
                       opacity: dayObj.isOtherMonth ? 0.25 : 1,
                     }}
                   >
