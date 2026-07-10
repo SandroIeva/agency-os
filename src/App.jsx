@@ -1914,7 +1914,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
               transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
               onClick={e => e.stopPropagation()}
               style={{
-                width: "100%", maxWidth: editingTask ? 860 : 520, maxHeight: "85vh",
+                width: "100%", maxWidth: editingTask ? 890 : 520, maxHeight: "85vh",
                 background: darkMode ? "rgba(22, 22, 30, 0.97)" : "rgba(255, 255, 255, 0.98)",
                 backdropFilter: "blur(40px)", border: `1px solid ${theme.border}`,
                 borderRadius: 18, display: "flex", flexDirection: "column", overflow: "hidden",
@@ -1922,7 +1922,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
             >
               {/* Header: title · project dropdown · close */}
               {(() => { const isTaskOwner = !editingTask || editingTask.creator_id === session?.user?.id; return (<>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "16px 22px", borderBottom: `1px solid ${theme.borderFaint}` }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "16px 16px 16px 22px", borderBottom: `1px solid ${theme.borderFaint}` }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                   <span style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap" }}>
                     {editingTask ? "Aufgabe bearbeiten" : t("task.newTask")}
@@ -2333,7 +2333,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                 {/* Right panel — comments & activity (only in edit mode) */}
                 {editingTask && (
                   <div style={{
-                    width: 300, borderLeft: `1px solid ${theme.border}`, display: "flex", flexDirection: "column",
+                    width: 360, borderLeft: `1px solid ${theme.border}`, display: "flex", flexDirection: "column",
                     background: darkMode ? "rgba(255,255,255,0.015)" : "rgba(0,0,0,0.015)",
                   }}>
                     <div style={{ padding: "14px 16px", borderBottom: `1px solid ${theme.border}`, fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, display: "flex", alignItems: "center", gap: 6 }}>
