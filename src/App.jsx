@@ -6097,7 +6097,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             />
 
             {/* Button — anthracite primary, no cancel (close via the X) */}
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: -3 }}>
               <motion.button whileHover={eventForm.title.trim() && !savingEvent ? { scale: 1.03 } : {}} whileTap={{ scale: 0.97 }}
                 onClick={eventForm.isTeamEvent ? createTeamEvent : createGoogleEvent}
                 disabled={!eventForm.title.trim() || savingEvent}
