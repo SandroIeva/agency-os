@@ -2374,7 +2374,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                       })}
                     </div>
                     {/* Comment input — same style as Messenger */}
-                    <div style={{ padding: "24px 16px 24px", borderTop: `1px solid ${theme.border}` }}>
+                    <div style={{ padding: 24, borderTop: `1px solid ${theme.border}` }}>
                       <div style={{
                         display: "flex", alignItems: "center", gap: 8,
                         background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
