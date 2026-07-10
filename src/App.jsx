@@ -2345,8 +2345,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                     {/* Comment list */}
                     <div style={{ flex: 1, overflowY: "auto", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
                       {taskComments.length === 0 && (
-                        <div style={{ textAlign: "center", padding: "32px 16px" }}>
-                          <div style={{ fontSize: 24, marginBottom: 8, opacity: 0.3 }}>💬</div>
+                        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
                           <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>Noch keine Kommentare</div>
                         </div>
                       )}
