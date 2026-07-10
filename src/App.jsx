@@ -2300,7 +2300,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                   )}
 
                   {/* Action buttons: Delete left, Save/Cancel right */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4, marginBottom: 2 }}>
                     <div>
                       {editingTask && isTaskOwner && (
                         <motion.button whileTap={{ scale: 0.97 }}
@@ -2372,7 +2372,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                       })}
                     </div>
                     {/* Comment input — same style as Messenger */}
-                    <div style={{ padding: "16px 16px 24px", borderTop: `1px solid ${theme.border}` }}>
+                    <div style={{ padding: "24px 16px 24px", borderTop: `1px solid ${theme.border}` }}>
                       <div style={{
                         display: "flex", alignItems: "center", gap: 8,
                         background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
