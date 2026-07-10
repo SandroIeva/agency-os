@@ -2306,7 +2306,8 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                         <motion.button whileTap={{ scale: 0.97 }}
                           onClick={() => { resetForm(); requestDelete(editingTask.id); }}
                           style={{
-                            padding: "10px 24px 11px", borderRadius: 999, cursor: "pointer",
+                            padding: "11px 24px 12px", borderRadius: 999, cursor: "pointer",
+                            minWidth: 128, boxSizing: "border-box", textAlign: "center",
                             background: "transparent", border: `1px solid ${theme.border}`,
                             fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.textSub,
                           }}
@@ -2319,6 +2320,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                         disabled={!taskForm.title.trim()}
                         style={{
                           padding: "11px 24px 12px", borderRadius: 999, cursor: taskForm.title.trim() ? "pointer" : "not-allowed",
+                          minWidth: 128, boxSizing: "border-box", textAlign: "center",
                           background: taskForm.title.trim() ? "#15151c" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"),
                           border: "none",
                           fontSize: 13, fontFamily: FONT, fontWeight: 600,
