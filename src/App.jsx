@@ -18947,7 +18947,21 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
       <style>{`.avatarNameInput::placeholder{color:rgba(255,255,255,0.82);transition:color .22s ease;}.avatarNameInput:focus::placeholder{color:transparent;}`}</style>
       {/* Default = hover-driven muted video; a set cfg.imageUrl shows as a static image */}
       {cfg.imageUrl ? (
-        <img src={cfg.imageUrl} alt={cfg.name || "Brand Avatar"} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+        <motion.img
+          key={cfg.imageUrl}
+          src={cfg.imageUrl} alt={cfg.name || "Brand Avatar"}
+          draggable={false}
+          drag={galleryList.length > 1 ? "x" : false}
+          dragConstraints={{ left: 0, right: 0 }} dragElastic={0.16} dragMomentum={false}
+          onDragEnd={(e, info) => {
+            if (galleryList.length < 2) return;
+            const th = 55; // px of horizontal drag to flip a version
+            if (info.offset.x <= -th && currentGalleryIdx < galleryList.length - 1) update({ imageUrl: galleryList[currentGalleryIdx + 1] });
+            else if (info.offset.x >= th && currentGalleryIdx > 0) update({ imageUrl: galleryList[currentGalleryIdx - 1] });
+          }}
+          initial={{ opacity: 0.55 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", userSelect: "none",
+            cursor: galleryList.length > 1 ? "grab" : "default" }} />
       ) : (
         <video ref={videoRef} src="/avatar-v2.mp4?v=2" muted playsInline preload="auto" poster="/Avatar-Bg.jpg?v=2"
           onMouseEnter={playAvatarVideo} onMouseLeave={releaseAvatarVideo}
@@ -18973,18 +18987,18 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
         </div>
       )}
 
-      {/* Version dots — flip between generated versions (only shown when there are 2+). */}
+      {/* Version dots — bottom-right, aligned with the name pill (same bottom + edge
+          padding), same frosted background; flip between versions (only shown at 2+). */}
       {cfg.imageUrl && !busy && galleryList.length > 1 && (
-        <div style={{ position: "absolute", left: 0, right: 0, bottom: 18, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 12px", borderRadius: 999, background: "rgba(0,0,0,0.3)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.16)", pointerEvents: "auto" }}>
-            {galleryList.map((url, i) => (
-              <motion.div key={url + i} whileTap={{ scale: 0.85 }}
-                onClick={() => update({ imageUrl: url })}
-                title={`${de ? "Version" : "Version"} ${i + 1}`}
-                style={{ width: i === currentGalleryIdx ? 18 : 7, height: 7, borderRadius: 999, cursor: "pointer",
-                  background: i === currentGalleryIdx ? "#fff" : "rgba(255,255,255,0.5)", transition: "width .22s ease, background .22s ease" }} />
-            ))}
-          </div>
+        <div style={{ position: "absolute", right: 22, bottom: 22, display: "flex", alignItems: "center", gap: 7, padding: "9px 13px", borderRadius: 11,
+          background: "rgba(0,0,0,0.18)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.16)" }}>
+          {galleryList.map((url, i) => (
+            <motion.div key={url + i} whileTap={{ scale: 0.85 }}
+              onClick={() => update({ imageUrl: url })}
+              title={`${de ? "Version" : "Version"} ${i + 1}`}
+              style={{ width: i === currentGalleryIdx ? 18 : 7, height: 7, borderRadius: 999, cursor: "pointer",
+                background: i === currentGalleryIdx ? "#fff" : "rgba(255,255,255,0.5)", transition: "width .22s ease, background .22s ease" }} />
+          ))}
         </div>
       )}
     </div>
