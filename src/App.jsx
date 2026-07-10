@@ -2306,9 +2306,9 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                         <motion.button whileTap={{ scale: 0.97 }}
                           onClick={() => { resetForm(); requestDelete(editingTask.id); }}
                           style={{
-                            padding: "11px 24px 12px", borderRadius: 999, cursor: "pointer",
-                            background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)",
-                            fontSize: 13, fontFamily: FONT, fontWeight: 600, color: "#EF4444",
+                            padding: "10px 24px 11px", borderRadius: 999, cursor: "pointer",
+                            background: "transparent", border: `1px solid ${theme.border}`,
+                            fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.textSub,
                           }}
                         >{t("common.delete")}</motion.button>
                       )}
