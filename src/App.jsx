@@ -5692,7 +5692,6 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           </div>
           {toolBtn("arrow", de ? "Pfeil" : "Arrow", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>)}
           {toolBtn("text", "Text", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>)}
-          {toolBtn("comment", de ? "Kommentar" : "Comment", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>)}
           <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
           {/* Stickers — round seal icon; picker opens centered over the toolbar (below) */}
           <motion.div whileTap={{ scale: 0.9 }} onClick={() => setStickersOpen(o => !o)} title="Sticker"
@@ -5700,17 +5699,19 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               background: stickersOpen ? "#15151c" : "transparent", color: stickersOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/></svg>
           </motion.div>
-          {/* Emoji picker */}
+          {/* Emoji picker — line-icon smiley to match the other tools */}
           <motion.div whileTap={{ scale: 0.9 }} onClick={() => setEmojiOpen(o => !o)} title="Emoji"
             style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-              background: emojiOpen ? "#15151c" : "transparent", transition: "background 0.15s ease", fontSize: 18, lineHeight: 1 }}>
-            <span>🙂</span>
+              background: emojiOpen ? "#15151c" : "transparent", color: emojiOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><line x1="9" y1="9.5" x2="9.01" y2="9.5"/><line x1="15" y1="9.5" x2="15.01" y2="9.5"/></svg>
           </motion.div>
           <motion.div whileTap={{ scale: 0.9 }} onClick={() => fileRef.current?.click()} title={de ? "Bild einfügen" : "Insert image"}
             style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text }}>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
           </motion.div>
           <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { handleImageFiles(e.target.files); e.target.value = ""; }} />
+          <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
+          {toolBtn("comment", de ? "Kommentar" : "Comment", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>)}
         </div>
       </div>
 
