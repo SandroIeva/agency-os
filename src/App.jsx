@@ -13500,9 +13500,9 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   if (!activeBoard) {
     const ASSET_TABS = [
       { id: "moodboards",   label: t("assets.moodboards") || "Moodboards" },
+      { id: "ideas",        label: appLanguage === "de" ? "Ideen" : "Ideas" },
       { id: "creations",    label: t("assets.creations") || "Creations" },
       { id: "docs",         label: t("assets.docs") || "Docs" },
-      { id: "ideas",        label: appLanguage === "de" ? "Ideen" : "Ideas" },
     ];
     const headerActions = (<>
             {tab === "moodboards" && (
