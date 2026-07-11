@@ -5581,45 +5581,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           {toolBtn("arrow", de ? "Pfeil" : "Arrow", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>)}
           {toolBtn("text", "Text", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>)}
           <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
-          {/* Stickers */}
-          <div style={{ position: "relative" }}>
-            <motion.div whileTap={{ scale: 0.9 }} onClick={() => setStickersOpen(o => !o)} title="Sticker"
-              style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-                background: stickersOpen ? "#15151c" : "transparent", color: stickersOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M21 3v10a8 8 0 0 1-8 8H3z"/><path d="M21 13h-4a4 4 0 0 0-4 4v4"/><circle cx="8.5" cy="8.5" r="0.6" fill="currentColor"/><circle cx="14" cy="8.5" r="0.6" fill="currentColor"/><path d="M8.5 12.5a4 4 0 0 0 5 0"/></svg>
-            </motion.div>
-            <AnimatePresence>
-              {stickersOpen && (<>
-                <div onClick={() => setStickersOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
-                <motion.div initial={{ opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
-                  onPointerDown={e => e.stopPropagation()}
-                  style={{ position: "absolute", bottom: "calc(100% + 14px)", left: "50%", transform: "translateX(-50%)", zIndex: 31, width: 320,
-                    background: darkMode ? "rgba(22,22,30,0.97)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.borderFaint}`, borderRadius: 16, boxShadow: "0 16px 44px rgba(0,0,0,0.2)", overflow: "hidden" }}>
-                  {/* Category tabs */}
-                  <div style={{ display: "flex", gap: 4, padding: 8, borderBottom: `1px solid ${theme.borderFaint}` }}>
-                    {Object.keys(WB_STICKERS).map(cat => {
-                      const on = stickerCat === cat;
-                      const label = de ? ({ IT: "Tech", Life: "Leben", Nature: "Natur", Shapes: "Formen" }[cat]) : cat;
-                      return (
-                        <div key={cat} onClick={() => setStickerCat(cat)}
-                          style={{ flex: 1, textAlign: "center", padding: "6px 4px", borderRadius: 8, cursor: "pointer", fontSize: 11.5, fontFamily: FONT, fontWeight: on ? 600 : 500,
-                            color: on ? "#fff" : theme.textDim, background: on ? "#15151c" : "transparent" }}>{label}</div>
-                      );
-                    })}
-                  </div>
-                  {/* Sticker grid */}
-                  <div className="no-scrollbar" style={{ maxHeight: 240, overflowY: "auto", padding: 10, display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
-                    {WB_STICKERS[stickerCat].map(file => (
-                      <motion.div key={file} whileHover={{ scale: 1.12 }} whileTap={{ scale: 0.9 }} onClick={() => placeSticker(stickerCat, file)}
-                        style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 9, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
-                        <img src={wbStickerUrl(stickerCat, file)} alt="" draggable={false} style={{ width: "78%", height: "78%", objectFit: "contain", pointerEvents: "none" }} />
-                      </motion.div>
-                    ))}
-                  </div>
-                </motion.div>
-              </>)}
-            </AnimatePresence>
-          </div>
+          {/* Stickers — picker is portalled + viewport-centered (see below) */}
+          <motion.div whileTap={{ scale: 0.9 }} onClick={() => setStickersOpen(o => !o)} title="Sticker"
+            style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+              background: stickersOpen ? "#15151c" : "transparent", color: stickersOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M20 4a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v15a1 1 0 0 0 1 1h9a1 1 0 0 0 .7-.3l5-5A1 1 0 0 0 20 14z"/><path d="M14 20v-5a1 1 0 0 1 1-1h5"/></svg>
+          </motion.div>
           <motion.div whileTap={{ scale: 0.9 }} onClick={() => fileRef.current?.click()} title={de ? "Bild einfügen" : "Insert image"}
             style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text }}>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
@@ -5640,6 +5607,38 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </motion.div>
       </div>
+
+      {/* Sticker picker — portalled + centered above the toolbar (not clipped to the button) */}
+      <AnimatePresence>
+        {stickersOpen && createPortal(
+          <>
+            <div onClick={() => setStickersOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
+            <motion.div initial={{ opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
+              onPointerDown={e => e.stopPropagation()}
+              style={{ position: "fixed", left: "50%", bottom: 86, transform: "translateX(-50%)", zIndex: 5001, width: 340,
+                background: darkMode ? "rgba(22,22,30,0.97)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.borderFaint}`, borderRadius: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.24)", overflow: "hidden", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
+              <div style={{ display: "flex", gap: 4, padding: 8, borderBottom: `1px solid ${theme.borderFaint}` }}>
+                {Object.keys(WB_STICKERS).map(cat => {
+                  const on = stickerCat === cat;
+                  const label = de ? ({ IT: "Tech", Life: "Leben", Nature: "Natur", Shapes: "Formen" }[cat]) : cat;
+                  return (
+                    <div key={cat} onClick={() => setStickerCat(cat)}
+                      style={{ flex: 1, textAlign: "center", padding: "6px 4px", borderRadius: 8, cursor: "pointer", fontSize: 11.5, fontFamily: FONT, fontWeight: on ? 600 : 500,
+                        color: on ? "#fff" : theme.textDim, background: on ? "#15151c" : "transparent" }}>{label}</div>
+                  );
+                })}
+              </div>
+              <div className="no-scrollbar" style={{ maxHeight: 250, overflowY: "auto", padding: 10, display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+                {WB_STICKERS[stickerCat].map(file => (
+                  <motion.div key={file} whileHover={{ scale: 1.12 }} whileTap={{ scale: 0.9 }} onClick={() => placeSticker(stickerCat, file)}
+                    style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 9, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+                    <img src={wbStickerUrl(stickerCat, file)} alt="" draggable={false} style={{ width: "78%", height: "78%", objectFit: "contain", pointerEvents: "none" }} />
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          </>, document.body)}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -12763,6 +12762,7 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
     if (error) { alert((de ? "Board konnte nicht gelöscht werden: " : "Couldn't delete board: ") + error.message); return; }
     setBoards(prev => (prev || []).filter(x => x.id !== b.id));
     setBoardToDelete(null);
+    load(); // re-sync with the DB so nothing lingers if realtime/another client changed it
   };
 
   const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" }) : "";
@@ -12792,7 +12792,7 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
   );
   const actBtnStyle = { width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: darkMode ? "#e8e8ee" : "#23232b", cursor: "pointer", flexShrink: 0 };
   const moveBtn = (b) => (
-    <div style={{ position: "relative" }} onClick={e => e.stopPropagation()}>
+    <div style={{ position: "relative" }} onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
       <motion.div whileTap={{ scale: 0.9 }} onClick={() => setMoveMenuFor(m => m === b.id ? null : b.id)} title={de ? "In Ordner verschieben" : "Move to folder"} style={actBtnStyle}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
       </motion.div>
@@ -12824,8 +12824,11 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
     </div>
   );
   // Any org member can delete a shared brainstorm board (RLS allows it).
+  // stopPropagation on BOTH pointerdown and click so the card's open-on-click
+  // (a framer-motion element that reacts to pointer events) never fires.
   const delBtn = (b) => (
-    <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); setBoardToDelete(b); }} title={de ? "Löschen" : "Delete"} style={actBtnStyle}>
+    <motion.div whileTap={{ scale: 0.9 }} onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); setBoardToDelete(b); }} title={de ? "Löschen" : "Delete"} style={actBtnStyle}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
     </motion.div>
   );
