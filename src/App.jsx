@@ -4882,6 +4882,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const canvasRef = useRef(null);
   const dragRef = useRef(null);
   const fileRef = useRef(null);
+  const toolbarRef = useRef(null); // bottom toolbar — used to center the sticker picker over it
   const camRef = useRef(cam); camRef.current = cam;
   const itemsRef = useRef(items); itemsRef.current = items;
   const editingRef = useRef(editing); editingRef.current = editing;
@@ -5542,7 +5543,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       </div>
 
       {/* Bottom toolbar */}
-      <div style={{ position: "absolute", left: "50%", bottom: 22, transform: "translateX(-50%)", pointerEvents: "auto" }} onPointerDown={e => e.stopPropagation()}>
+      <div ref={toolbarRef} style={{ position: "absolute", left: "50%", bottom: 22, transform: "translateX(-50%)", pointerEvents: "auto" }} onPointerDown={e => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", gap: 4, padding: 6, borderRadius: 16,
           background: darkMode ? "rgba(22,22,30,0.9)" : "rgba(255,255,255,0.95)", border: `1px solid ${theme.borderFaint}`,
           boxShadow: "0 14px 40px rgba(0,0,0,0.16)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
@@ -5581,11 +5582,11 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           {toolBtn("arrow", de ? "Pfeil" : "Arrow", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>)}
           {toolBtn("text", "Text", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>)}
           <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
-          {/* Stickers — picker is portalled + viewport-centered (see below) */}
+          {/* Stickers — round seal icon; picker opens centered over the toolbar (below) */}
           <motion.div whileTap={{ scale: 0.9 }} onClick={() => setStickersOpen(o => !o)} title="Sticker"
             style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
               background: stickersOpen ? "#15151c" : "transparent", color: stickersOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M20 4a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v15a1 1 0 0 0 1 1h9a1 1 0 0 0 .7-.3l5-5A1 1 0 0 0 20 14z"/><path d="M14 20v-5a1 1 0 0 1 1-1h5"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/></svg>
           </motion.div>
           <motion.div whileTap={{ scale: 0.9 }} onClick={() => fileRef.current?.click()} title={de ? "Bild einfügen" : "Insert image"}
             style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text }}>
@@ -5608,13 +5609,18 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         </motion.div>
       </div>
 
-      {/* Sticker picker — portalled + centered above the toolbar (not clipped to the button) */}
-        {stickersOpen && createPortal(
+      {/* Sticker picker — portalled, centered on the toolbar's real screen position
+          (measured, so a shifted app container doesn't skew it) */}
+        {stickersOpen && createPortal((() => {
+          const tb = toolbarRef.current?.getBoundingClientRect();
+          const cx = tb ? tb.left + tb.width / 2 : window.innerWidth / 2;
+          const bottomPx = tb ? window.innerHeight - tb.top + 14 : 90;
+          return (
           <>
             <div onClick={() => setStickersOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
             <motion.div initial={{ opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
               onPointerDown={e => e.stopPropagation()}
-              style={{ position: "fixed", left: "50%", bottom: 86, transform: "translateX(-50%)", zIndex: 5001, width: 340,
+              style={{ position: "fixed", left: cx, bottom: bottomPx, transform: "translateX(-50%)", zIndex: 5001, width: 340,
                 background: darkMode ? "rgba(22,22,30,0.97)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.borderFaint}`, borderRadius: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.24)", overflow: "hidden", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
               <div style={{ display: "flex", gap: 4, padding: 8, borderBottom: `1px solid ${theme.borderFaint}` }}>
                 {Object.keys(WB_STICKERS).map(cat => {
@@ -5636,7 +5642,8 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
                 ))}
               </div>
             </motion.div>
-          </>, document.body)}
+          </>
+          ); })(), document.body)}
     </motion.div>
   );
 }
