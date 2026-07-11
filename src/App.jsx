@@ -4876,6 +4876,9 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [lastShape, setLastShape] = useState("rect");  // shape shown on the toolbar's shapes button
   const [stickersOpen, setStickersOpen] = useState(false); // sticker picker above the toolbar
   const [stickerCat, setStickerCat] = useState("Life");
+  const [emojiOpen, setEmojiOpen] = useState(false);   // emoji picker above the toolbar
+  const [emojiCat, setEmojiCat] = useState("smileys");
+  const [commentOpenId, setCommentOpenId] = useState(null); // comment pin whose bubble is open
   const [timerSec, setTimerSec] = useState(0);
   const [timerOn, setTimerOn] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -4883,6 +4886,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const dragRef = useRef(null);
   const fileRef = useRef(null);
   const toolbarRef = useRef(null); // bottom toolbar — used to center the sticker picker over it
+  const commentAreaRef = useRef(null); // the comment textarea while a comment bubble is open
   const camRef = useRef(cam); camRef.current = cam;
   const itemsRef = useRef(items); itemsRef.current = items;
   const editingRef = useRef(editing); editingRef.current = editing;
@@ -4983,6 +4987,25 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     setItems(prev => prev.map(i => i.id === id ? { ...i, data } : i));
     supabase.from("whiteboard_items").update({ data }).eq("id", id).then(() => {});
   };
+  const saveComment = (id, text) => {
+    const it = itemsRef.current.find(i => i.id === id); if (!it) return;
+    const data = { ...it.data, text };
+    setItems(prev => prev.map(i => i.id === id ? { ...i, data } : i));
+    supabase.from("whiteboard_items").update({ data }).eq("id", id).then(() => {});
+  };
+  // Close the open comment bubble: save the typed text, or drop an empty pin.
+  const closeComment = () => {
+    const id = commentOpenId;
+    const el = commentAreaRef.current;
+    if (id) {
+      const it = itemsRef.current.find(i => i.id === id);
+      const text = el ? el.value.trim() : (it?.data?.text || "");
+      if (!text && !(it?.data?.text)) { deleteItem(id); }
+      else if (el) { saveComment(id, text); }
+    }
+    commentAreaRef.current = null;
+    setCommentOpenId(null);
+  };
 
   // ── Coordinate helpers ──
   const toWorld = (e) => {
@@ -5018,6 +5041,21 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const id = addItemLocal("sticker", { x: cx - s / 2, y: cy - s / 2, w: s, h: s, src: wbStickerUrl(cat, file) });
     setSel(id); setTool("select"); setStickersOpen(false);
   };
+  const placeEmoji = (emoji) => {
+    const r = canvasRef.current.getBoundingClientRect();
+    const c = camRef.current;
+    const cx = (r.width / 2 - c.x) / c.s, cy = (r.height / 2 - c.y) / c.s;
+    const id = addItemLocal("emoji", { x: cx - 30, y: cy - 30, w: 60, h: 60, text: emoji });
+    setSel(id); setTool("select"); setEmojiOpen(false);
+  };
+  const myName = () => {
+    const m = (orgMembers || []).find(o => o.user_id === session?.user?.id);
+    return m?.profiles?.display_name || session?.user?.user_metadata?.full_name || session?.user?.email?.split("@")[0] || "Du";
+  };
+  const placeComment = (pt) => {
+    const id = addItemLocal("comment", { x: pt.x, y: pt.y, text: "", author_id: session?.user?.id, author_name: myName(), created_at: new Date().toISOString() });
+    setSel(id); setCommentOpenId(id); setTool("select");
+  };
 
   // ── Canvas pointer handlers ──
   const onCanvasPointerDown = (e) => {
@@ -5029,6 +5067,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (tool === "pen") { dragRef.current = { mode: "draw" }; setTempStroke({ points: [[pt.x, pt.y]], color: "#15151c" }); return; }
     if (tool === "sticky") { placeSticky(pt); return; }
     if (tool === "text") { placeText(pt); return; }
+    if (tool === "comment") { placeComment(pt); return; }
     if (WB_SHAPE_TYPES.includes(tool)) { dragRef.current = { mode: "create", type: tool, sx: pt.x, sy: pt.y }; setTempItem({ type: tool, x: pt.x, y: pt.y, w: 1, h: 1 }); return; }
     if (tool === "arrow") { dragRef.current = { mode: "arrow" }; setTempItem({ type: "arrow", x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y }); return; }
     // select tool on empty canvas: deselect + pan
@@ -5220,6 +5259,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (it.type === "text") wrap = { ...wrap, padding: 2 };
     if (it.type === "image") wrap = { ...wrap, borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 22px rgba(0,0,0,0.12)" };
     if (it.type === "sticker") wrap = { ...wrap, padding: 0 };
+    if (it.type === "emoji") wrap = { ...wrap, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" };
     const sizeKey = d.size || (it.type === "text" ? "m" : "s");
     const fontSize = WB_TEXT_SIZES[sizeKey] || 16;
     const textColor = it.type === "sticky" ? "#2c2c25" : (it.type === "text" ? stroke : stroke);
@@ -5250,7 +5290,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     return (
       <div key={it.id}
         onPointerDown={(e) => onItemPointerDown(e, it)}
-        onDoubleClick={(e) => { if (it.type !== "image" && it.type !== "sticker") { e.stopPropagation(); setSel(it.id); setEditing(it.id); } }}
+        onDoubleClick={(e) => { if (it.type !== "image" && it.type !== "sticker" && it.type !== "emoji") { e.stopPropagation(); setSel(it.id); setEditing(it.id); } }}
         style={wrap}>
         {isSvgShape && (
           <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ position: "absolute", inset: 0, pointerEvents: "none", display: "block" }}>
@@ -5261,6 +5301,8 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           <img src={d.src} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none", display: "block" }} />
         ) : it.type === "sticker" ? (
           <img src={d.src} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none", display: "block", filter: "drop-shadow(0 3px 6px rgba(0,0,0,0.12))" }} />
+        ) : it.type === "emoji" ? (
+          <div style={{ fontSize: Math.min(w, h) * 0.82, lineHeight: 1, userSelect: "none", pointerEvents: "none" }}>{d.text}</div>
         ) : textContent}
         {isSel && !isEdit && (
           <div onPointerDown={(e) => { e.stopPropagation(); dragRef.current = { mode: "resize", id: it.id, base: { x, y, w, h } }; }}
@@ -5307,9 +5349,31 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       </svg>
     );
   };
+  const renderComment = (it) => {
+    const d = it.data || {};
+    const { x = 0, y = 0 } = d;
+    const open = commentOpenId === it.id;
+    const initial = (d.author_name || "?").trim()[0]?.toUpperCase() || "?";
+    return (
+      <div key={it.id}
+        onPointerDown={(e) => { if (tool === "select") { e.stopPropagation(); onItemPointerDown(e, it); } }}
+        onClick={(e) => { e.stopPropagation(); setSel(it.id); setCommentOpenId(open ? null : it.id); }}
+        style={{ position: "absolute", left: x, top: y, cursor: "pointer" }}>
+        {/* Pin: a speech bubble with a tail */}
+        <div style={{ position: "relative", width: 34, height: 34, borderRadius: "50% 50% 50% 3px",
+          background: "#15151c", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 13, fontFamily: FONT, fontWeight: 600, boxShadow: "0 4px 12px rgba(0,0,0,0.28)",
+          border: sel === it.id ? "2px solid #3B82F6" : "2px solid #fff" }}>
+          {initial}
+          {d.text ? null : <span style={{ position: "absolute", top: -3, right: -3, width: 9, height: 9, borderRadius: "50%", background: "#F59E0B", border: "1.5px solid #fff" }} />}
+        </div>
+      </div>
+    );
+  };
   const renderItem = (it) => {
     if (it.type === "draw") return renderPath(it);
     if (it.type === "arrow") return renderArrow(it);
+    if (it.type === "comment") return renderComment(it);
     return renderBoxItem(it);
   };
 
@@ -5318,7 +5382,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   // the text is being edited; mousedown is prevented so clicks don't blur it.
   const selItem = items.find(i => i.id === sel) || null;
   const selToolbar = (() => {
-    if (!selItem) return null;
+    if (!selItem || selItem.type === "comment") return null; // comments use their own bubble popup
     const dta = selItem.data || {};
     const setSelData = (patch) => { patchItem(selItem.id, patch); persistById(selItem.id); };
     const b = bboxOf(selItem);
@@ -5461,6 +5525,53 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           )}
         </div>
         {selToolbar}
+        {/* Comment bubble popup */}
+        {(() => {
+          const c = items.find(i => i.id === commentOpenId && i.type === "comment");
+          if (!c) return null;
+          const d = c.data || {};
+          const canEdit = d.author_id === session?.user?.id;
+          const left = Math.min((d.x || 0) * cam.s + cam.x + 44, (canvasRef.current?.clientWidth || 800) - 272);
+          const top = Math.max(12, (d.y || 0) * cam.s + cam.y - 12);
+          return (
+            <>
+              <div onPointerDown={(e) => { e.stopPropagation(); closeComment(); }} style={{ position: "fixed", inset: 0, zIndex: 21 }} />
+              <div onPointerDown={(e) => e.stopPropagation()}
+                style={{ position: "absolute", left, top, zIndex: 22, width: 260, borderRadius: 14, overflow: "hidden",
+                  background: darkMode ? "rgba(28,28,38,0.98)" : "#fff", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 16px 44px rgba(0,0,0,0.24)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "12px 14px 8px" }}>
+                  <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#15151c", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, fontFamily: FONT, flexShrink: 0 }}>{(d.author_name || "?").trim()[0]?.toUpperCase() || "?"}</div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.author_name || "—"}</div>
+                    <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim }}>{d.created_at ? new Date(d.created_at).toLocaleDateString("de-DE", { day: "2-digit", month: "short" }) + " · " + new Date(d.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : ""}</div>
+                  </div>
+                  {canEdit && (
+                    <motion.div whileTap={{ scale: 0.85 }} onClick={() => { deleteItem(c.id); setCommentOpenId(null); }} title={de ? "Löschen" : "Delete"}
+                      style={{ width: 24, height: 24, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#e5484d", flexShrink: 0 }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                    </motion.div>
+                  )}
+                </div>
+                <div style={{ padding: "0 12px 12px" }}>
+                  {canEdit ? (
+                    <textarea ref={(el) => { commentAreaRef.current = el; if (el && !el.dataset.f) { el.dataset.f = "1"; setTimeout(() => { try { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } catch (_) {} }, 0); } }}
+                      defaultValue={d.text || ""} placeholder={de ? "Kommentar schreiben…" : "Write a comment…"} rows={3}
+                      onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape") { e.preventDefault(); closeComment(); } if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); closeComment(); } }}
+                      style={{ width: "100%", boxSizing: "border-box", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, padding: "9px 11px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", resize: "none", lineHeight: 1.45, caretColor: theme.text }} />
+                  ) : (
+                    <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{d.text || <span style={{ color: theme.textFaint }}>{de ? "Kein Text" : "No text"}</span>}</div>
+                  )}
+                  {canEdit && (
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 9 }}>
+                      <motion.button whileTap={{ scale: 0.97 }} onClick={closeComment}
+                        style={{ padding: "8px 18px", borderRadius: 999, border: "none", background: "#15151c", color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>{de ? "Speichern" : "Save"}</motion.button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          );
+        })()}
         {/* Empty hint */}
         {board && items.length === 0 && !tempStroke && !tempItem && (
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
@@ -5581,12 +5692,19 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           </div>
           {toolBtn("arrow", de ? "Pfeil" : "Arrow", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>)}
           {toolBtn("text", "Text", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>)}
+          {toolBtn("comment", de ? "Kommentar" : "Comment", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>)}
           <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
           {/* Stickers — round seal icon; picker opens centered over the toolbar (below) */}
           <motion.div whileTap={{ scale: 0.9 }} onClick={() => setStickersOpen(o => !o)} title="Sticker"
             style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
               background: stickersOpen ? "#15151c" : "transparent", color: stickersOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/></svg>
+          </motion.div>
+          {/* Emoji picker */}
+          <motion.div whileTap={{ scale: 0.9 }} onClick={() => setEmojiOpen(o => !o)} title="Emoji"
+            style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+              background: emojiOpen ? "#15151c" : "transparent", transition: "background 0.15s ease", fontSize: 18, lineHeight: 1 }}>
+            <span>🙂</span>
           </motion.div>
           <motion.div whileTap={{ scale: 0.9 }} onClick={() => fileRef.current?.click()} title={de ? "Bild einfügen" : "Insert image"}
             style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text }}>
@@ -5639,6 +5757,36 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
                     style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 9, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
                     <img src={wbStickerUrl(stickerCat, file)} alt="" draggable={false} style={{ width: "78%", height: "78%", objectFit: "contain", pointerEvents: "none" }} />
                   </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          </>
+          ); })(), document.body)}
+
+      {/* Emoji picker — same centered-over-toolbar behaviour as the sticker picker */}
+        {emojiOpen && createPortal((() => {
+          const tb = toolbarRef.current?.getBoundingClientRect();
+          const cx = tb ? tb.left + tb.width / 2 : window.innerWidth / 2;
+          const bottomPx = tb ? window.innerHeight - tb.top + 14 : 90;
+          const EMOJI_TABS = [{ id: "smileys", icon: "😀" }, { id: "gestures", icon: "👋" }, { id: "hearts", icon: "❤️" }, { id: "objects", icon: "🎉" }];
+          return (
+          <>
+            <div onClick={() => setEmojiOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
+            <motion.div initial={{ opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
+              onPointerDown={e => e.stopPropagation()}
+              style={{ position: "fixed", left: cx, bottom: bottomPx, transform: "translateX(-50%)", zIndex: 5001, width: 320,
+                background: darkMode ? "rgba(22,22,30,0.97)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.borderFaint}`, borderRadius: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.24)", overflow: "hidden", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
+              <div style={{ display: "flex", gap: 4, padding: 8, borderBottom: `1px solid ${theme.borderFaint}` }}>
+                {EMOJI_TABS.map(tb2 => (
+                  <div key={tb2.id} onClick={() => setEmojiCat(tb2.id)}
+                    style={{ flex: 1, textAlign: "center", padding: "5px 0", borderRadius: 8, cursor: "pointer", fontSize: 17,
+                      background: emojiCat === tb2.id ? (darkMode ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.05)") : "transparent" }}>{tb2.icon}</div>
+                ))}
+              </div>
+              <div className="no-scrollbar" style={{ maxHeight: 240, overflowY: "auto", padding: 8, display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 2 }}>
+                {EMOJI_GROUPS[emojiCat].map((emoji, i) => (
+                  <motion.div key={emoji + i} whileHover={{ scale: 1.25 }} whileTap={{ scale: 0.9 }} onClick={() => placeEmoji(emoji)}
+                    style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 21 }}>{emoji}</motion.div>
                 ))}
               </div>
             </motion.div>
