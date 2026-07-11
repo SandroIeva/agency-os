@@ -4873,6 +4873,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const camRef = useRef(cam); camRef.current = cam;
   const itemsRef = useRef(items); itemsRef.current = items;
   const editingRef = useRef(editing); editingRef.current = editing;
+  const editAreaRef = useRef(null); // the live <textarea> DOM node while editing
 
   // ── Timer (stopwatch, local) ──
   useEffect(() => {
@@ -5000,6 +5001,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   // ── Canvas pointer handlers ──
   const onCanvasPointerDown = (e) => {
     if (e.button !== 0 || !board) return;
+    if (editingRef.current) flushEdit(); // save the text before starting anything on the canvas
     canvasRef.current?.setPointerCapture?.(e.pointerId);
     const pt = toWorld(e);
     if (tool === "hand") { dragRef.current = { mode: "pan", sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y }; return; }
@@ -5081,7 +5083,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     }
     lastClickRef.current = { id: it.id, t: now };
     setSel(it.id);
-    if (editing && editing !== it.id) setEditing(null);
+    if (editingRef.current && editingRef.current !== it.id) flushEdit(); // save the other element's text first
     const pt = toWorld(e);
     const d = it.data || {};
     if (it.type === "arrow") dragRef.current = { mode: "move", id: it.id, type: "arrow", grabX: pt.x - d.x1, grabY: pt.y - d.y1, base: { ...d } };
@@ -5162,11 +5164,22 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   // Focus the edit textarea reliably (autoFocus alone can lose the race against
   // the click that created the element) and put the caret at the end.
   const focusEditArea = (el) => {
+    editAreaRef.current = el; // null when React unmounts the textarea
     if (!el || el.dataset.wbFocused) return;
     el.dataset.wbFocused = "1";
     const doFocus = () => { try { el.focus({ preventScroll: true }); el.setSelectionRange(el.value.length, el.value.length); } catch (_) {} };
     doFocus();
     requestAnimationFrame(doFocus);
+  };
+  // Save the in-progress text BEFORE the editor unmounts. Clicking the canvas or
+  // another element calls setEditing(null) which removes the textarea, and React
+  // does not reliably fire its onBlur on unmount — so the typed text was lost.
+  const flushEdit = () => {
+    const id = editingRef.current;
+    const el = editAreaRef.current;
+    if (id && el) { commitText(id, el.value); }
+    else if (id) { setEditing(null); }
+    editAreaRef.current = null;
   };
   const renderBoxItem = (it) => {
     const d = it.data || {};
