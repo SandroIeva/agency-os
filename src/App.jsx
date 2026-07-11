@@ -5062,10 +5062,24 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     setTempStroke(null); setTempItem(null);
     dragRef.current = null;
   };
+  // NOTE: no setPointerCapture here — capturing to the canvas retargets the
+  // browser's compatibility mouse events (incl. dblclick) AWAY from the element,
+  // which silently killed double-click-to-edit. Moves still reach the canvas via
+  // bubbling (it's a fullscreen ancestor). Double-click is also detected manually
+  // (two pointerdowns on the same item within 400ms) so editing always works.
+  const lastClickRef = useRef({ id: null, t: 0 });
   const onItemPointerDown = (e, it) => {
     if (tool !== "select" || e.button !== 0) return;
     e.stopPropagation();
-    canvasRef.current?.setPointerCapture?.(e.pointerId);
+    if (editing === it.id) return; // active editor: let the textarea handle it
+    const now = Date.now();
+    if (lastClickRef.current.id === it.id && now - lastClickRef.current.t < 400 && it.type !== "image") {
+      lastClickRef.current = { id: null, t: 0 };
+      dragRef.current = null;
+      setSel(it.id); setEditing(it.id);
+      return;
+    }
+    lastClickRef.current = { id: it.id, t: now };
     setSel(it.id);
     if (editing && editing !== it.id) setEditing(null);
     const pt = toWorld(e);
@@ -5163,7 +5177,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const { x = 0, y = 0, w = 160, h = 120 } = d;
     const stroke = d.color || "#15151c";
     const fill = d.fill && d.fill !== "transparent" ? d.fill : "transparent";
-    let wrap = { position: "absolute", left: x, top: y, width: w, height: h, boxSizing: "border-box", cursor: "move", outline: isSel ? "1.5px solid #3B82F6" : "none", outlineOffset: 2 };
+    let wrap = { position: "absolute", left: x, top: y, width: w, height: h, boxSizing: "border-box", cursor: isEdit ? "auto" : "move", outline: isSel ? "1.5px solid #3B82F6" : "none", outlineOffset: 2 };
     if (it.type === "sticky") wrap = { ...wrap, background: d.color || WB_STICKY_COLORS[0], borderRadius: 6, boxShadow: "0 8px 22px rgba(0,0,0,0.14)", padding: 14 };
     if (it.type === "rect") wrap = { ...wrap, background: fill, border: `2px solid ${stroke}`, borderRadius: 12, padding: 12, display: "flex", alignItems: "center", justifyContent: "center" };
     if (it.type === "ellipse") wrap = { ...wrap, background: fill, border: `2px solid ${stroke}`, borderRadius: "50%", padding: 16, display: "flex", alignItems: "center", justifyContent: "center" };
@@ -5211,7 +5225,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           <img src={d.src} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none", display: "block" }} />
         ) : textContent}
         {isSel && !isEdit && (
-          <div onPointerDown={(e) => { e.stopPropagation(); canvasRef.current?.setPointerCapture?.(e.pointerId); dragRef.current = { mode: "resize", id: it.id, base: { x, y, w, h } }; }}
+          <div onPointerDown={(e) => { e.stopPropagation(); dragRef.current = { mode: "resize", id: it.id, base: { x, y, w, h } }; }}
             style={{ position: "absolute", right: -7, bottom: -7, width: 13, height: 13, borderRadius: 3, background: "#fff", border: "1.5px solid #3B82F6", cursor: "nwse-resize" }} />
         )}
       </div>
@@ -5386,7 +5400,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
             const d = selItem.data || {};
             const handle = (which, hx, hy) => (
               <div key={which}
-                onPointerDown={(e) => { e.stopPropagation(); canvasRef.current?.setPointerCapture?.(e.pointerId); dragRef.current = { mode: "arrowend", id: selItem.id, which }; }}
+                onPointerDown={(e) => { e.stopPropagation(); dragRef.current = { mode: "arrowend", id: selItem.id, which }; }}
                 style={{ position: "absolute", left: hx - 7, top: hy - 7, width: 14, height: 14, borderRadius: "50%", background: "#fff", border: "2px solid #3B82F6", cursor: "crosshair", boxShadow: "0 1px 4px rgba(0,0,0,0.25)" }} />
             );
             return <>{handle(1, d.x1, d.y1)}{handle(2, d.x2, d.y2)}</>;
@@ -10716,7 +10730,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
 // Single-project view — opened by clicking a project card. Shows the project's
 // files (documents + images) with upload + empty state. Settings stay behind
 // the card's edit button.
-function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", onOpenInKanban, orgMembers = [], myProjectIds = [], createNotification, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true, onNavigate, onOpenDoc, onUploadStorage, onUploadDrive, getProviderToken, autoReLogin }) {
+function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", onOpenInKanban, orgMembers = [], myProjectIds = [], createNotification, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true, onNavigate, onOpenDoc, onUploadStorage, onUploadDrive, getProviderToken, autoReLogin, onOpenWhiteboard = null }) {
   const [projects, setProjects] = useState([]);
   const [taskCounts, setTaskCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -10993,7 +11007,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
   // (same BrandView, scoped to this project); others show the file view.
   if (openProject) {
     if (openProject.is_brand) {
-      return <BrandView projectId={openProject.id} projectName={openProject.name}
+      return <BrandView projectId={openProject.id} projectName={openProject.name} onOpenWhiteboard={onOpenWhiteboard}
         session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage}
         llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken}
         canEditBrand={canEditBrand} canEditDesign={canEditDesign}
@@ -11003,7 +11017,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
         onBack={() => setOpenProject(null)} />;
     }
     // Default (non-brand) project: the project's own Files workspace (Moodboards / Assets / Dokumente)
-    return <AssetsView projectId={openProject.id} projectName={openProject.name} projectLogoUrl={openProject.logo_url} projectColor={openProject.color}
+    return <AssetsView projectId={openProject.id} projectName={openProject.name} projectLogoUrl={openProject.logo_url} projectColor={openProject.color} onOpenWhiteboard={onOpenWhiteboard}
       session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage}
       onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive} orgMembers={orgMembers} createNotification={createNotification}
       docDeepLink={null} docFullscreen={projDocFullscreen} setDocFullscreen={setProjDocFullscreen}
@@ -12551,12 +12565,449 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
   );
 }
 
+// ── Ideas tab (Dateien → Ideen) ─────────────────────────────────────────────
+// Lists the Brainstorm whiteboards with the same toolbar patterns as Docs:
+// search · sort toggle · grid/list view · shared folders (document_folders,
+// kind='ideas'). Clicking a board opens the whiteboard via onOpenBoard(id).
+function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMembers = [], projectId = null, createRef, newFolderRef, onOpenBoard }) {
+  const de = appLanguage === "de";
+  const [boards, setBoards] = useState(null); // null = loading
+  const [search, setSearch] = useState("");
+  const [sortMode, setSortMode] = useState("updated"); // updated | name | creator
+  const [viewMode, setViewMode] = useState("grid");
+  const [folders, setFolders] = useState([]);
+  const [currentFolder, setCurrentFolder] = useState(null);
+  const [folderMenu, setFolderMenu] = useState(null);
+  const [moveMenuFor, setMoveMenuFor] = useState(null);
+  const [folderModalOpen, setFolderModalOpen] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [folderToDelete, setFolderToDelete] = useState(null);
+  const [deletingFolder, setDeletingFolder] = useState(false);
+  const [renameFolderObj, setRenameFolderObj] = useState(null);
+  const [renameFolderName, setRenameFolderName] = useState("");
+  const [boardToDelete, setBoardToDelete] = useState(null);
+  const [deletingBoard, setDeletingBoard] = useState(false);
+
+  const memberById = useMemo(() => {
+    const m = {};
+    (orgMembers || []).forEach(om => { if (om.user_id) m[om.user_id] = { user_id: om.user_id, ...(om.profiles || {}) }; });
+    if (session?.user?.id) {
+      m[session.user.id] = m[session.user.id] || {
+        user_id: session.user.id,
+        display_name: session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "Du",
+        avatar_url: session.user.user_metadata?.avatar_url || null,
+      };
+    }
+    return m;
+  }, [orgMembers, session?.user?.id]);
+
+  const load = useCallback(async () => {
+    if (!userOrg?.id) { setBoards([]); return; }
+    let q = supabase.from("whiteboards").select("id,name,folder_id,project_id,created_by,created_at,updated_at").eq("org_id", userOrg.id);
+    if (projectId) q = q.eq("project_id", projectId);
+    const { data } = await q.order("updated_at", { ascending: false });
+    setBoards(data || []);
+  }, [userOrg?.id, projectId]);
+  useEffect(() => { load(); }, [load]);
+  const loadFolders = useCallback(async () => {
+    if (!userOrg?.id) { setFolders([]); return; }
+    let q = supabase.from("document_folders").select("id,name").eq("org_id", userOrg.id).eq("kind", "ideas");
+    q = projectId ? q.eq("project_id", projectId) : q.is("project_id", null);
+    const { data } = await q.order("name");
+    setFolders(data || []);
+  }, [userOrg?.id, projectId]);
+  useEffect(() => { loadFolders(); }, [loadFolders]);
+
+  // Create board (wired to the AssetsView header "Hinzufügen → Neues Board").
+  const createBoard = useCallback(async () => {
+    if (!userOrg?.id) return;
+    const { data, error } = await supabase.from("whiteboards")
+      .insert({ org_id: userOrg.id, project_id: projectId || null, folder_id: currentFolder || null, name: "Brainstorm", created_by: session?.user?.id })
+      .select().single();
+    if (error) { alert((de ? "Board konnte nicht erstellt werden: " : "Couldn't create board: ") + error.message); return; }
+    onOpenBoard?.(data.id);
+  }, [userOrg?.id, projectId, currentFolder, session?.user?.id, onOpenBoard, de]);
+  const createBoardRef = useRef(null); createBoardRef.current = createBoard;
+  useEffect(() => { if (createRef) createRef.current = () => createBoardRef.current?.(); }, [createRef]);
+  const openFolderModal = useCallback(() => { setFolderName(""); setFolderModalOpen(true); }, []);
+  const openFolderModalRef = useRef(null); openFolderModalRef.current = openFolderModal;
+  useEffect(() => { if (newFolderRef) newFolderRef.current = () => openFolderModalRef.current?.(); }, [newFolderRef]);
+
+  const submitFolder = async () => {
+    const name = folderName.trim();
+    if (!name || creatingFolder || !userOrg?.id) return;
+    setCreatingFolder(true);
+    const { data, error } = await supabase.from("document_folders")
+      .insert({ name, org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, kind: "ideas" })
+      .select("id,name").single();
+    setCreatingFolder(false);
+    if (error) { alert((de ? "Ordner konnte nicht erstellt werden: " : "Couldn't create folder: ") + error.message); return; }
+    if (data) setFolders(prev => [...prev, data].sort((a, b) => (a.name || "").localeCompare(b.name || "")));
+    setFolderModalOpen(false);
+  };
+  const submitRenameFolder = async () => {
+    const fo = renameFolderObj; const name = renameFolderName.trim();
+    if (!fo || !name || name === fo.name) { setRenameFolderObj(null); return; }
+    await supabase.from("document_folders").update({ name }).eq("id", fo.id);
+    setFolders(prev => prev.map(x => x.id === fo.id ? { ...x, name } : x).sort((a, b) => (a.name || "").localeCompare(b.name || "")));
+    setRenameFolderObj(null);
+  };
+  const performDeleteFolder = async () => {
+    const fo = folderToDelete;
+    if (!fo || deletingFolder) return;
+    setDeletingFolder(true);
+    await supabase.from("whiteboards").update({ folder_id: null }).eq("folder_id", fo.id);
+    await supabase.from("document_folders").delete().eq("id", fo.id);
+    setBoards(prev => (prev || []).map(b => b.folder_id === fo.id ? { ...b, folder_id: null } : b));
+    setFolders(prev => prev.filter(x => x.id !== fo.id));
+    if (currentFolder === fo.id) setCurrentFolder(null);
+    setDeletingFolder(false);
+    setFolderToDelete(null);
+  };
+  const moveBoardToFolder = async (id, folderId) => {
+    setMoveMenuFor(null);
+    await supabase.from("whiteboards").update({ folder_id: folderId }).eq("id", id);
+    setBoards(prev => (prev || []).map(b => b.id === id ? { ...b, folder_id: folderId } : b));
+  };
+  const performDeleteBoard = async () => {
+    const b = boardToDelete;
+    if (!b || deletingBoard) return;
+    setDeletingBoard(true);
+    await supabase.from("whiteboards").delete().eq("id", b.id);
+    setBoards(prev => (prev || []).filter(x => x.id !== b.id));
+    setDeletingBoard(false);
+    setBoardToDelete(null);
+  };
+
+  const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" }) : "";
+  const searching = search.trim().length > 0;
+  const visible = (boards || [])
+    .filter(b => (b.name || "").toLowerCase().includes(search.trim().toLowerCase()))
+    .filter(b => searching || (b.folder_id ?? null) === (currentFolder ?? null))
+    .slice()
+    .sort((a, b) => sortMode === "name"
+      ? (a.name || "").localeCompare(b.name || "", "de")
+      : sortMode === "creator"
+      ? (memberById[a.created_by]?.display_name || "").localeCompare(memberById[b.created_by]?.display_name || "", "de")
+      : new Date(b.updated_at) - new Date(a.updated_at));
+  const folderCounts = {};
+  for (const b of (boards || [])) { const k = b.folder_id; if (k) folderCounts[k] = (folderCounts[k] || 0) + 1; }
+  const showFolders = !searching && currentFolder == null && folders.length > 0;
+  const currentFolderObj = folders.find(f => f.id === currentFolder) || null;
+
+  const iconBg = darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)";
+  const boardIcon = (size) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><circle cx="17.5" cy="7" r="3.5"/><path d="M4 21l4-7 4 7z"/><path d="M14 15h7v6h-7z"/></svg>
+  );
+  const creatorAvatar = (m, size = 22) => (
+    <div style={{ width: size, height: size, borderRadius: "50%", overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", color: theme.textSub, fontSize: size * 0.4, fontWeight: 600, fontFamily: FONT }}>
+      {m?.avatar_url ? <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (m?.initials || (m?.display_name || "?").trim()[0] || "?").toUpperCase()}
+    </div>
+  );
+  const actBtnStyle = { width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: darkMode ? "#e8e8ee" : "#23232b", cursor: "pointer", flexShrink: 0 };
+  const moveBtn = (b) => (
+    <div style={{ position: "relative" }} onClick={e => e.stopPropagation()}>
+      <motion.div whileTap={{ scale: 0.9 }} onClick={() => setMoveMenuFor(m => m === b.id ? null : b.id)} title={de ? "In Ordner verschieben" : "Move to folder"} style={actBtnStyle}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </motion.div>
+      <AnimatePresence>
+        {moveMenuFor === b.id && (
+          <>
+            <div onClick={(e) => { e.stopPropagation(); setMoveMenuFor(null); }} style={{ position: "fixed", inset: 0, zIndex: 60 }} />
+            <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.14 }} onClick={(e) => e.stopPropagation()}
+              style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 61, minWidth: 190, maxHeight: 260, overflowY: "auto", background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 11, boxShadow: "0 16px 44px rgba(0,0,0,0.2)", padding: 5 }}>
+              <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.6, padding: "6px 9px 4px" }}>{de ? "In Ordner verschieben" : "Move to folder"}</div>
+              {b.folder_id != null && (
+                <div onClick={() => moveBoardToFolder(b.id, null)} className="hover-row" style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 9px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontFamily: FONT, color: theme.text }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  {de ? "Kein Ordner" : "No folder"}
+                </div>
+              )}
+              {folders.length === 0 && <div style={{ padding: "8px 9px", fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>{de ? "Noch keine Ordner" : "No folders yet"}</div>}
+              {folders.map(fo => (
+                <div key={fo.id} onClick={() => moveBoardToFolder(b.id, fo.id)} className="hover-row" style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 9px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontFamily: FONT, color: theme.text }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                  <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fo.name}</span>
+                  {b.folder_id === fo.id && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.text} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                </div>
+              ))}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+  const delBtn = (b) => {
+    const canDel = b.created_by === session?.user?.id;
+    return (
+      <motion.div whileTap={canDel ? { scale: 0.9 } : undefined} onClick={(e) => { e.stopPropagation(); if (canDel) setBoardToDelete(b); }}
+        title={canDel ? (de ? "Löschen" : "Delete") : (de ? "Nur der Ersteller kann löschen" : "Only the creator can delete")}
+        style={{ ...actBtnStyle, opacity: canDel ? 1 : 0.3, cursor: canDel ? "pointer" : "not-allowed" }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+      </motion.div>
+    );
+  };
+  const viewBtn = (mode, title, children) => {
+    const on = viewMode === mode;
+    return (
+      <motion.div whileTap={{ scale: 0.92 }} onClick={() => setViewMode(mode)} title={title}
+        style={{ width: 32, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+          background: on ? (darkMode ? "rgba(255,255,255,0.10)" : "#fff") : "transparent", color: on ? theme.text : theme.textDim,
+          boxShadow: on ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>{children}</motion.div>
+    );
+  };
+
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
+      {/* Toolbar: search · sort · view toggle */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "none", maxWidth: 340 }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={de ? "Board eingeben" : "Search boards"}
+            style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }} />
+        </div>
+        <div style={{ flex: 1 }} />
+        <motion.div whileTap={{ scale: 0.96 }} onClick={() => setSortMode(m => m === "updated" ? "name" : m === "name" ? "creator" : "updated")}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, whiteSpace: "nowrap" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+          {sortMode === "name" ? "Name" : sortMode === "creator" ? (de ? "Ersteller" : "Creator") : (de ? "Zuletzt geändert" : "Last modified")}
+        </motion.div>
+        <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+          {viewBtn("grid", de ? "Kachelansicht" : "Grid view", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>)}
+          {viewBtn("list", de ? "Listenansicht" : "List view", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>)}
+        </div>
+      </div>
+
+      {boards === null ? (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 60, color: theme.textDim, fontSize: 13, fontFamily: FONT }}>Lädt…</div>
+      ) : (
+      <>
+        {/* Breadcrumb when inside a folder */}
+        {currentFolder != null && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <motion.div whileTap={{ scale: 0.96 }} onClick={() => { setCurrentFolder(null); setFolderMenu(null); }}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12.5, fontFamily: FONT }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+              {de ? "Alle Boards" : "All boards"}
+            </motion.div>
+            <div style={{ flex: 1 }} />
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, minWidth: 0 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+              <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentFolderObj?.name || (de ? "Ordner" : "Folder")}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 400, color: theme.textDim, flexShrink: 0 }}>· {visible.length}</span>
+            </span>
+          </div>
+        )}
+        {/* Folders (root level only) */}
+        {showFolders && (
+          <div style={{ marginBottom: 22 }}>
+            <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>{de ? "Ordner" : "Folders"}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+              {folders.map(fo => (
+                <motion.div key={fo.id} whileHover={{ y: -2 }} onClick={() => { setCurrentFolder(fo.id); setFolderMenu(null); }}
+                  style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 11, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={theme.text} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fo.name}</div>
+                    <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{(folderCounts[fo.id] || 0)} Boards</div>
+                  </div>
+                  <div style={{ position: "relative", flexShrink: 0 }}>
+                    <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); setFolderMenu(m => m === fo.id ? null : fo.id); }} title={de ? "Optionen" : "Options"} style={actBtnStyle}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>
+                    </motion.div>
+                    <AnimatePresence>
+                      {folderMenu === fo.id && (
+                        <>
+                          <div onClick={(e) => { e.stopPropagation(); setFolderMenu(null); }} style={{ position: "fixed", inset: 0, zIndex: 60 }} />
+                          <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.14 }} onClick={(e) => e.stopPropagation()}
+                            style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 61, minWidth: 168, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 11, boxShadow: "0 16px 44px rgba(0,0,0,0.2)", overflow: "hidden", padding: 5 }}>
+                            <div onClick={() => { setFolderMenu(null); setRenameFolderObj(fo); setRenameFolderName(fo.name || ""); }} className="hover-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 8, cursor: "pointer" }}>
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                              <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>{de ? "Umbenennen" : "Rename"}</span>
+                            </div>
+                            <div onClick={() => { setFolderMenu(null); setFolderToDelete(fo); }} className="hover-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 8, cursor: "pointer" }}>
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#e5484d" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                              <span style={{ fontSize: 13, fontFamily: FONT, color: "#e5484d" }}>{de ? "Löschen" : "Delete"}</span>
+                            </div>
+                          </motion.div>
+                        </>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        )}
+        {visible.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "48px 20px" }}>
+            <div style={{ fontSize: 16, fontFamily: FONT, color: theme.text, marginBottom: 6 }}>{search ? (de ? "Keine Treffer" : "No matches") : currentFolder != null ? (de ? "Dieser Ordner ist leer" : "This folder is empty") : (de ? "Noch keine Boards" : "No boards yet")}</div>
+            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{search ? (de ? "Versuche einen anderen Suchbegriff." : "Try a different search term.") : (de ? "Erstelle ein Board über Hinzufügen → Neues Board oder Erstellen → Brainstorm." : "Create a board via Add → New board or Create → Brainstorm.")}</div>
+          </div>
+        ) : viewMode === "grid" ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 24 }}>
+            {visible.map(b => {
+              const creator = memberById[b.created_by];
+              return (
+                <motion.div key={b.id} className="doc-row" whileHover={{ y: -3 }} onClick={() => onOpenBoard?.(b.id)}
+                  style={{ position: "relative", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)", boxShadow: "0 5px 16px rgba(0,0,0,0.06)", padding: 18, cursor: "pointer", minHeight: 116, display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div className="doc-row-icon" style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{boardIcon(16)}</div>
+                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name || "Brainstorm"}</div>
+                    {moveBtn(b)}
+                  </div>
+                  <div style={{ flex: 1 }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, minWidth: 0 }}>
+                    {creator?.display_name && creatorAvatar(creator, 20)}
+                    <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[creator?.display_name, fmtDate(b.created_at)].filter(Boolean).join(" · ")}</span>
+                    {delBtn(b)}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", borderRadius: 14, border: `1px solid ${theme.borderFaint}`, overflow: "hidden", boxShadow: "0 10px 28px rgba(0,0,0,0.06)" }}>
+            {visible.map((b, i) => {
+              const creator = memberById[b.created_by];
+              return (
+                <motion.div key={b.id} className="doc-row" whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }} onClick={() => onOpenBoard?.(b.id)}
+                  style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", cursor: "pointer", borderBottom: i < visible.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
+                  <div className="doc-row-icon" style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{boardIcon(16)}</div>
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name || "Brainstorm"}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, width: 140 }}>
+                    {creator?.display_name && <>{creatorAvatar(creator)}<span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{creator.display_name}</span></>}
+                  </div>
+                  <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textFaint, flexShrink: 0, minWidth: 92, textAlign: "right", marginRight: 38 }}>{fmtDate(b.created_at)}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0 }}>{moveBtn(b)}{delBtn(b)}</div>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
+      </>
+      )}
+
+      {/* New-folder modal */}
+      <AnimatePresence>
+        {folderModalOpen && createPortal(
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+            onClick={() => !creatingFolder && setFolderModalOpen(false)}
+            style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 8 }}
+              transition={{ duration: 0.2, ease: [0.22, 0.68, 0.35, 1.0] }} onClick={e => e.stopPropagation()}
+              style={{ width: "100%", maxWidth: 420, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26, boxShadow: "0 25px 80px rgba(0,0,0,0.4)" }}>
+              <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 6, letterSpacing: -0.2 }}>{de ? "Neuer Ordner" : "New folder"}</div>
+              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 18, lineHeight: 1.5 }}>{de ? "Gib dem Ordner einen Namen." : "Give the folder a name."}</div>
+              <input autoFocus value={folderName} onChange={e => setFolderName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && folderName.trim() && !creatingFolder) submitFolder(); if (e.key === "Escape" && !creatingFolder) setFolderModalOpen(false); }}
+                placeholder={de ? "z.B. Kampagnen-Ideen" : "e.g. Campaign ideas"}
+                style={{ width: "100%", boxSizing: "border-box", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 12, padding: "12px 14px", fontSize: 14, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.text }}
+              />
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
+                <motion.button onClick={() => !creatingFolder && setFolderModalOpen(false)} whileTap={{ scale: 0.97 }}
+                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: creatingFolder ? "not-allowed" : "pointer", background: "transparent", border: `1px solid ${theme.border}`, color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: creatingFolder ? 0.5 : 1 }}
+                >{de ? "Abbrechen" : "Cancel"}</motion.button>
+                <motion.button onClick={submitFolder} whileTap={{ scale: 0.97 }} disabled={!folderName.trim() || creatingFolder}
+                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: (!folderName.trim() || creatingFolder) ? "not-allowed" : "pointer", minWidth: 128, boxSizing: "border-box", textAlign: "center", background: (!folderName.trim() || creatingFolder) ? (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)") : "#15151c", border: "none", color: (!folderName.trim() || creatingFolder) ? theme.textFaint : "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, transition: "background 0.18s ease" }}
+                >{creatingFolder ? (de ? "Erstellt…" : "Creating…") : (de ? "Erstellen" : "Create")}</motion.button>
+              </div>
+            </motion.div>
+          </motion.div>, document.body)}
+      </AnimatePresence>
+
+      {/* Rename-folder modal */}
+      <AnimatePresence>
+        {renameFolderObj && createPortal(
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+            onClick={() => setRenameFolderObj(null)}
+            style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 8 }}
+              transition={{ duration: 0.2, ease: [0.22, 0.68, 0.35, 1.0] }} onClick={e => e.stopPropagation()}
+              style={{ width: "100%", maxWidth: 420, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26, boxShadow: "0 25px 80px rgba(0,0,0,0.4)" }}>
+              <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 18, letterSpacing: -0.2 }}>{de ? "Ordner umbenennen" : "Rename folder"}</div>
+              <input autoFocus value={renameFolderName} onChange={e => setRenameFolderName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && renameFolderName.trim()) submitRenameFolder(); if (e.key === "Escape") setRenameFolderObj(null); }}
+                style={{ width: "100%", boxSizing: "border-box", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 12, padding: "12px 14px", fontSize: 14, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.text }}
+              />
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
+                <motion.button onClick={() => setRenameFolderObj(null)} whileTap={{ scale: 0.97 }}
+                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.border}`, color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600 }}
+                >{de ? "Abbrechen" : "Cancel"}</motion.button>
+                <motion.button onClick={submitRenameFolder} whileTap={{ scale: 0.97 }} disabled={!renameFolderName.trim()}
+                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: !renameFolderName.trim() ? "not-allowed" : "pointer", minWidth: 128, boxSizing: "border-box", textAlign: "center", background: !renameFolderName.trim() ? (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)") : "#15151c", border: "none", color: !renameFolderName.trim() ? theme.textFaint : "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600 }}
+                >{de ? "Speichern" : "Save"}</motion.button>
+              </div>
+            </motion.div>
+          </motion.div>, document.body)}
+      </AnimatePresence>
+
+      {/* Delete-folder confirm modal */}
+      <AnimatePresence>
+        {folderToDelete && createPortal(
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+            onClick={() => !deletingFolder && setFolderToDelete(null)}
+            style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 8 }}
+              transition={{ duration: 0.2, ease: [0.22, 0.68, 0.35, 1.0] }} onClick={e => e.stopPropagation()}
+              style={{ width: "100%", maxWidth: 420, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26, boxShadow: "0 25px 80px rgba(0,0,0,0.4)" }}>
+              <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8, letterSpacing: -0.2 }}>{de ? "Ordner löschen?" : "Delete folder?"}</div>
+              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 22, lineHeight: 1.55 }}>
+                {(() => {
+                  const n = folderCounts[folderToDelete.id] || 0;
+                  if (de) return <>„{folderToDelete.name}" wird gelöscht.{n ? ` Die ${n} enthaltenen Boards bleiben erhalten und landen unter „Kein Ordner".` : ""}</>;
+                  return <>“{folderToDelete.name}” will be deleted.{n ? ` Its ${n} board(s) are kept and moved to “No folder”.` : ""}</>;
+                })()}
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                <motion.button onClick={() => !deletingFolder && setFolderToDelete(null)} whileTap={{ scale: 0.97 }}
+                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: deletingFolder ? "not-allowed" : "pointer", background: "transparent", border: `1px solid ${theme.border}`, color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: deletingFolder ? 0.5 : 1 }}
+                >{de ? "Abbrechen" : "Cancel"}</motion.button>
+                <motion.button onClick={performDeleteFolder} whileTap={{ scale: 0.97 }} disabled={deletingFolder}
+                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: deletingFolder ? "not-allowed" : "pointer", minWidth: 128, boxSizing: "border-box", textAlign: "center", background: "#EF4444", border: "none", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: deletingFolder ? 0.6 : 1 }}
+                >{deletingFolder ? (de ? "Löscht…" : "Deleting…") : (de ? "Löschen" : "Delete")}</motion.button>
+              </div>
+            </motion.div>
+          </motion.div>, document.body)}
+      </AnimatePresence>
+
+      {/* Delete-board confirm modal */}
+      <AnimatePresence>
+        {boardToDelete && createPortal(
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+            onClick={() => !deletingBoard && setBoardToDelete(null)}
+            style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 8 }}
+              transition={{ duration: 0.2, ease: [0.22, 0.68, 0.35, 1.0] }} onClick={e => e.stopPropagation()}
+              style={{ width: "100%", maxWidth: 420, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26, boxShadow: "0 25px 80px rgba(0,0,0,0.4)" }}>
+              <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8, letterSpacing: -0.2 }}>{de ? "Board löschen?" : "Delete board?"}</div>
+              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 22, lineHeight: 1.55 }}>
+                {de ? <>„{boardToDelete.name || "Brainstorm"}" wird mit allen Inhalten unwiderruflich gelöscht.</> : <>“{boardToDelete.name || "Brainstorm"}” and everything on it will be permanently deleted.</>}
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                <motion.button onClick={() => !deletingBoard && setBoardToDelete(null)} whileTap={{ scale: 0.97 }}
+                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: deletingBoard ? "not-allowed" : "pointer", background: "transparent", border: `1px solid ${theme.border}`, color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: deletingBoard ? 0.5 : 1 }}
+                >{de ? "Abbrechen" : "Cancel"}</motion.button>
+                <motion.button onClick={performDeleteBoard} whileTap={{ scale: 0.97 }} disabled={deletingBoard}
+                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: deletingBoard ? "not-allowed" : "pointer", minWidth: 128, boxSizing: "border-box", textAlign: "center", background: "#EF4444", border: "none", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: deletingBoard ? 0.6 : 1 }}
+                >{deletingBoard ? (de ? "Löscht…" : "Deleting…") : (de ? "Löschen" : "Delete")}</motion.button>
+              </div>
+            </motion.div>
+          </motion.div>, document.body)}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ── Moodboards ──────────────────────────────────────────────────────────────
 // Org-scoped collections of visual references (under Brand → Assets). Two views:
 // a Grid (overview of everything) and a freeform Canvas (drag images around).
 // Images upload to the public brand-assets bucket so their URLs can later be
 // reused as reference inputs for image/video generation (Higgsfield etc.).
-function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, docFullscreen, setDocFullscreen, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null, embedded = false, headerSlotRef = null, projectName = "", projectLogoUrl = "", projectColor = "" }) {
+function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, docFullscreen, setDocFullscreen, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null, embedded = false, headerSlotRef = null, projectName = "", projectLogoUrl = "", projectColor = "", onOpenWhiteboard = null }) {
   // Embedded: action buttons portal into BrandView's header slot once it exists.
   const [assetSlotReady, setAssetSlotReady] = useState(false);
   useEffect(() => { setAssetSlotReady(true); }, []);
@@ -12598,6 +13049,9 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   }, [boardFullscreen]);
   const docsCreate = useRef(null); // DocsTab registers its "new document" fn here
   const docsNewFolder = useRef(null); // DocsTab registers its "create folder" fn here
+  const ideasCreate = useRef(null); // IdeasTab registers its "new board" fn here
+  const ideasNewFolder = useRef(null); // IdeasTab registers its "create folder" fn here
+  const [ideasAddOpen, setIdeasAddOpen] = useState(false); // "Hinzufügen" dropdown (ideas tab)
   const [boards, setBoards] = useState([]);
   const [loadingBoards, setLoadingBoards] = useState(true);
   const [activeBoard, setActiveBoard] = useState(null);
@@ -12965,6 +13419,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
       { id: "moodboards",   label: t("assets.moodboards") || "Moodboards" },
       { id: "creations",    label: t("assets.creations") || "Creations" },
       { id: "docs",         label: t("assets.docs") || "Docs" },
+      { id: "ideas",        label: appLanguage === "de" ? "Ideen" : "Ideas" },
     ];
     const headerActions = (<>
             {tab === "moodboards" && (
@@ -13078,6 +13533,52 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                 </AnimatePresence>
               </div>
             )}
+            {tab === "ideas" && (
+              <div style={{ position: "relative" }}>
+                <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setIdeasAddOpen(o => !o)}
+                  style={{ ...iconBtn, background: "#23232b", color: "#fff", border: "none" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  {appLanguage === "de" ? "Hinzufügen" : "Add"}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 1, opacity: 0.8 }}><polyline points="6 9 12 15 18 9"/></svg>
+                </motion.div>
+                <AnimatePresence>
+                  {ideasAddOpen && (
+                    <>
+                      <div onClick={() => setIdeasAddOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                      <motion.div
+                        initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                        transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
+                        style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 41, minWidth: 250, whiteSpace: "nowrap",
+                          background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
+                          boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden", padding: 6 }}>
+                        {[
+                          { key: "new", label: appLanguage === "de" ? "Neues Board" : "New board",
+                            sub: appLanguage === "de" ? "Leeres Brainstorm-Board erstellen" : "Create a blank brainstorm board",
+                            icon: <><rect x="3" y="3" width="8" height="8" rx="1.5"/><circle cx="17.5" cy="7" r="3.5"/><path d="M4 21l4-7 4 7z"/><path d="M14 15h7v6h-7z"/></>,
+                            onClick: () => { setIdeasAddOpen(false); ideasCreate.current?.(); } },
+                          { key: "folder", label: appLanguage === "de" ? "Ordner erstellen" : "Create folder",
+                            sub: appLanguage === "de" ? "Boards in Ordnern organisieren" : "Organise boards in folders",
+                            icon: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>,
+                            onClick: () => { setIdeasAddOpen(false); ideasNewFolder.current?.(); } },
+                        ].map(it => (
+                          <div key={it.key} onClick={it.onClick} className="hover-row"
+                            style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
+                            <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                              background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
+                              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>
+                            </div>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{it.label}</div>
+                              <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{it.sub}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
     </>);
     return (
       <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0, pointerEvents: "auto" }}
@@ -13166,6 +13667,13 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           {/* ── DOCS tab ── */}
           {tab === "docs" && (
             <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} orgMembers={orgMembers} createNotification={createNotification} projectId={projectId} deepLink={docDeepLink} fullscreen={docFullscreen} setFullscreen={setDocFullscreen} createRef={docsCreate} importRef={docsImport} onImportingChange={setDocsImporting} skillsRef={docsSkills} newFolderRef={docsNewFolder} llmProvider={llmProvider} llmKeys={llmKeys} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} onOpenChange={setDocOpen} />
+          )}
+
+          {/* ── IDEAS tab (Brainstorm whiteboards) ── */}
+          {tab === "ideas" && (
+            <IdeasTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+              orgMembers={orgMembers} projectId={projectId} createRef={ideasCreate} newFolderRef={ideasNewFolder}
+              onOpenBoard={onOpenWhiteboard} />
           )}
 
           {/* ── MOODBOARDS tab (boards grid) ── */}
@@ -20663,7 +21171,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   );
 }
 
-function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, darkMode, t, appLanguage = "de", brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true, projectId = null, projectName = "", orgMembers = [], createNotification, onUploadStorage, onUploadDrive, getProviderToken, autoReLogin }) {
+function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, darkMode, t, appLanguage = "de", brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true, projectId = null, projectName = "", orgMembers = [], createNotification, onUploadStorage, onUploadDrive, getProviderToken, autoReLogin, onOpenWhiteboard = null }) {
   // Scope: null projectId = the org-level brand (unchanged). A projectId scopes
   // every load/insert/realtime to that project's own brand_profile row, and the
   // pillar switch becomes a local top-right dropdown instead of the app menu.
@@ -22645,7 +23153,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 {brandTab === "touchpoints" ? (
                   <TouchpointsView embedded projectId={projectId} projectName={projectName} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} canEdit={canEditBrand} />
                 ) : (
-                  <AssetsView embedded projectId={projectId} headerSlotRef={embedHeaderSlot} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage}
+                  <AssetsView embedded projectId={projectId} headerSlotRef={embedHeaderSlot} onOpenWhiteboard={onOpenWhiteboard} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage}
                     onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive} orgMembers={orgMembers} createNotification={createNotification}
                     docDeepLink={null} docFullscreen={projDocFullscreen} setDocFullscreen={setProjDocFullscreen}
                     getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin}
@@ -23075,6 +23583,7 @@ export default function CircularMenu() {
   const [orgMembers, setOrgMembers] = useState([]);          // team members for chat etc.
   const [docDeepLink, setDocDeepLink] = useState(null);      // open a document from a notification: { documentId, blockId, ts }
   const [whiteboardId, setWhiteboardId] = useState(null);    // board to open in the Brainstorm whiteboard view
+  const [whiteboardReturn, setWhiteboardReturn] = useState("dashboard"); // view to return to when leaving the whiteboard
   const [docFullscreen, setDocFullscreen] = useState(false); // document editor in full-viewport mode
   const [brandProfile, setBrandProfile] = useState(null);    // brand_profile row for current org — fed into AI context
   const [appProjects, setAppProjects] = useState([]);        // [{name}] — known project names for AI context + vocab correction
@@ -25907,6 +26416,13 @@ export default function CircularMenu() {
       .select().single();
     if (error) { alert("Board konnte nicht erstellt werden: " + error.message); return; }
     setWhiteboardId(data.id);
+    setWhiteboardReturn("dashboard");
+    setCurrentView("whiteboard");
+  };
+  // Open an existing board from the Dateien → Ideen tab (back returns to assets).
+  const openWhiteboardFromAssets = (id) => {
+    setWhiteboardId(id);
+    setWhiteboardReturn("assets");
     setCurrentView("whiteboard");
   };
 
@@ -26737,28 +27253,28 @@ export default function CircularMenu() {
         {/* WHITEBOARD / BRAINSTORM VIEW */}
         <AnimatePresence>
           {currentView === "whiteboard" && (
-            <WhiteboardView session={session} userOrg={userOrg} orgMembers={orgMembers} theme={theme} darkMode={darkMode} appLanguage={appLanguage} boardId={whiteboardId} onBack={() => setCurrentView("dashboard")} />
+            <WhiteboardView session={session} userOrg={userOrg} orgMembers={orgMembers} theme={theme} darkMode={darkMode} appLanguage={appLanguage} boardId={whiteboardId} onBack={() => setCurrentView(whiteboardReturn || "dashboard")} />
           )}
         </AnimatePresence>
 
         {/* PROJECTS VIEW */}
         <AnimatePresence>
           {currentView === "projects" && (
-            <ProjectsView session={session} userOrg={userOrg} orgMembers={orgMembers} myProjectIds={myProjectIds} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} createNotification={createNotification} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} canEditBrand={canEditBrand} canEditDesign={canEditDesign} onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive} getProviderToken={getProviderToken} autoReLogin={autoReLogin} onNavigate={(v) => setCurrentView(v)} onOpenDoc={(id) => { setDocDeepLink({ documentId: id, blockId: null, ts: Date.now() }); setCurrentView("assets"); }} onBack={() => setCurrentView("dashboard")} onOpenInKanban={(projectName) => { setCurrentView("kanban"); }} />
+            <ProjectsView session={session} userOrg={userOrg} orgMembers={orgMembers} myProjectIds={myProjectIds} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} createNotification={createNotification} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} canEditBrand={canEditBrand} canEditDesign={canEditDesign} onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive} getProviderToken={getProviderToken} autoReLogin={autoReLogin} onNavigate={(v) => setCurrentView(v)} onOpenDoc={(id) => { setDocDeepLink({ documentId: id, blockId: null, ts: Date.now() }); setCurrentView("assets"); }} onOpenWhiteboard={openWhiteboardFromAssets} onBack={() => setCurrentView("dashboard")} onOpenInKanban={(projectName) => { setCurrentView("kanban"); }} />
           )}
         </AnimatePresence>
 
         {/* BRAND VIEW */}
         <AnimatePresence>
           {currentView === "brand" && (
-            <BrandView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} brandTab={brandTab} setBrandTab={setBrandTab} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} canEditBrand={canEditBrand} canEditDesign={canEditDesign} onNavigate={(v) => setCurrentView(v)} onOpenDoc={(id) => { setDocDeepLink({ documentId: id, blockId: null, ts: Date.now() }); setCurrentView("assets"); }} onBack={() => setCurrentView("dashboard")} />
+            <BrandView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} brandTab={brandTab} setBrandTab={setBrandTab} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} canEditBrand={canEditBrand} canEditDesign={canEditDesign} onNavigate={(v) => setCurrentView(v)} onOpenDoc={(id) => { setDocDeepLink({ documentId: id, blockId: null, ts: Date.now() }); setCurrentView("assets"); }} onOpenWhiteboard={openWhiteboardFromAssets} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
         {/* ASSETS VIEW (Brand → Assets): Moodboards / Creations / Inspirations */}
         <AnimatePresence>
           {currentView === "assets" && (
-            <AssetsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive} orgMembers={orgMembers} createNotification={createNotification} docDeepLink={docDeepLink} docFullscreen={docFullscreen} setDocFullscreen={setDocFullscreen} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} llmProvider={llmProvider} llmKeys={llmKeys} onBack={() => setCurrentView("dashboard")} />
+            <AssetsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive} orgMembers={orgMembers} createNotification={createNotification} docDeepLink={docDeepLink} docFullscreen={docFullscreen} setDocFullscreen={setDocFullscreen} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} llmProvider={llmProvider} llmKeys={llmKeys} onOpenWhiteboard={openWhiteboardFromAssets} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
