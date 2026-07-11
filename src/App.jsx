@@ -5609,7 +5609,6 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       </div>
 
       {/* Sticker picker — portalled + centered above the toolbar (not clipped to the button) */}
-      <AnimatePresence>
         {stickersOpen && createPortal(
           <>
             <div onClick={() => setStickersOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
@@ -5638,7 +5637,6 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               </div>
             </motion.div>
           </>, document.body)}
-      </AnimatePresence>
     </motion.div>
   );
 }
@@ -14590,7 +14588,6 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
         </motion.div>, document.body)}
 
       {/* New-folder modal — custom overlay (replaces window.prompt) */}
-      <AnimatePresence>
         {folderModalOpen && createPortal(
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
             onClick={() => !creatingFolder && setFolderModalOpen(false)}
@@ -14615,10 +14612,8 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
               </div>
             </motion.div>
           </motion.div>, document.body)}
-      </AnimatePresence>
 
       {/* Delete-folder confirm modal — custom overlay (replaces window.confirm) */}
-      <AnimatePresence>
         {folderToDelete && createPortal(
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
             onClick={() => !deletingFolder && setFolderToDelete(null)}
@@ -14644,7 +14639,6 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
               </div>
             </motion.div>
           </motion.div>, document.body)}
-      </AnimatePresence>
     </div>
   );
 }
@@ -17121,7 +17115,6 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
       )}
 
       {/* New-folder modal */}
-      <AnimatePresence>
         {folderModalOpen && createPortal(
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
             onClick={() => !creatingFolder && setFolderModalOpen(false)}
@@ -17146,10 +17139,8 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
               </div>
             </motion.div>
           </motion.div>, document.body)}
-      </AnimatePresence>
 
       {/* Rename-folder modal */}
-      <AnimatePresence>
         {renameFolderObj && createPortal(
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
             onClick={() => setRenameFolderObj(null)}
@@ -17172,10 +17163,8 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
               </div>
             </motion.div>
           </motion.div>, document.body)}
-      </AnimatePresence>
 
       {/* Delete-folder confirm modal */}
-      <AnimatePresence>
         {folderToDelete && createPortal(
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
             onClick={() => !deletingFolder && setFolderToDelete(null)}
@@ -17201,7 +17190,6 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
               </div>
             </motion.div>
           </motion.div>, document.body)}
-      </AnimatePresence>
       {skillsOpen && createPortal(
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { if (!skillBusy) setSkillsOpen(false); }}
           style={{ position: "fixed", inset: 0, zIndex: 100001, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
