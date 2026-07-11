@@ -12978,7 +12978,6 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
       )}
 
       {/* New-folder modal */}
-      <AnimatePresence>
         {folderModalOpen && createPortal(
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
             onClick={() => !creatingFolder && setFolderModalOpen(false)}
@@ -13003,10 +13002,8 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
               </div>
             </motion.div>
           </motion.div>, document.body)}
-      </AnimatePresence>
 
       {/* Rename-folder modal */}
-      <AnimatePresence>
         {renameFolderObj && createPortal(
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
             onClick={() => setRenameFolderObj(null)}
@@ -13029,10 +13026,8 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
               </div>
             </motion.div>
           </motion.div>, document.body)}
-      </AnimatePresence>
 
       {/* Delete-folder confirm modal */}
-      <AnimatePresence>
         {folderToDelete && createPortal(
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
             onClick={() => !deletingFolder && setFolderToDelete(null)}
@@ -13058,10 +13053,8 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
               </div>
             </motion.div>
           </motion.div>, document.body)}
-      </AnimatePresence>
 
       {/* Delete-board confirm modal */}
-      <AnimatePresence>
         {boardToDelete && createPortal(
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
             onClick={() => !deletingBoard && setBoardToDelete(null)}
@@ -13083,7 +13076,6 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
               </div>
             </motion.div>
           </motion.div>, document.body)}
-      </AnimatePresence>
     </div>
   );
 }
