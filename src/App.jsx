@@ -12792,10 +12792,11 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
   );
   const actBtnStyle = { width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: darkMode ? "#e8e8ee" : "#23232b", cursor: "pointer", flexShrink: 0 };
   const moveBtn = (b) => (
-    <div style={{ position: "relative" }} onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
-      <motion.div whileTap={{ scale: 0.9 }} onClick={() => setMoveMenuFor(m => m === b.id ? null : b.id)} title={de ? "In Ordner verschieben" : "Move to folder"} style={actBtnStyle}>
+    <div data-wb-action style={{ position: "relative" }}>
+      <button type="button" data-wb-action onClick={(e) => { e.stopPropagation(); e.preventDefault(); setMoveMenuFor(m => m === b.id ? null : b.id); }}
+        title={de ? "In Ordner verschieben" : "Move to folder"} style={{ ...actBtnStyle, border: "none", background: "transparent", padding: 0 }}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-      </motion.div>
+      </button>
       <AnimatePresence>
         {moveMenuFor === b.id && (
           <>
@@ -12823,14 +12824,15 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
       </AnimatePresence>
     </div>
   );
-  // Any org member can delete a shared brainstorm board (RLS allows it).
-  // stopPropagation on BOTH pointerdown and click so the card's open-on-click
-  // (a framer-motion element that reacts to pointer events) never fires.
+  // Native <button> (not a framer motion element) so the click is bulletproof —
+  // motion gestures/pointer-capture were swallowing it. data-wb-action lets the
+  // card's onClick ignore clicks that originate here (so it never opens instead).
   const delBtn = (b) => (
-    <motion.div whileTap={{ scale: 0.9 }} onPointerDown={(e) => e.stopPropagation()}
-      onClick={(e) => { e.stopPropagation(); setBoardToDelete(b); }} title={de ? "Löschen" : "Delete"} style={actBtnStyle}>
+    <button type="button" data-wb-action title={de ? "Löschen" : "Delete"}
+      onClick={(e) => { e.stopPropagation(); e.preventDefault(); setBoardToDelete(b); }}
+      style={{ ...actBtnStyle, border: "none", background: "transparent", padding: 0 }}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-    </motion.div>
+    </button>
   );
   const viewBtn = (mode, title, children) => {
     const on = viewMode === mode;
@@ -12936,7 +12938,7 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
             {visible.map(b => {
               const creator = memberById[b.created_by];
               return (
-                <motion.div key={b.id} className="doc-row" whileHover={{ y: -3 }} onClick={() => onOpenBoard?.(b.id)}
+                <motion.div key={b.id} className="doc-row" whileHover={{ y: -3 }} onClick={(e) => { if (e.target.closest?.("[data-wb-action]")) return; onOpenBoard?.(b.id); }}
                   style={{ position: "relative", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)", boxShadow: "0 5px 16px rgba(0,0,0,0.06)", padding: 18, cursor: "pointer", minHeight: 116, display: "flex", flexDirection: "column", gap: 8 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <div className="doc-row-icon" style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{boardIcon(16)}</div>
@@ -12958,7 +12960,7 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
             {visible.map((b, i) => {
               const creator = memberById[b.created_by];
               return (
-                <motion.div key={b.id} className="doc-row" whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }} onClick={() => onOpenBoard?.(b.id)}
+                <motion.div key={b.id} className="doc-row" whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }} onClick={(e) => { if (e.target.closest?.("[data-wb-action]")) return; onOpenBoard?.(b.id); }}
                   style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", cursor: "pointer", borderBottom: i < visible.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
                   <div className="doc-row-icon" style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{boardIcon(16)}</div>
                   <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name || "Brainstorm"}</div>
