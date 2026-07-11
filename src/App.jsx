@@ -4842,6 +4842,13 @@ const MONTH_NAMES = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli
 // every collaborator's board in sync (last write wins per element).
 const WB_STICKY_COLORS = ["#FFE066", "#F4A79D", "#B5E2B0", "#A9D7F2", "#F0EEEA"];
 const WB_STROKE_COLORS = ["#15151c", "#EF4444", "#F59E0B", "#0EA5E9", "#10B981"];
+const WB_FILL_COLORS = ["transparent", "#FFFFFF", "#FFE066", "#F4A79D", "#B5E2B0", "#A9D7F2"];
+const WB_TEXT_SIZES = { s: 14, m: 18, l: 24, xl: 32 };
+const WB_SHAPE_TYPES = ["rect", "ellipse", "diamond", "triangle"];
+// Polygon points for svg-rendered shapes (diamond/triangle), in a w×h box.
+const wbShapePoints = (type, w, h) =>
+  type === "diamond" ? `${w / 2},1 ${w - 1},${h / 2} ${w / 2},${h - 1} 1,${h / 2}`
+  : `${w / 2},1 ${w - 1},${h - 1} 1,${h - 1}`; // triangle
 
 function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage = "de", orgMembers = [], boardId = null }) {
   const de = appLanguage === "de";
@@ -4855,6 +4862,8 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [editing, setEditing] = useState(null);
   const [tempStroke, setTempStroke] = useState(null);
   const [tempItem, setTempItem] = useState(null);
+  const [shapesOpen, setShapesOpen] = useState(false); // shapes flyout above the toolbar
+  const [lastShape, setLastShape] = useState("rect");  // shape shown on the toolbar's shapes button
   const [timerSec, setTimerSec] = useState(0);
   const [timerOn, setTimerOn] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -4997,7 +5006,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (tool === "pen") { dragRef.current = { mode: "draw" }; setTempStroke({ points: [[pt.x, pt.y]], color: "#15151c" }); return; }
     if (tool === "sticky") { placeSticky(pt); return; }
     if (tool === "text") { placeText(pt); return; }
-    if (tool === "rect" || tool === "ellipse") { dragRef.current = { mode: "create", type: tool, sx: pt.x, sy: pt.y }; setTempItem({ type: tool, x: pt.x, y: pt.y, w: 1, h: 1 }); return; }
+    if (WB_SHAPE_TYPES.includes(tool)) { dragRef.current = { mode: "create", type: tool, sx: pt.x, sy: pt.y }; setTempItem({ type: tool, x: pt.x, y: pt.y, w: 1, h: 1 }); return; }
     if (tool === "arrow") { dragRef.current = { mode: "arrow" }; setTempItem({ type: "arrow", x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y }); return; }
     // select tool on empty canvas: deselect + pan
     setSel(null); setEditing(null);
@@ -5022,6 +5031,11 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (d.mode === "resize") {
       const patch = { w: Math.max(36, pt.x - d.base.x), h: Math.max(30, pt.y - d.base.y) };
       patchItem(d.id, patch); d.final = patch; d.persistId = d.id;
+      return;
+    }
+    if (d.mode === "arrowend") {
+      const patch = d.which === 1 ? { x1: pt.x, y1: pt.y } : { x2: pt.x, y2: pt.y };
+      patchItem(d.id, patch); d.final = patch; d.persistId = d.id;
     }
   };
   const onCanvasPointerUp = () => {
@@ -5031,7 +5045,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     }
     if (d?.mode === "create" && tempItem) {
       const w = Math.max(48, tempItem.w), h = Math.max(48, tempItem.h);
-      const id = addItemLocal(tempItem.type, { x: tempItem.x, y: tempItem.y, w, h, text: "", color: "#15151c" });
+      const id = addItemLocal(tempItem.type, { x: tempItem.x, y: tempItem.y, w, h, text: "", color: "#15151c", fill: "transparent" });
       setSel(id); setTool("select");
     }
     if (d?.mode === "arrow" && tempItem) {
@@ -5096,6 +5110,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   useEffect(() => {
     const onKey = (e) => {
       if (/^(INPUT|TEXTAREA)$/.test(e.target?.tagName || "") || e.target?.isContentEditable) return;
+      if (editingRef.current) return; // never delete the element while its text is being edited
       if ((e.key === "Backspace" || e.key === "Delete") && sel) { e.preventDefault(); deleteItem(sel); }
       if (e.key === "Escape") { setSel(null); setEditing(null); }
     };
@@ -5130,35 +5145,71 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   };
 
   // ── Rendering ──
+  // Focus the edit textarea reliably (autoFocus alone can lose the race against
+  // the click that created the element) and put the caret at the end.
+  const focusEditArea = (el) => {
+    if (!el || el.dataset.wbFocused) return;
+    el.dataset.wbFocused = "1";
+    const doFocus = () => { try { el.focus({ preventScroll: true }); el.setSelectionRange(el.value.length, el.value.length); } catch (_) {} };
+    doFocus();
+    requestAnimationFrame(doFocus);
+  };
   const renderBoxItem = (it) => {
     const d = it.data || {};
     const isSel = sel === it.id;
     const isEdit = editing === it.id;
+    const isShape = WB_SHAPE_TYPES.includes(it.type);
+    const isSvgShape = it.type === "diamond" || it.type === "triangle";
     const { x = 0, y = 0, w = 160, h = 120 } = d;
+    const stroke = d.color || "#15151c";
+    const fill = d.fill && d.fill !== "transparent" ? d.fill : "transparent";
     let wrap = { position: "absolute", left: x, top: y, width: w, height: h, boxSizing: "border-box", cursor: "move", outline: isSel ? "1.5px solid #3B82F6" : "none", outlineOffset: 2 };
     if (it.type === "sticky") wrap = { ...wrap, background: d.color || WB_STICKY_COLORS[0], borderRadius: 6, boxShadow: "0 8px 22px rgba(0,0,0,0.14)", padding: 14 };
-    if (it.type === "rect") wrap = { ...wrap, background: "transparent", border: `2px solid ${d.color || "#15151c"}`, borderRadius: 12, padding: 12, display: "flex", alignItems: "center", justifyContent: "center" };
-    if (it.type === "ellipse") wrap = { ...wrap, background: "transparent", border: `2px solid ${d.color || "#15151c"}`, borderRadius: "50%", padding: 16, display: "flex", alignItems: "center", justifyContent: "center" };
+    if (it.type === "rect") wrap = { ...wrap, background: fill, border: `2px solid ${stroke}`, borderRadius: 12, padding: 12, display: "flex", alignItems: "center", justifyContent: "center" };
+    if (it.type === "ellipse") wrap = { ...wrap, background: fill, border: `2px solid ${stroke}`, borderRadius: "50%", padding: 16, display: "flex", alignItems: "center", justifyContent: "center" };
+    if (isSvgShape) wrap = { ...wrap, background: "transparent", padding: 0 };
     if (it.type === "text") wrap = { ...wrap, padding: 2 };
     if (it.type === "image") wrap = { ...wrap, borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 22px rgba(0,0,0,0.12)" };
-    const textColor = it.type === "sticky" ? "#2c2c25" : (d.color || "#15151c");
-    const textStyle = { width: "100%", height: "100%", background: "transparent", border: "none", outline: "none", resize: "none", fontFamily: FONT, fontSize: it.type === "text" ? 16 : 14.5, lineHeight: 1.45, color: textColor, textAlign: (it.type === "rect" || it.type === "ellipse") ? "center" : "left", padding: 0, overflow: "hidden" };
+    const sizeKey = d.size || (it.type === "text" ? "m" : "s");
+    const fontSize = WB_TEXT_SIZES[sizeKey] || 16;
+    const textColor = it.type === "sticky" ? "#2c2c25" : (it.type === "text" ? stroke : stroke);
+    const textStyle = {
+      width: "100%", height: "100%", background: "transparent", border: "none", outline: "none", resize: "none",
+      fontFamily: FONT, fontSize, fontWeight: d.bold ? 700 : (it.type === "sticky" ? 500 : 400), lineHeight: 1.4,
+      color: textColor, textAlign: isShape ? "center" : (d.align || "left"), padding: 0, overflow: "hidden",
+    };
+    const textContent = isEdit ? (
+      <textarea ref={focusEditArea} defaultValue={d.text || ""}
+        onPointerDown={e => e.stopPropagation()}
+        onBlur={(e) => commitText(it.id, e.target.value)}
+        onKeyDown={(e) => {
+          e.stopPropagation(); // keep global shortcuts away from typing
+          if (e.key === "Escape") { e.preventDefault(); commitText(it.id, e.target.value); }
+          if (e.key === "Enter" && it.type === "text" && !e.shiftKey) { e.preventDefault(); commitText(it.id, e.target.value); }
+        }}
+        style={{ ...textStyle, cursor: "text", position: isSvgShape ? "absolute" : "static", width: isSvgShape ? "76%" : "100%", height: isSvgShape ? "60%" : "100%", top: isSvgShape ? "50%" : undefined, left: isSvgShape ? "12%" : undefined, transform: isSvgShape ? "translateY(-50%)" : undefined }} />
+    ) : (
+      <div style={{ ...textStyle, whiteSpace: "pre-wrap", wordBreak: "break-word",
+        display: isShape ? "flex" : "block", alignItems: "center", justifyContent: "center",
+        userSelect: "none", pointerEvents: "none",
+        position: isSvgShape ? "absolute" : "static", left: isSvgShape ? "12%" : undefined, top: isSvgShape ? "50%" : undefined, width: isSvgShape ? "76%" : "100%", height: isSvgShape ? "auto" : "100%", transform: isSvgShape ? "translateY(-50%)" : undefined,
+      }}>
+        {d.text || ((it.type === "sticky" || it.type === "text") && !isEdit ? <span style={{ opacity: 0.35 }}>{de ? "Doppelklick zum Schreiben" : "Double-click to write"}</span> : "")}
+      </div>
+    );
     return (
       <div key={it.id}
         onPointerDown={(e) => onItemPointerDown(e, it)}
         onDoubleClick={(e) => { if (it.type !== "image") { e.stopPropagation(); setSel(it.id); setEditing(it.id); } }}
         style={wrap}>
+        {isSvgShape && (
+          <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ position: "absolute", inset: 0, pointerEvents: "none", display: "block" }}>
+            <polygon points={wbShapePoints(it.type, w, h)} fill={fill === "transparent" ? "none" : fill} stroke={stroke} strokeWidth={2} strokeLinejoin="round" />
+          </svg>
+        )}
         {it.type === "image" ? (
           <img src={d.src} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none", display: "block" }} />
-        ) : isEdit ? (
-          <textarea autoFocus defaultValue={d.text || ""}
-            onPointerDown={e => e.stopPropagation()}
-            onBlur={(e) => commitText(it.id, e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); commitText(it.id, e.target.value); } if (e.key === "Enter" && it.type === "text") { e.preventDefault(); commitText(it.id, e.target.value); } }}
-            style={{ ...textStyle, cursor: "text" }} />
-        ) : (
-          <div style={{ ...textStyle, whiteSpace: "pre-wrap", wordBreak: "break-word", display: (it.type === "rect" || it.type === "ellipse") ? "flex" : "block", alignItems: "center", justifyContent: "center", userSelect: "none", pointerEvents: "none" }}>{d.text || ""}</div>
-        )}
+        ) : textContent}
         {isSel && !isEdit && (
           <div onPointerDown={(e) => { e.stopPropagation(); canvasRef.current?.setPointerCapture?.(e.pointerId); dragRef.current = { mode: "resize", id: it.id, base: { x, y, w, h } }; }}
             style={{ position: "absolute", right: -7, bottom: -7, width: 13, height: 13, borderRadius: 3, background: "#fff", border: "1.5px solid #3B82F6", cursor: "nwse-resize" }} />
@@ -5210,27 +5261,71 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     return renderBoxItem(it);
   };
 
-  // Selection toolbar (screen space, above the selected element)
+  // Format/selection bar (screen space, above the selected element) — dark
+  // FigJam-style bar; contents depend on the element type. Stays visible while
+  // the text is being edited; mousedown is prevented so clicks don't blur it.
   const selItem = items.find(i => i.id === sel) || null;
   const selToolbar = (() => {
-    if (!selItem || editing) return null;
+    if (!selItem) return null;
+    const dta = selItem.data || {};
+    const setSelData = (patch) => { patchItem(selItem.id, patch); persistById(selItem.id); };
     const b = bboxOf(selItem);
-    const left = b.x * cam.s + cam.x;
-    const top = b.y * cam.s + cam.y - 46;
-    const palette = selItem.type === "sticky" ? WB_STICKY_COLORS : (["rect", "ellipse", "arrow", "draw", "text"].includes(selItem.type) ? WB_STROKE_COLORS : null);
+    let top = b.y * cam.s + cam.y - 54;
+    if (top < 64) top = (b.y + b.h) * cam.s + cam.y + 14; // below when the element touches the header
+    const left = Math.max(12, b.x * cam.s + cam.x);
+    const divider = <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.16)", margin: "0 3px" }} />;
+    const dot = (c, active, onClick, key) => (
+      <div key={key || c} onClick={onClick} title={c === "transparent" ? (de ? "Ohne Füllung" : "No fill") : c}
+        style={{ width: 17, height: 17, borderRadius: "50%", cursor: "pointer", position: "relative", flexShrink: 0,
+          background: c === "transparent" ? "#fff" : c,
+          border: active ? "2px solid #4D9FFF" : "1.5px solid rgba(255,255,255,0.35)", boxSizing: "border-box", overflow: "hidden" }}>
+        {c === "transparent" && <div style={{ position: "absolute", left: -2, top: "50%", width: "140%", height: 1.5, background: "#e5484d", transform: "rotate(-45deg)" }} />}
+      </div>
+    );
+    const sizeBtn = (k) => (
+      <div key={k} onClick={() => setSelData({ size: k })}
+        style={{ padding: "3px 7px", borderRadius: 7, cursor: "pointer", fontSize: 11, fontFamily: FONT, fontWeight: 600,
+          color: "#fff", background: (dta.size || (selItem.type === "text" ? "m" : "s")) === k ? "rgba(255,255,255,0.22)" : "transparent", textTransform: "uppercase" }}>{k}</div>
+    );
+    const iconBtnStyle = { width: 26, height: 26, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff" };
+    const isShape = WB_SHAPE_TYPES.includes(selItem.type);
+    const hasText = isShape || selItem.type === "sticky" || selItem.type === "text";
+    const strokePalette = (selItem.type === "sticky") ? null : (["arrow", "draw", "text"].includes(selItem.type) || isShape) ? WB_STROKE_COLORS : null;
+    const alignNext = { left: "center", center: "right", right: "left" };
+    const alignIcon = (a) => a === "center"
+      ? <><line x1="6" y1="6" x2="18" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="6" y1="18" x2="18" y2="18"/></>
+      : a === "right"
+      ? <><line x1="8" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="8" y1="18" x2="20" y2="18"/></>
+      : <><line x1="4" y1="6" x2="16" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="16" y2="18"/></>;
     return (
-      <div onPointerDown={e => e.stopPropagation()}
-        style={{ position: "absolute", left, top, display: "flex", alignItems: "center", gap: 7, padding: "7px 10px", borderRadius: 999, zIndex: 20,
-          background: darkMode ? "rgba(28,28,38,0.92)" : "rgba(255,255,255,0.95)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}`,
-          boxShadow: "0 10px 28px rgba(0,0,0,0.16)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)" }}>
-        {palette && palette.map(c => (
-          <div key={c} onClick={() => { patchItem(selItem.id, { color: c }); persistById(selItem.id); }}
-            style={{ width: 17, height: 17, borderRadius: "50%", background: c, cursor: "pointer",
-              border: (selItem.data?.color || (selItem.type === "sticky" ? WB_STICKY_COLORS[0] : "#15151c")) === c ? "2px solid #3B82F6" : `1px solid ${darkMode ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.15)"}` }} />
-        ))}
-        {palette && <div style={{ width: 1, height: 16, background: darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)" }} />}
+      <div onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.preventDefault()}
+        style={{ position: "absolute", left, top, display: "flex", alignItems: "center", gap: 7, padding: "8px 12px", borderRadius: 13, zIndex: 20,
+          background: "#15151c", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 14px 36px rgba(0,0,0,0.28)" }}>
+        {/* Sticky: background colors */}
+        {selItem.type === "sticky" && WB_STICKY_COLORS.map(c => dot(c, (dta.color || WB_STICKY_COLORS[0]) === c, () => setSelData({ color: c })))}
+        {/* Stroke / text color */}
+        {strokePalette && strokePalette.map(c => dot(c, (dta.color || "#15151c") === c, () => setSelData({ color: c }), "s" + c))}
+        {/* Shape fill */}
+        {isShape && (<>
+          {divider}
+          <span style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.55)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Fill</span>
+          {WB_FILL_COLORS.map(c => dot(c, (dta.fill || "transparent") === c, () => setSelData({ fill: c }), "f" + c))}
+        </>)}
+        {/* Text formatting */}
+        {hasText && (<>
+          {divider}
+          {sizeBtn("s")}{sizeBtn("m")}{sizeBtn("l")}{sizeBtn("xl")}
+          <div onClick={() => setSelData({ bold: !dta.bold })} title="Bold"
+            style={{ ...iconBtnStyle, background: dta.bold ? "rgba(255,255,255,0.22)" : "transparent", fontFamily: FONT, fontWeight: 800, fontSize: 13 }}>B</div>
+          {selItem.type === "text" && (
+            <div onClick={() => setSelData({ align: alignNext[dta.align || "left"] })} title={de ? "Ausrichtung" : "Alignment"} style={iconBtnStyle}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">{alignIcon(dta.align || "left")}</svg>
+            </div>
+          )}
+        </>)}
+        {divider}
         <motion.div whileTap={{ scale: 0.88 }} onClick={() => deleteItem(selItem.id)} title={de ? "Löschen" : "Delete"}
-          style={{ width: 24, height: 24, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#e5484d" }}>
+          style={{ ...iconBtnStyle, color: "#ff8589" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
         </motion.div>
       </div>
@@ -5249,6 +5344,11 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     );
   };
   const sw = 1.9;
+  const shapeIcon = (st) =>
+    st === "ellipse" ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw}><circle cx="12" cy="12" r="9"/></svg>
+    : st === "diamond" ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinejoin="round"><path d="M12 2.5l9.5 9.5-9.5 9.5L2.5 12z"/></svg>
+    : st === "triangle" ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinejoin="round"><path d="M12 3.5L21.5 20.5h-19z"/></svg>
+    : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw}><rect x="3" y="3" width="18" height="18" rx="2.5"/></svg>;
   const cursorForTool = tool === "hand" ? "grab" : tool === "select" ? "default" : "crosshair";
   const avatars = (orgMembers || []).slice(0, 3);
 
@@ -5276,9 +5376,30 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
             return <svg width={Math.max(...xs) - minX + 16} height={Math.max(...ys) - minY + 16} style={{ position: "absolute", left: minX - 8, top: minY - 8, overflow: "visible", pointerEvents: "none" }}>
               <path d={path} stroke={tempStroke.color} strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>;
           })()}
+          {/* Uniform selection frame around pen strokes (like images/shapes) */}
+          {selItem?.type === "draw" && !editing && (() => {
+            const b = bboxOf(selItem);
+            return <div style={{ position: "absolute", left: b.x - 6, top: b.y - 6, width: b.w + 12, height: b.h + 12, border: "1.5px solid #3B82F6", borderRadius: 6, pointerEvents: "none" }} />;
+          })()}
+          {/* Arrow endpoint handles — drag to re-route the arrow */}
+          {selItem?.type === "arrow" && tool === "select" && (() => {
+            const d = selItem.data || {};
+            const handle = (which, hx, hy) => (
+              <div key={which}
+                onPointerDown={(e) => { e.stopPropagation(); canvasRef.current?.setPointerCapture?.(e.pointerId); dragRef.current = { mode: "arrowend", id: selItem.id, which }; }}
+                style={{ position: "absolute", left: hx - 7, top: hy - 7, width: 14, height: 14, borderRadius: "50%", background: "#fff", border: "2px solid #3B82F6", cursor: "crosshair", boxShadow: "0 1px 4px rgba(0,0,0,0.25)" }} />
+            );
+            return <>{handle(1, d.x1, d.y1)}{handle(2, d.x2, d.y2)}</>;
+          })()}
           {/* Live create-drag preview */}
-          {tempItem && (tempItem.type === "rect" || tempItem.type === "ellipse") && (
-            <div style={{ position: "absolute", left: tempItem.x, top: tempItem.y, width: tempItem.w, height: tempItem.h, border: "2px dashed #15151c", borderRadius: tempItem.type === "ellipse" ? "50%" : 12, pointerEvents: "none" }} />
+          {tempItem && WB_SHAPE_TYPES.includes(tempItem.type) && (
+            (tempItem.type === "rect" || tempItem.type === "ellipse") ? (
+              <div style={{ position: "absolute", left: tempItem.x, top: tempItem.y, width: tempItem.w, height: tempItem.h, border: "2px dashed #15151c", borderRadius: tempItem.type === "ellipse" ? "50%" : 12, pointerEvents: "none" }} />
+            ) : (
+              <svg width={Math.max(2, tempItem.w)} height={Math.max(2, tempItem.h)} style={{ position: "absolute", left: tempItem.x, top: tempItem.y, pointerEvents: "none", overflow: "visible" }}>
+                <polygon points={wbShapePoints(tempItem.type, Math.max(2, tempItem.w), Math.max(2, tempItem.h))} fill="none" stroke="#15151c" strokeWidth={2} strokeDasharray="6 5" strokeLinejoin="round" />
+              </svg>
+            )
           )}
           {tempItem && tempItem.type === "arrow" && (
             <svg style={{ position: "absolute", left: 0, top: 0, overflow: "visible", pointerEvents: "none" }}>
@@ -5373,8 +5494,33 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
           {toolBtn("pen", de ? "Stift" : "Pen", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>)}
           {toolBtn("sticky", "Sticky Note", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5z"/><path d="M15 3v6h6"/></svg>)}
-          {toolBtn("rect", de ? "Rechteck" : "Rectangle", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw}><rect x="3" y="3" width="18" height="18" rx="2.5"/></svg>)}
-          {toolBtn("ellipse", de ? "Kreis" : "Circle", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw}><circle cx="12" cy="12" r="9"/></svg>)}
+          {/* Shapes — one button, Figma-style flyout with all shapes */}
+          <div style={{ position: "relative" }}>
+            <motion.div whileTap={{ scale: 0.9 }} onClick={() => setShapesOpen(o => !o)} title={de ? "Formen" : "Shapes"}
+              style={{ height: 38, padding: "0 7px 0 10px", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", gap: 3, cursor: "pointer",
+                background: WB_SHAPE_TYPES.includes(tool) ? "#15151c" : "transparent", color: WB_SHAPE_TYPES.includes(tool) ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
+              {shapeIcon(lastShape)}
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}><polyline points="6 9 12 15 18 9"/></svg>
+            </motion.div>
+            <AnimatePresence>
+              {shapesOpen && (<>
+                <div onClick={() => setShapesOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
+                <motion.div initial={{ opacity: 0, y: 8, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.96 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
+                  style={{ position: "absolute", bottom: "calc(100% + 14px)", left: "50%", transform: "translateX(-50%)", zIndex: 31, display: "flex", alignItems: "center", gap: 4, padding: 6, borderRadius: 14,
+                    background: darkMode ? "rgba(22,22,30,0.95)" : "rgba(255,255,255,0.98)", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 14px 40px rgba(0,0,0,0.18)" }}>
+                  {WB_SHAPE_TYPES.map(st => (
+                    <motion.div key={st} whileTap={{ scale: 0.9 }}
+                      onClick={() => { setTool(st); setLastShape(st); setShapesOpen(false); setEditing(null); }}
+                      title={st === "rect" ? (de ? "Rechteck" : "Rectangle") : st === "ellipse" ? (de ? "Kreis" : "Circle") : st === "diamond" ? (de ? "Raute" : "Diamond") : (de ? "Dreieck" : "Triangle")}
+                      style={{ width: 38, height: 38, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                        background: tool === st ? "#15151c" : "transparent", color: tool === st ? "#fff" : theme.text }}>
+                      {shapeIcon(st)}
+                    </motion.div>
+                  ))}
+                </motion.div>
+              </>)}
+            </AnimatePresence>
+          </div>
           {toolBtn("arrow", de ? "Pfeil" : "Arrow", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>)}
           {toolBtn("text", "Text", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>)}
           <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
