@@ -4843,6 +4843,16 @@ const MONTH_NAMES = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli
 const WB_STICKY_COLORS = ["#FFE066", "#F4A79D", "#B5E2B0", "#A9D7F2", "#F0EEEA"];
 const WB_STROKE_COLORS = ["#15151c", "#EF4444", "#F59E0B", "#0EA5E9", "#10B981"];
 const WB_FILL_COLORS = ["transparent", "#FFFFFF", "#FFE066", "#F4A79D", "#B5E2B0", "#A9D7F2"];
+const WB_BORDER_COLORS = ["transparent", ...WB_STROKE_COLORS]; // shapes can also have no border
+const WB_SHAPE_DEFAULT_FILL = "#FFFFFF"; // new shapes start with a fill + outline
+// Stickers bundled in /public/Open Stickers/PNG/<Category>/<file>.png
+const WB_STICKERS = {
+  IT: ["1_usb_stick.png","2_sliders.png","3_email.png","4_code_window.png","5_bell.png","6_calendar.png","7_pie_chart.png","8_location_mark.png","9_credit_card.png","10_smartphone.png","11_enter_key.png","12_folder.png","13_joystick.png","14_browser_window.png","15_computer_mouse.png","16_trash_bin.png","17_speaker.png","18_monitor.png","19_watch.png","20_bubble.png"],
+  Life: ["1_sneaker.png","2_heels.png","3_cup.png","4_trumpet.png","5_glasses.png","6_book.png","7_gift.png","8_globe.png","9_sketchbook.png","10_pencil.png","11_bulb.png","12_bubble.png","13_plant.png","14_tshirt.png","15_guitar.png","16_palette.png","17_mirror.png","18_sad_emoji.png","19_funny_emoji.png","20_picture.png"],
+  Nature: ["1_cat.png","2_dog.png","3_fish.png","4_flower.png","5_beach.png","6_stars.png","7_water.png","8_clouds.png","9_palm_tree.png","10_berries.png","11_mushrooms.png","12_fruits.png","13_rain.png","14_rainbow.png","15_vegetables.png","16_moon.png","17_butterfly.png","18_bug.png","19_comet.png","20_sun.png"],
+  Shapes: ["1_circle.png","2_triangles.png","3_hearts.png","4_flower.png","5_vase.png","6_arches.png","7_zigzag.png","8_star.png","9_beans.png","10_leaves.png","11_seaweed.png","12_jug.png","13_stick.png","14_rhombus.png","15_wave.png","16_line.png","17_soap.png","18_crown.png","19_grass.png","20_bubbles.png"],
+};
+const wbStickerUrl = (cat, file) => encodeURI(`/Open Stickers/PNG/${cat}/${file}`);
 const WB_TEXT_SIZES = { s: 14, m: 18, l: 24, xl: 32 };
 const WB_SHAPE_TYPES = ["rect", "ellipse", "diamond", "triangle"];
 // Polygon points for svg-rendered shapes (diamond/triangle), in a w×h box.
@@ -4864,6 +4874,8 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [tempItem, setTempItem] = useState(null);
   const [shapesOpen, setShapesOpen] = useState(false); // shapes flyout above the toolbar
   const [lastShape, setLastShape] = useState("rect");  // shape shown on the toolbar's shapes button
+  const [stickersOpen, setStickersOpen] = useState(false); // sticker picker above the toolbar
+  const [stickerCat, setStickerCat] = useState("Life");
   const [timerSec, setTimerSec] = useState(0);
   const [timerOn, setTimerOn] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -4997,6 +5009,14 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const id = addItemLocal("text", { x: pt.x, y: pt.y - 16, w: 260, h: 44, text: "", color: "#15151c" });
     setSel(id); setEditing(id); setTool("select");
   };
+  const placeSticker = (cat, file) => {
+    const r = canvasRef.current.getBoundingClientRect();
+    const c = camRef.current;
+    const cx = (r.width / 2 - c.x) / c.s, cy = (r.height / 2 - c.y) / c.s;
+    const s = 120;
+    const id = addItemLocal("sticker", { x: cx - s / 2, y: cy - s / 2, w: s, h: s, src: wbStickerUrl(cat, file) });
+    setSel(id); setTool("select"); setStickersOpen(false);
+  };
 
   // ── Canvas pointer handlers ──
   const onCanvasPointerDown = (e) => {
@@ -5047,7 +5067,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     }
     if (d?.mode === "create" && tempItem) {
       const w = Math.max(48, tempItem.w), h = Math.max(48, tempItem.h);
-      const id = addItemLocal(tempItem.type, { x: tempItem.x, y: tempItem.y, w, h, text: "", color: "#15151c", fill: "transparent" });
+      const id = addItemLocal(tempItem.type, { x: tempItem.x, y: tempItem.y, w, h, text: "", color: "#15151c", fill: WB_SHAPE_DEFAULT_FILL });
       setSel(id); setTool("select");
     }
     if (d?.mode === "arrow" && tempItem) {
@@ -5075,7 +5095,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     e.stopPropagation();
     if (editing === it.id) return; // active editor: let the textarea handle it
     const now = Date.now();
-    if (lastClickRef.current.id === it.id && now - lastClickRef.current.t < 400 && it.type !== "image") {
+    if (lastClickRef.current.id === it.id && now - lastClickRef.current.t < 400 && it.type !== "image" && it.type !== "sticker") {
       lastClickRef.current = { id: null, t: 0 };
       dragRef.current = null;
       setSel(it.id); setEditing(it.id);
@@ -5189,14 +5209,16 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const isSvgShape = it.type === "diamond" || it.type === "triangle";
     const { x = 0, y = 0, w = 160, h = 120 } = d;
     const stroke = d.color || "#15151c";
+    const noBorder = stroke === "transparent";
     const fill = d.fill && d.fill !== "transparent" ? d.fill : "transparent";
     let wrap = { position: "absolute", left: x, top: y, width: w, height: h, boxSizing: "border-box", cursor: isEdit ? "auto" : "move", outline: isSel ? "1.5px solid #3B82F6" : "none", outlineOffset: 2 };
     if (it.type === "sticky") wrap = { ...wrap, background: d.color || WB_STICKY_COLORS[0], borderRadius: 6, boxShadow: "0 8px 22px rgba(0,0,0,0.14)", padding: 14 };
-    if (it.type === "rect") wrap = { ...wrap, background: fill, border: `2px solid ${stroke}`, borderRadius: 12, padding: 12, display: "flex", alignItems: "center", justifyContent: "center" };
-    if (it.type === "ellipse") wrap = { ...wrap, background: fill, border: `2px solid ${stroke}`, borderRadius: "50%", padding: 16, display: "flex", alignItems: "center", justifyContent: "center" };
+    if (it.type === "rect") wrap = { ...wrap, background: fill, border: noBorder ? "none" : `2px solid ${stroke}`, borderRadius: 12, padding: 12, display: "flex", alignItems: "center", justifyContent: "center" };
+    if (it.type === "ellipse") wrap = { ...wrap, background: fill, border: noBorder ? "none" : `2px solid ${stroke}`, borderRadius: "50%", padding: 16, display: "flex", alignItems: "center", justifyContent: "center" };
     if (isSvgShape) wrap = { ...wrap, background: "transparent", padding: 0 };
     if (it.type === "text") wrap = { ...wrap, padding: 2 };
     if (it.type === "image") wrap = { ...wrap, borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 22px rgba(0,0,0,0.12)" };
+    if (it.type === "sticker") wrap = { ...wrap, padding: 0 };
     const sizeKey = d.size || (it.type === "text" ? "m" : "s");
     const fontSize = WB_TEXT_SIZES[sizeKey] || 16;
     const textColor = it.type === "sticky" ? "#2c2c25" : (it.type === "text" ? stroke : stroke);
@@ -5227,15 +5249,17 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     return (
       <div key={it.id}
         onPointerDown={(e) => onItemPointerDown(e, it)}
-        onDoubleClick={(e) => { if (it.type !== "image") { e.stopPropagation(); setSel(it.id); setEditing(it.id); } }}
+        onDoubleClick={(e) => { if (it.type !== "image" && it.type !== "sticker") { e.stopPropagation(); setSel(it.id); setEditing(it.id); } }}
         style={wrap}>
         {isSvgShape && (
           <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ position: "absolute", inset: 0, pointerEvents: "none", display: "block" }}>
-            <polygon points={wbShapePoints(it.type, w, h)} fill={fill === "transparent" ? "none" : fill} stroke={stroke} strokeWidth={2} strokeLinejoin="round" />
+            <polygon points={wbShapePoints(it.type, w, h)} fill={fill === "transparent" ? "none" : fill} stroke={noBorder ? "none" : stroke} strokeWidth={2} strokeLinejoin="round" />
           </svg>
         )}
         {it.type === "image" ? (
           <img src={d.src} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none", display: "block" }} />
+        ) : it.type === "sticker" ? (
+          <img src={d.src} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none", display: "block", filter: "drop-shadow(0 3px 6px rgba(0,0,0,0.12))" }} />
         ) : textContent}
         {isSel && !isEdit && (
           <div onPointerDown={(e) => { e.stopPropagation(); dragRef.current = { mode: "resize", id: it.id, base: { x, y, w, h } }; }}
@@ -5317,7 +5341,6 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const iconBtnStyle = { width: 26, height: 26, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff" };
     const isShape = WB_SHAPE_TYPES.includes(selItem.type);
     const hasText = isShape || selItem.type === "sticky" || selItem.type === "text";
-    const strokePalette = (selItem.type === "sticky") ? null : (["arrow", "draw", "text"].includes(selItem.type) || isShape) ? WB_STROKE_COLORS : null;
     const alignNext = { left: "center", center: "right", right: "left" };
     const alignIcon = (a) => a === "center"
       ? <><line x1="6" y1="6" x2="18" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="6" y1="18" x2="18" y2="18"/></>
@@ -5330,12 +5353,14 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           background: "#15151c", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 14px 36px rgba(0,0,0,0.28)" }}>
         {/* Sticky: background colors */}
         {selItem.type === "sticky" && WB_STICKY_COLORS.map(c => dot(c, (dta.color || WB_STICKY_COLORS[0]) === c, () => setSelData({ color: c })))}
-        {/* Stroke / text color */}
-        {strokePalette && strokePalette.map(c => dot(c, (dta.color || "#15151c") === c, () => setSelData({ color: c }), "s" + c))}
-        {/* Shape fill */}
+        {/* Stroke / text color for arrow, pen strokes and free text */}
+        {["arrow", "draw", "text"].includes(selItem.type) && WB_STROKE_COLORS.map(c => dot(c, (dta.color || "#15151c") === c, () => setSelData({ color: c }), "s" + c))}
+        {/* Shape: border (incl. none) + fill (incl. none) */}
         {isShape && (<>
+          <span style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.55)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{de ? "Rand" : "Border"}</span>
+          {WB_BORDER_COLORS.map(c => dot(c, (dta.color || "#15151c") === c, () => setSelData({ color: c }), "b" + c))}
           {divider}
-          <span style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.55)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Fill</span>
+          <span style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.55)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{de ? "Füllung" : "Fill"}</span>
           {WB_FILL_COLORS.map(c => dot(c, (dta.fill || "transparent") === c, () => setSelData({ fill: c }), "f" + c))}
         </>)}
         {/* Text formatting */}
@@ -5464,11 +5489,16 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               <input value={titleDraft} onChange={e => setTitleDraft(e.target.value)} onBlur={persistTitle}
                 onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
                 style={{ border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 14.5, fontWeight: 600, fontFamily: FONT, width: Math.max(90, Math.min(280, titleDraft.length * 8.5 + 20)) }} />
-              {boards.length > 1 && (
-                <Dropdown value={board.id} onChange={openBoard} theme={theme} darkMode={darkMode} align="left" minWidth={220} maxTriggerWidth={40}
-                  options={boards.map(b => ({ value: b.id, label: b.name || "Brainstorm" }))}
-                  triggerStyle={{ padding: "5px 8px", background: "transparent" }} />
-              )}
+              {boards.length > 1 && (() => {
+                // Only the 5 most-recent boards; keep the current one in the list.
+                let picker = boards.slice(0, 5);
+                if (board && !picker.some(b => b.id === board.id)) picker = [board, ...picker].slice(0, 5);
+                return (
+                  <Dropdown value={board.id} onChange={openBoard} theme={theme} darkMode={darkMode} align="left" minWidth={220} maxTriggerWidth={40}
+                    options={picker.map(b => ({ value: b.id, label: b.name || "Brainstorm" }))}
+                    triggerStyle={{ padding: "5px 8px", background: "transparent" }} />
+                );
+              })()}
               <motion.div whileTap={{ scale: 0.9 }} onClick={createBoard} title={de ? "Neues Board" : "New board"}
                 style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -5551,6 +5581,45 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           {toolBtn("arrow", de ? "Pfeil" : "Arrow", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>)}
           {toolBtn("text", "Text", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>)}
           <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
+          {/* Stickers */}
+          <div style={{ position: "relative" }}>
+            <motion.div whileTap={{ scale: 0.9 }} onClick={() => setStickersOpen(o => !o)} title="Sticker"
+              style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                background: stickersOpen ? "#15151c" : "transparent", color: stickersOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M21 3v10a8 8 0 0 1-8 8H3z"/><path d="M21 13h-4a4 4 0 0 0-4 4v4"/><circle cx="8.5" cy="8.5" r="0.6" fill="currentColor"/><circle cx="14" cy="8.5" r="0.6" fill="currentColor"/><path d="M8.5 12.5a4 4 0 0 0 5 0"/></svg>
+            </motion.div>
+            <AnimatePresence>
+              {stickersOpen && (<>
+                <div onClick={() => setStickersOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
+                <motion.div initial={{ opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
+                  onPointerDown={e => e.stopPropagation()}
+                  style={{ position: "absolute", bottom: "calc(100% + 14px)", left: "50%", transform: "translateX(-50%)", zIndex: 31, width: 320,
+                    background: darkMode ? "rgba(22,22,30,0.97)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.borderFaint}`, borderRadius: 16, boxShadow: "0 16px 44px rgba(0,0,0,0.2)", overflow: "hidden" }}>
+                  {/* Category tabs */}
+                  <div style={{ display: "flex", gap: 4, padding: 8, borderBottom: `1px solid ${theme.borderFaint}` }}>
+                    {Object.keys(WB_STICKERS).map(cat => {
+                      const on = stickerCat === cat;
+                      const label = de ? ({ IT: "Tech", Life: "Leben", Nature: "Natur", Shapes: "Formen" }[cat]) : cat;
+                      return (
+                        <div key={cat} onClick={() => setStickerCat(cat)}
+                          style={{ flex: 1, textAlign: "center", padding: "6px 4px", borderRadius: 8, cursor: "pointer", fontSize: 11.5, fontFamily: FONT, fontWeight: on ? 600 : 500,
+                            color: on ? "#fff" : theme.textDim, background: on ? "#15151c" : "transparent" }}>{label}</div>
+                      );
+                    })}
+                  </div>
+                  {/* Sticker grid */}
+                  <div className="no-scrollbar" style={{ maxHeight: 240, overflowY: "auto", padding: 10, display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+                    {WB_STICKERS[stickerCat].map(file => (
+                      <motion.div key={file} whileHover={{ scale: 1.12 }} whileTap={{ scale: 0.9 }} onClick={() => placeSticker(stickerCat, file)}
+                        style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 9, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+                        <img src={wbStickerUrl(stickerCat, file)} alt="" draggable={false} style={{ width: "78%", height: "78%", objectFit: "contain", pointerEvents: "none" }} />
+                      </motion.div>
+                    ))}
+                  </div>
+                </motion.div>
+              </>)}
+            </AnimatePresence>
+          </div>
           <motion.div whileTap={{ scale: 0.9 }} onClick={() => fileRef.current?.click()} title={de ? "Bild einfügen" : "Insert image"}
             style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text }}>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
@@ -12687,9 +12756,12 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
     const b = boardToDelete;
     if (!b || deletingBoard) return;
     setDeletingBoard(true);
-    await supabase.from("whiteboards").delete().eq("id", b.id);
-    setBoards(prev => (prev || []).filter(x => x.id !== b.id));
+    // Remove the board's items first, then the board (defensive — the FK cascades too).
+    await supabase.from("whiteboard_items").delete().eq("board_id", b.id);
+    const { error } = await supabase.from("whiteboards").delete().eq("id", b.id);
     setDeletingBoard(false);
+    if (error) { alert((de ? "Board konnte nicht gelöscht werden: " : "Couldn't delete board: ") + error.message); return; }
+    setBoards(prev => (prev || []).filter(x => x.id !== b.id));
     setBoardToDelete(null);
   };
 
@@ -12751,16 +12823,12 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
       </AnimatePresence>
     </div>
   );
-  const delBtn = (b) => {
-    const canDel = b.created_by === session?.user?.id;
-    return (
-      <motion.div whileTap={canDel ? { scale: 0.9 } : undefined} onClick={(e) => { e.stopPropagation(); if (canDel) setBoardToDelete(b); }}
-        title={canDel ? (de ? "Löschen" : "Delete") : (de ? "Nur der Ersteller kann löschen" : "Only the creator can delete")}
-        style={{ ...actBtnStyle, opacity: canDel ? 1 : 0.3, cursor: canDel ? "pointer" : "not-allowed" }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-      </motion.div>
-    );
-  };
+  // Any org member can delete a shared brainstorm board (RLS allows it).
+  const delBtn = (b) => (
+    <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); setBoardToDelete(b); }} title={de ? "Löschen" : "Delete"} style={actBtnStyle}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+    </motion.div>
+  );
   const viewBtn = (mode, title, children) => {
     const on = viewMode === mode;
     return (
