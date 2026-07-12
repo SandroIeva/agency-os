@@ -4843,6 +4843,11 @@ const MONTH_NAMES = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli
 const WB_STICKY_COLORS = ["#FFE066", "#F4A79D", "#B5E2B0", "#A9D7F2", "#F0EEEA"];
 const WB_STROKE_COLORS = ["#15151c", "#EF4444", "#F59E0B", "#0EA5E9", "#10B981"];
 const WB_FILL_COLORS = ["transparent", "#FFFFFF", "#FFE066", "#F4A79D", "#B5E2B0", "#A9D7F2"];
+// Figma-style color grid opened from a swatch button (2 rows).
+const WB_PALETTE = [
+  "#15151c", "#6B7280", "#EF4444", "#F59E0B", "#EAB308", "#22C55E", "#14B8A6", "#3B82F6", "#8B5CF6", "#EC4899", "#FFFFFF",
+  "#9CA3AF", "#D1D5DB", "#FCA5A5", "#FDBA74", "#FDE68A", "#BBF7D0", "#99F6E4", "#BFDBFE", "#DDD6FE", "#FBCFE8",
+];
 const WB_BORDER_COLORS = ["transparent", ...WB_STROKE_COLORS]; // shapes can also have no border
 const WB_SHAPE_DEFAULT_FILL = "#FFFFFF"; // new shapes start with a fill + outline
 // Stickers bundled in /public/Open Stickers/PNG/<Category>/<file>.png
@@ -4860,7 +4865,7 @@ const wbShapePoints = (type, w, h) =>
   type === "diamond" ? `${w / 2},1 ${w - 1},${h / 2} ${w / 2},${h - 1} 1,${h / 2}`
   : `${w / 2},1 ${w - 1},${h - 1} 1,${h - 1}`; // triangle
 
-function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage = "de", orgMembers = [], boardId = null }) {
+function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage = "de", orgMembers = [], boardId = null, createNotification }) {
   const de = appLanguage === "de";
   const [boards, setBoards] = useState([]);
   const [board, setBoard] = useState(null);
@@ -4879,13 +4884,17 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [emojiOpen, setEmojiOpen] = useState(false);   // emoji picker above the toolbar
   const [emojiCat, setEmojiCat] = useState("smileys");
   const [commentOpenId, setCommentOpenId] = useState(null); // comment pin whose bubble is open
+  const [wbColorPop, setWbColorPop] = useState(null); // format-bar color overlay: null | "color" | "fill"
+  const [commentDraft, setCommentDraft] = useState(""); // controlled text of the open comment
+  const [mentionQuery, setMentionQuery] = useState(null); // string after "@" while mentioning, else null
   const [timerSec, setTimerSec] = useState(0);
   const [timerOn, setTimerOn] = useState(false);
   const [copied, setCopied] = useState(false);
   const canvasRef = useRef(null);
   const dragRef = useRef(null);
   const fileRef = useRef(null);
-  const toolbarRef = useRef(null); // bottom toolbar — used to center the sticker picker over it
+  const toolbarRef = useRef(null); // bottom toolbar — used to center the emoji picker over it
+  const stickerBtnRef = useRef(null); // sticker toolbar button — the sticker picker centers on this
   const commentAreaRef = useRef(null); // the comment textarea while a comment bubble is open
   const camRef = useRef(cam); camRef.current = cam;
   const itemsRef = useRef(items); itemsRef.current = items;
@@ -4899,6 +4908,13 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     return () => clearInterval(iv);
   }, [timerOn]);
   const fmtTimer = `${String(Math.floor(timerSec / 60)).padStart(2, "0")}:${String(timerSec % 60).padStart(2, "0")}`;
+
+  // Sync the controlled comment draft when a comment bubble opens/closes.
+  useEffect(() => {
+    const it = itemsRef.current.find(i => i.id === commentOpenId);
+    setCommentDraft(it?.data?.text || "");
+    setMentionQuery(null);
+  }, [commentOpenId]);
 
   // ── Boards ──
   const loadBoards = useCallback(async () => {
@@ -4993,18 +5009,46 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     setItems(prev => prev.map(i => i.id === id ? { ...i, data } : i));
     supabase.from("whiteboard_items").update({ data }).eq("id", id).then(() => {});
   };
-  // Close the open comment bubble: save the typed text, or drop an empty pin.
+  // @-mention: filter members by what's typed after "@" (null = not mentioning).
+  const mentionMatches = mentionQuery != null
+    ? (orgMembers || []).filter(m => { const n = m?.profiles?.display_name || m?.display_name || ""; return n && n.toLowerCase().includes(mentionQuery.toLowerCase()); }).slice(0, 6)
+    : [];
+  const onCommentChange = (e) => {
+    const v = e.target.value; setCommentDraft(v);
+    const before = v.slice(0, e.target.selectionStart ?? v.length);
+    const m = before.match(/@([\p{L}0-9_]{0,24})$/u);
+    setMentionQuery(m ? m[1] : null);
+  };
+  const insertMention = (mem) => {
+    const name = mem?.profiles?.display_name || mem?.display_name || "User";
+    const el = commentAreaRef.current;
+    const caret = el ? el.selectionStart : commentDraft.length;
+    const before = commentDraft.slice(0, caret).replace(/@([\p{L}0-9_]*)$/u, "@" + name + " ");
+    setCommentDraft(before + commentDraft.slice(caret));
+    setMentionQuery(null);
+    setTimeout(() => { try { commentAreaRef.current?.focus(); } catch (_) {} }, 0);
+  };
+  // Close the open comment bubble: save text (+ mentions, notify), or drop an empty pin.
   const closeComment = () => {
     const id = commentOpenId;
-    const el = commentAreaRef.current;
     if (id) {
       const it = itemsRef.current.find(i => i.id === id);
-      const text = el ? el.value.trim() : (it?.data?.text || "");
+      const text = (commentDraft || "").trim();
       if (!text && !(it?.data?.text)) { deleteItem(id); }
-      else if (el) { saveComment(id, text); }
+      else {
+        const mentioned = (orgMembers || []).filter(m => { const n = m?.profiles?.display_name || m?.display_name; return n && text.includes("@" + n); }).map(m => ({ id: m.user_id, name: m?.profiles?.display_name || m?.display_name }));
+        const prevMentions = it?.data?.mentions || [];
+        const data = { ...(it?.data || {}), text, mentions: mentioned.map(x => x.id) };
+        setItems(prev => prev.map(i => i.id === id ? { ...i, data } : i));
+        supabase.from("whiteboard_items").update({ data }).eq("id", id).then(() => {});
+        mentioned.forEach(mm => {
+          if (mm.id && mm.id !== session?.user?.id && !prevMentions.includes(mm.id)) {
+            createNotification?.({ userId: mm.id, type: "comment_mention", title: de ? "Erwähnung im Brainstorm" : "Mentioned in Brainstorm", body: `${myName()}: ${text.slice(0, 90)}`, metadata: { board_id: board?.id } });
+          }
+        });
+      }
     }
-    commentAreaRef.current = null;
-    setCommentOpenId(null);
+    setMentionQuery(null); setCommentDraft(""); commentAreaRef.current = null; setCommentOpenId(null);
   };
 
   // ── Coordinate helpers ──
@@ -5026,7 +5070,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
 
   // ── Placement ──
   const placeSticky = (pt) => {
-    const id = addItemLocal("sticky", { x: pt.x - 95, y: pt.y - 95, w: 190, h: 190, text: "", color: WB_STICKY_COLORS[0] });
+    const id = addItemLocal("sticky", { x: pt.x - 125, y: pt.y - 125, w: 250, h: 250, text: "", color: WB_STICKY_COLORS[0] });
     setSel(id); setEditing(id); setTool("select");
   };
   const placeText = (pt) => {
@@ -5060,6 +5104,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   // ── Canvas pointer handlers ──
   const onCanvasPointerDown = (e) => {
     if (e.button !== 0 || !board) return;
+    setWbColorPop(null);
     if (editingRef.current) flushEdit(); // save the text before starting anything on the canvas
     canvasRef.current?.setPointerCapture?.(e.pointerId);
     const pt = toWorld(e);
@@ -5387,17 +5432,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const setSelData = (patch) => { patchItem(selItem.id, patch); persistById(selItem.id); };
     const b = bboxOf(selItem);
     let top = b.y * cam.s + cam.y - 54;
-    if (top < 64) top = (b.y + b.h) * cam.s + cam.y + 14; // below when the element touches the header
-    const left = Math.max(12, b.x * cam.s + cam.x);
+    const below = top < 64;
+    if (below) top = (b.y + b.h) * cam.s + cam.y + 14; // below when the element touches the header
+    const cx = (b.x + b.w / 2) * cam.s + cam.x; // centre on the object
     const divider = <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.16)", margin: "0 3px" }} />;
-    const dot = (c, active, onClick, key) => (
-      <div key={key || c} onClick={onClick} title={c === "transparent" ? (de ? "Ohne Füllung" : "No fill") : c}
-        style={{ width: 17, height: 17, borderRadius: "50%", cursor: "pointer", position: "relative", flexShrink: 0,
-          background: c === "transparent" ? "#fff" : c,
-          border: active ? "2px solid #4D9FFF" : "1.5px solid rgba(255,255,255,0.35)", boxSizing: "border-box", overflow: "hidden" }}>
-        {c === "transparent" && <div style={{ position: "absolute", left: -2, top: "50%", width: "140%", height: 1.5, background: "#e5484d", transform: "rotate(-45deg)" }} />}
-      </div>
-    );
     const sizeBtn = (k) => (
       <div key={k} onClick={() => setSelData({ size: k })}
         style={{ padding: "3px 7px", borderRadius: 7, cursor: "pointer", fontSize: 11, fontFamily: FONT, fontWeight: 600,
@@ -5412,21 +5450,37 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       : a === "right"
       ? <><line x1="8" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="8" y1="18" x2="20" y2="18"/></>
       : <><line x1="4" y1="6" x2="16" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="16" y2="18"/></>;
+    // A single swatch button that opens the color grid overlay.
+    const swatch = (kind, cur) => (
+      <div onClick={() => setWbColorPop(p => p === kind ? null : kind)} title={kind === "fill" ? (de ? "Füllung" : "Fill") : (de ? "Farbe" : "Color")}
+        style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 6px 3px 4px", borderRadius: 8, cursor: "pointer",
+          background: wbColorPop === kind ? "rgba(255,255,255,0.16)" : "transparent" }}>
+        <div style={{ width: 20, height: 20, borderRadius: "50%", position: "relative", overflow: "hidden", flexShrink: 0,
+          background: cur === "transparent" ? "#fff" : cur, border: "2px solid rgba(255,255,255,0.5)", boxSizing: "border-box" }}>
+          {cur === "transparent" && <div style={{ position: "absolute", left: -2, top: "50%", width: "140%", height: 1.5, background: "#e5484d", transform: "rotate(-45deg)" }} />}
+        </div>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+    );
+    // Palette shown in the overlay for the active swatch.
+    const popPalette = wbColorPop === "fill" ? ["transparent", ...WB_PALETTE]
+      : selItem.type === "sticky" ? WB_STICKY_COLORS
+      : isShape ? ["transparent", ...WB_PALETTE]
+      : WB_PALETTE;
+    const popCurrent = wbColorPop === "fill" ? (dta.fill || "transparent") : (dta.color || (selItem.type === "sticky" ? WB_STICKY_COLORS[0] : "#15151c"));
+    const applyPop = (c) => { setSelData(wbColorPop === "fill" ? { fill: c } : { color: c }); setWbColorPop(null); };
     return (
       <div onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.preventDefault()}
-        style={{ position: "absolute", left, top, display: "flex", alignItems: "center", gap: 7, padding: "8px 12px", borderRadius: 13, zIndex: 20,
-          background: "#15151c", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 14px 36px rgba(0,0,0,0.28)" }}>
-        {/* Sticky: background colors */}
-        {selItem.type === "sticky" && WB_STICKY_COLORS.map(c => dot(c, (dta.color || WB_STICKY_COLORS[0]) === c, () => setSelData({ color: c })))}
-        {/* Stroke / text color for arrow, pen strokes and free text */}
-        {["arrow", "draw", "text"].includes(selItem.type) && WB_STROKE_COLORS.map(c => dot(c, (dta.color || "#15151c") === c, () => setSelData({ color: c }), "s" + c))}
-        {/* Shape: border (incl. none) + fill (incl. none) */}
+        style={{ position: "absolute", left: cx, top, transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 13, zIndex: 20,
+          background: "#15151c", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 14px 36px rgba(0,0,0,0.28)", whiteSpace: "nowrap" }}>
+        {/* Color swatch(es) */}
+        {(selItem.type === "sticky" || ["arrow", "draw", "text"].includes(selItem.type)) && swatch("color", dta.color || (selItem.type === "sticky" ? WB_STICKY_COLORS[0] : "#15151c"))}
         {isShape && (<>
           <span style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.55)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{de ? "Rand" : "Border"}</span>
-          {WB_BORDER_COLORS.map(c => dot(c, (dta.color || "#15151c") === c, () => setSelData({ color: c }), "b" + c))}
+          {swatch("color", dta.color || "#15151c")}
           {divider}
           <span style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.55)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{de ? "Füllung" : "Fill"}</span>
-          {WB_FILL_COLORS.map(c => dot(c, (dta.fill || "transparent") === c, () => setSelData({ fill: c }), "f" + c))}
+          {swatch("fill", dta.fill || "transparent")}
         </>)}
         {/* Text formatting */}
         {hasText && (<>
@@ -5445,6 +5499,22 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           style={{ ...iconBtnStyle, color: "#ff8589" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
         </motion.div>
+
+        {/* Color grid overlay (Figma-style) — opens above the bar */}
+        {wbColorPop && (
+          <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", [below ? "top" : "bottom"]: "calc(100% + 10px)", zIndex: 21,
+            padding: 10, borderRadius: 14, background: "#15151c", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 16px 44px rgba(0,0,0,0.34)",
+            display: "grid", gridTemplateColumns: "repeat(11, 1fr)", gap: 8, width: 330 }}>
+            {popPalette.map((c) => (
+              <div key={c} onClick={() => applyPop(c)} title={c === "transparent" ? (de ? "Ohne" : "None") : c}
+                style={{ width: 22, height: 22, borderRadius: "50%", cursor: "pointer", position: "relative", overflow: "hidden",
+                  background: c === "transparent" ? "#fff" : c,
+                  border: popCurrent === c ? "2.5px solid #4D9FFF" : (c === "#FFFFFF" ? "1.5px solid rgba(255,255,255,0.4)" : "1.5px solid rgba(255,255,255,0.14)"), boxSizing: "border-box" }}>
+                {c === "transparent" && <div style={{ position: "absolute", left: -3, top: "50%", width: "150%", height: 2, background: "#e5484d", transform: "rotate(-45deg)" }} />}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   })();
@@ -5554,10 +5624,30 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
                 </div>
                 <div style={{ padding: "0 12px 12px" }}>
                   {canEdit ? (
+                    <div style={{ position: "relative" }}>
                     <textarea ref={(el) => { commentAreaRef.current = el; if (el && !el.dataset.f) { el.dataset.f = "1"; setTimeout(() => { try { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } catch (_) {} }, 0); } }}
-                      defaultValue={d.text || ""} placeholder={de ? "Kommentar schreiben…" : "Write a comment…"} rows={3}
-                      onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape") { e.preventDefault(); closeComment(); } if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); closeComment(); } }}
+                      value={commentDraft} onChange={onCommentChange} placeholder={de ? "Kommentar… (@ erwähnt jemanden)" : "Comment… (@ to mention)"} rows={3}
+                      onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape") { e.preventDefault(); if (mentionQuery != null) setMentionQuery(null); else closeComment(); } if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); closeComment(); } }}
                       style={{ width: "100%", boxSizing: "border-box", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, padding: "9px 11px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", resize: "none", lineHeight: 1.45, caretColor: theme.text }} />
+                    {/* @-mention dropdown */}
+                    {mentionQuery != null && mentionMatches.length > 0 && (
+                      <div style={{ position: "absolute", left: 0, right: 0, top: "calc(100% + 4px)", zIndex: 5, maxHeight: 168, overflowY: "auto",
+                        background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, boxShadow: "0 12px 32px rgba(0,0,0,0.2)", padding: 4 }} className="no-scrollbar">
+                        {mentionMatches.map(mem => {
+                          const nm = mem?.profiles?.display_name || mem?.display_name || "User";
+                          const av = mem?.profiles?.avatar_url || mem?.avatar_url;
+                          return (
+                            <div key={mem.user_id} onPointerDown={(e) => { e.preventDefault(); insertMention(mem); }} className="hover-row"
+                              style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", borderRadius: 8, cursor: "pointer" }}>
+                              {av ? <img src={av} alt="" referrerPolicy="no-referrer" style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0 }} />
+                                : <div style={{ width: 22, height: 22, borderRadius: "50%", background: "#15151c", color: "#fff", fontSize: 10, fontWeight: 600, fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{nm[0]?.toUpperCase()}</div>}
+                              <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nm}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    </div>
                   ) : (
                     <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{d.text || <span style={{ color: theme.textFaint }}>{de ? "Kein Text" : "No text"}</span>}</div>
                   )}
@@ -5693,8 +5783,8 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           {toolBtn("arrow", de ? "Pfeil" : "Arrow", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>)}
           {toolBtn("text", "Text", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>)}
           <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
-          {/* Stickers — round seal icon; picker opens centered over the toolbar (below) */}
-          <motion.div whileTap={{ scale: 0.9 }} onClick={() => setStickersOpen(o => !o)} title="Sticker"
+          {/* Stickers — round seal icon; picker opens centered over this button (below) */}
+          <motion.div ref={stickerBtnRef} whileTap={{ scale: 0.9 }} onClick={() => setStickersOpen(o => !o)} title="Sticker"
             style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
               background: stickersOpen ? "#15151c" : "transparent", color: stickersOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/></svg>
@@ -5731,9 +5821,11 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       {/* Sticker picker — portalled, centered on the toolbar's real screen position
           (measured, so a shifted app container doesn't skew it) */}
         {stickersOpen && createPortal((() => {
-          const tb = toolbarRef.current?.getBoundingClientRect();
-          const cx = tb ? tb.left + tb.width / 2 : window.innerWidth / 2;
-          const bottomPx = tb ? window.innerHeight - tb.top + 14 : 90;
+          const bt = stickerBtnRef.current?.getBoundingClientRect();
+          const W = 340;
+          const rawCx = bt ? bt.left + bt.width / 2 : window.innerWidth / 2;
+          const cx = Math.min(Math.max(rawCx, W / 2 + 12), window.innerWidth - W / 2 - 12); // keep on-screen
+          const bottomPx = bt ? window.innerHeight - bt.top + 24 : 100; // 10px higher than before
           return (
           <>
             <div onClick={() => setStickersOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
@@ -27475,7 +27567,7 @@ export default function CircularMenu() {
         {/* WHITEBOARD / BRAINSTORM VIEW */}
         <AnimatePresence>
           {currentView === "whiteboard" && (
-            <WhiteboardView session={session} userOrg={userOrg} orgMembers={orgMembers} theme={theme} darkMode={darkMode} appLanguage={appLanguage} boardId={whiteboardId} onBack={() => setCurrentView(whiteboardReturn || "dashboard")} />
+            <WhiteboardView session={session} userOrg={userOrg} orgMembers={orgMembers} createNotification={createNotification} theme={theme} darkMode={darkMode} appLanguage={appLanguage} boardId={whiteboardId} onBack={() => setCurrentView(whiteboardReturn || "dashboard")} />
           )}
         </AnimatePresence>
 
