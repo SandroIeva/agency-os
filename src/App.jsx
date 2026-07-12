@@ -4889,9 +4889,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [wbColorPop, setWbColorPop] = useState(null); // format-bar color overlay: null | "color" | "fill"
   const [commentDraft, setCommentDraft] = useState(""); // controlled text of the open comment
   const [mentionQuery, setMentionQuery] = useState(null); // string after "@" while mentioning, else null
+  const [shareOpen, setShareOpen] = useState(false);   // share popover (workspace / members / project)
+  const [boardShares, setBoardShares] = useState([]);  // user_ids the board is shared with (restricted)
+  const [wbProjects, setWbProjects] = useState([]);    // projects the current user can share to
+  const [shareCopied, setShareCopied] = useState(false);
   const [timerSec, setTimerSec] = useState(0);
   const [timerOn, setTimerOn] = useState(false);
-  const [copied, setCopied] = useState(false);
   const canvasRef = useRef(null);
   const dragRef = useRef(null);
   const fileRef = useRef(null);
@@ -4921,7 +4924,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   // ── Boards ──
   const loadBoards = useCallback(async () => {
     if (!userOrg?.id) return [];
-    const { data } = await supabase.from("whiteboards").select("id,name,created_at,updated_at").eq("org_id", userOrg.id).order("updated_at", { ascending: false });
+    const { data } = await supabase.from("whiteboards").select("id,name,created_at,updated_at,visibility,project_id,created_by").eq("org_id", userOrg.id).order("updated_at", { ascending: false });
     setBoards(data || []);
     return data || [];
   }, [userOrg?.id]);
@@ -4952,6 +4955,43 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     setTitleDraft(name);
     setBoards(prev => prev.map(b => b.id === board.id ? { ...b, name } : b));
     await supabase.from("whiteboards").update({ name, updated_at: new Date().toISOString() }).eq("id", board.id);
+  };
+
+  // ── Sharing (workspace / specific members / project) — mirrors the Docs flow ──
+  useEffect(() => {
+    if (!board?.id || !userOrg?.id) { setBoardShares([]); return; }
+    supabase.from("whiteboard_shares").select("user_id").eq("board_id", board.id).then(({ data }) => setBoardShares((data || []).map(r => r.user_id)));
+    (async () => {
+      const { data: pm } = await supabase.from("project_members").select("project_id").eq("user_id", session?.user?.id);
+      const ids = [...new Set((pm || []).map(r => r.project_id))];
+      if (!ids.length) { setWbProjects([]); return; }
+      const { data } = await supabase.from("projects").select("id, name").eq("org_id", userOrg.id).in("id", ids).order("name");
+      setWbProjects(data || []);
+    })();
+  }, [board?.id, userOrg?.id, session?.user?.id]);
+  const setBoardVisibility = async (v) => {
+    if (!board) return;
+    const patch = v === "project" ? { visibility: v } : { visibility: v, project_id: null };
+    setBoard(b => b ? { ...b, ...patch } : b);
+    setBoards(prev => prev.map(b => b.id === board.id ? { ...b, ...patch } : b));
+    await supabase.from("whiteboards").update(patch).eq("id", board.id);
+  };
+  const setBoardProject = async (pid) => {
+    if (!board) return;
+    const patch = { visibility: "project", project_id: pid || null };
+    setBoard(b => b ? { ...b, ...patch } : b);
+    setBoards(prev => prev.map(b => b.id === board.id ? { ...b, ...patch } : b));
+    await supabase.from("whiteboards").update(patch).eq("id", board.id);
+  };
+  const toggleBoardShare = async (uid) => {
+    if (!board) return;
+    if (boardShares.includes(uid)) {
+      setBoardShares(s => s.filter(x => x !== uid));
+      await supabase.from("whiteboard_shares").delete().eq("board_id", board.id).eq("user_id", uid);
+    } else {
+      setBoardShares(s => [...s, uid]);
+      await supabase.from("whiteboard_shares").insert({ board_id: board.id, user_id: uid });
+    }
   };
 
   // ── Items: load + realtime sync ──
@@ -5737,13 +5777,82 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>}
             {fmtTimer}
           </motion.div>
-          {/* Share */}
-          <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-            onClick={() => { try { navigator.clipboard.writeText(window.location.origin); } catch (_) {} setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-            title={de ? "Alle Team-Mitglieder können dieses Board öffnen (Erstellen → Brainstorm)" : "All team members can open this board (Create → Brainstorm)"}
-            style={{ padding: "9px 18px", borderRadius: 999, background: "#15151c", border: "none", color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
-            {copied ? (de ? "✓ Kopiert" : "✓ Copied") : (de ? "Teilen" : "Share")}
-          </motion.button>
+          {/* Share (workspace / specific members / project — same principle as Docs) */}
+          <div style={{ position: "relative" }}>
+            <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setShareOpen(o => !o)}
+              style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 16px 9px 14px", borderRadius: 999, background: "#15151c", border: "none", color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
+              {de ? "Teilen" : "Share"}
+            </motion.button>
+            {shareOpen && board && (() => {
+              const vis = board.visibility || "workspace";
+              const accent = "#15151c";
+              const shareables = (orgMembers || []).filter(m => (m.user_id || m.id) !== board.created_by && (m.profiles?.display_name || m.display_name));
+              const memName = (m) => m.profiles?.display_name || m.display_name || "—";
+              const memAv = (m) => m.profiles?.avatar_url || m.avatar_url;
+              const opt = (id, label, desc, icon, children) => (
+                <div style={{ borderRadius: 10, background: vis === id ? (darkMode ? "rgba(255,255,255,0.06)" : "#f1f2f4") : "transparent", marginBottom: 2 }}>
+                  <button onClick={() => setBoardVisibility(id)} style={{ display: "flex", gap: 10, alignItems: "flex-start", width: "100%", textAlign: "left", padding: "10px 12px", border: "none", borderRadius: 10, cursor: "pointer", background: "transparent" }}>
+                    <div style={{ marginTop: 1, color: vis === id ? accent : theme.textDim, lineHeight: 0 }}>{icon}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{label}</div>
+                      <div style={{ fontSize: 11.5, color: theme.textDim, fontFamily: FONT, lineHeight: 1.4 }}>{desc}</div>
+                    </div>
+                    {vis === id && <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginTop: 2, flexShrink: 0 }}><path d="M20 6L9 17l-5-5"/></svg>}
+                  </button>
+                  {vis === id && children}
+                </div>
+              );
+              return (<>
+                <div onMouseDown={(e) => e.stopPropagation()} onClick={() => setShareOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 39 }} />
+                <div onMouseDown={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}
+                  style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 320, zIndex: 40, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 16, boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden" }}>
+                  {/* Copy link */}
+                  <div style={{ padding: "6px", borderBottom: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "#f0f0f3"}` }}>
+                    <button onClick={() => { try { navigator.clipboard.writeText(`${window.location.origin}/?wb=${board.id}`); } catch (_) {} setShareCopied(true); setTimeout(() => setShareCopied(false), 1600); }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.06)" : "#f1f2f4"} onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "9px 12px", border: "none", borderRadius: 10, cursor: "pointer", background: "transparent" }}>
+                      <span style={{ color: accent, lineHeight: 0 }}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+                      <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{de ? "Link kopieren" : "Copy link"}</span>
+                      {shareCopied && <span style={{ fontSize: 12, color: accent, fontFamily: FONT, fontWeight: 600 }}>{de ? "Kopiert ✓" : "Copied ✓"}</span>}
+                    </button>
+                  </div>
+                  {/* Visibility options */}
+                  <div style={{ padding: 6 }}>
+                    {opt("workspace", de ? "Ganzer Workspace" : "Whole workspace", de ? "Alle Mitglieder können sehen & bearbeiten" : "All members can view & edit",
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 0 0 18M12 3a14 14 0 0 1 0 18"/></svg>)}
+                    {opt("restricted", de ? "Bestimmte Mitglieder" : "Specific members", de ? "Nur ausgewählte Personen" : "Only selected people",
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg>,
+                      <div className="no-scrollbar" style={{ maxHeight: 190, overflowY: "auto", padding: "0 0 6px" }}>
+                        {shareables.length === 0 && <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, padding: "4px 12px 8px" }}>{de ? "Keine weiteren Mitglieder" : "No other members"}</div>}
+                        {shareables.map(m => {
+                          const uid = m.user_id || m.id; const on = boardShares.includes(uid); const av = memAv(m);
+                          return (
+                            <button key={uid} onClick={() => toggleBoardShare(uid)} style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left", padding: "6px 12px", border: "none", borderRadius: 8, cursor: "pointer", background: "transparent" }}>
+                              {av ? <img src={av} alt="" referrerPolicy="no-referrer" style={{ width: 24, height: 24, borderRadius: "50%", flexShrink: 0 }} /> : <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#15151c", color: "#fff", fontSize: 10, fontWeight: 600, fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{memName(m)[0]?.toUpperCase()}</div>}
+                              <span style={{ flex: 1, fontSize: 13, color: theme.text, fontFamily: FONT }}>{memName(m)}</span>
+                              <span style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${on ? accent : theme.borderFaint}`, background: on ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>)}
+                    {opt("project", de ? "Projekt" : "Project", de ? "Mitglieder eines Projekts erhalten Zugriff" : "Members of a project get access",
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>,
+                      <div style={{ padding: "0 12px 12px", position: "relative" }}>
+                        <select value={board.project_id || ""} onChange={(e) => setBoardProject(e.target.value)}
+                          style={{ width: "100%", padding: "9px 34px 9px 11px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff", color: theme.text, fontFamily: FONT, fontSize: 13, outline: "none", appearance: "none", WebkitAppearance: "none", MozAppearance: "none", cursor: "pointer" }}>
+                          <option value="">{de ? "Projekt wählen…" : "Choose project…"}</option>
+                          {wbProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ position: "absolute", right: 24, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}><path d="M6 9l6 6 6-6" stroke={darkMode ? "#ffffff70" : "#1a1a2e70"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      </div>)}
+                  </div>
+                </div>
+              </>);
+            })()}
+          </div>
         </div>
       </div>
 
