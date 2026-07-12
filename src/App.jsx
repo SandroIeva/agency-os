@@ -4840,7 +4840,9 @@ const MONTH_NAMES = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli
 // ──── Whiteboard / Brainstorm — FigJam-style infinite canvas ────
 // Elements live in whiteboard_items (one row each) so Supabase realtime keeps
 // every collaborator's board in sync (last write wins per element).
-const WB_STICKY_COLORS = ["#FFE066", "#F4A79D", "#B5E2B0", "#A9D7F2", "#F0EEEA"];
+// Full pastel row for sticky notes (fills the picker bar).
+const WB_STICKY_COLORS = ["#FFFFFF", "#E5E7EB", "#FCA5A5", "#FDBA74", "#FDE68A", "#BBF7D0", "#99F6E4", "#BFDBFE", "#DDD6FE", "#FBCFE8"];
+const WB_STICKY_DEFAULT = "#FDE68A"; // new notes start yellow
 const WB_STROKE_COLORS = ["#15151c", "#EF4444", "#F59E0B", "#0EA5E9", "#10B981"];
 const WB_FILL_COLORS = ["transparent", "#FFFFFF", "#FFE066", "#F4A79D", "#B5E2B0", "#A9D7F2"];
 // Figma-style color grid opened from a swatch button (2 rows).
@@ -5070,7 +5072,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
 
   // ── Placement ──
   const placeSticky = (pt) => {
-    const id = addItemLocal("sticky", { x: pt.x - 125, y: pt.y - 125, w: 250, h: 250, text: "", color: WB_STICKY_COLORS[0] });
+    const id = addItemLocal("sticky", { x: pt.x - 125, y: pt.y - 125, w: 250, h: 250, text: "", color: WB_STICKY_DEFAULT });
     setSel(id); setEditing(id); setTool("select");
   };
   const placeText = (pt) => {
@@ -5297,7 +5299,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const noBorder = stroke === "transparent";
     const fill = d.fill && d.fill !== "transparent" ? d.fill : "transparent";
     let wrap = { position: "absolute", left: x, top: y, width: w, height: h, boxSizing: "border-box", cursor: isEdit ? "auto" : "move", outline: isSel ? "1.5px solid #3B82F6" : "none", outlineOffset: 2 };
-    if (it.type === "sticky") wrap = { ...wrap, background: d.color || WB_STICKY_COLORS[0], borderRadius: 6, boxShadow: "0 8px 22px rgba(0,0,0,0.14)", padding: 14 };
+    if (it.type === "sticky") wrap = { ...wrap, background: d.color || WB_STICKY_DEFAULT, borderRadius: 6, boxShadow: "0 8px 22px rgba(0,0,0,0.14)", padding: 14 };
     if (it.type === "rect") wrap = { ...wrap, background: fill, border: noBorder ? "none" : `2px solid ${stroke}`, borderRadius: 12, padding: 12, display: "flex", alignItems: "center", justifyContent: "center" };
     if (it.type === "ellipse") wrap = { ...wrap, background: fill, border: noBorder ? "none" : `2px solid ${stroke}`, borderRadius: "50%", padding: 16, display: "flex", alignItems: "center", justifyContent: "center" };
     if (isSvgShape) wrap = { ...wrap, background: "transparent", padding: 0 };
@@ -5467,14 +5469,14 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       : selItem.type === "sticky" ? WB_STICKY_COLORS
       : isShape ? ["transparent", ...WB_PALETTE]
       : WB_PALETTE;
-    const popCurrent = wbColorPop === "fill" ? (dta.fill || "transparent") : (dta.color || (selItem.type === "sticky" ? WB_STICKY_COLORS[0] : "#15151c"));
+    const popCurrent = wbColorPop === "fill" ? (dta.fill || "transparent") : (dta.color || (selItem.type === "sticky" ? WB_STICKY_DEFAULT : "#15151c"));
     const applyPop = (c) => { setSelData(wbColorPop === "fill" ? { fill: c } : { color: c }); setWbColorPop(null); };
     return (
       <div onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.preventDefault()}
         style={{ position: "absolute", left: cx, top, transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 13, zIndex: 20,
           background: "#15151c", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 14px 36px rgba(0,0,0,0.28)", whiteSpace: "nowrap" }}>
         {/* Color swatch(es) */}
-        {(selItem.type === "sticky" || ["arrow", "draw", "text"].includes(selItem.type)) && swatch("color", dta.color || (selItem.type === "sticky" ? WB_STICKY_COLORS[0] : "#15151c"))}
+        {(selItem.type === "sticky" || ["arrow", "draw", "text"].includes(selItem.type)) && swatch("color", dta.color || (selItem.type === "sticky" ? WB_STICKY_DEFAULT : "#15151c"))}
         {isShape && (<>
           <span style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.55)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{de ? "Rand" : "Border"}</span>
           {swatch("color", dta.color || "#15151c")}
@@ -5500,11 +5502,13 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
         </motion.div>
 
-        {/* Color grid overlay (Figma-style) — opens above the bar */}
-        {wbColorPop && (
+        {/* Color grid overlay (Figma-style) — opens above the bar; grid fills to the palette */}
+        {wbColorPop && (() => {
+          const cols = Math.min(popPalette.length, 11);
+          return (
           <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", [below ? "top" : "bottom"]: "calc(100% + 10px)", zIndex: 21,
             padding: 10, borderRadius: 14, background: "#15151c", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 16px 44px rgba(0,0,0,0.34)",
-            display: "grid", gridTemplateColumns: "repeat(11, 1fr)", gap: 8, width: 330 }}>
+            display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 9, width: cols * 31 + 20 }}>
             {popPalette.map((c) => (
               <div key={c} onClick={() => applyPop(c)} title={c === "transparent" ? (de ? "Ohne" : "None") : c}
                 style={{ width: 22, height: 22, borderRadius: "50%", cursor: "pointer", position: "relative", overflow: "hidden",
@@ -5514,7 +5518,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               </div>
             ))}
           </div>
-        )}
+          ); })()}
       </div>
     );
   })();
