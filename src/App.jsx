@@ -5607,7 +5607,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
             <>
               <div onPointerDown={(e) => { e.stopPropagation(); closeComment(); }} style={{ position: "fixed", inset: 0, zIndex: 21 }} />
               <div onPointerDown={(e) => e.stopPropagation()}
-                style={{ position: "absolute", left, top, zIndex: 22, width: 260, borderRadius: 14, overflow: "hidden",
+                style={{ position: "absolute", left, top, zIndex: 22, width: 260, borderRadius: 14,
                   background: darkMode ? "rgba(28,28,38,0.98)" : "#fff", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 16px 44px rgba(0,0,0,0.24)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "12px 14px 8px" }}>
                   <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#15151c", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, fontFamily: FONT, flexShrink: 0 }}>{(d.author_name || "?").trim()[0]?.toUpperCase() || "?"}</div>
