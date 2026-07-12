@@ -25338,6 +25338,25 @@ export default function CircularMenu() {
     setCurrentView("assets");
   }, [session?.user?.id]);
 
+  // ── Handle ?wb=<id> — open a Brainstorm board directly from a shared link ──
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlWb = params.get("wb");
+    if (urlWb) {
+      localStorage.setItem("agencyos-open-wb", urlWb);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("wb");
+      window.history.replaceState({}, "", url.pathname + (url.search || ""));
+    }
+    const wbId = urlWb || localStorage.getItem("agencyos-open-wb");
+    if (!wbId) return;
+    if (!session?.user?.id) return; // wait for login
+    localStorage.removeItem("agencyos-open-wb");
+    setWhiteboardId(wbId);
+    setWhiteboardReturn("dashboard");
+    setCurrentView("whiteboard");
+  }, [session?.user?.id]);
+
   // ── Handle ?push-setup=true&token=... — show setup overlay (no login required) ──
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
