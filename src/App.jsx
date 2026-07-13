@@ -4873,7 +4873,12 @@ const wbMeasureLines = (text, fontSize, bold) => {
   const width = Math.max(1, ...lines.map(l => ctx.measureText(l || " ").width));
   return { width, lineCount: lines.length };
 };
-const WB_TEXT_H_PAD = 14, WB_TEXT_V_PAD = 10, WB_TEXT_MIN_W = 44;
+// 4 = the wrap div's own "padding: 2" on both left and right — keeping the fit
+// buffer exactly equal to that (no extra slack) is what makes a mind-map
+// connector line land the same visual distance from the text on both ends;
+// any bigger buffer only shows up on the trailing side of left-aligned text.
+const WB_TEXT_H_PAD = 4, WB_TEXT_V_PAD = 4, WB_TEXT_MIN_W = 24;
+const WB_TEXT_SIZE_ORDER = ["s", "m", "l", "xl"];
 const wbFitTextBox = (text, sizeKey, bold) => {
   const fontSize = WB_TEXT_SIZES[sizeKey] || WB_TEXT_SIZES.m;
   const { width, lineCount } = wbMeasureLines(text, fontSize, bold);
@@ -4896,6 +4901,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [sel, setSel] = useState(null);
   const [selIds, setSelIds] = useState([]); // multi-selection (marquee); always includes `sel` when single
   const [marquee, setMarquee] = useState(null); // {x,y,w,h} world-space selection rectangle
+  const [hoverId, setHoverId] = useState(null); // text node under the cursor — shows the mind-map group frame
   const [editing, setEditing] = useState(null);
   const [tempStroke, setTempStroke] = useState(null);
   const [tempItem, setTempItem] = useState(null);
@@ -5183,18 +5189,51 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     setSel(id); setCommentOpenId(id); setTool("select");
   };
 
+  // All link items touching a node, either end.
+  const linksTouching = (nodeId) => itemsRef.current.filter(i => i.type === "link" && (i.data?.fromId === nodeId || i.data?.toId === nodeId));
+  // Every node id reachable from nodeId via any chain of links (undirected) — the
+  // whole connected mind-map "group" that node belongs to. Includes nodeId itself.
+  const mindmapGroup = (nodeId) => {
+    const seen = new Set([nodeId]);
+    const queue = [nodeId];
+    while (queue.length) {
+      const cur = queue.pop();
+      linksTouching(cur).forEach(l => {
+        const other = l.data.fromId === cur ? l.data.toId : l.data.fromId;
+        if (other && !seen.has(other)) { seen.add(other); queue.push(other); }
+      });
+    }
+    return seen;
+  };
+  const WB_MINDMAP_BRANCH_SIZE = "m", WB_MINDMAP_ROOT_SIZE = "l";
   // ── Mind map: a text node grows a new linked text node to its left/right.
   // The connecting "link" item stores fromId/toId (not coordinates) so the line
   // stays attached and re-routes live as either node moves — see renderLink.
   const addMindmapBranch = (sourceId, direction) => {
     const src = itemsRef.current.find(i => i.id === sourceId); if (!src) return;
     const sd = src.data || {};
+    let curX = sd.x || 0, curY = sd.y || 0, curW = sd.w || 160, curH = sd.h || 44;
+    // First branch off this node: bump it a size tier so the mind-map's origin is
+    // unmistakable at a glance. Only fires once — a node already carrying a link
+    // is already part of a map and keeps whatever size it has.
+    if (linksTouching(sourceId).length === 0) {
+      const rootIdx = Math.max(WB_TEXT_SIZE_ORDER.indexOf(sd.size || "m"), WB_TEXT_SIZE_ORDER.indexOf(WB_MINDMAP_ROOT_SIZE));
+      const rootSize = WB_TEXT_SIZE_ORDER[rootIdx];
+      if (rootSize !== sd.size) {
+        const rootBox = wbFitTextBox(sd.text, rootSize, sd.bold);
+        patchItem(sourceId, { size: rootSize, w: rootBox.w, h: rootBox.h });
+        persistById(sourceId);
+        curW = rootBox.w; curH = rootBox.h;
+      }
+    }
+    // Branches are always the same, slightly smaller size regardless of depth —
+    // otherwise text keeps shrinking the further out the map grows.
     const ph = de ? "Text hinzufügen" : "Add text";
-    const box = wbFitTextBox(ph, sd.size, sd.bold);
+    const box = wbFitTextBox(ph, WB_MINDMAP_BRANCH_SIZE, sd.bold);
     const gap = 70;
-    const x = direction === "left" ? (sd.x || 0) - gap - box.w : (sd.x || 0) + (sd.w || 160) + gap;
-    const y = (sd.y || 0) + (sd.h || 44) / 2 - box.h / 2;
-    const id = addItemLocal("text", { x, y, w: box.w, h: box.h, text: "", color: sd.color || "#15151c", size: sd.size, bold: sd.bold });
+    const x = direction === "left" ? curX - gap - box.w : curX + curW + gap;
+    const y = curY + curH / 2 - box.h / 2;
+    const id = addItemLocal("text", { x, y, w: box.w, h: box.h, text: "", color: sd.color || "#15151c", size: WB_MINDMAP_BRANCH_SIZE, bold: sd.bold });
     addItemLocal("link", { fromId: sourceId, toId: id, color: "#15151c" });
     setSel(id); setEditing(id); setTool("select");
   };
@@ -5333,6 +5372,21 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       return;
     }
     lastClickRef.current = { id: it.id, t: now };
+    // A text node that's part of a mind map drags the WHOLE connected group
+    // together — matches Figma/FigJam, where the map behaves as one rigid
+    // structure. (Hovering shows the same group via the frame in the canvas.)
+    if (it.type === "text") {
+      const group = mindmapGroup(it.id);
+      if (group.size > 1) {
+        setSel(it.id); setSelIds([...group]);
+        if (editingRef.current && !group.has(editingRef.current)) flushEdit();
+        const pt = toWorld(e);
+        const bases = {};
+        group.forEach(id => { const t = itemsRef.current.find(i => i.id === id); if (t) bases[id] = { ...t.data }; });
+        dragRef.current = { mode: "groupmove", startX: pt.x, startY: pt.y, bases };
+        return;
+      }
+    }
     setSel(it.id);
     if (editingRef.current && editingRef.current !== it.id) flushEdit(); // save the other element's text first
     const pt = toWorld(e);
@@ -5493,6 +5547,8 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       <div key={it.id}
         onPointerDown={(e) => onItemPointerDown(e, it)}
         onDoubleClick={(e) => { if (it.type !== "image" && it.type !== "sticker" && it.type !== "emoji") { e.stopPropagation(); setSel(it.id); setEditing(it.id); } }}
+        onPointerEnter={it.type === "text" ? () => setHoverId(it.id) : undefined}
+        onPointerLeave={it.type === "text" ? () => setHoverId(h => h === it.id ? null : h) : undefined}
         style={wrap}>
         {isSvgShape && (
           <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ position: "absolute", inset: 0, pointerEvents: "none", display: "block" }}>
@@ -5759,12 +5815,26 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       {/* Canvas */}
       <div ref={canvasRef}
         onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp}
+        onPointerLeave={() => setHoverId(null)}
         onDrop={(e) => { e.preventDefault(); handleImageFiles(e.dataTransfer.files, toWorld(e)); }}
         onDragOver={(e) => e.preventDefault()}
         style={{ position: "absolute", inset: 0, cursor: cursorForTool, touchAction: "none",
           backgroundImage: `radial-gradient(circle, ${darkMode ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.10)"} 1px, transparent 1px)`,
           backgroundSize: `${24 * cam.s}px ${24 * cam.s}px`, backgroundPosition: `${cam.x}px ${cam.y}px` }}>
         <div style={{ position: "absolute", left: 0, top: 0, transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`, transformOrigin: "0 0", pointerEvents: tool === "select" ? "auto" : "none" }}>
+          {/* Mind-map group frame — hovering a connected text node outlines the
+              whole connected group (Figma/FigJam convention), rendered behind
+              the nodes so it never tints their fill. */}
+          {hoverId && !dragRef.current && (() => {
+            const group = mindmapGroup(hoverId);
+            if (group.size < 2) return null;
+            const boxes = [...group].map(id => items.find(i => i.id === id)).filter(Boolean).map(bboxOf);
+            if (!boxes.length) return null;
+            const pad = 16;
+            const x = Math.min(...boxes.map(b => b.x)) - pad, y = Math.min(...boxes.map(b => b.y)) - pad;
+            const x2 = Math.max(...boxes.map(b => b.x + b.w)) + pad, y2 = Math.max(...boxes.map(b => b.y + b.h)) + pad;
+            return <div style={{ position: "absolute", left: x, top: y, width: x2 - x, height: y2 - y, border: `1.5px dashed ${darkMode ? "rgba(59,130,246,0.55)" : "rgba(59,130,246,0.5)"}`, borderRadius: 14, pointerEvents: "none" }} />;
+          })()}
           {items.map(renderItem)}
           {/* Live pen stroke */}
           {tempStroke && tempStroke.points.length > 1 && (() => {
