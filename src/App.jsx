@@ -5038,9 +5038,13 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (it) supabase.from("whiteboard_items").update({ data: it.data }).eq("id", id).then(() => {});
   }, 0);
   const deleteItem = (id) => {
-    setItems(prev => prev.filter(i => i.id !== id));
-    setSel(s => s === id ? null : s);
-    supabase.from("whiteboard_items").delete().eq("id", id).then(() => {});
+    // Cascade: dropping a mind-map node also drops the link lines attached to it.
+    const orphanLinks = itemsRef.current.filter(i => i.type === "link" && (i.data?.fromId === id || i.data?.toId === id)).map(i => i.id);
+    const doomed = [id, ...orphanLinks];
+    setItems(prev => prev.filter(i => !doomed.includes(i.id)));
+    setSel(s => doomed.includes(s) ? null : s);
+    setSelIds(ids => ids.filter(x => !doomed.includes(x)));
+    doomed.forEach(did => supabase.from("whiteboard_items").delete().eq("id", did).then(() => {}));
   };
   const commitText = (id, text) => {
     setEditing(null);
@@ -5111,6 +5115,16 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
       return { x: Math.min(...xs) + (d.ox || 0), y: Math.min(...ys) + (d.oy || 0), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
     }
+    if (it.type === "link") {
+      // Mind-map connector: no stored coords — derive from the two live nodes it joins.
+      const from = itemsRef.current.find(i => i.id === d.fromId), to = itemsRef.current.find(i => i.id === d.toId);
+      if (!from || !to) return { x: 0, y: 0, w: 0, h: 0 };
+      const a = bboxOf(from), b = bboxOf(to);
+      const aCenterX = a.x + a.w / 2, bCenterX = b.x + b.w / 2;
+      const x1 = aCenterX <= bCenterX ? a.x + a.w : a.x, x2 = aCenterX <= bCenterX ? b.x : b.x + b.w;
+      const y1 = a.y + a.h / 2, y2 = b.y + b.h / 2;
+      return { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1) };
+    }
     return { x: d.x || 0, y: d.y || 0, w: d.w || 0, h: d.h || 0 };
   };
 
@@ -5145,6 +5159,20 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const placeComment = (pt) => {
     const id = addItemLocal("comment", { x: pt.x, y: pt.y, text: "", author_id: session?.user?.id, author_name: myName(), created_at: new Date().toISOString() });
     setSel(id); setCommentOpenId(id); setTool("select");
+  };
+
+  // ── Mind map: a text node grows a new linked text node to its left/right.
+  // The connecting "link" item stores fromId/toId (not coordinates) so the line
+  // stays attached and re-routes live as either node moves — see renderLink.
+  const addMindmapBranch = (sourceId, direction) => {
+    const src = itemsRef.current.find(i => i.id === sourceId); if (!src) return;
+    const sd = src.data || {};
+    const gap = 90, w = 200, h = 44;
+    const x = direction === "left" ? (sd.x || 0) - gap - w : (sd.x || 0) + (sd.w || 160) + gap;
+    const y = (sd.y || 0) + (sd.h || 44) / 2 - h / 2;
+    const id = addItemLocal("text", { x, y, w, h, text: "", color: sd.color || "#15151c", size: sd.size, bold: sd.bold });
+    addItemLocal("link", { fromId: sourceId, toId: id, color: "#15151c" });
+    setSel(id); setEditing(id); setTool("select");
   };
 
   // A single click/select keeps selIds in sync (marquee sets selIds directly with sel=null).
@@ -5233,7 +5261,9 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (d?.mode === "marquee") {
       const m = d.rect;
       if (m && (m.w > 4 || m.h > 4)) {
-        const hits = itemsRef.current.filter(it => it.type !== "comment" && rectsIntersect(bboxOf(it), m)).map(it => it.id);
+        // Comments and links aren't marquee-selectable: comments are point pins,
+        // links have no independent position (they follow the two nodes they join).
+        const hits = itemsRef.current.filter(it => it.type !== "comment" && it.type !== "link" && rectsIntersect(bboxOf(it), m)).map(it => it.id);
         setSelIds(hits);
         setSel(hits.length === 1 ? hits[0] : null);
       } else { setSel(null); setSelIds([]); }
@@ -5449,6 +5479,22 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           <div onPointerDown={(e) => { e.stopPropagation(); dragRef.current = { mode: "resize", id: it.id, base: { x, y, w, h } }; }}
             style={{ position: "absolute", right: -7, bottom: -7, width: 13, height: 13, borderRadius: 3, background: "#fff", border: "1.5px solid #3B82F6", cursor: "nwse-resize" }} />
         )}
+        {/* Mind-map branch handles — reselecting a text node shows a "+" on each
+            side to grow a new linked node in that direction. */}
+        {isOnly && !isEdit && it.type === "text" && (<>
+          <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); addMindmapBranch(it.id, "left"); }}
+            title={de ? "Zweig links" : "Branch left"}
+            style={{ position: "absolute", left: -32, top: "50%", transform: "translateY(-50%)", width: 22, height: 22, borderRadius: "50%",
+              background: "#fff", border: "1.5px solid #3B82F6", color: "#3B82F6", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 2px 6px rgba(0,0,0,0.18)" }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </div>
+          <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); addMindmapBranch(it.id, "right"); }}
+            title={de ? "Zweig rechts" : "Branch right"}
+            style={{ position: "absolute", right: -32, top: "50%", transform: "translateY(-50%)", width: 22, height: 22, borderRadius: "50%",
+              background: "#fff", border: "1.5px solid #3B82F6", color: "#3B82F6", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 2px 6px rgba(0,0,0,0.18)" }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </div>
+        </>)}
       </div>
     );
   };
@@ -5511,10 +5557,36 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       </div>
     );
   };
+  // Mind-map connector: no stored coordinates — endpoints are recomputed from the
+  // two linked nodes' current bboxes every render, so the line re-routes live as
+  // either node is dragged. Anchors on the facing edge (right→left or left→right).
+  const renderLink = (it) => {
+    const d = it.data || {};
+    const from = items.find(i => i.id === d.fromId);
+    const to = items.find(i => i.id === d.toId);
+    if (!from || !to) return null;
+    const a = bboxOf(from), b = bboxOf(to);
+    const aCenterX = a.x + a.w / 2, bCenterX = b.x + b.w / 2;
+    const x1 = aCenterX <= bCenterX ? a.x + a.w : a.x;
+    const x2 = aCenterX <= bCenterX ? b.x : b.x + b.w;
+    const y1 = a.y + a.h / 2, y2 = b.y + b.h / 2;
+    const minX = Math.min(x1, x2) - 4, minY = Math.min(y1, y2) - 4;
+    const col = d.color || "#15151c";
+    return (
+      <svg key={it.id} width={Math.abs(x2 - x1) + 8} height={Math.abs(y2 - y1) + 8}
+        style={{ position: "absolute", left: minX, top: minY, overflow: "visible", pointerEvents: "none" }}>
+        <g transform={`translate(${-minX}, ${-minY})`} stroke={col} strokeWidth={selIds.includes(it.id) ? 2.3 : 1.5} strokeLinecap="round"
+          style={{ pointerEvents: tool === "select" ? "stroke" : "none", cursor: "pointer" }} onPointerDown={(e) => { if (tool !== "select") return; e.stopPropagation(); setSel(it.id); setSelIds([it.id]); }}>
+          <line x1={x1} y1={y1} x2={x2} y2={y2} />
+        </g>
+      </svg>
+    );
+  };
   const renderItem = (it) => {
     if (it.type === "draw") return renderPath(it);
     if (it.type === "arrow") return renderArrow(it);
     if (it.type === "comment") return renderComment(it);
+    if (it.type === "link") return renderLink(it);
     return renderBoxItem(it);
   };
 
@@ -5589,8 +5661,14 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">{alignIcon(dta.align || "left")}</svg>
             </div>
           )}
+          {selItem.type === "text" && (<>
+            {divider}
+            <div onClick={() => addMindmapBranch(selItem.id, "right")} title={de ? "Mindmap starten" : "Start a mind map"} style={iconBtnStyle}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="5" cy="6" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="18" cy="12" r="2.2"/><path d="M6.7 7.2L15.8 11M6.7 16.8L15.8 13"/></svg>
+            </div>
+          </>)}
         </>)}
-        {divider}
+        {selItem.type !== "link" && divider}
         <motion.div whileTap={{ scale: 0.88 }} onClick={() => deleteItem(selItem.id)} title={de ? "Löschen" : "Delete"}
           style={{ ...iconBtnStyle, color: "#ff8589" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
