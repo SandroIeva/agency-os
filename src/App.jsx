@@ -4864,13 +4864,38 @@ const WB_TEXT_SIZES = { s: 14, m: 18, l: 24, xl: 32 };
 // Auto-fit sizing for free-text nodes ("text" type only) — the box hugs the
 // content instead of staying at a fixed placement width, so mind-map connector
 // lines land right next to the letters instead of a fixed-box-sized gap.
-let __wbMeasureCanvas = null;
+//
+// Measured via a hidden DOM mirror, NOT canvas measureText(). Canvas text
+// metrics and real DOM/CSS text layout are two different rendering paths and
+// can disagree by a few px (subpixel rounding, kerning, and — critically — the
+// custom "Geist" font not being ready yet for canvas while the real textarea
+// already has it) — that mismatch was the actual cause of typed text getting
+// clipped/scrolled out of view even after disabling browser soft-wrap. A mirror
+// element uses the exact same layout engine as the real textarea/div, so it
+// can never drift out of sync with what's actually on screen.
+let __wbMirror = null;
+const wbGetMirror = () => {
+  if (__wbMirror) return __wbMirror;
+  const el = document.createElement("div");
+  el.style.position = "fixed";
+  el.style.top = "-9999px";
+  el.style.left = "-9999px";
+  el.style.visibility = "hidden";
+  el.style.whiteSpace = "pre";
+  el.style.pointerEvents = "none";
+  document.body.appendChild(el);
+  __wbMirror = el;
+  return el;
+};
 const wbMeasureLines = (text, fontSize, bold) => {
-  if (!__wbMeasureCanvas) __wbMeasureCanvas = document.createElement("canvas");
-  const ctx = __wbMeasureCanvas.getContext("2d");
-  ctx.font = `${bold ? 700 : 400} ${fontSize}px ${FONT}`;
+  const el = wbGetMirror();
+  el.style.fontFamily = FONT;
+  el.style.fontSize = fontSize + "px";
+  el.style.fontWeight = bold ? "700" : "400";
+  el.style.lineHeight = "1.4";
   const lines = (text || "").split("\n");
-  const width = Math.max(1, ...lines.map(l => ctx.measureText(l || " ").width));
+  el.textContent = text && text.length ? text : " ";
+  const width = Math.max(1, el.scrollWidth || el.getBoundingClientRect().width);
   return { width, lineCount: lines.length };
 };
 // 4 = the wrap div's own "padding: 2" on both left and right — keeping the fit
