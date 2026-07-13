@@ -4861,6 +4861,24 @@ const WB_STICKERS = {
 };
 const wbStickerUrl = (cat, file) => encodeURI(`/Open Stickers/PNG/${cat}/${file}`);
 const WB_TEXT_SIZES = { s: 14, m: 18, l: 24, xl: 32 };
+// Auto-fit sizing for free-text nodes ("text" type only) — the box hugs the
+// content instead of staying at a fixed placement width, so mind-map connector
+// lines land right next to the letters instead of a fixed-box-sized gap.
+let __wbMeasureCanvas = null;
+const wbMeasureLines = (text, fontSize, bold) => {
+  if (!__wbMeasureCanvas) __wbMeasureCanvas = document.createElement("canvas");
+  const ctx = __wbMeasureCanvas.getContext("2d");
+  ctx.font = `${bold ? 700 : 400} ${fontSize}px ${FONT}`;
+  const lines = (text || "").split("\n");
+  const width = Math.max(1, ...lines.map(l => ctx.measureText(l || " ").width));
+  return { width, lineCount: lines.length };
+};
+const WB_TEXT_H_PAD = 14, WB_TEXT_V_PAD = 10, WB_TEXT_MIN_W = 44;
+const wbFitTextBox = (text, sizeKey, bold) => {
+  const fontSize = WB_TEXT_SIZES[sizeKey] || WB_TEXT_SIZES.m;
+  const { width, lineCount } = wbMeasureLines(text, fontSize, bold);
+  return { w: Math.max(WB_TEXT_MIN_W, Math.round(width + WB_TEXT_H_PAD)), h: Math.round(lineCount * fontSize * 1.4 + WB_TEXT_V_PAD) };
+};
 const WB_SHAPE_TYPES = ["rect", "ellipse", "diamond", "triangle"];
 // Polygon points for svg-rendered shapes (diamond/triangle), in a w×h box.
 const wbShapePoints = (type, w, h) =>
@@ -5134,7 +5152,11 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     setSel(id); setEditing(id); setTool("select");
   };
   const placeText = (pt) => {
-    const id = addItemLocal("text", { x: pt.x, y: pt.y - 16, w: 260, h: 44, text: "", color: "#15151c" });
+    // Start sized for the placeholder ("Text hinzufügen" / "Add text") so an empty
+    // node isn't a sliver — typing then live-refits the box to the real content.
+    const ph = de ? "Text hinzufügen" : "Add text";
+    const box = wbFitTextBox(ph, "m", false);
+    const id = addItemLocal("text", { x: pt.x, y: pt.y - box.h / 2, w: box.w, h: box.h, text: "", color: "#15151c" });
     setSel(id); setEditing(id); setTool("select");
   };
   const placeSticker = (cat, file) => {
@@ -5167,10 +5189,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const addMindmapBranch = (sourceId, direction) => {
     const src = itemsRef.current.find(i => i.id === sourceId); if (!src) return;
     const sd = src.data || {};
-    const gap = 90, w = 200, h = 44;
-    const x = direction === "left" ? (sd.x || 0) - gap - w : (sd.x || 0) + (sd.w || 160) + gap;
-    const y = (sd.y || 0) + (sd.h || 44) / 2 - h / 2;
-    const id = addItemLocal("text", { x, y, w, h, text: "", color: sd.color || "#15151c", size: sd.size, bold: sd.bold });
+    const ph = de ? "Text hinzufügen" : "Add text";
+    const box = wbFitTextBox(ph, sd.size, sd.bold);
+    const gap = 70;
+    const x = direction === "left" ? (sd.x || 0) - gap - box.w : (sd.x || 0) + (sd.w || 160) + gap;
+    const y = (sd.y || 0) + (sd.h || 44) / 2 - box.h / 2;
+    const id = addItemLocal("text", { x, y, w: box.w, h: box.h, text: "", color: sd.color || "#15151c", size: sd.size, bold: sd.bold });
     addItemLocal("link", { fromId: sourceId, toId: id, color: "#15151c" });
     setSel(id); setEditing(id); setTool("select");
   };
@@ -5443,6 +5467,13 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       <textarea ref={focusEditArea} defaultValue={d.text || ""}
         onPointerDown={e => e.stopPropagation()}
         onBlur={(e) => commitText(it.id, e.target.value)}
+        onInput={it.type === "text" ? (e) => {
+          // Free-text nodes auto-fit their box to the typed content, live — this is
+          // what keeps mind-map connector lines snug against the text as you type
+          // instead of stopping at a fixed placement-time box edge.
+          const box = wbFitTextBox(e.target.value, d.size, d.bold);
+          patchItem(it.id, { w: box.w, h: box.h });
+        } : undefined}
         onKeyDown={(e) => {
           e.stopPropagation(); // keep global shortcuts away from typing
           if (e.key === "Escape") { e.preventDefault(); commitText(it.id, e.target.value); }
@@ -5475,7 +5506,9 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         ) : it.type === "emoji" ? (
           <div style={{ fontSize: Math.min(w, h) * 0.82, lineHeight: 1, userSelect: "none", pointerEvents: "none" }}>{d.text}</div>
         ) : textContent}
-        {isOnly && !isEdit && (
+        {/* Free-text nodes auto-fit to their content — no manual resize handle
+            (it would just fight the live auto-sizing on the next keystroke). */}
+        {isOnly && !isEdit && it.type !== "text" && (
           <div onPointerDown={(e) => { e.stopPropagation(); dragRef.current = { mode: "resize", id: it.id, base: { x, y, w, h } }; }}
             style={{ position: "absolute", right: -7, bottom: -7, width: 13, height: 13, borderRadius: 3, background: "#fff", border: "1.5px solid #3B82F6", cursor: "nwse-resize" }} />
         )}
@@ -5604,8 +5637,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (below) top = (b.y + b.h) * cam.s + cam.y + 14; // below when the element touches the header
     const cx = (b.x + b.w / 2) * cam.s + cam.x; // centre on the object
     const divider = <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.16)", margin: "0 3px" }} />;
+    // Free-text nodes auto-fit; when size/bold change, refit the box to the (unchanged) text.
+    const refitIfText = (patch) => selItem.type === "text" ? { ...patch, ...wbFitTextBox(dta.text, patch.size ?? dta.size, patch.bold ?? dta.bold) } : patch;
     const sizeBtn = (k) => (
-      <div key={k} onClick={() => setSelData({ size: k })}
+      <div key={k} onClick={() => setSelData(refitIfText({ size: k }))}
         style={{ padding: "3px 7px", borderRadius: 7, cursor: "pointer", fontSize: 11, fontFamily: FONT, fontWeight: 600,
           color: "#fff", background: (dta.size || (selItem.type === "text" ? "m" : "s")) === k ? "rgba(255,255,255,0.22)" : "transparent", textTransform: "uppercase" }}>{k}</div>
     );
@@ -5654,7 +5689,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         {hasText && (<>
           {divider}
           {sizeBtn("s")}{sizeBtn("m")}{sizeBtn("l")}{sizeBtn("xl")}
-          <div onClick={() => setSelData({ bold: !dta.bold })} title="Bold"
+          <div onClick={() => setSelData(refitIfText({ bold: !dta.bold }))} title="Bold"
             style={{ ...iconBtnStyle, background: dta.bold ? "rgba(255,255,255,0.22)" : "transparent", fontFamily: FONT, fontWeight: 800, fontSize: 13 }}>B</div>
           {selItem.type === "text" && (
             <div onClick={() => setSelData({ align: alignNext[dta.align || "left"] })} title={de ? "Ausrichtung" : "Alignment"} style={iconBtnStyle}>
