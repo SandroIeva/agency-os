@@ -4902,6 +4902,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const fileRef = useRef(null);
   const toolbarRef = useRef(null); // bottom toolbar — used to center the emoji picker over it
   const stickerBtnRef = useRef(null); // sticker toolbar button — the sticker picker centers on this
+  const emojiBtnRef = useRef(null); // emoji toolbar button — the emoji picker centers on this
   const commentAreaRef = useRef(null); // the comment textarea while a comment bubble is open
   const camRef = useRef(cam); camRef.current = cam;
   const itemsRef = useRef(items); itemsRef.current = items;
@@ -5960,7 +5961,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/></svg>
           </motion.div>
           {/* Emoji picker — line-icon smiley to match the other tools */}
-          <motion.div whileTap={{ scale: 0.9 }} onClick={() => setEmojiOpen(o => !o)} title="Emoji"
+          <motion.div ref={emojiBtnRef} whileTap={{ scale: 0.9 }} onClick={() => setEmojiOpen(o => !o)} title="Emoji"
             style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
               background: emojiOpen ? "#15151c" : "transparent", color: emojiOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><line x1="9" y1="9.5" x2="9.01" y2="9.5"/><line x1="15" y1="9.5" x2="15.01" y2="9.5"/></svg>
@@ -5995,13 +5996,17 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           const W = 340;
           const rawCx = bt ? bt.left + bt.width / 2 : window.innerWidth / 2;
           const cx = Math.min(Math.max(rawCx, W / 2 + 12), window.innerWidth - W / 2 - 12); // keep on-screen
-          const bottomPx = bt ? window.innerHeight - bt.top + 24 : 100; // 10px higher than before
+          const bottomPx = bt ? window.innerHeight - bt.top + 34 : 110; // 10px higher still
           return (
           <>
             <div onClick={() => setStickersOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
+            {/* Outer plain div owns left/bottom/translateX(-50%) positioning — framer-motion's
+                own transform (from the animate y/scale below) would otherwise clobber a
+                translateX set directly on the motion.div, so centering must happen one level up. */}
+            <div style={{ position: "fixed", left: cx, bottom: bottomPx, transform: "translateX(-50%)", zIndex: 5001, width: 340 }}>
             <motion.div initial={{ opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
               onPointerDown={e => e.stopPropagation()}
-              style={{ position: "fixed", left: cx, bottom: bottomPx, transform: "translateX(-50%)", zIndex: 5001, width: 340,
+              style={{ width: "100%",
                 background: darkMode ? "rgba(22,22,30,0.97)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.borderFaint}`, borderRadius: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.24)", overflow: "hidden", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
               <div style={{ display: "flex", gap: 4, padding: 8, borderBottom: `1px solid ${theme.borderFaint}` }}>
                 {Object.keys(WB_STICKERS).map(cat => {
@@ -6023,21 +6028,27 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
                 ))}
               </div>
             </motion.div>
+            </div>
           </>
           ); })(), document.body)}
 
       {/* Emoji picker — same centered-over-toolbar behaviour as the sticker picker */}
         {emojiOpen && createPortal((() => {
-          const tb = toolbarRef.current?.getBoundingClientRect();
-          const cx = tb ? tb.left + tb.width / 2 : window.innerWidth / 2;
-          const bottomPx = tb ? window.innerHeight - tb.top + 14 : 90;
+          const bt = emojiBtnRef.current?.getBoundingClientRect();
+          const W = 320;
+          const rawCx = bt ? bt.left + bt.width / 2 : window.innerWidth / 2;
+          const cx = Math.min(Math.max(rawCx, W / 2 + 12), window.innerWidth - W / 2 - 12); // keep on-screen
+          const bottomPx = bt ? window.innerHeight - bt.top + 34 : 110; // 10px higher, matches the sticker picker
           const EMOJI_TABS = [{ id: "smileys", icon: "😀" }, { id: "gestures", icon: "👋" }, { id: "hearts", icon: "❤️" }, { id: "objects", icon: "🎉" }];
           return (
           <>
             <div onClick={() => setEmojiOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
+            {/* Outer plain div owns left/bottom/translateX(-50%) — see the sticker picker's
+                comment above for why this can't live on the motion.div itself. */}
+            <div style={{ position: "fixed", left: cx, bottom: bottomPx, transform: "translateX(-50%)", zIndex: 5001, width: 320 }}>
             <motion.div initial={{ opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
               onPointerDown={e => e.stopPropagation()}
-              style={{ position: "fixed", left: cx, bottom: bottomPx, transform: "translateX(-50%)", zIndex: 5001, width: 320,
+              style={{ width: "100%",
                 background: darkMode ? "rgba(22,22,30,0.97)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.borderFaint}`, borderRadius: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.24)", overflow: "hidden", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
               <div style={{ display: "flex", gap: 4, padding: 8, borderBottom: `1px solid ${theme.borderFaint}` }}>
                 {EMOJI_TABS.map(tb2 => (
@@ -6053,6 +6064,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
                 ))}
               </div>
             </motion.div>
+            </div>
           </>
           ); })(), document.body)}
     </motion.div>
