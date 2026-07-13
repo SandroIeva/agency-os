@@ -5519,6 +5519,14 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     };
     const textContent = isEdit ? (
       <textarea ref={focusEditArea} defaultValue={d.text || ""}
+        // Free-text nodes size the box to exactly fit the measured (unwrapped)
+        // text. If the browser were still allowed to soft-wrap at that width, any
+        // tiny mismatch between canvas measureText() and real font rendering could
+        // push the last word onto a hidden second line the box wasn't tall enough
+        // to show — which read as "the words are gone" while typing. wrap="off"
+        // makes line count 100% determined by real \n characters (Shift+Enter),
+        // matching what wbFitTextBox actually measures.
+        wrap={it.type === "text" ? "off" : "soft"}
         onPointerDown={e => e.stopPropagation()}
         onBlur={(e) => commitText(it.id, e.target.value)}
         onInput={it.type === "text" ? (e) => {
