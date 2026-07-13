@@ -4898,11 +4898,15 @@ const wbMeasureLines = (text, fontSize, bold) => {
   const width = Math.max(1, el.scrollWidth || el.getBoundingClientRect().width);
   return { width, lineCount: lines.length };
 };
-// 4 = the wrap div's own "padding: 2" on both left and right — keeping the fit
-// buffer exactly equal to that (no extra slack) is what makes a mind-map
-// connector line land the same visual distance from the text on both ends;
-// any bigger buffer only shows up on the trailing side of left-aligned text.
-const WB_TEXT_H_PAD = 4, WB_TEXT_V_PAD = 4, WB_TEXT_MIN_W = 24;
+// WB_TEXT_PAD is the wrap div's own CSS padding on all four sides. Keeping the
+// fit buffer (H/V_PAD) equal to exactly 2× that — no extra unaccounted slack —
+// is what makes a mind-map connector line land the same visual distance from
+// the text on both ends; any bigger buffer only shows up on the trailing side
+// of left-aligned text. Bumped from 2 to 6 (still symmetric) for a bit more
+// breathing room around the text, per feedback that the tightest version felt
+// too cramped.
+const WB_TEXT_PAD = 6;
+const WB_TEXT_H_PAD = WB_TEXT_PAD * 2, WB_TEXT_V_PAD = WB_TEXT_PAD * 2, WB_TEXT_MIN_W = 28;
 const WB_TEXT_SIZE_ORDER = ["s", "m", "l", "xl"];
 const wbFitTextBox = (text, sizeKey, bold) => {
   const fontSize = WB_TEXT_SIZES[sizeKey] || WB_TEXT_SIZES.m;
@@ -5098,7 +5102,14 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const commitText = (id, text) => {
     setEditing(null);
     const it = itemsRef.current.find(i => i.id === id); if (!it) return;
-    const data = { ...it.data, text };
+    let data = { ...it.data, text };
+    // Recompute the box size from the FINAL text right here, rather than trusting
+    // whatever w/h the last onInput happened to patch — onInput and this commit
+    // (from a mouse click elsewhere) can race, and itemsRef.current occasionally
+    // lagged one render behind, committing a box sized for an earlier, shorter
+    // draft while the (correct, complete) text was kept. This was the real cause
+    // of text nodes visually losing their tail end the moment you clicked away.
+    if (it.type === "text") data = { ...data, ...wbFitTextBox(text, data.size, data.bold) };
     setItems(prev => prev.map(i => i.id === id ? { ...i, data } : i));
     supabase.from("whiteboard_items").update({ data }).eq("id", id).then(() => {});
   };
@@ -5530,7 +5541,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (it.type === "rect") wrap = { ...wrap, background: fill, border: noBorder ? "none" : `2px solid ${stroke}`, borderRadius: 12, padding: 12, display: "flex", alignItems: "center", justifyContent: "center" };
     if (it.type === "ellipse") wrap = { ...wrap, background: fill, border: noBorder ? "none" : `2px solid ${stroke}`, borderRadius: "50%", padding: 16, display: "flex", alignItems: "center", justifyContent: "center" };
     if (isSvgShape) wrap = { ...wrap, background: "transparent", padding: 0 };
-    if (it.type === "text") wrap = { ...wrap, padding: 2 };
+    if (it.type === "text") wrap = { ...wrap, padding: WB_TEXT_PAD };
     if (it.type === "image") wrap = { ...wrap, borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 22px rgba(0,0,0,0.12)" };
     if (it.type === "sticker") wrap = { ...wrap, padding: 0 };
     if (it.type === "emoji") wrap = { ...wrap, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" };
