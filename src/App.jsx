@@ -4876,6 +4876,8 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [tool, setTool] = useState("select");      // select | hand | pen | sticky | rect | ellipse | arrow | text
   const [cam, setCam] = useState({ x: 0, y: 0, s: 1 });
   const [sel, setSel] = useState(null);
+  const [selIds, setSelIds] = useState([]); // multi-selection (marquee); always includes `sel` when single
+  const [marquee, setMarquee] = useState(null); // {x,y,w,h} world-space selection rectangle
   const [editing, setEditing] = useState(null);
   const [tempStroke, setTempStroke] = useState(null);
   const [tempItem, setTempItem] = useState(null);
@@ -4904,6 +4906,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const camRef = useRef(cam); camRef.current = cam;
   const itemsRef = useRef(items); itemsRef.current = items;
   const editingRef = useRef(editing); editingRef.current = editing;
+  const selIdsRef = useRef(selIds); selIdsRef.current = selIds;
   const editAreaRef = useRef(null); // the live <textarea> DOM node while editing
 
   // ── Timer (stopwatch, local) ──
@@ -5143,6 +5146,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     setSel(id); setCommentOpenId(id); setTool("select");
   };
 
+  // A single click/select keeps selIds in sync (marquee sets selIds directly with sel=null).
+  useEffect(() => { if (sel) setSelIds(prev => (prev.length === 1 && prev[0] === sel) ? prev : [sel]); }, [sel]);
+  const rectsIntersect = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
   // ── Canvas pointer handlers ──
   const onCanvasPointerDown = (e) => {
     if (e.button !== 0 || !board) return;
@@ -5157,9 +5164,11 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (tool === "comment") { placeComment(pt); return; }
     if (WB_SHAPE_TYPES.includes(tool)) { dragRef.current = { mode: "create", type: tool, sx: pt.x, sy: pt.y }; setTempItem({ type: tool, x: pt.x, y: pt.y, w: 1, h: 1 }); return; }
     if (tool === "arrow") { dragRef.current = { mode: "arrow" }; setTempItem({ type: "arrow", x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y }); return; }
-    // select tool on empty canvas: deselect + pan
-    setSel(null); setEditing(null);
-    dragRef.current = { mode: "pan", sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y };
+    // select tool on empty canvas: start a marquee (drag a box to select multiple).
+    // Panning is done with the hand tool (or the mouse wheel).
+    setSel(null); setEditing(null); setSelIds([]);
+    dragRef.current = { mode: "marquee", sx: pt.x, sy: pt.y };
+    setMarquee({ x: pt.x, y: pt.y, w: 0, h: 0 });
   };
   const onCanvasPointerMove = (e) => {
     const d = dragRef.current; if (!d) return;
@@ -5168,6 +5177,22 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (d.mode === "draw") { setTempStroke(s => s ? { ...s, points: [...s.points, [pt.x, pt.y]] } : s); return; }
     if (d.mode === "create") { setTempItem({ type: d.type, x: Math.min(d.sx, pt.x), y: Math.min(d.sy, pt.y), w: Math.abs(pt.x - d.sx), h: Math.abs(pt.y - d.sy) }); return; }
     if (d.mode === "arrow") { setTempItem(t => t ? { ...t, x2: pt.x, y2: pt.y } : t); return; }
+    if (d.mode === "marquee") {
+      const rect = { x: Math.min(d.sx, pt.x), y: Math.min(d.sy, pt.y), w: Math.abs(pt.x - d.sx), h: Math.abs(pt.y - d.sy) };
+      d.rect = rect; setMarquee(rect); return;
+    }
+    if (d.mode === "groupmove") {
+      const dx = pt.x - d.startX, dy = pt.y - d.startY;
+      setItems(prev => prev.map(i => {
+        const base = d.bases[i.id]; if (!base) return i;
+        let patch;
+        if (i.type === "arrow") patch = { x1: base.x1 + dx, y1: base.y1 + dy, x2: base.x2 + dx, y2: base.y2 + dy };
+        else if (i.type === "draw") patch = { ox: (base.ox || 0) + dx, oy: (base.oy || 0) + dy };
+        else patch = { x: (base.x || 0) + dx, y: (base.y || 0) + dy };
+        return { ...i, data: { ...i.data, ...patch } };
+      }));
+      d.moved = true; return;
+    }
     if (d.mode === "move") {
       const nx = pt.x - d.grabX, ny = pt.y - d.grabY;
       let patch;
@@ -5204,6 +5229,21 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       }
       setTool("select");
     }
+    if (d?.mode === "marquee") {
+      const m = d.rect;
+      if (m && (m.w > 4 || m.h > 4)) {
+        const hits = itemsRef.current.filter(it => it.type !== "comment" && rectsIntersect(bboxOf(it), m)).map(it => it.id);
+        setSelIds(hits);
+        setSel(hits.length === 1 ? hits[0] : null);
+      } else { setSel(null); setSelIds([]); }
+      setMarquee(null);
+    }
+    if (d?.mode === "groupmove" && d.moved) {
+      Object.keys(d.bases).forEach(id => {
+        const it = itemsRef.current.find(i => i.id === id);
+        if (it) supabase.from("whiteboard_items").update({ data: it.data }).eq("id", id).then(() => {});
+      });
+    }
     if (d?.persistId && d.final) {
       const it = itemsRef.current.find(i => i.id === d.persistId);
       if (it) supabase.from("whiteboard_items").update({ data: { ...it.data, ...d.final } }).eq("id", d.persistId).then(() => {});
@@ -5221,6 +5261,15 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (tool !== "select" || e.button !== 0) return;
     e.stopPropagation();
     if (editing === it.id) return; // active editor: let the textarea handle it
+    // Grabbing an element that's part of a multi-selection moves the whole group.
+    const group = selIdsRef.current.length > 1 && selIdsRef.current.includes(it.id);
+    if (group) {
+      const pt = toWorld(e);
+      const bases = {};
+      selIdsRef.current.forEach(id => { const t = itemsRef.current.find(i => i.id === id); if (t) bases[id] = { ...t.data }; });
+      dragRef.current = { mode: "groupmove", startX: pt.x, startY: pt.y, bases };
+      return;
+    }
     const now = Date.now();
     if (lastClickRef.current.id === it.id && now - lastClickRef.current.t < 400 && it.type !== "image" && it.type !== "sticker") {
       lastClickRef.current = { id: null, t: 0 };
@@ -5274,8 +5323,11 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const onKey = (e) => {
       if (/^(INPUT|TEXTAREA)$/.test(e.target?.tagName || "") || e.target?.isContentEditable) return;
       if (editingRef.current) return; // never delete the element while its text is being edited
-      if ((e.key === "Backspace" || e.key === "Delete") && sel) { e.preventDefault(); deleteItem(sel); }
-      if (e.key === "Escape") { setSel(null); setEditing(null); }
+      if (e.key === "Backspace" || e.key === "Delete") {
+        const ids = selIdsRef.current.length ? [...selIdsRef.current] : (sel ? [sel] : []);
+        if (ids.length) { e.preventDefault(); ids.forEach(id => deleteItem(id)); setSelIds([]); }
+      }
+      if (e.key === "Escape") { setSel(null); setSelIds([]); setEditing(null); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -5330,7 +5382,8 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   };
   const renderBoxItem = (it) => {
     const d = it.data || {};
-    const isSel = sel === it.id;
+    const isSel = selIds.includes(it.id);
+    const isOnly = selIds.length === 1 && isSel; // resize handle only for a single selection
     const isEdit = editing === it.id;
     const isShape = WB_SHAPE_TYPES.includes(it.type);
     const isSvgShape = it.type === "diamond" || it.type === "triangle";
@@ -5391,7 +5444,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         ) : it.type === "emoji" ? (
           <div style={{ fontSize: Math.min(w, h) * 0.82, lineHeight: 1, userSelect: "none", pointerEvents: "none" }}>{d.text}</div>
         ) : textContent}
-        {isSel && !isEdit && (
+        {isOnly && !isEdit && (
           <div onPointerDown={(e) => { e.stopPropagation(); dragRef.current = { mode: "resize", id: it.id, base: { x, y, w, h } }; }}
             style={{ position: "absolute", right: -7, bottom: -7, width: 13, height: 13, borderRadius: 3, background: "#fff", border: "1.5px solid #3B82F6", cursor: "nwse-resize" }} />
         )}
@@ -5410,7 +5463,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     return (
       <svg key={it.id} width={Math.max(...xs) - minX + pad * 2} height={Math.max(...ys) - minY + pad * 2}
         style={{ position: "absolute", left: minX + ox - pad, top: minY + oy - pad, overflow: "visible", pointerEvents: "none" }}>
-        <path d={path} stroke={d.color || "#15151c"} strokeWidth={(d.sw || 2.5) + (sel === it.id ? 0.8 : 0)} fill="none" strokeLinecap="round" strokeLinejoin="round"
+        <path d={path} stroke={d.color || "#15151c"} strokeWidth={(d.sw || 2.5) + (selIds.includes(it.id) ? 0.8 : 0)} fill="none" strokeLinecap="round" strokeLinejoin="round"
           style={{ pointerEvents: "stroke", cursor: "move" }} onPointerDown={(e) => onItemPointerDown(e, it)} />
       </svg>
     );
@@ -5427,7 +5480,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     return (
       <svg key={it.id} width={Math.abs(x2 - x1) + 20} height={Math.abs(y2 - y1) + 20}
         style={{ position: "absolute", left: minX, top: minY, overflow: "visible", pointerEvents: "none" }}>
-        <g transform={`translate(${-minX}, ${-minY})`} stroke={col} strokeWidth={(d.sw || 2.5) + (sel === it.id ? 0.8 : 0)} strokeLinecap="round" fill="none"
+        <g transform={`translate(${-minX}, ${-minY})`} stroke={col} strokeWidth={(d.sw || 2.5) + (selIds.includes(it.id) ? 0.8 : 0)} strokeLinecap="round" fill="none"
           style={{ pointerEvents: "stroke", cursor: "move" }} onPointerDown={(e) => onItemPointerDown(e, it)}>
           <line x1={x1} y1={y1} x2={x2} y2={y2} />
           <line x1={x2} y1={y2} x2={hx1} y2={hy1} />
@@ -5450,7 +5503,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         <div style={{ position: "relative", width: 34, height: 34, borderRadius: "50% 50% 50% 3px",
           background: "#15151c", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: 13, fontFamily: FONT, fontWeight: 600, boxShadow: "0 4px 12px rgba(0,0,0,0.28)",
-          border: sel === it.id ? "2px solid #3B82F6" : "2px solid #fff" }}>
+          border: selIds.includes(it.id) ? "2px solid #3B82F6" : "2px solid #fff" }}>
           {initial}
           {d.text ? null : <span style={{ position: "absolute", top: -3, right: -3, width: 9, height: 9, borderRadius: "50%", background: "#F59E0B", border: "1.5px solid #fff" }} />}
         </div>
@@ -5607,11 +5660,15 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
             return <svg width={Math.max(...xs) - minX + 16} height={Math.max(...ys) - minY + 16} style={{ position: "absolute", left: minX - 8, top: minY - 8, overflow: "visible", pointerEvents: "none" }}>
               <path d={path} stroke={tempStroke.color} strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>;
           })()}
-          {/* Uniform selection frame around pen strokes (like images/shapes) */}
-          {selItem?.type === "draw" && !editing && (() => {
-            const b = bboxOf(selItem);
-            return <div style={{ position: "absolute", left: b.x - 6, top: b.y - 6, width: b.w + 12, height: b.h + 12, border: "1.5px solid #3B82F6", borderRadius: 6, pointerEvents: "none" }} />;
-          })()}
+          {/* Uniform selection frame around selected pen strokes (like images/shapes) */}
+          {!editing && items.filter(i => i.type === "draw" && selIds.includes(i.id)).map(i => {
+            const b = bboxOf(i);
+            return <div key={"df" + i.id} style={{ position: "absolute", left: b.x - 6, top: b.y - 6, width: b.w + 12, height: b.h + 12, border: "1.5px solid #3B82F6", borderRadius: 6, pointerEvents: "none" }} />;
+          })}
+          {/* Marquee selection rectangle */}
+          {marquee && (marquee.w > 1 || marquee.h > 1) && (
+            <div style={{ position: "absolute", left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h, border: "1.5px solid #3B82F6", background: "rgba(59,130,246,0.10)", pointerEvents: "none" }} />
+          )}
           {/* Arrow endpoint handles — drag to re-route the arrow */}
           {selItem?.type === "arrow" && tool === "select" && (() => {
             const d = selItem.data || {};
