@@ -5951,9 +5951,11 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
             toolbar / zoom controls, which are siblings of the whole canvas. So the
             hard bottom edge of the grid melts into the solid canvas colour without
             ever dimming the content or the UI. pointer-events:none = fully passthrough.
-            theme.bg is a 6-digit hex → 8-digit alpha suffixes (00 transparent … ff opaque). */}
-        <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 160, pointerEvents: "none",
-          background: `linear-gradient(to bottom, ${theme.bg}00 0%, ${theme.bg}00 32%, ${theme.bg}b0 70%, ${theme.bg}ff 100%)` }} />
+            Height is a % of the canvas so the fade is a tall, clearly-visible band that
+            scales with the board (a short 160px band was barely perceptible on the very
+            faint dots). theme.bg is a 6-digit hex → 8-digit alpha suffixes (00…ff). */}
+        <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: "36%", minHeight: 200, pointerEvents: "none",
+          background: `linear-gradient(to bottom, ${theme.bg}00 0%, ${theme.bg}40 42%, ${theme.bg}c0 72%, ${theme.bg}ff 100%)` }} />
         <div style={{ position: "absolute", left: 0, top: 0, transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`, transformOrigin: "0 0", pointerEvents: tool === "select" ? "auto" : "none" }}>
           {/* Mind-map group frame — hovering a connected text node outlines the
               whole connected group (Figma/FigJam convention), rendered behind
