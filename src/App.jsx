@@ -29078,9 +29078,15 @@ export default function CircularMenu() {
                           cursor: "pointer",
                           fontSize: 15, fontFamily: FONT, fontWeight: 500,
                           letterSpacing: 0,
-                          background: isActive ? "rgba(7, 13, 34, 0.80)" : "transparent",
+                          // Selected pill is INVERTED in dark mode: a light background with
+                          // anthracite text (instead of the dark-navy pill), so the active
+                          // category reads clearly against the dark glass. Light mode keeps the
+                          // dark pill with white text.
+                          background: isActive
+                            ? (darkMode ? "rgba(244,244,247,0.95)" : "rgba(7, 13, 34, 0.80)")
+                            : "transparent",
                           color: isActive
-                            ? "rgba(255,255,255,0.90)"
+                            ? (darkMode ? "#15151c" : "rgba(255,255,255,0.90)")
                             : (darkMode ? "rgba(255,255,255,0.80)" : "rgba(0,0,0,0.80)"),
                           // Silky ease-out curve — quick start, very slow tail. Feels like glass.
                           transition: "background 0.7s cubic-bezier(0.16, 1, 0.3, 1), color 0.7s cubic-bezier(0.16, 1, 0.3, 1)",
