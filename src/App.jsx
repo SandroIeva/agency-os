@@ -5942,20 +5942,19 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         onPointerLeave={() => setHoverId(null)}
         onDrop={(e) => { e.preventDefault(); handleImageFiles(e.dataTransfer.files, toWorld(e)); }}
         onDragOver={(e) => e.preventDefault()}
-        style={{ position: "absolute", inset: 0, cursor: cursorForTool, touchAction: "none",
+        style={{ position: "absolute", inset: 0, cursor: cursorForTool, touchAction: "none" }}>
+        {/* Dot grid on its own layer so it can be MASKED (not overlaid). A CSS mask
+            fades the dots' own alpha to zero toward the bottom, so they genuinely
+            dissolve into the solid canvas colour with no hard edge — and, unlike a
+            coloured overlay gradient, there's no rectangle/colour seam and nothing to
+            match. It's the first child (behind the transformed item layer) and
+            pointer-events:none, so items, the toolbar and the zoom controls (all
+            painted later / outside the canvas) are completely unaffected. */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none",
           backgroundImage: `radial-gradient(circle, ${darkMode ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.10)"} 1px, transparent 1px)`,
-          backgroundSize: `${24 * cam.s}px ${24 * cam.s}px`, backgroundPosition: `${cam.x}px ${cam.y}px` }}>
-        {/* Bottom fade of the DOT GRID only. It's the first child of the canvas div
-            (which paints the dots) and sits BEFORE the transformed item layer, so in
-            paint order it covers the dots but is behind every item — and behind the
-            toolbar / zoom controls, which are siblings of the whole canvas. So the
-            hard bottom edge of the grid melts into the solid canvas colour without
-            ever dimming the content or the UI. pointer-events:none = fully passthrough.
-            Height is a % of the canvas so the fade is a tall, clearly-visible band that
-            scales with the board (a short 160px band was barely perceptible on the very
-            faint dots). theme.bg is a 6-digit hex → 8-digit alpha suffixes (00…ff). */}
-        <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: "36%", minHeight: 200, pointerEvents: "none",
-          background: `linear-gradient(to bottom, ${theme.bg}00 0%, ${theme.bg}40 42%, ${theme.bg}c0 72%, ${theme.bg}ff 100%)` }} />
+          backgroundSize: `${24 * cam.s}px ${24 * cam.s}px`, backgroundPosition: `${cam.x}px ${cam.y}px`,
+          WebkitMaskImage: "linear-gradient(to bottom, #000 0%, #000 46%, rgba(0,0,0,0.35) 78%, transparent 97%)",
+          maskImage: "linear-gradient(to bottom, #000 0%, #000 46%, rgba(0,0,0,0.35) 78%, transparent 97%)" }} />
         <div style={{ position: "absolute", left: 0, top: 0, transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`, transformOrigin: "0 0", pointerEvents: tool === "select" ? "auto" : "none" }}>
           {/* Mind-map group frame — hovering a connected text node outlines the
               whole connected group (Figma/FigJam convention), rendered behind
