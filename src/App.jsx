@@ -5945,6 +5945,15 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         style={{ position: "absolute", inset: 0, cursor: cursorForTool, touchAction: "none",
           backgroundImage: `radial-gradient(circle, ${darkMode ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.10)"} 1px, transparent 1px)`,
           backgroundSize: `${24 * cam.s}px ${24 * cam.s}px`, backgroundPosition: `${cam.x}px ${cam.y}px` }}>
+        {/* Bottom fade of the DOT GRID only. It's the first child of the canvas div
+            (which paints the dots) and sits BEFORE the transformed item layer, so in
+            paint order it covers the dots but is behind every item — and behind the
+            toolbar / zoom controls, which are siblings of the whole canvas. So the
+            hard bottom edge of the grid melts into the solid canvas colour without
+            ever dimming the content or the UI. pointer-events:none = fully passthrough.
+            theme.bg is a 6-digit hex → 8-digit alpha suffixes (00 transparent … ff opaque). */}
+        <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 160, pointerEvents: "none",
+          background: `linear-gradient(to bottom, ${theme.bg}00 0%, ${theme.bg}00 32%, ${theme.bg}b0 70%, ${theme.bg}ff 100%)` }} />
         <div style={{ position: "absolute", left: 0, top: 0, transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`, transformOrigin: "0 0", pointerEvents: tool === "select" ? "auto" : "none" }}>
           {/* Mind-map group frame — hovering a connected text node outlines the
               whole connected group (Figma/FigJam convention), rendered behind
@@ -6220,16 +6229,6 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           </div>
         </div>
       </div>
-
-      {/* Bottom fade — the dot grid otherwise ends in a hard horizontal edge at the
-          bottom of the viewport (right where the toolbar sits); this gradient melts
-          it into the solid canvas colour so it reads as fading out, not cut off.
-          pointer-events:none so it never intercepts canvas interaction, and it sits
-          below the toolbar (later in the DOM) so controls stay crisp on top. */}
-      {/* theme.bg is always a 6-digit hex, so append an 8-digit alpha suffix:
-          00 = transparent, b8 ≈ 0.72, ff = opaque. */}
-      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 150, pointerEvents: "none", zIndex: 6,
-        background: `linear-gradient(to bottom, ${theme.bg}00 0%, ${theme.bg}00 34%, ${theme.bg}b8 74%, ${theme.bg}ff 100%)` }} />
 
       {/* Bottom toolbar */}
       <div ref={toolbarRef} style={{ position: "absolute", left: "50%", bottom: 22, transform: "translateX(-50%)", pointerEvents: "auto" }} onPointerDown={e => e.stopPropagation()}>
