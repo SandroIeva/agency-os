@@ -4895,7 +4895,11 @@ const wbMeasureLines = (text, fontSize, bold) => {
   el.style.lineHeight = "1.4";
   const lines = (text || "").split("\n");
   el.textContent = text && text.length ? text : " ";
-  const width = Math.max(1, el.scrollWidth || el.getBoundingClientRect().width);
+  // getBoundingClientRect gives the *fractional* width; scrollWidth is floored to
+  // an integer and can therefore land up to ~1px short — with the box hugging the
+  // text that was enough to clip. Take the fractional width and round UP so the
+  // box is never narrower than the real glyphs.
+  const width = Math.max(1, Math.ceil(el.getBoundingClientRect().width));
   return { width, lineCount: lines.length };
 };
 // WB_TEXT_PAD is the wrap div's own CSS padding on all four sides. Keeping the
@@ -4911,7 +4915,13 @@ const WB_TEXT_SIZE_ORDER = ["s", "m", "l", "xl"];
 const wbFitTextBox = (text, sizeKey, bold) => {
   const fontSize = WB_TEXT_SIZES[sizeKey] || WB_TEXT_SIZES.m;
   const { width, lineCount } = wbMeasureLines(text, fontSize, bold);
-  return { w: Math.max(WB_TEXT_MIN_W, Math.round(width + WB_TEXT_H_PAD)), h: Math.round(lineCount * fontSize * 1.4 + WB_TEXT_V_PAD) };
+  // Safety buffer (~a third of a character) on top of the measured width. The
+  // mirror and the real textarea are the same engine, but caret width, subpixel
+  // hinting and font-loading timing can still differ by a hair — a small buffer
+  // guarantees the text is never clipped, at the cost of a barely-visible bit of
+  // trailing slack. Correctness of the text beats a perfectly tight box.
+  const buf = Math.ceil(fontSize * 0.35);
+  return { w: Math.max(WB_TEXT_MIN_W, Math.ceil(width) + WB_TEXT_H_PAD + buf), h: Math.round(lineCount * fontSize * 1.4 + WB_TEXT_V_PAD) };
 };
 const WB_SHAPE_TYPES = ["rect", "ellipse", "diamond", "triangle"];
 // Polygon points for svg-rendered shapes (diamond/triangle), in a w×h box.
@@ -5567,10 +5577,17 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         onBlur={(e) => commitText(it.id, e.target.value)}
         onInput={it.type === "text" ? (e) => {
           // Free-text nodes auto-fit their box to the typed content, live — this is
-          // what keeps mind-map connector lines snug against the text as you type
-          // instead of stopping at a fixed placement-time box edge.
-          const box = wbFitTextBox(e.target.value, d.size, d.bold);
-          patchItem(it.id, { w: box.w, h: box.h });
+          // what keeps mind-map connector lines snug against the text as you type.
+          const ta = e.target;
+          const box = wbFitTextBox(ta.value, d.size, d.bold);
+          // Belt-and-suspenders: never let the box be narrower than what the live
+          // textarea itself reports it needs (scrollWidth = full content width with
+          // wrap=off, measured on the SAME element that draws the text, so it can't
+          // disagree). This makes it impossible for typed text to scroll out of view
+          // mid-word even if the mirror measurement is a hair off. It only grows
+          // while editing; commitText snaps back to the tight fit on blur.
+          const need = ta.scrollWidth + WB_TEXT_H_PAD;
+          patchItem(it.id, { w: Math.max(box.w, need), h: box.h });
         } : undefined}
         onKeyDown={(e) => {
           e.stopPropagation(); // keep global shortcuts away from typing
@@ -5582,7 +5599,17 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         }}
         style={{ ...textStyle, cursor: "text", position: isSvgShape ? "absolute" : "static", width: isSvgShape ? "76%" : "100%", height: isSvgShape ? "60%" : "100%", top: isSvgShape ? "50%" : undefined, left: isSvgShape ? "12%" : undefined, transform: isSvgShape ? "translateY(-50%)" : undefined }} />
     ) : (
-      <div style={{ ...textStyle, whiteSpace: "pre-wrap", wordBreak: "break-word",
+      // Free-text nodes render with `white-space: pre` (NOT pre-wrap) and visible
+      // overflow: the box is auto-fitted to the text, and a wrapping display was
+      // the real "a whole word disappears" bug — if the box came out even 1px too
+      // narrow, pre-wrap shoved the last word onto a second line that the 1-line-
+      // tall box then hid. `pre` never reflows (lines are exactly what was typed,
+      // Enter = newline) and visible overflow means text can never be clipped even
+      // if the fit is a hair off. Sticky notes / shapes keep wrapping (fixed width).
+      <div style={{ ...textStyle,
+        whiteSpace: it.type === "text" ? "pre" : "pre-wrap",
+        wordBreak: it.type === "text" ? "normal" : "break-word",
+        overflow: it.type === "text" ? "visible" : "hidden",
         display: isShape ? "flex" : "block", alignItems: "center", justifyContent: "center",
         userSelect: "none", pointerEvents: "none",
         position: isSvgShape ? "absolute" : "static", left: isSvgShape ? "12%" : undefined, top: isSvgShape ? "50%" : undefined, width: isSvgShape ? "76%" : "100%", height: isSvgShape ? "auto" : "100%", transform: isSvgShape ? "translateY(-50%)" : undefined,
