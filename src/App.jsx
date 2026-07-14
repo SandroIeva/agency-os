@@ -4950,6 +4950,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [stickerCat, setStickerCat] = useState("Life");
   const [emojiOpen, setEmojiOpen] = useState(false);   // emoji picker above the toolbar
   const [emojiCat, setEmojiCat] = useState("smileys");
+  const [imgMenuOpen, setImgMenuOpen] = useState(false); // image button's Upload / Assets choice menu
+  const [assetsOpen, setAssetsOpen] = useState(false);   // Assets image picker panel above the toolbar
+  const [assetImages, setAssetImages] = useState([]);    // org's uploaded images (user_files)
+  const [assetsLoading, setAssetsLoading] = useState(false);
   const [commentOpenId, setCommentOpenId] = useState(null); // comment pin whose bubble is open
   const [wbColorPop, setWbColorPop] = useState(null); // format-bar color overlay: null | "color" | "fill"
   const [commentDraft, setCommentDraft] = useState(""); // controlled text of the open comment
@@ -4966,6 +4970,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const toolbarRef = useRef(null); // bottom toolbar — used to center the emoji picker over it
   const stickerBtnRef = useRef(null); // sticker toolbar button — the sticker picker centers on this
   const emojiBtnRef = useRef(null); // emoji toolbar button — the emoji picker centers on this
+  const imgBtnRef = useRef(null); // image toolbar button — the Upload/Assets menu & picker center on this
   const commentAreaRef = useRef(null); // the comment textarea while a comment bubble is open
   const camRef = useRef(cam); camRef.current = cam;
   const itemsRef = useRef(items); itemsRef.current = items;
@@ -5488,16 +5493,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     return () => window.removeEventListener("keydown", onKey);
   }); // eslint-disable-line
 
-  // ── Images: upload via toolbar or drop ──
-  const handleImageFiles = async (files, at) => {
-    const file = Array.from(files || []).find(f => f.type.startsWith("image/"));
-    if (!file || !board || !userOrg?.id) return;
-    const ext = (file.name.split(".").pop() || "png").toLowerCase();
-    const path = `whiteboards/${userOrg.id}/${crypto.randomUUID()}.${ext}`;
-    const { error } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type });
-    if (error) { alert((de ? "Bild-Upload fehlgeschlagen: " : "Image upload failed: ") + error.message); return; }
-    const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
-    const url = pub.publicUrl;
+  // ── Images: upload via toolbar, drop, or pick from Assets ──
+  // Drop an image onto the board from a public URL — sizes it to its natural
+  // aspect ratio (capped at 420px wide) and centres it on the viewport (or at a
+  // given world point for drops). Shared by uploads and the Assets picker.
+  const addImageFromUrl = (url, at) => {
+    if (!url) return;
     const img = new Image();
     img.onload = () => {
       const k = Math.min(1, 420 / img.naturalWidth);
@@ -5511,8 +5512,47 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       const id = addItemLocal("image", { x: center.x - w / 2, y: center.y - h / 2, w, h, src: url });
       setSel(id);
     };
+    img.onerror = () => {
+      // Fall back to a sane default box if the image can't be measured (e.g. CORS
+      // on an external asset) — better a placed image than a silent no-op.
+      let center = at;
+      if (!center && canvasRef.current) {
+        const r = canvasRef.current.getBoundingClientRect();
+        const c = camRef.current;
+        center = { x: (r.width / 2 - c.x) / c.s, y: (r.height / 2 - c.y) / c.s };
+      }
+      center = center || { x: 0, y: 0 };
+      const id = addItemLocal("image", { x: center.x - 160, y: center.y - 120, w: 320, h: 240, src: url });
+      setSel(id);
+    };
     img.src = url;
   };
+  const handleImageFiles = async (files, at) => {
+    const file = Array.from(files || []).find(f => f.type.startsWith("image/"));
+    if (!file || !board || !userOrg?.id) return;
+    const ext = (file.name.split(".").pop() || "png").toLowerCase();
+    const path = `whiteboards/${userOrg.id}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type });
+    if (error) { alert((de ? "Bild-Upload fehlgeschlagen: " : "Image upload failed: ") + error.message); return; }
+    const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
+    addImageFromUrl(pub.publicUrl, at);
+  };
+  // Assets picker: the org's already-uploaded image files (same source as the
+  // Assets view — the user_files table, images only). Loaded lazily the first
+  // time the picker is opened.
+  const loadAssetImages = async () => {
+    if (!userOrg?.id) return;
+    setAssetsLoading(true);
+    const { data, error } = await supabase.from("user_files")
+      .select("id,name,public_url,mime_type,created_at")
+      .eq("org_id", userOrg.id)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    setAssetsLoading(false);
+    if (error) { console.warn("[wb] asset load failed:", error.message); setAssetImages([]); return; }
+    setAssetImages((data || []).filter(f => (f.mime_type || "").startsWith("image/") && f.public_url));
+  };
+  const openAssetsPicker = () => { setImgMenuOpen(false); setAssetsOpen(true); loadAssetImages(); };
 
   // ── Rendering ──
   // Focus the edit textarea reliably (autoFocus alone can lose the race against
@@ -6181,6 +6221,16 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         </div>
       </div>
 
+      {/* Bottom fade — the dot grid otherwise ends in a hard horizontal edge at the
+          bottom of the viewport (right where the toolbar sits); this gradient melts
+          it into the solid canvas colour so it reads as fading out, not cut off.
+          pointer-events:none so it never intercepts canvas interaction, and it sits
+          below the toolbar (later in the DOM) so controls stay crisp on top. */}
+      {/* theme.bg is always a 6-digit hex, so append an 8-digit alpha suffix:
+          00 = transparent, b8 ≈ 0.72, ff = opaque. */}
+      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 150, pointerEvents: "none", zIndex: 6,
+        background: `linear-gradient(to bottom, ${theme.bg}00 0%, ${theme.bg}00 34%, ${theme.bg}b8 74%, ${theme.bg}ff 100%)` }} />
+
       {/* Bottom toolbar */}
       <div ref={toolbarRef} style={{ position: "absolute", left: "50%", bottom: 22, transform: "translateX(-50%)", pointerEvents: "auto" }} onPointerDown={e => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", gap: 4, padding: 6, borderRadius: 16,
@@ -6233,8 +6283,9 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               background: emojiOpen ? "#15151c" : "transparent", color: emojiOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><line x1="9" y1="9.5" x2="9.01" y2="9.5"/><line x1="15" y1="9.5" x2="15.01" y2="9.5"/></svg>
           </motion.div>
-          <motion.div whileTap={{ scale: 0.9 }} onClick={() => fileRef.current?.click()} title={de ? "Bild einfügen" : "Insert image"}
-            style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text }}>
+          <motion.div ref={imgBtnRef} whileTap={{ scale: 0.9 }} onClick={() => { setImgMenuOpen(o => !o); setAssetsOpen(false); }} title={de ? "Bild einfügen" : "Insert image"}
+            style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+              background: (imgMenuOpen || assetsOpen) ? "#15151c" : "transparent", color: (imgMenuOpen || assetsOpen) ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
           </motion.div>
           <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { handleImageFiles(e.target.files); e.target.value = ""; }} />
@@ -6329,6 +6380,82 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
                   <motion.div key={emoji + i} whileHover={{ scale: 1.25 }} whileTap={{ scale: 0.9 }} onClick={() => placeEmoji(emoji)}
                     style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 21 }}>{emoji}</motion.div>
                 ))}
+              </div>
+            </motion.div>
+            </div>
+          </>
+          ); })(), document.body)}
+
+      {/* Image button → small "Upload / from Assets" choice menu */}
+        {imgMenuOpen && createPortal((() => {
+          const bt = imgBtnRef.current?.getBoundingClientRect();
+          const W = 220;
+          const rawCx = bt ? bt.left + bt.width / 2 : window.innerWidth / 2;
+          const cx = Math.min(Math.max(rawCx, W / 2 + 12), window.innerWidth - W / 2 - 12);
+          const bottomPx = bt ? window.innerHeight - bt.top + 14 : 90;
+          const row = { display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text };
+          return (
+          <>
+            <div onClick={() => setImgMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
+            <div style={{ position: "fixed", left: cx, bottom: bottomPx, transform: "translateX(-50%)", zIndex: 5001, width: W }}>
+            <motion.div initial={{ opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
+              onPointerDown={e => e.stopPropagation()}
+              style={{ width: "100%", padding: 6,
+                background: darkMode ? "rgba(22,22,30,0.97)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.borderFaint}`, borderRadius: 14, boxShadow: "0 18px 50px rgba(0,0,0,0.24)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
+              <div onClick={() => { setImgMenuOpen(false); fileRef.current?.click(); }}
+                onMouseEnter={e => e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"} style={row}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                {de ? "Datei hochladen" : "Upload file"}
+              </div>
+              <div onClick={openAssetsPicker}
+                onMouseEnter={e => e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"} style={row}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                {de ? "Aus Assets" : "From Assets"}
+              </div>
+            </motion.div>
+            </div>
+          </>
+          ); })(), document.body)}
+
+      {/* Assets image picker — the org's uploaded images, click to drop onto the board */}
+        {assetsOpen && createPortal((() => {
+          const bt = imgBtnRef.current?.getBoundingClientRect();
+          const W = 340;
+          const rawCx = bt ? bt.left + bt.width / 2 : window.innerWidth / 2;
+          const cx = Math.min(Math.max(rawCx, W / 2 + 12), window.innerWidth - W / 2 - 12);
+          const bottomPx = bt ? window.innerHeight - bt.top + 14 : 90;
+          return (
+          <>
+            <div onClick={() => setAssetsOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
+            <div style={{ position: "fixed", left: cx, bottom: bottomPx, transform: "translateX(-50%)", zIndex: 5001, width: W }}>
+            <motion.div initial={{ opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
+              onPointerDown={e => e.stopPropagation()}
+              style={{ width: "100%",
+                background: darkMode ? "rgba(22,22,30,0.97)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.borderFaint}`, borderRadius: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.24)", overflow: "hidden", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderBottom: `1px solid ${theme.borderFaint}` }}>
+                <div onClick={() => { setAssetsOpen(false); setImgMenuOpen(true); }} title={de ? "Zurück" : "Back"} style={{ cursor: "pointer", display: "flex", color: theme.textDim }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </div>
+                <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{de ? "Aus Assets" : "From Assets"}</div>
+              </div>
+              <div className="no-scrollbar" style={{ maxHeight: 280, overflowY: "auto", padding: 10 }}>
+                {assetsLoading ? (
+                  <div style={{ padding: "26px 0", textAlign: "center", fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>{de ? "Wird geladen…" : "Loading…"}</div>
+                ) : assetImages.length === 0 ? (
+                  <div style={{ padding: "26px 14px", textAlign: "center", fontSize: 12.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>{de ? "Noch keine Bilder unter Assets." : "No images in Assets yet."}</div>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+                    {assetImages.map(a => (
+                      <motion.div key={a.id} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.94 }} title={a.name || ""}
+                        onClick={() => { addImageFromUrl(a.public_url); setAssetsOpen(false); }}
+                        style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 9, cursor: "pointer", overflow: "hidden", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}>
+                        <img src={a.public_url} alt="" draggable={false} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none", display: "block" }} />
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
               </div>
             </motion.div>
             </div>
