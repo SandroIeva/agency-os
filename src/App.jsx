@@ -5574,8 +5574,11 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         } : undefined}
         onKeyDown={(e) => {
           e.stopPropagation(); // keep global shortcuts away from typing
+          // A text node is a plain multi-line text field: Enter just inserts a
+          // newline (the default textarea behaviour) so you can freely add lines.
+          // Editing is finished by clicking away (onBlur) or pressing Escape —
+          // NOT by Enter, which used to commit and made the field feel unusable.
           if (e.key === "Escape") { e.preventDefault(); commitText(it.id, e.target.value); }
-          if (e.key === "Enter" && it.type === "text" && !e.shiftKey) { e.preventDefault(); commitText(it.id, e.target.value); }
         }}
         style={{ ...textStyle, cursor: "text", position: isSvgShape ? "absolute" : "static", width: isSvgShape ? "76%" : "100%", height: isSvgShape ? "60%" : "100%", top: isSvgShape ? "50%" : undefined, left: isSvgShape ? "12%" : undefined, transform: isSvgShape ? "translateY(-50%)" : undefined }} />
     ) : (
@@ -5612,9 +5615,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           <div onPointerDown={(e) => { e.stopPropagation(); dragRef.current = { mode: "resize", id: it.id, base: { x, y, w, h } }; }}
             style={{ position: "absolute", right: -7, bottom: -7, width: 13, height: 13, borderRadius: 3, background: "#fff", border: "1.5px solid #3B82F6", cursor: "nwse-resize" }} />
         )}
-        {/* Mind-map branch handles — reselecting a text node shows a "+" on each
-            side to grow a new linked node in that direction. */}
-        {isOnly && !isEdit && it.type === "text" && (<>
+        {/* Mind-map branch handles — a "+" on each side to grow a new linked node.
+            These only appear once the node is actually a mind map: either the user
+            switched it into mind-map mode via the toolbar (d.mindmap), or it is
+            already connected to other nodes. A plain, unconnected text node shows
+            NO handles and behaves purely as a text field. */}
+        {isOnly && !isEdit && it.type === "text" && (d.mindmap || linksTouching(it.id).length > 0) && (<>
           <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); addMindmapBranch(it.id, "left"); }}
             title={de ? "Zweig links" : "Branch left"}
             style={{ position: "absolute", left: -32, top: "50%", transform: "translateY(-50%)", width: 22, height: 22, borderRadius: "50%",
@@ -5796,12 +5802,19 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">{alignIcon(dta.align || "left")}</svg>
             </div>
           )}
-          {selItem.type === "text" && (<>
+          {selItem.type === "text" && (() => {
+            // Toggle the node into mind-map mode. Off by default → it's a plain
+            // text field. Turning it on reveals the left/right "+" branch handles.
+            // A node that already has links is inherently a mind map and stays
+            // highlighted regardless of the flag.
+            const isMindmap = dta.mindmap || linksTouching(selItem.id).length > 0;
+            return (<>
             {divider}
-            <div onClick={() => addMindmapBranch(selItem.id, "right")} title={de ? "Mindmap starten" : "Start a mind map"} style={iconBtnStyle}>
+            <div onClick={() => setSelData({ mindmap: !dta.mindmap })} title={de ? "Mindmap" : "Mind map"}
+              style={{ ...iconBtnStyle, background: isMindmap ? "rgba(255,255,255,0.22)" : "transparent" }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="5" cy="6" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="18" cy="12" r="2.2"/><path d="M6.7 7.2L15.8 11M6.7 16.8L15.8 13"/></svg>
             </div>
-          </>)}
+          </>); })()}
         </>)}
         {selItem.type !== "link" && divider}
         <motion.div whileTap={{ scale: 0.88 }} onClick={() => deleteItem(selItem.id)} title={de ? "Löschen" : "Delete"}
