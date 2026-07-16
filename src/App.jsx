@@ -5411,7 +5411,9 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         w = Math.max(48, tempItem.w); h = Math.max(48, tempItem.h);
         x = tempItem.x; y = tempItem.y;
       } else {
-        w = 190; h = 150;
+        // Plain click → a SQUARE default (equal w/h) centered on the cursor, so
+        // ellipse = a real circle and rect = a real square. ~2x the old size.
+        w = h = 300;
         x = d.sx - w / 2; y = d.sy - h / 2;
       }
       const id = addItemLocal(tempItem.type, { x, y, w, h, text: "", color: "#15151c", fill: WB_SHAPE_DEFAULT_FILL });
