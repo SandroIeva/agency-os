@@ -108,3 +108,5 @@ FigJam-style infinite canvas (`WhiteboardView`), reachable via Erstellen → Bra
 - Group drags have no `dragRef.id` → check `dragRef.bases` too when guarding realtime.
 - Vercel Hobby: max 12 serverless functions → extend `fetch-brand.js` modes instead of adding files.
 - `whiteboards.updated_at` is only bumped by title edits, not item changes.
+- Lists that mix saved DB rows with unsaved local rows (`_localId` pattern, e.g. the Kanban new-task checklist) must never compare raw `item.id` — `undefined === undefined` matches every unsaved row. Use an identity helper (`id ?? _localId`) and skip DB calls for unsaved rows.
+- Deep-link props like `openTaskId` stay set while the view is open — effects that auto-open something from them must guard with a "handled" ref or they re-fire on every dependent state change.
