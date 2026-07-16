@@ -3472,7 +3472,14 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
   const refetchItems = async () => {
     if (!userOrg?.id) return;
     const { data } = await supabase.from("timeline_items").select("*").eq("org_id", userOrg.id).order("start_date", { ascending: true });
-    if (data) setItems(data);
+    if (!data) return;
+    // Apply the same non-admin project scoping as the initial load — without it,
+    // this refetch (safety net after createItem) leaked every project's sprints
+    // into a member's view until the next remount. `projects` already holds the
+    // scoped list for non-admins, so its ids are exactly the allowed set.
+    if (amTlAdmin) { setItems(data); return; }
+    const allowed = new Set(projects.map(p => p.id));
+    setItems(data.filter(it => !it.project_id || allowed.has(it.project_id)));
   };
 
   // Create new tasks (titles only) inside a sprint context, then link them to the timeline item.
@@ -3684,7 +3691,10 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
           ? { s: r.origStart, e: r.origEnd }
           : (() => { const s = r.successors.find(x => x.id === id); return { s: s.origStart, e: s.origEnd }; })();
         if (f.start_date !== orig.s || f.end_date !== orig.e) {
-          supabase.from("timeline_items").update({ start_date: f.start_date, end_date: f.end_date }).eq("id", id);
+          // .then() is REQUIRED: supabase-js builders are lazy and only execute
+          // when awaited/thened — without it this update never left the browser,
+          // so dragged/resized sprints silently snapped back on the next reload.
+          supabase.from("timeline_items").update({ start_date: f.start_date, end_date: f.end_date }).eq("id", id).then(() => {});
         }
       }
       return prev;
@@ -4253,6 +4263,13 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
       <AnimatePresence>
         {(creating || selectedItem) && (
           <TimelineItemModal
+            // The key forces a REMOUNT whenever the modal's subject changes — the
+            // modal seeds all its state from props in useState initializers, which
+            // only run on mount. Without the key, "Nächsten Sprint verketten"
+            // (edit modal → create modal in one click, so the element never
+            // unmounts) kept the previous sprint's title/description/checklist
+            // and ignored the chain defaults.
+            key={selectedItem ? selectedItem.id : chainFrom ? `chain-${chainFrom.predecessorId}` : "create"}
             item={selectedItem}
             creating={creating}
             canEdit={creating ? canCreateSprints : canManageSprints}
