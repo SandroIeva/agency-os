@@ -4975,6 +4975,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const camRef = useRef(cam); camRef.current = cam;
   const itemsRef = useRef(items); itemsRef.current = items;
   const editingRef = useRef(editing); editingRef.current = editing;
+  const selRef = useRef(sel); selRef.current = sel;
   const selIdsRef = useRef(selIds); selIdsRef.current = selIds;
   const editAreaRef = useRef(null); // the live <textarea> DOM node while editing
 
@@ -5015,11 +5016,14 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const { data, error } = await supabase.from("whiteboards").insert({ org_id: userOrg.id, name: "Brainstorm", created_by: session?.user?.id }).select().single();
     if (error) { alert((de ? "Board konnte nicht erstellt werden: " : "Couldn't create board: ") + error.message); return; }
     setBoards(prev => [data, ...prev]);
-    setBoard(data); setTitleDraft(data.name || ""); setItems([]); setSel(null); setCam({ x: 0, y: 0, s: 1 });
+    // selIds MUST be cleared on any board switch: the Delete key deletes every id
+    // in selIds straight from the DB, so a stale multi-selection surviving a board
+    // switch would delete items of the PREVIOUS board.
+    setBoard(data); setTitleDraft(data.name || ""); setItems([]); setSel(null); setSelIds([]); setEditing(null); setCam({ x: 0, y: 0, s: 1 });
   };
   const openBoard = (id) => {
     const b = boards.find(x => x.id === id); if (!b || b.id === board?.id) return;
-    setBoard(b); setTitleDraft(b.name || ""); setSel(null); setEditing(null); setCam({ x: 0, y: 0, s: 1 });
+    setBoard(b); setTitleDraft(b.name || ""); setSel(null); setSelIds([]); setEditing(null); setCam({ x: 0, y: 0, s: 1 });
   };
   const persistTitle = async () => {
     if (!board) return;
@@ -5081,7 +5085,9 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           setItems(prev => prev.some(i => i.id === row.id) ? prev : [...prev, { id: row.id, type: row.type, data: row.data }]);
         } else if (payload.eventType === "UPDATE") {
           const row = payload.new;
-          if (dragRef.current?.id === row.id || editingRef.current === row.id) return; // don't fight a local drag/edit
+          // Don't fight a local drag/edit. Group drags (mind-map / multi-select)
+          // carry no single .id — their members are the keys of dragRef.bases.
+          if (dragRef.current?.id === row.id || dragRef.current?.bases?.[row.id] || editingRef.current === row.id) return;
           setItems(prev => prev.map(i => i.id === row.id ? { id: row.id, type: row.type, data: row.data } : i));
         } else if (payload.eventType === "DELETE") {
           setItems(prev => prev.filter(i => i.id !== payload.old?.id));
@@ -5479,19 +5485,21 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   };
 
   // ── Keyboard: delete selection, escape ──
+  // Registered once; all mutable state is read through refs so the listener
+  // never needs re-registering (it used to re-register on every render).
   useEffect(() => {
     const onKey = (e) => {
       if (/^(INPUT|TEXTAREA)$/.test(e.target?.tagName || "") || e.target?.isContentEditable) return;
       if (editingRef.current) return; // never delete the element while its text is being edited
       if (e.key === "Backspace" || e.key === "Delete") {
-        const ids = selIdsRef.current.length ? [...selIdsRef.current] : (sel ? [sel] : []);
+        const ids = selIdsRef.current.length ? [...selIdsRef.current] : (selRef.current ? [selRef.current] : []);
         if (ids.length) { e.preventDefault(); ids.forEach(id => deleteItem(id)); setSelIds([]); }
       }
       if (e.key === "Escape") { setSel(null); setSelIds([]); setEditing(null); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }); // eslint-disable-line
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Images: upload via toolbar, drop, or pick from Assets ──
   // Drop an image onto the board from a public URL — sizes it to its natural
@@ -5546,6 +5554,9 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const { data, error } = await supabase.from("user_files")
       .select("id,name,public_url,mime_type,created_at")
       .eq("org_id", userOrg.id)
+      // Filter to images server-side — otherwise an org with many PDFs/videos could
+      // eat the 200-row limit before a single image makes it into the picker.
+      .like("mime_type", "image/%")
       .order("created_at", { ascending: false })
       .limit(200);
     setAssetsLoading(false);
