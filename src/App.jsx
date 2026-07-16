@@ -1500,11 +1500,17 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
     init();
   }, [session, userOrg?.id, orgMembers]);
 
-  // Auto-open task edit form when navigating from startview card
+  // Auto-open task edit form when navigating from startview card.
+  // Guarded by a ref so each openTaskId only auto-opens ONCE: the effect also
+  // re-runs on every `tasks` change (drag, save, delete), and without the guard
+  // it re-opened the modal the user had just closed.
+  const handledOpenTaskRef = useRef(null);
   useEffect(() => {
     if (!openTaskId || loading || tasks.length === 0) return;
+    if (handledOpenTaskRef.current === openTaskId) return;
     const task = tasks.find(tk => tk.id === openTaskId);
     if (task) {
+      handledOpenTaskRef.current = openTaskId;
       setEditingTask(task);
       setEditingTitle(false);
       setEditingDesc(false);
@@ -1569,12 +1575,18 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
   };
 
   const addAttachment = async () => {
-    if (!attachmentUrl.trim() || !editingTask) return;
-    const name = attachmentName.trim() || new URL(attachmentUrl.trim()).hostname;
-    const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(attachmentUrl.trim());
+    const raw = attachmentUrl.trim();
+    if (!raw || !editingTask) return;
+    // Tolerate protocol-less input ("example.com"): new URL() would throw (the
+    // button silently did nothing) and a stored relative href would point into
+    // the app instead of the site.
+    const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : "https://" + raw;
+    let host = raw; try { host = new URL(url).hostname; } catch (_) {}
+    const name = attachmentName.trim() || host;
+    const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url);
     const { data } = await supabase.from("task_attachments").insert({
       task_id: editingTask.id, user_id: session.user.id,
-      name, url: attachmentUrl.trim(), type: isImage ? "image" : "link",
+      name, url, type: isImage ? "image" : "link",
     }).select().single();
     if (data) setTaskAttachments(prev => [...prev, data]);
     setAttachmentUrl(""); setAttachmentName(""); setShowAttachInput(false);
@@ -1585,14 +1597,22 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
     await supabase.from("task_attachments").delete().eq("id", id);
   };
 
-  // Checklist CRUD
+  // Checklist CRUD.
+  // Identity: DB rows have `id`; unsaved rows (new-task mode) only have `_localId`.
+  // Everything below must compare via chkId — comparing raw `item.id` matched
+  // undefined === undefined for EVERY unsaved row, so toggling/editing/deleting one
+  // local item hit all of them at once.
+  const chkId = (i) => i?.id ?? i?._localId;
   const addChecklistItem = async () => {
     const text = newChecklistText.trim();
     if (!text) return;
+    // Clear the input BEFORE any await: Enter triggers this handler and the input's
+    // onBlur triggers it again if focus moves while the insert is still in flight —
+    // clearing synchronously makes the second call a no-op instead of a duplicate row.
+    setNewChecklistText("");
     // New-task mode: no editingTask yet — store locally; createTask will bulk-insert
     if (!editingTask) {
       setTaskChecklist(prev => [...prev, { _localId: Date.now() + Math.random(), text, checked: false }]);
-      setNewChecklistText("");
       return;
     }
     // Edit-task mode: persist immediately
@@ -1601,25 +1621,24 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
       task_id: editingTask.id, text, position: pos,
     }).select().single();
     if (data) setTaskChecklist(prev => [...prev, data]);
-    setNewChecklistText("");
   };
 
-  const toggleChecklistItem = async (id, currentVal) => {
-    setTaskChecklist(prev => prev.map(i => i.id === id ? { ...i, checked: !currentVal } : i));
-    await supabase.from("task_checklist_items").update({ checked: !currentVal }).eq("id", id);
+  const toggleChecklistItem = async (item) => {
+    setTaskChecklist(prev => prev.map(i => chkId(i) === chkId(item) ? { ...i, checked: !item.checked } : i));
+    if (item.id != null) await supabase.from("task_checklist_items").update({ checked: !item.checked }).eq("id", item.id);
   };
 
-  const updateChecklistItem = async (id, newText) => {
+  const updateChecklistItem = async (item, newText) => {
     if (!newText.trim()) return;
-    setTaskChecklist(prev => prev.map(i => i.id === id ? { ...i, text: newText.trim() } : i));
-    await supabase.from("task_checklist_items").update({ text: newText.trim() }).eq("id", id);
+    setTaskChecklist(prev => prev.map(i => chkId(i) === chkId(item) ? { ...i, text: newText.trim() } : i));
+    if (item.id != null) await supabase.from("task_checklist_items").update({ text: newText.trim() }).eq("id", item.id);
     setEditingChecklistId(null);
     setEditingChecklistText("");
   };
 
-  const deleteChecklistItem = async (id) => {
-    setTaskChecklist(prev => prev.filter(i => i.id !== id));
-    await supabase.from("task_checklist_items").delete().eq("id", id);
+  const deleteChecklistItem = async (item) => {
+    setTaskChecklist(prev => prev.filter(i => chkId(i) !== chkId(item)));
+    if (item.id != null) await supabase.from("task_checklist_items").delete().eq("id", item.id);
   };
 
   // Speech-to-text dictation for description
@@ -2157,7 +2176,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                     {/* Checklist items */}
                     <div style={{ display: "flex", flexDirection: "column", gap: 2, marginBottom: 8 }}>
                       {taskChecklist.map(item => (
-                        <div key={item.id} style={{
+                        <div key={chkId(item)} style={{
                           display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8,
                           background: "transparent",
                         }}
@@ -2166,7 +2185,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                         >
                           {/* Checkbox */}
                           <div
-                            onClick={() => toggleChecklistItem(item.id, item.checked)}
+                            onClick={() => toggleChecklistItem(item)}
                             style={{
                               width: 18, height: 18, borderRadius: 5, flexShrink: 0, cursor: "pointer",
                               border: item.checked ? "none" : `1.5px solid ${theme.textFaint}`,
@@ -2178,12 +2197,12 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                             {item.checked && <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                           </div>
                           {/* Text — inline edit for owner */}
-                          {editingChecklistId === item.id ? (
+                          {editingChecklistId === chkId(item) ? (
                             <input
                               value={editingChecklistText}
                               onChange={e => setEditingChecklistText(e.target.value)}
-                              onBlur={() => updateChecklistItem(item.id, editingChecklistText)}
-                              onKeyDown={e => { if (e.key === "Enter") updateChecklistItem(item.id, editingChecklistText); if (e.key === "Escape") { setEditingChecklistId(null); setEditingChecklistText(""); } }}
+                              onBlur={() => updateChecklistItem(item, editingChecklistText)}
+                              onKeyDown={e => { if (e.key === "Enter") updateChecklistItem(item, editingChecklistText); if (e.key === "Escape") { setEditingChecklistId(null); setEditingChecklistText(""); } }}
                               autoFocus
                               style={{
                                 flex: 1, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.accent}40`,
@@ -2193,7 +2212,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                             />
                           ) : (
                             <span
-                              onClick={() => { if (isTaskOwner) { setEditingChecklistId(item.id); setEditingChecklistText(item.text); } }}
+                              onClick={() => { if (isTaskOwner) { setEditingChecklistId(chkId(item)); setEditingChecklistText(item.text); } }}
                               style={{
                                 flex: 1, fontSize: 14, fontFamily: FONT, cursor: isTaskOwner ? "text" : "default",
                                 color: item.checked ? theme.textFaint : theme.text,
@@ -2205,7 +2224,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                           {/* Delete button — owner only */}
                           {isTaskOwner && (
                             <motion.div whileTap={{ scale: 0.85 }}
-                              onClick={() => deleteChecklistItem(item.id)}
+                              onClick={() => deleteChecklistItem(item)}
                               style={{ cursor: "pointer", padding: "0 2px", opacity: 0.4, fontSize: 13, color: theme.textDim }}
                             >✕</motion.div>
                           )}
