@@ -7885,6 +7885,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   const [metadata, setMetadata] = useState({});
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewFile, setPreviewFile] = useState(null);
+  const [previewFreshUrl, setPreviewFreshUrl] = useState(null); // fresh signed URL for the open sb preview (stored one may be expired)
   const [downloading, setDownloading] = useState(false);
   const [toast, setToast] = useState(null); // { text, type } — transient feedback line
   const [activeSource, setActiveSource] = useState("supabase"); // 'supabase' | 'drive'
@@ -7895,17 +7896,19 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
   const [deleteFolderModalOpen, setDeleteFolderModalOpen] = useState(false);
   const [deletingFolder, setDeletingFolder] = useState(false);
 
-  // Get a shareable link for the current preview file
+  // Get a shareable link for the current preview file.
+  // Supabase files: ALWAYS mint a fresh signed URL when a storage path exists —
+  // the stored webViewLink is a signed URL from upload time (up to 1 year old)
+  // and may have expired; it's only the fallback for rows without a path.
   const getShareLink = async (file) => {
     if (!file) return null;
     const isSb = file._source === "supabase" || String(file.id || "").startsWith("sb:");
     if (isSb) {
-      if (file.webViewLink) return file.webViewLink;
       if (file._storagePath) {
         const { data } = await supabase.storage.from("user-files").createSignedUrl(file._storagePath, 60 * 60 * 24 * 7); // 7d
-        return data?.signedUrl || null;
+        if (data?.signedUrl) return data.signedUrl;
       }
-      return null;
+      return file.webViewLink || null;
     }
     // Drive — webViewLink is "view in Drive" URL
     return file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`;
@@ -8355,6 +8358,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
 
     setUploading(true);
     setUploadProgress({ current: 0, total: fileList.length });
+    let okCount = 0; // actual successes — the toast must not claim failed files were uploaded
 
     for (let i = 0; i < fileList.length; i++) {
       const file = fileList[i];
@@ -8388,6 +8392,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
             status: "Neu",
           });
           setMetadata(prev => ({ ...prev, [uploaded.id]: { google_file_id: uploaded.id, status: "Neu" } }));
+          okCount++;
         } else {
           // ── Supabase Storage upload (default) ──────────────────────────
           const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -8422,6 +8427,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
               _storagePath: inserted.storage_path,
               _rowId: inserted.id,
             }, ...prev]);
+            okCount++;
           }
         }
       } catch (err) {
@@ -8433,9 +8439,19 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
     setUploadProgress(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     const where = useDrive ? (localDriveFolder?.name || "Drive-Ordner") : "i7 OS Storage";
-    // Auto-switch to the source we uploaded to so the user sees the new file
-    setActiveSource(useDrive ? "drive" : "supabase");
-    setToast({ text: `${fileList.length} ${fileList.length === 1 ? "Datei hochgeladen" : "Dateien hochgeladen"} → ${where}`, type: "success" });
+    // Report what actually happened — the old toast claimed every selected file
+    // was uploaded even when some (or all) failed.
+    const failed = fileList.length - okCount;
+    if (okCount > 0) {
+      // Auto-switch to the source we uploaded to so the user sees the new file
+      setActiveSource(useDrive ? "drive" : "supabase");
+      setToast({
+        text: `${okCount} ${okCount === 1 ? "Datei hochgeladen" : "Dateien hochgeladen"} → ${where}${failed > 0 ? ` · ${failed} fehlgeschlagen` : ""}`,
+        type: failed > 0 ? "error" : "success",
+      });
+    } else {
+      setToast({ text: failed === 1 ? "Upload fehlgeschlagen" : "Uploads fehlgeschlagen", type: "error" });
+    }
     setTimeout(() => setToast(null), 3500);
   };
 
@@ -8445,13 +8461,16 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
     setDownloading(true);
     try {
       if (file._source === "supabase" || String(file.id || "").startsWith("sb:")) {
-        // Supabase: signed URL
-        if (file.webViewLink) {
-          window.open(file.webViewLink, "_blank");
-        } else if (file._storagePath) {
-          const { data } = await supabase.storage.from("user-files").createSignedUrl(file._storagePath, 60);
-          if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+        // Supabase: mint a FRESH signed URL — the stored webViewLink is from
+        // upload time and may have expired (it's only the no-path fallback).
+        let url = null;
+        if (file._storagePath) {
+          const { data } = await supabase.storage.from("user-files").createSignedUrl(file._storagePath, 60 * 5);
+          url = data?.signedUrl || null;
         }
+        url = url || file.webViewLink;
+        if (url) window.open(url, "_blank");
+        else setError("Kein Download-Link verfügbar.");
       } else {
         // Drive: fetch as blob, trigger download with original filename
         const token = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
@@ -8499,8 +8518,10 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
     const kind = previewKind(file);
 
     if (isSb) {
-      // Supabase: signed URL works for images directly, for PDFs in <iframe>
-      return file.webViewLink || null;
+      // Supabase: prefer the freshly-minted signed URL (see the effect below) —
+      // the stored webViewLink is from upload time and may have expired. It still
+      // renders first as a fast path while the fresh one is being created.
+      return previewFreshUrl || file.webViewLink || null;
     }
     // Drive
     if (kind === "image") {
@@ -8514,6 +8535,22 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
     }
     return file.webViewLink || null;
   };
+
+  // Mint a fresh signed URL whenever an i7-OS-Storage file is opened in the
+  // preview — the row's stored URL was signed at upload time (up to 1 year old)
+  // and silently 400s once expired. previewSrc prefers this fresh one.
+  useEffect(() => {
+    setPreviewFreshUrl(null);
+    const f = previewFile;
+    if (!f) return;
+    const isSb = f._source === "supabase" || String(f.id || "").startsWith("sb:");
+    if (!isSb || !f._storagePath) return;
+    let alive = true;
+    supabase.storage.from("user-files").createSignedUrl(f._storagePath, 60 * 60).then(({ data }) => {
+      if (alive && data?.signedUrl) setPreviewFreshUrl(data.signedUrl);
+    });
+    return () => { alive = false; };
+  }, [previewFile]);
 
   const openNewFolderModal = () => {
     setNewFolderName("");
