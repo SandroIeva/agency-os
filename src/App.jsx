@@ -5377,7 +5377,17 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       return;
     }
     if (d.mode === "resize") {
-      const patch = { w: Math.max(36, pt.x - d.base.x), h: Math.max(30, pt.y - d.base.y) };
+      const rawW = Math.max(36, pt.x - d.base.x), rawH = Math.max(30, pt.y - d.base.y);
+      let patch;
+      if (e.shiftKey) {
+        // Shift = free / unproportional resize.
+        patch = { w: rawW, h: rawH };
+      } else {
+        // Default = keep the original aspect ratio: scale both sides by whichever
+        // axis the cursor moved proportionally further, so the box follows the cursor.
+        const scale = Math.max(rawW / d.base.w, rawH / d.base.h);
+        patch = { w: Math.max(36, Math.round(d.base.w * scale)), h: Math.max(30, Math.round(d.base.h * scale)) };
+      }
       patchItem(d.id, patch); d.final = patch; d.persistId = d.id;
       return;
     }
@@ -5392,8 +5402,19 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       addItemLocal("draw", { points: tempStroke.points, ox: 0, oy: 0, color: tempStroke.color, sw: 2.5 });
     }
     if (d?.mode === "create" && tempItem) {
-      const w = Math.max(48, tempItem.w), h = Math.max(48, tempItem.h);
-      const id = addItemLocal(tempItem.type, { x: tempItem.x, y: tempItem.y, w, h, text: "", color: "#15151c", fill: WB_SHAPE_DEFAULT_FILL });
+      // A plain click (no real drag) drops a comfortably-sized default shape
+      // centered on the cursor — the old 48px min made click-placed shapes tiny.
+      // A genuine drag keeps the dragged size (min 48).
+      const dragged = tempItem.w > 12 || tempItem.h > 12;
+      let x, y, w, h;
+      if (dragged) {
+        w = Math.max(48, tempItem.w); h = Math.max(48, tempItem.h);
+        x = tempItem.x; y = tempItem.y;
+      } else {
+        w = 190; h = 150;
+        x = d.sx - w / 2; y = d.sy - h / 2;
+      }
+      const id = addItemLocal(tempItem.type, { x, y, w, h, text: "", color: "#15151c", fill: WB_SHAPE_DEFAULT_FILL });
       setSel(id); setTool("select");
     }
     if (d?.mode === "arrow" && tempItem) {
@@ -6338,21 +6359,20 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { handleImageFiles(e.target.files); e.target.value = ""; }} />
           <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
           {toolBtn("comment", de ? "Kommentar" : "Comment", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>)}
+          {/* Zoom — integrated into the toolbar, right of the comment tool:
+              − · current % (click resets) · + */}
+          <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
+          <motion.div whileTap={{ scale: 0.9 }} onClick={() => zoomBy(-1)} title={de ? "Verkleinern" : "Zoom out"}
+            style={{ width: 30, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </motion.div>
+          <div onClick={() => setCam({ x: 0, y: 0, s: 1 })} title={de ? "Zoom zurücksetzen" : "Reset zoom"}
+            style={{ minWidth: 40, textAlign: "center", fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.text, cursor: "pointer", fontVariantNumeric: "tabular-nums" }}>{Math.round(cam.s * 100)}%</div>
+          <motion.div whileTap={{ scale: 0.9 }} onClick={() => zoomBy(1)} title={de ? "Vergrößern" : "Zoom in"}
+            style={{ width: 30, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </motion.div>
         </div>
-      </div>
-
-      {/* Zoom controls — vertical, docked to the right edge at mid-height:
-          + on top, current zoom % in the middle (click = reset), − on the bottom. */}
-      <div style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: 4, borderRadius: 999,
-        background: darkMode ? "rgba(22,22,30,0.9)" : "rgba(255,255,255,0.95)", border: `1px solid ${theme.borderFaint}`,
-        boxShadow: "0 5px 14px rgba(0,0,0,0.08)", pointerEvents: "auto" }} onPointerDown={e => e.stopPropagation()}>
-        <motion.div whileTap={{ scale: 0.9 }} onClick={() => zoomBy(1)} title={de ? "Vergrößern" : "Zoom in"} style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textSub }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </motion.div>
-        <div onClick={() => setCam({ x: 0, y: 0, s: 1 })} title={de ? "Zoom zurücksetzen" : "Reset zoom"} style={{ padding: "2px 0", fontSize: 10.5, fontFamily: FONT, fontWeight: 600, color: theme.textSub, cursor: "pointer", fontVariantNumeric: "tabular-nums", writingMode: "horizontal-tb" }}>{Math.round(cam.s * 100)}%</div>
-        <motion.div whileTap={{ scale: 0.9 }} onClick={() => zoomBy(-1)} title={de ? "Verkleinern" : "Zoom out"} style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textSub }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </motion.div>
       </div>
 
       {/* Sticker picker — portalled, centered on the toolbar's real screen position
