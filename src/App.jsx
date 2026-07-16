@@ -13,12 +13,15 @@ import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 // Document skills — the instruction body of each comes straight from its SKILL.md
 // (single source of truth; edit the .md + rebuild to change a skill).
-import skillSignalMine from "../docs/docs-skillz/signal-mine/SKILL.md?raw";
-import skillStoryMine from "../docs/docs-skillz/story-mine/SKILL.md?raw";
-import skillAudienceGaps from "../docs/docs-skillz/audience-gaps/SKILL.md?raw";
-import skillReelScripter from "../docs/docs-skillz/reel-scripter/SKILL.md?raw";
-import skillNewsletter from "../docs/docs-skillz/newsletter-drafter/SKILL.md?raw";
-import skillSeriesPlanner from "../docs/docs-skillz/series-planner/SKILL.md?raw";
+// Content "skills" for the AI assistant. Kept under src/ (NOT docs/) on purpose:
+// the GitBook integration syncs docs/ and deletes anything it doesn't own, which
+// once wiped these files and broke the build. src/ is outside its reach.
+import skillSignalMine from "./skills/signal-mine/SKILL.md?raw";
+import skillStoryMine from "./skills/story-mine/SKILL.md?raw";
+import skillAudienceGaps from "./skills/audience-gaps/SKILL.md?raw";
+import skillReelScripter from "./skills/reel-scripter/SKILL.md?raw";
+import skillNewsletter from "./skills/newsletter-drafter/SKILL.md?raw";
+import skillSeriesPlanner from "./skills/series-planner/SKILL.md?raw";
 
 // Error Boundary to prevent black screen — shows error info in production
 export class AppErrorBoundary extends Component {
