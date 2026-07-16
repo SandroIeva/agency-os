@@ -6338,16 +6338,17 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         </div>
       </div>
 
-      {/* Zoom controls */}
-      <div style={{ position: "absolute", right: 22, bottom: 22, display: "flex", alignItems: "center", gap: 2, padding: 4, borderRadius: 999,
+      {/* Zoom controls — vertical, docked to the right edge at mid-height:
+          + on top, current zoom % in the middle (click = reset), − on the bottom. */}
+      <div style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: 4, borderRadius: 999,
         background: darkMode ? "rgba(22,22,30,0.9)" : "rgba(255,255,255,0.95)", border: `1px solid ${theme.borderFaint}`,
         boxShadow: "0 5px 14px rgba(0,0,0,0.08)", pointerEvents: "auto" }} onPointerDown={e => e.stopPropagation()}>
-        <motion.div whileTap={{ scale: 0.9 }} onClick={() => zoomBy(-1)} style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textSub }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </motion.div>
-        <div onClick={() => setCam({ x: 0, y: 0, s: 1 })} title={de ? "Zoom zurücksetzen" : "Reset zoom"} style={{ minWidth: 44, textAlign: "center", fontSize: 11.5, fontFamily: FONT, fontWeight: 600, color: theme.textSub, cursor: "pointer", fontVariantNumeric: "tabular-nums" }}>{Math.round(cam.s * 100)}%</div>
-        <motion.div whileTap={{ scale: 0.9 }} onClick={() => zoomBy(1)} style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textSub }}>
+        <motion.div whileTap={{ scale: 0.9 }} onClick={() => zoomBy(1)} title={de ? "Vergrößern" : "Zoom in"} style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textSub }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </motion.div>
+        <div onClick={() => setCam({ x: 0, y: 0, s: 1 })} title={de ? "Zoom zurücksetzen" : "Reset zoom"} style={{ padding: "2px 0", fontSize: 10.5, fontFamily: FONT, fontWeight: 600, color: theme.textSub, cursor: "pointer", fontVariantNumeric: "tabular-nums", writingMode: "horizontal-tb" }}>{Math.round(cam.s * 100)}%</div>
+        <motion.div whileTap={{ scale: 0.9 }} onClick={() => zoomBy(-1)} title={de ? "Verkleinern" : "Zoom out"} style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textSub }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </motion.div>
       </div>
 
