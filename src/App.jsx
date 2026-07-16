@@ -4150,7 +4150,10 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                   onDoubleClick={(e) => { e.stopPropagation(); setSelectedItem(it); }}
                   style={{
                     position: "absolute", left, top, width, height: cardH,
-                    borderRadius: 12, cursor: "grab",
+                    // Members without the manage right can't drag — showing "grab"
+                    // would promise an interaction that onItemDragStart blocks.
+                    // "pointer" still signals the bar is clickable (opens the modal).
+                    borderRadius: 12, cursor: canManageSprints ? "grab" : "pointer",
                     background: isDone ? "transparent" : c,
                     border: isDone ? `1.5px dashed ${c}` : "none",
                     color: isDone ? c : "#fff",
@@ -4163,7 +4166,9 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                     touchAction: "none",
                   }}
                 >
-                  {/* Left resize handle — visible || grip */}
+                  {/* Left resize handle — visible || grip. Hidden entirely for members
+                      without the manage right: it's a pure drag affordance. */}
+                  {canManageSprints && (
                   <div data-handle="L"
                     onPointerDown={(e) => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} onItemDragStart(e, it, "resizeL"); }}
                     onPointerUp={(e) => { try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {} }}
@@ -4171,6 +4176,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                   >
                     <div data-handle="L" style={{ width: 3, height: 18, borderRadius: 2, background: isDone ? c : "rgba(255,255,255,0.55)", boxShadow: isDone ? "none" : "inset 0 0 0 1px rgba(0,0,0,0.05)" }} />
                   </div>
+                  )}
                   {/* Status dot — gray=planned, blue=active, green=done */}
                   {(() => {
                     const st = liveStatus(it);
@@ -4235,7 +4241,9 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                       {(linkedTasks[it.id] || []).length}
                     </div>
                   )}
-                  {/* Right resize handle — visible || grip */}
+                  {/* Right resize handle — visible || grip. Hidden for members without
+                      the manage right, same as the left one. */}
+                  {canManageSprints && (
                   <div data-handle="R"
                     onPointerDown={(e) => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} onItemDragStart(e, it, "resizeR"); }}
                     onPointerUp={(e) => { try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {} }}
@@ -4243,6 +4251,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                   >
                     <div data-handle="R" style={{ width: 3, height: 18, borderRadius: 2, background: isDone ? c : "rgba(255,255,255,0.55)" }} />
                   </div>
+                  )}
                 </div>
               );
             })))}
@@ -4499,29 +4508,19 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
         {/* 1. Projekt (full width) */}
         <div style={{ marginBottom: 14 }}>
           <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Projekt</label>
-          <select value={projectId} onChange={e => setProjectId(e.target.value)}
-            style={{
-              width: "100%",
-              background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-              border: `1px solid ${theme.borderFaint}`,
-              borderRadius: 10,
-              padding: "11px 36px 11px 14px",
-              fontSize: 13,
-              fontFamily: FONT,
-              color: theme.text,
-              outline: "none",
-              appearance: "none",
-              WebkitAppearance: "none",
-              MozAppearance: "none",
-              backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(theme.textDim)}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")`,
-              backgroundRepeat: "no-repeat",
-              backgroundPosition: "right 14px center",
-              backgroundSize: "12px 12px",
-            }}
-          >
-            <option value="">Kein Projekt</option>
-            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          <Dropdown
+            value={projectId}
+            onChange={v => setProjectId(v)}
+            options={[
+              { value: "", label: "Kein Projekt" },
+              ...projects.map(p => ({ value: p.id, label: p.name,
+                icon: p.logo_url
+                  ? <img src={p.logo_url} alt="" style={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover" }} />
+                  : <span style={{ width: 18, height: 18, borderRadius: "50%", background: (p.color || "#64748B") + "30", color: p.color || "#64748B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700 }}>{(p.name || "?")[0]}</span> })),
+            ]}
+            placeholder="Kein Projekt" theme={theme} darkMode={darkMode} minWidth={280}
+            triggerStyle={{ width: "100%", justifyContent: "space-between", borderRadius: 10, padding: "10px 14px", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}
+          />
         </div>
 
         {/* 2. Sprintgruppe + Sprinttitel (+ chain button) */}
@@ -4540,30 +4539,17 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
                 </motion.div>
               </div>
             ) : (
-              <select value={groupId} onChange={e => { setGroupId(e.target.value); setNewGroupName(""); }}
-                style={{
-                  width: "100%",
-                  background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                  border: `1px solid ${theme.borderFaint}`,
-                  borderRadius: 10,
-                  padding: "10px 36px 10px 14px",
-                  fontSize: 13,
-                  fontFamily: FONT,
-                  color: theme.text,
-                  outline: "none",
-                  appearance: "none",
-                  WebkitAppearance: "none",
-                  MozAppearance: "none",
-                  backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(theme.textDim)}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")`,
-                  backgroundRepeat: "no-repeat",
-                  backgroundPosition: "right 14px center",
-                  backgroundSize: "12px 12px",
-                }}
-              >
-                <option value="">Keine Gruppe</option>
-                {availableGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                <option value="__new__">+ Neue Gruppe…</option>
-              </select>
+              <Dropdown
+                value={groupId}
+                onChange={v => { setGroupId(v); setNewGroupName(""); }}
+                options={[
+                  { value: "", label: "Keine Gruppe" },
+                  ...availableGroups.map(g => ({ value: g.id, label: g.name })),
+                  { value: "__new__", label: "+ Neue Gruppe…" },
+                ]}
+                placeholder="Keine Gruppe" theme={theme} darkMode={darkMode} minWidth={220}
+                triggerStyle={{ width: "100%", justifyContent: "space-between", borderRadius: 10, padding: "10px 14px", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}
+              />
             )}
           </div>
           <div>
