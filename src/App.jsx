@@ -5967,8 +5967,17 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
-      style={{ position: "absolute", inset: 0, zIndex: 5, overflow: "hidden", background: theme.bg }}
+      style={{ position: "absolute", inset: 0, zIndex: 5, overflow: "hidden" }}
     >
+      {/* Board background — on its OWN masked layer instead of a solid background
+          on the container: the container ends above the app's bottom chrome, and a
+          solid background produced exactly the hard bottom edge the masked dot grid
+          alone could never hide. Masking the background itself makes the whole
+          surface dissolve into the app background underneath over the last ~140px —
+          no seam, in both themes. Items/toolbar are later siblings and stay crisp. */}
+      <div style={{ position: "absolute", inset: 0, background: theme.bg, pointerEvents: "none",
+        WebkitMaskImage: "linear-gradient(to bottom, #000 0%, #000 calc(100% - 140px), transparent 100%)",
+        maskImage: "linear-gradient(to bottom, #000 0%, #000 calc(100% - 140px), transparent 100%)" }} />
       {/* Canvas */}
       <div ref={canvasRef}
         onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp}
@@ -5986,8 +5995,8 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         <div style={{ position: "absolute", inset: 0, pointerEvents: "none",
           backgroundImage: `radial-gradient(circle, ${darkMode ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.10)"} 1px, transparent 1px)`,
           backgroundSize: `${24 * cam.s}px ${24 * cam.s}px`, backgroundPosition: `${cam.x}px ${cam.y}px`,
-          WebkitMaskImage: "linear-gradient(to bottom, #000 0%, #000 46%, rgba(0,0,0,0.35) 78%, transparent 97%)",
-          maskImage: "linear-gradient(to bottom, #000 0%, #000 46%, rgba(0,0,0,0.35) 78%, transparent 97%)" }} />
+          WebkitMaskImage: "linear-gradient(to bottom, #000 0%, #000 calc(100% - 260px), transparent calc(100% - 90px))",
+          maskImage: "linear-gradient(to bottom, #000 0%, #000 calc(100% - 260px), transparent calc(100% - 90px))" }} />
         <div style={{ position: "absolute", left: 0, top: 0, transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`, transformOrigin: "0 0", pointerEvents: tool === "select" ? "auto" : "none" }}>
           {/* Mind-map group frame — hovering a connected text node outlines the
               whole connected group (Figma/FigJam convention), rendered behind
@@ -6268,7 +6277,9 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       <div ref={toolbarRef} style={{ position: "absolute", left: "50%", bottom: 22, transform: "translateX(-50%)", pointerEvents: "auto" }} onPointerDown={e => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", gap: 4, padding: 6, borderRadius: 16,
           background: darkMode ? "rgba(22,22,30,0.9)" : "rgba(255,255,255,0.95)", border: `1px solid ${theme.borderFaint}`,
-          boxShadow: "0 14px 40px rgba(0,0,0,0.16)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
+          // Subtle, short shadow on purpose: the old 14/40px one reached past the
+          // container's bottom edge and got visibly clipped by overflow:hidden.
+          boxShadow: "0 5px 16px rgba(0,0,0,0.10)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
           {toolBtn("select", de ? "Auswählen" : "Select", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M5 3l7.5 16 2-6.5L21 10.5z"/></svg>)}
           {toolBtn("hand", de ? "Verschieben" : "Hand", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>)}
           <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
@@ -6330,7 +6341,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       {/* Zoom controls */}
       <div style={{ position: "absolute", right: 22, bottom: 22, display: "flex", alignItems: "center", gap: 2, padding: 4, borderRadius: 999,
         background: darkMode ? "rgba(22,22,30,0.9)" : "rgba(255,255,255,0.95)", border: `1px solid ${theme.borderFaint}`,
-        boxShadow: "0 10px 28px rgba(0,0,0,0.12)", pointerEvents: "auto" }} onPointerDown={e => e.stopPropagation()}>
+        boxShadow: "0 5px 14px rgba(0,0,0,0.08)", pointerEvents: "auto" }} onPointerDown={e => e.stopPropagation()}>
         <motion.div whileTap={{ scale: 0.9 }} onClick={() => zoomBy(-1)} style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textSub }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </motion.div>
