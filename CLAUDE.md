@@ -110,3 +110,6 @@ FigJam-style infinite canvas (`WhiteboardView`), reachable via Erstellen → Bra
 - `whiteboards.updated_at` is only bumped by title edits, not item changes.
 - Lists that mix saved DB rows with unsaved local rows (`_localId` pattern, e.g. the Kanban new-task checklist) must never compare raw `item.id` — `undefined === undefined` matches every unsaved row. Use an identity helper (`id ?? _localId`) and skip DB calls for unsaved rows.
 - Deep-link props like `openTaskId` stay set while the view is open — effects that auto-open something from them must guard with a "handled" ref or they re-fire on every dependent state change.
+- supabase-js builders are LAZY: `supabase.from(...).update(...).eq(...)` without `await` or `.then()` never sends the request. Fire-and-forget calls must end in `.then(() => {})` (this silently broke Timeline drag persistence).
+- Modals that seed their state from props via `useState` initializers (e.g. `TimelineItemModal`) need a subject-derived `key` — swapping the subject without unmounting keeps the old state.
+- Views that scope data client-side for non-admins (e.g. Timeline project scoping) must apply the same scoping in every refetch path, not just the initial load.
