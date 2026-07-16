@@ -31,7 +31,8 @@ src/systemPrompt.js      ← AI assistant system prompt
 src/googlePicker.js      ← Google Drive picker loader
 api/*.js                 ← Vercel serverless functions (⚠ Hobby plan = max 12 functions;
                             that's why fetch-brand.js multiplexes several modes in one file)
-docs/docs-skillz/*/SKILL.md ← content "skills" imported ?raw into the app
+src/skills/*/SKILL.md    ← content "skills" imported ?raw into the app (kept in src/,
+                            NOT docs/, so the GitBook sync can't delete them)
 vercel.json              ← cleanUrls, SPA rewrite, /i/:slug → api/redirect (short links)
 ```
 
