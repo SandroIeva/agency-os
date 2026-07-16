@@ -7956,16 +7956,27 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
     try {
       if (activeSource === "supabase") {
         if (!currentSbFolder) return;
+        // Delete the whole subtree, not just the folder itself: sbFolders holds ALL
+        // of the user's folders, so descendants can be collected locally. The old
+        // version left subfolders pointing at a deleted parent (unreachable orphans)
+        // and only deleted file rows when at least one file had a storage_path.
+        const folderIds = [currentSbFolder];
+        for (let i = 0; i < folderIds.length; i++) {
+          for (const f of sbFolders) {
+            if ((f.parent_id || null) === folderIds[i] && !folderIds.includes(f.id)) folderIds.push(f.id);
+          }
+        }
         const { data: filesInFolder } = await supabase
           .from("user_files").select("id, storage_path")
-          .eq("user_id", session.user.id).eq("folder_id", currentSbFolder);
+          .eq("user_id", session.user.id).in("folder_id", folderIds);
         const paths = (filesInFolder || []).map(f => f.storage_path).filter(Boolean);
-        if (paths.length > 0) {
-          await supabase.storage.from("user-files").remove(paths);
-          await supabase.from("user_files").delete().eq("user_id", session.user.id).eq("folder_id", currentSbFolder);
+        if (paths.length > 0) await supabase.storage.from("user-files").remove(paths);
+        if ((filesInFolder || []).length > 0) {
+          await supabase.from("user_files").delete().eq("user_id", session.user.id).in("folder_id", folderIds);
         }
-        const { error: delErr } = await supabase.from("user_folders").delete().eq("id", currentSbFolder).eq("user_id", session.user.id);
+        const { error: delErr } = await supabase.from("user_folders").delete().eq("user_id", session.user.id).in("id", folderIds);
         if (delErr) throw delErr;
+        setSbFolders(prev => prev.filter(f => !folderIds.includes(f.id)));
         const prev = [...sbFolderPath];
         const parent = prev.pop();
         setSbFolderPath(prev);
@@ -8131,13 +8142,16 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
         // Scope the Drive query to the user's connected folder (if any).
         // Without a connected folder, drive.file scope returns only files the app uploaded —
         // which is fine, just less useful UX. With a folder, we see everything WE uploaded into it.
-        const rootFolderId = currentFolder || driveFolder?.id || null;
+        // Uses localDriveFolder (not the driveFolder prop): folders connected or
+        // changed inline (ensureDriveFolderInline / "Drive-Ordner ändern") only
+        // live in local state — reading the prop kept listing the OLD folder.
+        const rootFolderId = currentFolder || localDriveFolder?.id || null;
         let query = "trashed=false";
         let driveFiles = [];
         if (rootFolderId) {
           query += ` and '${rootFolderId}' in parents`;
-          const driveExtras = driveFolder?.driveId
-            ? `&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=drive&driveId=${driveFolder.driveId}`
+          const driveExtras = localDriveFolder?.driveId
+            ? `&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=drive&driveId=${localDriveFolder.driveId}`
             : "&supportsAllDrives=true&includeItemsFromAllDrives=true";
           let res = await fetch(
             `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink)&orderBy=folder,name&pageSize=100${driveExtras}`,
@@ -8245,7 +8259,9 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
       setLoading(false);
     };
     fetchFiles();
-  }, [session, currentFolder, currentSbFolder, driveFolder?.id]);
+    // localDriveFolder?.id (not driveFolder?.id): re-fetch when a folder is
+    // connected/changed inline; prop changes still flow in via the sync effect.
+  }, [session, currentFolder, currentSbFolder, localDriveFolder?.id]);
 
   // File-type matchers for the menu sub-filters. Folders are ALWAYS kept so
   // navigation works regardless of which filter is active.
@@ -8328,40 +8344,6 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
       await supabase.from("file_metadata").insert({ google_file_id: fileId, user_id: session.user.id, status: newStatus });
     }
     setMetadata(prev => ({ ...prev, [fileId]: { ...prev[fileId], google_file_id: fileId, status: newStatus } }));
-  };
-
-  const refreshFiles = () => {
-    setLoading(true);
-    setFiles([]);
-    // Trigger re-fetch by toggling a dummy state
-    setCurrentFolder(prev => prev);
-    // Force useEffect by setting a new object reference
-    const fetchAgain = async () => {
-      setError(null);
-      try {
-        const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
-        if (!providerToken) { setError("Kein Google Drive Zugriff."); setLoading(false); return; }
-        let query = "trashed=false";
-        if (currentFolder) { query += ` and '${currentFolder}' in parents`; }
-        else { query += " and 'root' in parents"; }
-        const res = await fetch(
-          `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,size,modifiedTime,thumbnailLink,iconLink,webViewLink)&orderBy=folder,name&pageSize=50`,
-          { headers: { Authorization: `Bearer ${providerToken}` } }
-        );
-        if (!res.ok) { setError("Fehler beim Laden."); setLoading(false); return; }
-        const data = await res.json();
-        setFiles(data.files || []);
-        const fileIds = (data.files || []).map(f => f.id);
-        if (fileIds.length > 0) {
-          const { data: metaData } = await supabase.from("file_metadata").select("*").in("google_file_id", fileIds);
-          const metaMap = {};
-          (metaData || []).forEach(m => { metaMap[m.google_file_id] = m; });
-          setMetadata(metaMap);
-        }
-      } catch (err) { setError("Verbindungsfehler."); }
-      setLoading(false);
-    };
-    fetchAgain();
   };
 
   // Route uploads to Supabase Storage OR Google Drive based on the destination
@@ -8689,8 +8671,14 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
                 <span key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <span style={{ color: theme.textFaint }}>/</span>
                   <span onClick={() => {
-                    if (activeSource === "supabase") { setCurrentSbFolder(fp.id); setSbFolderPath(prev => prev.slice(0, i)); }
-                    else { setCurrentFolder(fp.id); setFolderPath(prev => prev.slice(0, i)); }
+                    // Path entries pair the PARENT level's id with the entered folder's
+                    // name — so the folder this crumb names has its id in the NEXT
+                    // entry (or is the current folder, for the last crumb). Navigating
+                    // to fp.id landed one level too high on every crumb.
+                    const path = activeSource === "supabase" ? sbFolderPath : folderPath;
+                    const targetId = i < path.length - 1 ? path[i + 1].id : (activeSource === "supabase" ? currentSbFolder : currentFolder);
+                    if (activeSource === "supabase") { setCurrentSbFolder(targetId); setSbFolderPath(path.slice(0, i + 1)); }
+                    else { setCurrentFolder(targetId); setFolderPath(path.slice(0, i + 1)); }
                   }} style={{ cursor: "pointer", color: theme.textSub }}>{fp.name}</span>
                 </span>
               ))}
