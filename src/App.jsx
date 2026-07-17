@@ -4877,6 +4877,9 @@ const WB_PALETTE = [
 ];
 const WB_BORDER_COLORS = ["transparent", ...WB_STROKE_COLORS]; // shapes can also have no border
 const WB_SHAPE_DEFAULT_FILL = "#FFFFFF"; // new shapes start with a fill + outline
+// Line/arrow stroke thickness options (thin · medium · thick) and arrowhead sizes.
+const WB_STROKE_WIDTHS = [2, 4, 7];
+const WB_ARROW_HEAD_SIZES = { s: 9, m: 15, l: 24 };
 // Stickers bundled in /public/Open Stickers/PNG/<Category>/<file>.png
 const WB_STICKERS = {
   IT: ["1_usb_stick.png","2_sliders.png","3_email.png","4_code_window.png","5_bell.png","6_calendar.png","7_pie_chart.png","8_location_mark.png","9_credit_card.png","10_smartphone.png","11_enter_key.png","12_folder.png","13_joystick.png","14_browser_window.png","15_computer_mouse.png","16_trash_bin.png","17_speaker.png","18_monitor.png","19_watch.png","20_bubble.png"],
@@ -4971,6 +4974,8 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [tempItem, setTempItem] = useState(null);
   const [shapesOpen, setShapesOpen] = useState(false); // shapes flyout above the toolbar
   const [lastShape, setLastShape] = useState("rect");  // shape shown on the toolbar's shapes button
+  const [lineToolOpen, setLineToolOpen] = useState(false); // arrow/line flyout above the toolbar
+  const [lastLineTool, setLastLineTool] = useState("arrow"); // which of arrow|line the toolbar button shows
   const [stickersOpen, setStickersOpen] = useState(false); // sticker picker above the toolbar
   const [stickerCat, setStickerCat] = useState("Life");
   const [emojiOpen, setEmojiOpen] = useState(false);   // emoji picker above the toolbar
@@ -5215,7 +5220,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   };
   const bboxOf = (it) => {
     const d = it.data || {};
-    if (it.type === "arrow") return { x: Math.min(d.x1, d.x2), y: Math.min(d.y1, d.y2), w: Math.abs(d.x2 - d.x1), h: Math.abs(d.y2 - d.y1) };
+    if (it.type === "arrow" || it.type === "line") return { x: Math.min(d.x1, d.x2), y: Math.min(d.y1, d.y2), w: Math.abs(d.x2 - d.x1), h: Math.abs(d.y2 - d.y1) };
     if (it.type === "draw") {
       const pts = d.points || [[0, 0]];
       const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
@@ -5337,7 +5342,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (tool === "text") { placeText(pt); return; }
     if (tool === "comment") { placeComment(pt); return; }
     if (WB_SHAPE_TYPES.includes(tool)) { dragRef.current = { mode: "create", type: tool, sx: pt.x, sy: pt.y }; setTempItem({ type: tool, x: pt.x, y: pt.y, w: 1, h: 1 }); return; }
-    if (tool === "arrow") { dragRef.current = { mode: "arrow" }; setTempItem({ type: "arrow", x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y }); return; }
+    if (tool === "arrow" || tool === "line") { dragRef.current = { mode: "arrow" }; setTempItem({ type: tool, x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y }); return; }
     // select tool on empty canvas: start a marquee (drag a box to select multiple).
     // Panning is done with the hand tool (or the mouse wheel).
     setSel(null); setEditing(null); setSelIds([]);
@@ -5370,7 +5375,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (d.mode === "move") {
       const nx = pt.x - d.grabX, ny = pt.y - d.grabY;
       let patch;
-      if (d.type === "arrow") patch = { x1: nx, y1: ny, x2: nx + (d.base.x2 - d.base.x1), y2: ny + (d.base.y2 - d.base.y1) };
+      if (d.type === "arrow" || d.type === "line") patch = { x1: nx, y1: ny, x2: nx + (d.base.x2 - d.base.x1), y2: ny + (d.base.y2 - d.base.y1) };
       else if (d.type === "draw") patch = { ox: nx, oy: ny };
       else patch = { x: nx, y: ny };
       patchItem(d.id, patch); d.final = patch; d.persistId = d.id;
@@ -5421,7 +5426,8 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     }
     if (d?.mode === "arrow" && tempItem) {
       if (Math.hypot(tempItem.x2 - tempItem.x1, tempItem.y2 - tempItem.y1) > 12) {
-        const id = addItemLocal("arrow", { x1: tempItem.x1, y1: tempItem.y1, x2: tempItem.x2, y2: tempItem.y2, color: "#15151c", sw: 2.5 });
+        // arrow (with head) or line (no head) — hs only matters for arrows.
+        const id = addItemLocal(tempItem.type, { x1: tempItem.x1, y1: tempItem.y1, x2: tempItem.x2, y2: tempItem.y2, color: "#15151c", sw: 4, hs: "m" });
         setSel(id);
       }
       setTool("select");
@@ -5496,7 +5502,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (editingRef.current && editingRef.current !== it.id) flushEdit(); // save the other element's text first
     const pt = toWorld(e);
     const d = it.data || {};
-    if (it.type === "arrow") dragRef.current = { mode: "move", id: it.id, type: "arrow", grabX: pt.x - d.x1, grabY: pt.y - d.y1, base: { ...d } };
+    if (it.type === "arrow" || it.type === "line") dragRef.current = { mode: "move", id: it.id, type: it.type, grabX: pt.x - d.x1, grabY: pt.y - d.y1, base: { ...d } };
     else if (it.type === "draw") dragRef.current = { mode: "move", id: it.id, type: "draw", grabX: pt.x - (d.ox || 0), grabY: pt.y - (d.oy || 0), base: { ...d } };
     else dragRef.current = { mode: "move", id: it.id, type: it.type, grabX: pt.x - (d.x || 0), grabY: pt.y - (d.y || 0), base: { ...d } };
   };
@@ -5783,20 +5789,22 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const renderArrow = (it) => {
     const d = it.data || {};
     const { x1 = 0, y1 = 0, x2 = 40, y2 = 0 } = d;
-    const minX = Math.min(x1, x2) - 10, minY = Math.min(y1, y2) - 10;
+    const pad = 26; // room for the arrowhead so it isn't clipped by the svg box
+    const minX = Math.min(x1, x2) - pad, minY = Math.min(y1, y2) - pad;
     const ang = Math.atan2(y2 - y1, x2 - x1);
-    const hl = 11;
+    const hasHead = it.type === "arrow";
+    const hl = WB_ARROW_HEAD_SIZES[d.hs] || WB_ARROW_HEAD_SIZES.m; // arrowhead length
     const hx1 = x2 - hl * Math.cos(ang - 0.46), hy1 = y2 - hl * Math.sin(ang - 0.46);
     const hx2 = x2 - hl * Math.cos(ang + 0.46), hy2 = y2 - hl * Math.sin(ang + 0.46);
     const col = d.color || "#15151c";
     return (
-      <svg key={it.id} width={Math.abs(x2 - x1) + 20} height={Math.abs(y2 - y1) + 20}
+      <svg key={it.id} width={Math.abs(x2 - x1) + pad * 2} height={Math.abs(y2 - y1) + pad * 2}
         style={{ position: "absolute", left: minX, top: minY, overflow: "visible", pointerEvents: "none" }}>
-        <g transform={`translate(${-minX}, ${-minY})`} stroke={col} strokeWidth={(d.sw || 2.5) + (selIds.includes(it.id) ? 0.8 : 0)} strokeLinecap="round" fill="none"
+        <g transform={`translate(${-minX}, ${-minY})`} stroke={col} strokeWidth={(d.sw || 4) + (selIds.includes(it.id) ? 0.8 : 0)} strokeLinecap="round" strokeLinejoin="round" fill="none"
           style={{ pointerEvents: "stroke", cursor: "move" }} onPointerDown={(e) => onItemPointerDown(e, it)}>
           <line x1={x1} y1={y1} x2={x2} y2={y2} />
-          <line x1={x2} y1={y2} x2={hx1} y2={hy1} />
-          <line x1={x2} y1={y2} x2={hx2} y2={hy2} />
+          {hasHead && <line x1={x2} y1={y2} x2={hx1} y2={hy1} />}
+          {hasHead && <line x1={x2} y1={y2} x2={hx2} y2={hy2} />}
         </g>
       </svg>
     );
@@ -5849,7 +5857,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   };
   const renderItem = (it) => {
     if (it.type === "draw") return renderPath(it);
-    if (it.type === "arrow") return renderArrow(it);
+    if (it.type === "arrow" || it.type === "line") return renderArrow(it);
     if (it.type === "comment") return renderComment(it);
     if (it.type === "link") return renderLink(it);
     return renderBoxItem(it);
@@ -5909,7 +5917,27 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         style={{ position: "absolute", left: cx, top, transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 13, zIndex: 20,
           background: "#15151c", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 14px 36px rgba(0,0,0,0.28)", whiteSpace: "nowrap" }}>
         {/* Color swatch(es) */}
-        {(selItem.type === "sticky" || ["arrow", "draw", "text"].includes(selItem.type)) && swatch("color", dta.color || (selItem.type === "sticky" ? WB_STICKY_DEFAULT : "#15151c"))}
+        {(selItem.type === "sticky" || ["arrow", "line", "draw", "text"].includes(selItem.type)) && swatch("color", dta.color || (selItem.type === "sticky" ? WB_STICKY_DEFAULT : "#15151c"))}
+        {/* Line / arrow: stroke width (both) + arrowhead size (arrow only) */}
+        {(selItem.type === "arrow" || selItem.type === "line") && (<>
+          {divider}
+          <span style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.55)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{de ? "Stärke" : "Width"}</span>
+          {WB_STROKE_WIDTHS.map(w => (
+            <div key={w} onClick={() => setSelData({ sw: w })} title={de ? `Strichstärke ${w}` : `Stroke ${w}`}
+              style={{ ...iconBtnStyle, background: (dta.sw || 4) === w ? "rgba(255,255,255,0.22)" : "transparent" }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeLinecap="round"><line x1="4" y1="12" x2="20" y2="12" strokeWidth={w} /></svg>
+            </div>
+          ))}
+          {selItem.type === "arrow" && (<>
+            {divider}
+            <span style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.55)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{de ? "Spitze" : "Head"}</span>
+            {["s", "m", "l"].map(k => (
+              <div key={k} onClick={() => setSelData({ hs: k })} title={de ? `Spitze ${k.toUpperCase()}` : `Head ${k.toUpperCase()}`}
+                style={{ padding: "3px 7px", borderRadius: 7, cursor: "pointer", fontSize: 11, fontFamily: FONT, fontWeight: 600, color: "#fff", textTransform: "uppercase",
+                  background: (dta.hs || "m") === k ? "rgba(255,255,255,0.22)" : "transparent" }}>{k}</div>
+            ))}
+          </>)}
+        </>)}
         {isShape && (<>
           <span style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.55)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{de ? "Rand" : "Border"}</span>
           {swatch("color", dta.color || "#15151c")}
@@ -6055,8 +6083,8 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           {marquee && (marquee.w > 1 || marquee.h > 1) && (
             <div style={{ position: "absolute", left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h, border: "1.5px solid #3B82F6", background: "rgba(59,130,246,0.10)", pointerEvents: "none" }} />
           )}
-          {/* Arrow endpoint handles — drag to re-route the arrow */}
-          {selItem?.type === "arrow" && tool === "select" && (() => {
+          {/* Arrow/line endpoint handles — drag to re-route */}
+          {(selItem?.type === "arrow" || selItem?.type === "line") && tool === "select" && (() => {
             const d = selItem.data || {};
             const handle = (which, hx, hy) => (
               <div key={which}
@@ -6075,9 +6103,9 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               </svg>
             )
           )}
-          {tempItem && tempItem.type === "arrow" && (
+          {tempItem && (tempItem.type === "arrow" || tempItem.type === "line") && (
             <svg style={{ position: "absolute", left: 0, top: 0, overflow: "visible", pointerEvents: "none" }}>
-              <line x1={tempItem.x1} y1={tempItem.y1} x2={tempItem.x2} y2={tempItem.y2} stroke="#15151c" strokeWidth={2.5} strokeDasharray="6 5" strokeLinecap="round" />
+              <line x1={tempItem.x1} y1={tempItem.y1} x2={tempItem.x2} y2={tempItem.y2} stroke="#15151c" strokeWidth={4} strokeDasharray="6 5" strokeLinecap="round" />
             </svg>
           )}
         </div>
@@ -6338,7 +6366,41 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               </>)}
             </AnimatePresence>
           </div>
-          {toolBtn("arrow", de ? "Pfeil" : "Arrow", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>)}
+          {/* Arrow / line — one button with a Figma-style flyout (arrow OR plain line) */}
+          {(() => {
+            const lineIcon = (kind) => kind === "line"
+              ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="18" x2="18" y2="6"/></svg>
+              : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>;
+            const active = tool === "arrow" || tool === "line";
+            return (
+            <div style={{ position: "relative" }}>
+              <motion.div whileTap={{ scale: 0.9 }} onClick={() => setLineToolOpen(o => !o)} title={de ? "Pfeil / Linie" : "Arrow / line"}
+                style={{ height: 38, padding: "0 7px 0 10px", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", gap: 3, cursor: "pointer",
+                  background: active ? "#15151c" : "transparent", color: active ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
+                {lineIcon(lastLineTool)}
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}><polyline points="6 9 12 15 18 9"/></svg>
+              </motion.div>
+              <AnimatePresence>
+                {lineToolOpen && (<>
+                  <div onClick={() => setLineToolOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
+                  <motion.div initial={{ opacity: 0, y: 8, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.96 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
+                    style={{ position: "absolute", bottom: "calc(100% + 14px)", left: "50%", transform: "translateX(-50%)", zIndex: 31, display: "flex", alignItems: "center", gap: 4, padding: 6, borderRadius: 14,
+                      background: darkMode ? "rgba(22,22,30,0.95)" : "rgba(255,255,255,0.98)", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 14px 40px rgba(0,0,0,0.18)" }}>
+                    {["arrow", "line"].map(k => (
+                      <motion.div key={k} whileTap={{ scale: 0.9 }}
+                        onClick={() => { setTool(k); setLastLineTool(k); setLineToolOpen(false); setEditing(null); }}
+                        title={k === "arrow" ? (de ? "Pfeil" : "Arrow") : (de ? "Linie" : "Line")}
+                        style={{ width: 38, height: 38, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                          background: tool === k ? "#15151c" : "transparent", color: tool === k ? "#fff" : theme.text }}>
+                        {lineIcon(k)}
+                      </motion.div>
+                    ))}
+                  </motion.div>
+                </>)}
+              </AnimatePresence>
+            </div>
+            );
+          })()}
           {toolBtn("text", "Text", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>)}
           <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
           {/* Stickers — round seal icon; picker opens centered over this button (below) */}
