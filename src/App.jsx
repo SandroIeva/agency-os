@@ -6337,7 +6337,6 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           {toolBtn("select", de ? "Auswählen" : "Select", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M5 3l7.5 16 2-6.5L21 10.5z"/></svg>)}
           {toolBtn("hand", de ? "Verschieben" : "Hand", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>)}
           <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
-          {toolBtn("pen", de ? "Stift" : "Pen", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>)}
           {toolBtn("sticky", "Sticky Note", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5z"/><path d="M15 3v6h6"/></svg>)}
           {/* Shapes — one button, Figma-style flyout with all shapes */}
           <div style={{ position: "relative" }}>
@@ -6366,15 +6365,18 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               </>)}
             </AnimatePresence>
           </div>
-          {/* Arrow / line — one button with a Figma-style flyout (arrow OR plain line) */}
+          {/* Arrow / line / free-hand — one button with a Figma-style flyout */}
           {(() => {
             const lineIcon = (kind) => kind === "line"
               ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="18" x2="18" y2="6"/></svg>
+              : kind === "pen"
+              ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
               : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>;
-            const active = tool === "arrow" || tool === "line";
+            const active = tool === "arrow" || tool === "line" || tool === "pen";
+            const lineTitle = (k) => k === "arrow" ? (de ? "Pfeil" : "Arrow") : k === "line" ? (de ? "Linie" : "Line") : (de ? "Freihand" : "Free-hand");
             return (
             <div style={{ position: "relative" }}>
-              <motion.div whileTap={{ scale: 0.9 }} onClick={() => setLineToolOpen(o => !o)} title={de ? "Pfeil / Linie" : "Arrow / line"}
+              <motion.div whileTap={{ scale: 0.9 }} onClick={() => setLineToolOpen(o => !o)} title={de ? "Pfeil / Linie / Freihand" : "Arrow / line / free-hand"}
                 style={{ height: 38, padding: "0 7px 0 10px", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", gap: 3, cursor: "pointer",
                   background: active ? "#15151c" : "transparent", color: active ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
                 {lineIcon(lastLineTool)}
@@ -6386,10 +6388,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
                   <motion.div initial={{ opacity: 0, y: 8, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.96 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
                     style={{ position: "absolute", bottom: "calc(100% + 14px)", left: "50%", transform: "translateX(-50%)", zIndex: 31, display: "flex", alignItems: "center", gap: 4, padding: 6, borderRadius: 14,
                       background: darkMode ? "rgba(22,22,30,0.95)" : "rgba(255,255,255,0.98)", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 14px 40px rgba(0,0,0,0.18)" }}>
-                    {["arrow", "line"].map(k => (
+                    {["arrow", "line", "pen"].map(k => (
                       <motion.div key={k} whileTap={{ scale: 0.9 }}
                         onClick={() => { setTool(k); setLastLineTool(k); setLineToolOpen(false); setEditing(null); }}
-                        title={k === "arrow" ? (de ? "Pfeil" : "Arrow") : (de ? "Linie" : "Line")}
+                        title={lineTitle(k)}
                         style={{ width: 38, height: 38, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
                           background: tool === k ? "#15151c" : "transparent", color: tool === k ? "#fff" : theme.text }}>
                         {lineIcon(k)}
