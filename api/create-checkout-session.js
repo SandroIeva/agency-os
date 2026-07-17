@@ -13,7 +13,7 @@ import {
   sendBillingError,
 } from "../server/billing.js";
 
-const MANAGED_STATUSES = new Set(["active", "trialing", "past_due", "unpaid", "paused"]);
+const MANAGED_STATUSES = new Set(["active", "trialing", "incomplete", "past_due", "unpaid", "paused"]);
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });

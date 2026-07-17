@@ -9,7 +9,7 @@ const PLAN_OPTIONS = [
   { id: "agency", name: "Agency", monthly: 85, annual: 72, description: "Flexible workspaces, roles, and support for agencies." },
 ];
 
-const MANAGEABLE_STATUSES = new Set(["active", "trialing", "past_due", "unpaid", "paused"]);
+const MANAGEABLE_STATUSES = new Set(["active", "trialing", "incomplete", "past_due", "unpaid", "paused"]);
 
 function readPendingSelection() {
   try {

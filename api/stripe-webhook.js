@@ -12,6 +12,28 @@ async function readRawBody(req) {
   return Buffer.concat(chunks);
 }
 
+function readStripeId(value) {
+  if (!value) return null;
+  return typeof value === "string" ? value : value.id || null;
+}
+
+async function syncCheckoutSubscription(checkout) {
+  if (checkout.mode !== "subscription") return;
+  const subscriptionId = readStripeId(checkout.subscription);
+  if (!subscriptionId) return;
+  const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
+  await syncStripeSubscription(subscription);
+}
+
+async function syncInvoiceSubscription(invoice) {
+  const subscriptionId = readStripeId(
+    invoice.subscription || invoice.parent?.subscription_details?.subscription,
+  );
+  if (!subscriptionId) return;
+  const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
+  await syncStripeSubscription(subscription);
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
@@ -32,15 +54,12 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Invalid Stripe signature" });
     }
 
-    if (event.type === "checkout.session.completed") {
-      const checkout = event.data.object;
-      if (checkout.mode === "subscription" && checkout.subscription) {
-        const subscriptionId = typeof checkout.subscription === "string"
-          ? checkout.subscription
-          : checkout.subscription.id;
-        const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
-        await syncStripeSubscription(subscription);
-      }
+    if (
+      event.type === "checkout.session.completed" ||
+      event.type === "checkout.session.async_payment_succeeded" ||
+      event.type === "checkout.session.async_payment_failed"
+    ) {
+      await syncCheckoutSubscription(event.data.object);
     }
 
     if (
@@ -49,6 +68,15 @@ export default async function handler(req, res) {
       event.type === "customer.subscription.deleted"
     ) {
       await syncStripeSubscription(event.data.object);
+    }
+
+    if (
+      event.type === "invoice.paid" ||
+      event.type === "invoice.payment_failed" ||
+      event.type === "invoice.payment_action_required" ||
+      event.type === "invoice.finalization_failed"
+    ) {
+      await syncInvoiceSubscription(event.data.object);
     }
 
     return res.status(200).json({ received: true });
