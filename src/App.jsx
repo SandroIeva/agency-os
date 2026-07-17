@@ -11975,10 +11975,11 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
       if (error) throw error;
       // Send email
       try {
-        await fetch("/api/send-project-invite", {
+        await fetch("/api/send", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            mode: "project-invite",
             email,
             token: inv.token,
             projectName: editing.name,
@@ -22850,10 +22851,10 @@ If you don't know a field, infer a plausible value. Write all text values in the
   const analyseBrandPdf = async (fileUrl) => {
     setSourceUploading(p => ({ ...p, "brandbook-analyse": true }));
     try {
-      const response = await fetch("/api/fetch-brand-pdf", {
+      const response = await fetch("/api/fetch-brand", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: fileUrl }),
+        body: JSON.stringify({ mode: "pdf", url: fileUrl }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || t("brand.sources.fetchError"));
@@ -22882,10 +22883,10 @@ If you don't know a field, infer a plausible value. Write all text values in the
   const analyseBrandZip = async (fileUrl) => {
     setSourceUploading(p => ({ ...p, "zip-analyse": true }));
     try {
-      const response = await fetch("/api/fetch-brand-zip", {
+      const response = await fetch("/api/fetch-brand", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: fileUrl }),
+        body: JSON.stringify({ mode: "zip", url: fileUrl }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || t("brand.sources.fetchError"));
@@ -25808,10 +25809,11 @@ export default function CircularMenu() {
           if (pushSubs?.length) {
             for (const sub of pushSubs) {
               try {
-                const res = await fetch("/api/send-push", {
+                const res = await fetch("/api/send", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
+                    mode: "push",
                     subscription: { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
                     title: "⏰ Erinnerung",
                     body: rem.title,
@@ -25904,10 +25906,11 @@ export default function CircularMenu() {
 
       // Immediately fire a test push so the user knows it works
       try {
-        const testRes = await fetch("/api/send-push", {
+        const testRes = await fetch("/api/send", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            mode: "push",
             subscription: { endpoint: subJson.endpoint, keys: { p256dh: subJson.keys.p256dh, auth: subJson.keys.auth } },
             title: "✓ Push aktiviert",
             body: "Du erhältst ab jetzt Erinnerungen auf diesem Gerät.",
@@ -30174,10 +30177,11 @@ export default function CircularMenu() {
                               // otherwise a Resend rejection (bounce, bad address, limit)
                               // silently looks like a successful send.
                               try {
-                                const resp = await fetch("/api/send-invite", {
+                                const resp = await fetch("/api/send", {
                                   method: "POST",
                                   headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify({
+                                    mode: "invite",
                                     email,
                                     token: inv.token,
                                     orgName: userOrg.name,
@@ -31183,10 +31187,11 @@ export default function CircularMenu() {
                           try {
                             const { data: subs } = await supabase.from("push_subscriptions").select("*").eq("user_id", session.user.id);
                             for (const sub of subs || []) {
-                              await fetch("/api/send-push", {
+                              await fetch("/api/send", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({
+                                  mode: "push",
                                   subscription: { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
                                   title: "🔔 Test-Benachrichtigung",
                                   body: "Push funktioniert auf diesem Gerät!",
@@ -31209,10 +31214,10 @@ export default function CircularMenu() {
                             .select()
                             .single();
                           if (tokenErr) throw tokenErr;
-                          await fetch("/api/send-push-setup", {
+                          await fetch("/api/send", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ email: userEmail, userName, token: tokenRow.token }),
+                            body: JSON.stringify({ mode: "push-setup", email: userEmail, userName, token: tokenRow.token }),
                           });
                           setPushSetupSent(true);
                           setTimeout(() => setPushSetupSent(false), 5000);
