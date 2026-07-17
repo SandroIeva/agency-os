@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 
+const APP_FONT = "'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+
 const PLAN_OPTIONS = [
   { id: "starter", name: "Starter", monthly: 15, annual: 12, description: "A focused space for individual creative work." },
   { id: "pro", name: "Pro", monthly: 24, annual: 20, description: "Shared brand context and collaboration for small teams." },
@@ -125,7 +127,7 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.12, duration: 0.4, ease: [0.22, 0.68, 0.35, 1] }}
-      style={{ marginTop: 24 }}
+      style={{ marginTop: 24, fontFamily: APP_FONT }}
     >
       <div style={{ fontSize: 10, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
         {de ? "Abo & Abrechnung" : "Plan & Billing"} — {org?.name}
@@ -144,7 +146,7 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
             </div>
           </div>
           {hasSubscription && isAdmin && (
-            <motion.button whileTap={{ scale: 0.97 }} onClick={openPortal} disabled={Boolean(action)} style={{ padding: "10px 15px", borderRadius: 11, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text, fontSize: 12, fontWeight: 600, cursor: action ? "wait" : "pointer" }}>
+            <motion.button whileTap={{ scale: 0.97 }} onClick={openPortal} disabled={Boolean(action)} style={{ padding: "10px 15px", borderRadius: 11, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text, fontFamily: APP_FONT, fontSize: 12, fontWeight: 600, cursor: action ? "wait" : "pointer" }}>
               {action === "portal" ? "…" : (de ? "Abo verwalten" : "Manage billing")}
             </motion.button>
           )}
@@ -154,7 +156,7 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
           <>
             <div style={{ display: "inline-flex", gap: 4, padding: 4, borderRadius: 12, background: darkMode ? "rgba(255,255,255,.05)" : "rgba(0,0,0,.045)", marginBottom: 18 }}>
               {["monthly", "annual"].map(interval => (
-                <button key={interval} onClick={() => setBillingInterval(interval)} style={{ padding: "8px 14px", border: 0, borderRadius: 9, background: billingInterval === interval ? (darkMode ? "rgba(255,255,255,.12)" : "#fff") : "transparent", boxShadow: billingInterval === interval ? "0 1px 4px rgba(0,0,0,.12)" : "none", color: billingInterval === interval ? theme.text : theme.textDim, fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all .25s ease" }}>
+                <button key={interval} onClick={() => setBillingInterval(interval)} style={{ padding: "8px 14px", border: 0, borderRadius: 9, background: billingInterval === interval ? (darkMode ? "rgba(255,255,255,.12)" : "#fff") : "transparent", boxShadow: billingInterval === interval ? "0 1px 4px rgba(0,0,0,.12)" : "none", color: billingInterval === interval ? theme.text : theme.textDim, fontFamily: APP_FONT, fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all .25s ease" }}>
                   {interval === "monthly" ? (de ? "Monatlich" : "Monthly") : (de ? "Jährlich" : "Annual")}
                 </button>
               ))}
@@ -164,7 +166,7 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
               {PLAN_OPTIONS.map(plan => {
                 const selected = selectedPlan === plan.id;
                 return (
-                  <motion.button key={plan.id} whileHover={{ y: -2 }} whileTap={{ scale: 0.99 }} onClick={() => setSelectedPlan(plan.id)} style={{ minHeight: 155, padding: 17, textAlign: "left", borderRadius: 16, border: `1px solid ${selected ? "#8B7AFF" : theme.border}`, background: selected ? "rgba(139,122,255,.10)" : "transparent", color: theme.text, cursor: "pointer", transition: "border-color .25s ease, background .25s ease" }}>
+                  <motion.button key={plan.id} whileHover={{ y: -2 }} whileTap={{ scale: 0.99 }} onClick={() => setSelectedPlan(plan.id)} style={{ minHeight: 155, padding: 17, textAlign: "left", borderRadius: 16, border: `1px solid ${selected ? "#8B7AFF" : theme.border}`, background: selected ? "rgba(139,122,255,.10)" : "transparent", color: theme.text, fontFamily: APP_FONT, cursor: "pointer", transition: "border-color .25s ease, background .25s ease" }}>
                     <div style={{ fontSize: 14, fontWeight: 600 }}>{plan.name}</div>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginTop: 12 }}>
                       <strong style={{ fontSize: 30, fontWeight: 600 }}>€{plan[billingInterval]}</strong>
@@ -180,7 +182,7 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
               <div style={{ fontSize: 11, color: theme.textDim }}>
                 {!isAdmin && (de ? "Nur Workspace-Admins können ein Abo abschließen." : "Only workspace admins can start a subscription.")}
               </div>
-              <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }} onClick={startCheckout} disabled={!isAdmin || Boolean(action) || loading} style={{ padding: "11px 20px", border: 0, borderRadius: 12, background: "#8B7AFF", color: "#fff", fontSize: 13, fontWeight: 600, cursor: !isAdmin || action || loading ? "not-allowed" : "pointer", opacity: !isAdmin || action || loading ? 0.55 : 1 }}>
+              <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }} onClick={startCheckout} disabled={!isAdmin || Boolean(action) || loading} style={{ padding: "11px 20px", border: 0, borderRadius: 12, background: "#8B7AFF", color: "#fff", fontFamily: APP_FONT, fontSize: 13, fontWeight: 600, cursor: !isAdmin || action || loading ? "not-allowed" : "pointer", opacity: !isAdmin || action || loading ? 0.55 : 1 }}>
                 {action === "checkout" ? (de ? "Öffnet Checkout …" : "Opening checkout …") : (de ? "Weiter zum sicheren Checkout" : "Continue to secure checkout")}
               </motion.button>
             </div>
