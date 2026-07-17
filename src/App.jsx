@@ -6349,8 +6349,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
             <AnimatePresence>
               {shapesOpen && (<>
                 <div onClick={() => setShapesOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
+                {/* Plain wrapper owns the centering (left:50% + translateX(-50%)) — the
+                    motion.div animates scale/y, which would otherwise clobber that
+                    transform and shove the flyout to the right (Framer transform trap). */}
+                <div style={{ position: "absolute", bottom: "calc(100% + 14px)", left: "50%", transform: "translateX(-50%)", zIndex: 31 }}>
                 <motion.div initial={{ opacity: 0, y: 8, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.96 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
-                  style={{ position: "absolute", bottom: "calc(100% + 14px)", left: "50%", transform: "translateX(-50%)", zIndex: 31, display: "flex", alignItems: "center", gap: 4, padding: 6, borderRadius: 14,
+                  style={{ display: "flex", alignItems: "center", gap: 4, padding: 6, borderRadius: 14,
                     background: darkMode ? "rgba(22,22,30,0.95)" : "rgba(255,255,255,0.98)", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 14px 40px rgba(0,0,0,0.18)" }}>
                   {WB_SHAPE_TYPES.map(st => (
                     <motion.div key={st} whileTap={{ scale: 0.9 }}
@@ -6362,6 +6366,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
                     </motion.div>
                   ))}
                 </motion.div>
+                </div>
               </>)}
             </AnimatePresence>
           </div>
@@ -6385,8 +6390,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               <AnimatePresence>
                 {lineToolOpen && (<>
                   <div onClick={() => setLineToolOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
+                  {/* Plain wrapper owns the centering; motion.div only animates (see shapes flyout). */}
+                  <div style={{ position: "absolute", bottom: "calc(100% + 14px)", left: "50%", transform: "translateX(-50%)", zIndex: 31 }}>
                   <motion.div initial={{ opacity: 0, y: 8, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.96 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
-                    style={{ position: "absolute", bottom: "calc(100% + 14px)", left: "50%", transform: "translateX(-50%)", zIndex: 31, display: "flex", alignItems: "center", gap: 4, padding: 6, borderRadius: 14,
+                    style={{ display: "flex", alignItems: "center", gap: 4, padding: 6, borderRadius: 14,
                       background: darkMode ? "rgba(22,22,30,0.95)" : "rgba(255,255,255,0.98)", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 14px 40px rgba(0,0,0,0.18)" }}>
                     {["arrow", "line", "pen"].map(k => (
                       <motion.div key={k} whileTap={{ scale: 0.9 }}
@@ -6398,6 +6405,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
                       </motion.div>
                     ))}
                   </motion.div>
+                  </div>
                 </>)}
               </AnimatePresence>
             </div>
