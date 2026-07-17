@@ -5,6 +5,7 @@ import { supabase } from "./supabase";
 import { buildSystemPrompt } from "./systemPrompt";
 import { getTranslation } from "./translations";
 import { openGooglePicker, openGoogleFolderPicker } from "./googlePicker";
+import BillingSettings from "./BillingSettings";
 import { useCreateBlockNote, getDefaultReactSlashMenuItems, SuggestionMenuController, createReactBlockSpec, FormattingToolbar, FormattingToolbarController, getFormattingToolbarItems, useComponentsContext } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { de as blockNoteDe } from "@blocknote/core/locales";
@@ -24620,7 +24621,7 @@ export default function CircularMenu() {
   const [userOrgs, setUserOrgs] = useState([]);             // all orgs the user belongs to
   const [userOrgRole, setUserOrgRole] = useState(null);     // role in current org
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false); // workspace switcher dropdown
-  const [settingsTab, setSettingsTab] = useState("workspace"); // settings page tab: workspace | ai | appearance | account
+  const [settingsTab, setSettingsTab] = useState("workspace"); // settings page tab: workspace | billing | ai | appearance | account
   const [deleteWsOpen, setDeleteWsOpen] = useState(false);   // workspace-delete confirm modal
   const [deleteWsText, setDeleteWsText] = useState("");      // typed confirmation (must match workspace name)
   const [deletingWs, setDeletingWs] = useState(false);
@@ -24944,6 +24945,29 @@ export default function CircularMenu() {
   const canCreateSprints = isOrgAdmin || !!myMembership?.can_create_sprints;
   const canManageSprints = isOrgAdmin || !!myMembership?.can_manage_sprints;
   const canInviteMembers = isOrgAdmin || !!myMembership?.can_invite_members;
+
+  // Pricing links from i7os.com arrive with ?plan=...&billing=.... Keep the
+  // selection through login and open the workspace Billing settings once the
+  // authenticated workspace is ready.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const plan = params.get("plan");
+    const billing = params.get("billing");
+    if (["starter", "pro", "agency"].includes(plan) && ["monthly", "annual"].includes(billing)) {
+      try { localStorage.setItem("i7os-pending-billing", JSON.stringify({ plan, billing })); } catch (_) {}
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!session?.user?.id || !userOrg?.id) return;
+    const params = new URLSearchParams(window.location.search);
+    let hasPendingSelection = false;
+    try { hasPendingSelection = Boolean(localStorage.getItem("i7os-pending-billing")); } catch (_) {}
+    if (hasPendingSelection || params.has("checkout")) {
+      setSettingsTab("billing");
+      setCurrentView("settings");
+    }
+  }, [session?.user?.id, userOrg?.id]);
   // Persist a chosen display name to auth metadata + profiles + localStorage.
   const saveDisplayName = async (name) => {
     const clean = (name || "").trim();
@@ -29969,6 +29993,7 @@ export default function CircularMenu() {
               }}>
                 {[
                   { id: "workspace", label: "Workspace" },
+                  { id: "billing", label: appLanguage === "de" ? "Abo" : "Billing" },
                   { id: "ai", label: appLanguage === "de" ? "KI & Modelle" : "AI & Models" },
                   { id: "appearance", label: appLanguage === "de" ? "Darstellung" : "Appearance" },
                   { id: "account", label: "Account" },
@@ -29989,6 +30014,17 @@ export default function CircularMenu() {
                   );
                 })}
               </div>
+
+              {settingsTab === "billing" && userOrg && (
+                <BillingSettings
+                  session={session}
+                  org={userOrg}
+                  isAdmin={isOrgAdmin}
+                  theme={theme}
+                  darkMode={darkMode}
+                  appLanguage={appLanguage}
+                />
+              )}
 
               {/* ── Workspace & Team Management ── */}
               {settingsTab === "workspace" && userOrg && (
