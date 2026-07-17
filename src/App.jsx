@@ -4976,9 +4976,9 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [lastShape, setLastShape] = useState("rect");  // shape shown on the toolbar's shapes button
   const [lineToolOpen, setLineToolOpen] = useState(false); // arrow/line flyout above the toolbar
   const [lastLineTool, setLastLineTool] = useState("arrow"); // which of arrow|line the toolbar button shows
-  const [stickersOpen, setStickersOpen] = useState(false); // sticker picker above the toolbar
+  const [mediaOpen, setMediaOpen] = useState(false);   // combined emoji/sticker picker above the toolbar
+  const [mediaTab, setMediaTab] = useState("emoji");   // "emoji" | "sticker" — top toggle in the picker
   const [stickerCat, setStickerCat] = useState("Life");
-  const [emojiOpen, setEmojiOpen] = useState(false);   // emoji picker above the toolbar
   const [emojiCat, setEmojiCat] = useState("smileys");
   const [imgMenuOpen, setImgMenuOpen] = useState(false); // image button's Upload / Assets choice menu
   const [assetsOpen, setAssetsOpen] = useState(false);   // Assets image picker panel above the toolbar
@@ -4998,8 +4998,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const dragRef = useRef(null);
   const fileRef = useRef(null);
   const toolbarRef = useRef(null); // bottom toolbar — used to center the emoji picker over it
-  const stickerBtnRef = useRef(null); // sticker toolbar button — the sticker picker centers on this
-  const emojiBtnRef = useRef(null); // emoji toolbar button — the emoji picker centers on this
+  const mediaBtnRef = useRef(null); // combined emoji/sticker toolbar button — the picker centers on this
   const imgBtnRef = useRef(null); // image toolbar button — the Upload/Assets menu & picker center on this
   const commentAreaRef = useRef(null); // the comment textarea while a comment bubble is open
   const camRef = useRef(cam); camRef.current = cam;
@@ -5258,14 +5257,14 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const cx = (r.width / 2 - c.x) / c.s, cy = (r.height / 2 - c.y) / c.s;
     const s = 120;
     const id = addItemLocal("sticker", { x: cx - s / 2, y: cy - s / 2, w: s, h: s, src: wbStickerUrl(cat, file) });
-    setSel(id); setTool("select"); setStickersOpen(false);
+    setSel(id); setTool("select"); setMediaOpen(false);
   };
   const placeEmoji = (emoji) => {
     const r = canvasRef.current.getBoundingClientRect();
     const c = camRef.current;
     const cx = (r.width / 2 - c.x) / c.s, cy = (r.height / 2 - c.y) / c.s;
     const id = addItemLocal("emoji", { x: cx - 30, y: cy - 30, w: 60, h: 60, text: emoji });
-    setSel(id); setTool("select"); setEmojiOpen(false);
+    setSel(id); setTool("select"); setMediaOpen(false);
   };
   const myName = () => {
     const m = (orgMembers || []).find(o => o.user_id === session?.user?.id);
@@ -6413,16 +6412,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           })()}
           {toolBtn("text", "Text", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>)}
           <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
-          {/* Stickers — round seal icon; picker opens centered over this button (below) */}
-          <motion.div ref={stickerBtnRef} whileTap={{ scale: 0.9 }} onClick={() => setStickersOpen(o => !o)} title="Sticker"
+          {/* Emoji + Sticker — one button; the picker toggles between the two inside */}
+          <motion.div ref={mediaBtnRef} whileTap={{ scale: 0.9 }} onClick={() => setMediaOpen(o => !o)} title={de ? "Emoji / Sticker" : "Emoji / sticker"}
             style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-              background: stickersOpen ? "#15151c" : "transparent", color: stickersOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/></svg>
-          </motion.div>
-          {/* Emoji picker — line-icon smiley to match the other tools */}
-          <motion.div ref={emojiBtnRef} whileTap={{ scale: 0.9 }} onClick={() => setEmojiOpen(o => !o)} title="Emoji"
-            style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-              background: emojiOpen ? "#15151c" : "transparent", color: emojiOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
+              background: mediaOpen ? "#15151c" : "transparent", color: mediaOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><line x1="9" y1="9.5" x2="9.01" y2="9.5"/><line x1="15" y1="9.5" x2="15.01" y2="9.5"/></svg>
           </motion.div>
           <motion.div ref={imgBtnRef} whileTap={{ scale: 0.9 }} onClick={() => { setImgMenuOpen(o => !o); setAssetsOpen(false); }} title={de ? "Bild einfügen" : "Insert image"}
@@ -6449,80 +6442,79 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         </div>
       </div>
 
-      {/* Sticker picker — portalled, centered on the toolbar's real screen position
-          (measured, so a shifted app container doesn't skew it) */}
-        {stickersOpen && createPortal((() => {
-          const bt = stickerBtnRef.current?.getBoundingClientRect();
+      {/* Combined Emoji / Sticker picker — one panel, top toggle switches between the
+          two; each has its own sub-category tabs + grid below. Portalled and centered
+          over the single toolbar button (measured screen position). */}
+        {mediaOpen && createPortal((() => {
+          const bt = mediaBtnRef.current?.getBoundingClientRect();
           const W = 340;
           const rawCx = bt ? bt.left + bt.width / 2 : window.innerWidth / 2;
           const cx = Math.min(Math.max(rawCx, W / 2 + 12), window.innerWidth - W / 2 - 12); // keep on-screen
-          const bottomPx = bt ? window.innerHeight - bt.top + 34 : 110; // 10px higher still
-          return (
-          <>
-            <div onClick={() => setStickersOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
-            {/* Outer plain div owns left/bottom/translateX(-50%) positioning — framer-motion's
-                own transform (from the animate y/scale below) would otherwise clobber a
-                translateX set directly on the motion.div, so centering must happen one level up. */}
-            <div style={{ position: "fixed", left: cx, bottom: bottomPx, transform: "translateX(-50%)", zIndex: 5001, width: 340 }}>
-            <motion.div initial={{ opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
-              onPointerDown={e => e.stopPropagation()}
-              style={{ width: "100%",
-                background: darkMode ? "rgba(22,22,30,0.97)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.borderFaint}`, borderRadius: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.24)", overflow: "hidden", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
-              <div style={{ display: "flex", gap: 4, padding: 8, borderBottom: `1px solid ${theme.borderFaint}` }}>
-                {Object.keys(WB_STICKERS).map(cat => {
-                  const on = stickerCat === cat;
-                  const label = de ? ({ IT: "Tech", Life: "Leben", Nature: "Natur", Shapes: "Formen" }[cat]) : cat;
-                  return (
-                    <div key={cat} onClick={() => setStickerCat(cat)}
-                      style={{ flex: 1, textAlign: "center", padding: "6px 4px", borderRadius: 8, cursor: "pointer", fontSize: 11.5, fontFamily: FONT, fontWeight: on ? 600 : 500,
-                        color: on ? "#fff" : theme.textDim, background: on ? "#15151c" : "transparent" }}>{label}</div>
-                  );
-                })}
-              </div>
-              <div className="no-scrollbar" style={{ maxHeight: 250, overflowY: "auto", padding: 10, display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
-                {WB_STICKERS[stickerCat].map(file => (
-                  <motion.div key={file} whileHover={{ scale: 1.12 }} whileTap={{ scale: 0.9 }} onClick={() => placeSticker(stickerCat, file)}
-                    style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 9, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
-                    <img src={wbStickerUrl(stickerCat, file)} alt="" draggable={false} style={{ width: "78%", height: "78%", objectFit: "contain", pointerEvents: "none" }} />
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
-            </div>
-          </>
-          ); })(), document.body)}
-
-      {/* Emoji picker — same centered-over-toolbar behaviour as the sticker picker */}
-        {emojiOpen && createPortal((() => {
-          const bt = emojiBtnRef.current?.getBoundingClientRect();
-          const W = 320;
-          const rawCx = bt ? bt.left + bt.width / 2 : window.innerWidth / 2;
-          const cx = Math.min(Math.max(rawCx, W / 2 + 12), window.innerWidth - W / 2 - 12); // keep on-screen
-          const bottomPx = bt ? window.innerHeight - bt.top + 34 : 110; // 10px higher, matches the sticker picker
+          const bottomPx = bt ? window.innerHeight - bt.top + 34 : 110;
+          const isEmoji = mediaTab === "emoji";
           const EMOJI_TABS = [{ id: "smileys", icon: "😀" }, { id: "gestures", icon: "👋" }, { id: "hearts", icon: "❤️" }, { id: "objects", icon: "🎉" }];
           return (
           <>
-            <div onClick={() => setEmojiOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
-            {/* Outer plain div owns left/bottom/translateX(-50%) — see the sticker picker's
-                comment above for why this can't live on the motion.div itself. */}
-            <div style={{ position: "fixed", left: cx, bottom: bottomPx, transform: "translateX(-50%)", zIndex: 5001, width: 320 }}>
+            <div onClick={() => setMediaOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
+            {/* Outer plain div owns left/bottom/translateX(-50%) positioning — framer-motion's
+                own transform (from the animate y/scale below) would otherwise clobber a
+                translateX set directly on the motion.div, so centering must happen one level up. */}
+            <div style={{ position: "fixed", left: cx, bottom: bottomPx, transform: "translateX(-50%)", zIndex: 5001, width: W }}>
             <motion.div initial={{ opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
               onPointerDown={e => e.stopPropagation()}
               style={{ width: "100%",
                 background: darkMode ? "rgba(22,22,30,0.97)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.borderFaint}`, borderRadius: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.24)", overflow: "hidden", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
+              {/* Top toggle: Emoji | Sticker (anthracite pill = active) */}
               <div style={{ display: "flex", gap: 4, padding: 8, borderBottom: `1px solid ${theme.borderFaint}` }}>
-                {EMOJI_TABS.map(tb2 => (
-                  <div key={tb2.id} onClick={() => setEmojiCat(tb2.id)}
-                    style={{ flex: 1, textAlign: "center", padding: "5px 0", borderRadius: 8, cursor: "pointer", fontSize: 17,
-                      background: emojiCat === tb2.id ? (darkMode ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.05)") : "transparent" }}>{tb2.icon}</div>
-                ))}
+                {[{ id: "emoji", label: "Emoji" }, { id: "sticker", label: "Sticker" }].map(tb => {
+                  const on = mediaTab === tb.id;
+                  return (
+                    <div key={tb.id} onClick={() => setMediaTab(tb.id)}
+                      style={{ flex: 1, textAlign: "center", padding: "7px 4px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: on ? 600 : 500,
+                        color: on ? "#fff" : theme.textDim, background: on ? "#15151c" : "transparent" }}>{tb.label}</div>
+                  );
+                })}
               </div>
-              <div className="no-scrollbar" style={{ maxHeight: 240, overflowY: "auto", padding: 8, display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 2 }}>
-                {EMOJI_GROUPS[emojiCat].map((emoji, i) => (
-                  <motion.div key={emoji + i} whileHover={{ scale: 1.25 }} whileTap={{ scale: 0.9 }} onClick={() => placeEmoji(emoji)}
-                    style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 21 }}>{emoji}</motion.div>
-                ))}
-              </div>
+              {/* Sub-category tabs for the active media type */}
+              {isEmoji ? (
+                <div style={{ display: "flex", gap: 4, padding: 8, borderBottom: `1px solid ${theme.borderFaint}` }}>
+                  {EMOJI_TABS.map(tb2 => (
+                    <div key={tb2.id} onClick={() => setEmojiCat(tb2.id)}
+                      style={{ flex: 1, textAlign: "center", padding: "5px 0", borderRadius: 8, cursor: "pointer", fontSize: 17,
+                        background: emojiCat === tb2.id ? (darkMode ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.05)") : "transparent" }}>{tb2.icon}</div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 4, padding: 8, borderBottom: `1px solid ${theme.borderFaint}` }}>
+                  {Object.keys(WB_STICKERS).map(cat => {
+                    const on = stickerCat === cat;
+                    const label = de ? ({ IT: "Tech", Life: "Leben", Nature: "Natur", Shapes: "Formen" }[cat] || cat) : cat;
+                    return (
+                      <div key={cat} onClick={() => setStickerCat(cat)}
+                        style={{ flex: 1, textAlign: "center", padding: "6px 4px", borderRadius: 8, cursor: "pointer", fontSize: 11.5, fontFamily: FONT, fontWeight: on ? 600 : 500,
+                          color: on ? (darkMode ? "#fff" : "#15151c") : theme.textDim, background: on ? (darkMode ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.05)") : "transparent" }}>{label}</div>
+                    );
+                  })}
+                </div>
+              )}
+              {/* Grid */}
+              {isEmoji ? (
+                <div className="no-scrollbar" style={{ maxHeight: 240, overflowY: "auto", padding: 8, display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 2 }}>
+                  {EMOJI_GROUPS[emojiCat].map((emoji, i) => (
+                    <motion.div key={emoji + i} whileHover={{ scale: 1.25 }} whileTap={{ scale: 0.9 }} onClick={() => placeEmoji(emoji)}
+                      style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 21 }}>{emoji}</motion.div>
+                  ))}
+                </div>
+              ) : (
+                <div className="no-scrollbar" style={{ maxHeight: 250, overflowY: "auto", padding: 10, display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+                  {WB_STICKERS[stickerCat].map(file => (
+                    <motion.div key={file} whileHover={{ scale: 1.12 }} whileTap={{ scale: 0.9 }} onClick={() => placeSticker(stickerCat, file)}
+                      style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 9, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+                      <img src={wbStickerUrl(stickerCat, file)} alt="" draggable={false} style={{ width: "78%", height: "78%", objectFit: "contain", pointerEvents: "none" }} />
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </motion.div>
             </div>
           </>
