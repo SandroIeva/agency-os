@@ -10,6 +10,8 @@ const PLAN_OPTIONS = [
 ];
 
 const MANAGEABLE_STATUSES = new Set(["active", "trialing", "incomplete", "past_due", "unpaid", "paused"]);
+const CHECKOUT_POLL_INTERVAL_MS = 1500;
+const CHECKOUT_POLL_ATTEMPTS = 8;
 
 function readPendingSelection() {
   try {
@@ -33,6 +35,8 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
   const [loading, setLoading] = useState(true);
   const [action, setAction] = useState(null);
   const [error, setError] = useState("");
+  const [checkoutProcessing, setCheckoutProcessing] = useState(() => new URLSearchParams(window.location.search).get("checkout") === "success");
+  const [checkoutSyncDelayed, setCheckoutSyncDelayed] = useState(false);
   const de = appLanguage === "de";
 
   const request = useCallback(async (path, body) => {
@@ -53,19 +57,23 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
     return payload;
   }, [session?.access_token]);
 
-  const loadBilling = useCallback(async () => {
-    if (!org?.id || !session?.access_token) return;
-    setLoading(true);
-    setError("");
+  const loadBilling = useCallback(async ({ silent = false } = {}) => {
+    if (!org?.id || !session?.access_token) return null;
+    if (!silent) {
+      setLoading(true);
+      setError("");
+    }
     try {
       const data = await request("/api/billing-status", { orgId: org.id });
       setBilling(data.billing);
+      return data.billing;
     } catch (requestError) {
       setError(requestError.code === "billing_not_configured"
         ? (de ? "Billing ist noch nicht vollständig konfiguriert." : "Billing is not fully configured yet.")
         : requestError.message);
+      return null;
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [de, org?.id, request, session?.access_token]);
 
@@ -74,10 +82,43 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const checkout = params.get("checkout");
-    if (checkout === "success" || checkout === "portal-return") {
+    if (checkout === "success") {
       localStorage.removeItem("i7os-pending-billing");
-      const timer = window.setTimeout(loadBilling, 900);
       window.history.replaceState({}, "", window.location.pathname);
+      setCheckoutProcessing(true);
+      setCheckoutSyncDelayed(false);
+
+      let cancelled = false;
+      let timer = null;
+      let attempts = 0;
+
+      const pollBilling = async () => {
+        const latestBilling = await loadBilling({ silent: true });
+        if (cancelled) return;
+        if (MANAGEABLE_STATUSES.has(latestBilling?.status)) {
+          setCheckoutProcessing(false);
+          setCheckoutSyncDelayed(false);
+          return;
+        }
+
+        attempts += 1;
+        if (attempts < CHECKOUT_POLL_ATTEMPTS) {
+          timer = window.setTimeout(pollBilling, CHECKOUT_POLL_INTERVAL_MS);
+        } else {
+          setCheckoutSyncDelayed(true);
+        }
+      };
+
+      timer = window.setTimeout(pollBilling, 450);
+      return () => {
+        cancelled = true;
+        window.clearTimeout(timer);
+      };
+    }
+
+    if (checkout === "portal-return") {
+      window.history.replaceState({}, "", window.location.pathname);
+      const timer = window.setTimeout(loadBilling, 450);
       return () => window.clearTimeout(timer);
     }
     return undefined;
@@ -137,10 +178,16 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, marginBottom: 24 }}>
           <div>
             <div style={{ fontSize: 18, fontWeight: 600, color: theme.text }}>
-              {loading ? (de ? "Abo wird geladen …" : "Loading subscription …") : hasSubscription ? `${activePlan?.name || billing.plan} Plan` : (de ? "Wähle deinen Plan" : "Choose your plan")}
+              {checkoutProcessing
+                ? (checkoutSyncDelayed ? (de ? "Deine Zahlung wird verarbeitet" : "Your payment is being processed") : (de ? "Dein Plan wird aktiviert …" : "Activating your plan …"))
+                : loading ? (de ? "Abo wird geladen …" : "Loading subscription …") : hasSubscription ? `${activePlan?.name || billing.plan} Plan` : (de ? "Wähle deinen Plan" : "Choose your plan")}
             </div>
             <div style={{ fontSize: 12, color: theme.textDim, marginTop: 5, lineHeight: 1.5 }}>
-              {hasSubscription
+              {checkoutProcessing
+                ? (checkoutSyncDelayed
+                  ? (de ? "Die Synchronisierung dauert länger als üblich. Du kannst diese Seite sicher verlassen und in Kürze zurückkehren." : "Synchronization is taking longer than usual. You can safely leave this page and return shortly.")
+                  : (de ? "Stripe hat den Checkout bestätigt. Wir synchronisieren das Abo gerade mit diesem Workspace." : "Stripe confirmed the checkout. We’re syncing the subscription with this workspace."))
+                : hasSubscription
                 ? `${billing.status}${periodEnd ? ` · ${billing.cancelAtPeriodEnd ? (de ? "Endet" : "Ends") : (de ? "Verlängert sich" : "Renews")} ${periodEnd}` : ""}`
                 : (de ? "Das Abo gilt für den gesamten aktuellen Workspace." : "The subscription applies to the entire current workspace.")}
             </div>
@@ -152,7 +199,28 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
           )}
         </div>
 
-        {!hasSubscription && (
+        {!hasSubscription && checkoutProcessing && (
+          <div style={{ minHeight: 235, borderRadius: 16, border: `1px solid ${theme.border}`, background: darkMode ? "rgba(255,255,255,.025)" : "rgba(0,0,0,.018)", display: "grid", placeItems: "center", textAlign: "center", padding: 28 }}>
+            <div>
+              <motion.div
+                aria-hidden="true"
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1.1, ease: "linear", repeat: Infinity }}
+                style={{ width: 28, height: 28, margin: "0 auto 15px", borderRadius: "50%", border: `2px solid ${theme.border}`, borderTopColor: "#8B7AFF" }}
+              />
+              <div style={{ color: theme.text, fontSize: 14, fontWeight: 600 }}>
+                {checkoutSyncDelayed ? (de ? "Fast geschafft" : "Almost there") : (de ? "Workspace wird aktualisiert" : "Updating your workspace")}
+              </div>
+              <div style={{ color: theme.textDim, fontSize: 11, lineHeight: 1.55, marginTop: 7, maxWidth: 340 }}>
+                {checkoutSyncDelayed
+                  ? (de ? "Dein Kauf ist sicher. Lade diese Seite in Kürze neu, um den aktualisierten Plan zu sehen." : "Your purchase is safe. Refresh this page shortly to see the updated plan.")
+                  : (de ? "Das dauert normalerweise nur wenige Sekunden." : "This normally takes only a few seconds.")}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!hasSubscription && !checkoutProcessing && (
           <>
             <div style={{ display: "inline-flex", gap: 4, padding: 4, borderRadius: 12, background: darkMode ? "rgba(255,255,255,.05)" : "rgba(0,0,0,.045)", marginBottom: 18 }}>
               {["monthly", "annual"].map(interval => (
