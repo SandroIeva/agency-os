@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo, Component } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Component } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "./supabase";
@@ -904,6 +904,56 @@ const DEFAULT_COLUMNS = [
   { id: "col-review", key: "review", labelKey: "kanban.review", color: "#8B7AFF", position: 2 },
   { id: "col-done", key: "done", labelKey: "kanban.done", color: "#00B894", position: 3 },
 ];
+
+// useTabIndicator — drives the sliding active-tab underline. Instead of a Framer
+// `layoutId` (which is timing-flaky: the first switch after mount often doesn't
+// animate, and a post-mount layout shift makes it "slide in from below"), we keep
+// ONE persistent line and measure the active tab's box, then animate x/width.
+//   const ind = useTabIndicator(activeKey, [appLanguage]);
+//   <div ref={ind.containerRef} style={{ ..., position: "relative" }}>
+//     {tabs.map(t => <div ref={ind.registerTab(t.id)} ...>{t.label}</div>)}
+//     <TabUnderline box={ind.box} />
+//   </div>
+// The container MUST be position:relative (it is the offsetParent we measure from).
+function useTabIndicator(activeKey, deps = []) {
+  const tabEls = useRef({});
+  const [box, setBox] = useState(null); // { left, width } of active tab, relative to container
+  const activeRef = useRef(activeKey); activeRef.current = activeKey; // so the RO callback always reads the current tab
+  const measure = useCallback(() => {
+    const el = tabEls.current[activeRef.current];
+    if (el) setBox({ left: el.offsetLeft, width: el.offsetWidth });
+  }, []);
+  const registerTab = (key) => (el) => { if (el) tabEls.current[key] = el; else delete tabEls.current[key]; };
+  // containerRef is a CALLBACK ref: a ResizeObserver is (re)attached whenever the
+  // bar mounts. RO fires once on observe(), so the line is measured immediately —
+  // also on responsive resize and late Geist font load (both shift label widths),
+  // and when the bar is hidden/shown again (e.g. while a document is open).
+  const roRef = useRef(null);
+  const containerRef = useCallback((node) => {
+    if (roRef.current) { roRef.current.disconnect(); roRef.current = null; }
+    if (node && typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(() => measure());
+      ro.observe(node);
+      roRef.current = ro;
+    }
+  }, [measure]);
+  // Re-measure synchronously before paint whenever the active tab (or a dep like
+  // the UI language) changes.
+  useLayoutEffect(measure, [activeKey, ...deps]); // eslint-disable-line
+  return { containerRef, registerTab, box };
+}
+
+// TabUnderline — the active-tab indicator line. `box` comes from useTabIndicator.
+// `initial={false}` makes it appear at its target position with no entrance
+// animation (so it's "just there" on open); only later box changes (tab switches)
+// animate x/width. Inset 8px each side to match the old look.
+function TabUnderline({ box }) {
+  if (!box) return null;
+  return <motion.div initial={false}
+    animate={{ x: box.left + 8, width: Math.max(0, box.width - 16) }}
+    transition={{ type: "spring", stiffness: 500, damping: 40 }}
+    style={{ position: "absolute", left: 0, bottom: -1, height: 2.5, borderRadius: 2, background: "#23232b" }} />;
+}
 
 // ImageLightbox — full-screen viewer for AI-generated images, with action toolbar:
 //   Download · Copy Image · Copy Link · Upload to Drive · Open in new tab
@@ -4952,6 +5002,17 @@ const wbFitTextBox = (text, sizeKey, bold) => {
   const buf = Math.ceil(fontSize * 0.35);
   return { w: Math.max(WB_TEXT_MIN_W, Math.ceil(width) + WB_TEXT_H_PAD + buf), h: Math.round(lineCount * fontSize * 1.4 + WB_TEXT_V_PAD) };
 };
+// Normalise a user-typed hyperlink: trim, and prepend https:// when no scheme is
+// given (so "i7os.com" becomes a real, openable URL). Empty stays empty (= no link).
+const wbNormalizeUrl = (u) => {
+  const s = (u || "").trim();
+  if (!s) return "";
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : "https://" + s;
+};
+// NOTE: the YouTube id parser `ytVideoId(url)` already exists (defined lower down
+// for the doc editor's YouTube block) and is hoisted, so it's reused here for the
+// whiteboard embed. Its no-URL fallback matches any 11-char run, so callers that
+// take arbitrary text (the paste handler) must first check for a YouTube domain.
 const WB_SHAPE_TYPES = ["rect", "ellipse", "diamond", "triangle"];
 // Polygon points for svg-rendered shapes (diamond/triangle), in a w×h box.
 const wbShapePoints = (type, w, h) =>
@@ -4987,6 +5048,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [assetsLoading, setAssetsLoading] = useState(false);
   const [commentOpenId, setCommentOpenId] = useState(null); // comment pin whose bubble is open
   const [wbColorPop, setWbColorPop] = useState(null); // format-bar color overlay: null | "color" | "fill"
+  const [wbLinkPop, setWbLinkPop] = useState(false); // format-bar URL editor for text hyperlinks
+  const [linkDraft, setLinkDraft] = useState("");    // the URL being typed in that editor
+  const [activeEmbed, setActiveEmbed] = useState(null); // the video embed in "play" mode (its iframe is interactive); double-click to enter, click away to leave
+  const linkOpenTimerRef = useRef(null);             // pending "open link" after a single click (cancelled by a double-click)
   const [commentDraft, setCommentDraft] = useState(""); // controlled text of the open comment
   const [mentionQuery, setMentionQuery] = useState(null); // string after "@" while mentioning, else null
   const [shareOpen, setShareOpen] = useState(false);   // share popover (workspace / members / project)
@@ -5160,7 +5225,14 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     // lagged one render behind, committing a box sized for an earlier, shorter
     // draft while the (correct, complete) text was kept. This was the real cause
     // of text nodes visually losing their tail end the moment you clicked away.
-    if (it.type === "text") data = { ...data, ...wbFitTextBox(text, data.size, data.bold) };
+    // An empty node keeps the PLACEHOLDER's width (not the ~28px minimum) so the
+    // greyed "Text hinzufügen" shown in its place is never clipped — and it is NOT
+    // auto-deleted: a focus race on a freshly placed node would otherwise make the
+    // field vanish the instant it appears.
+    if (it.type === "text") {
+      const ph = de ? "Text hinzufügen" : "Add text";
+      data = { ...data, ...wbFitTextBox((text || "").trim() ? text : ph, data.size, data.bold) };
+    }
     setItems(prev => prev.map(i => i.id === id ? { ...i, data } : i));
     supabase.from("whiteboard_items").update({ data }).eq("id", id).then(() => {});
   };
@@ -5332,15 +5404,21 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   // ── Canvas pointer handlers ──
   const onCanvasPointerDown = (e) => {
     if (e.button !== 0 || !board) return;
-    setWbColorPop(null);
+    setWbColorPop(null); setWbLinkPop(false); setActiveEmbed(null);
     if (editingRef.current) flushEdit(); // save the text before starting anything on the canvas
-    canvasRef.current?.setPointerCapture?.(e.pointerId);
     const pt = toWorld(e);
-    if (tool === "hand") { dragRef.current = { mode: "pan", sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y }; return; }
-    if (tool === "pen") { dragRef.current = { mode: "draw" }; setTempStroke({ points: [[pt.x, pt.y]], color: "#15151c" }); return; }
+    // Click-placement tools drop an element and immediately open its editor. They
+    // must NOT capture the pointer: capturing the canvas retargets the click's
+    // compatibility mouse events and steals focus from the just-created field,
+    // which made freshly placed text nodes unusable / appear to "not show up".
     if (tool === "sticky") { placeSticky(pt); return; }
     if (tool === "text") { placeText(pt); return; }
     if (tool === "comment") { placeComment(pt); return; }
+    // Drag/gesture tools: capture the pointer so the gesture keeps tracking even if
+    // the cursor leaves the canvas mid-drag.
+    canvasRef.current?.setPointerCapture?.(e.pointerId);
+    if (tool === "hand") { dragRef.current = { mode: "pan", sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y }; return; }
+    if (tool === "pen") { dragRef.current = { mode: "draw" }; setTempStroke({ points: [[pt.x, pt.y]], color: "#15151c" }); return; }
     if (WB_SHAPE_TYPES.includes(tool)) { dragRef.current = { mode: "create", type: tool, sx: pt.x, sy: pt.y }; setTempItem({ type: tool, x: pt.x, y: pt.y, w: 1, h: 1 }); return; }
     if (tool === "arrow" || tool === "line") { dragRef.current = { mode: "arrow" }; setTempItem({ type: tool, x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y }); return; }
     // select tool on empty canvas: start a marquee (drag a box to select multiple).
@@ -5453,6 +5531,17 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       const it = itemsRef.current.find(i => i.id === d.persistId);
       if (it) supabase.from("whiteboard_items").update({ data: { ...it.data, ...d.final } }).eq("id", d.persistId).then(() => {});
     }
+    // Single click (no drag) on a linked text node → open the URL in a new tab.
+    // Delayed by ~the double-click window so a double-click (which edits the text
+    // instead) can cancel it first — see the double-click branch in onItemPointerDown.
+    if (d?.mode === "move" && !d.final && editingRef.current !== d.id) {
+      const it = itemsRef.current.find(i => i.id === d.id);
+      const url = it?.type === "text" ? it.data?.url : null;
+      if (url) {
+        clearTimeout(linkOpenTimerRef.current);
+        linkOpenTimerRef.current = setTimeout(() => { window.open(wbNormalizeUrl(url), "_blank", "noopener,noreferrer"); }, 420);
+      }
+    }
     setTempStroke(null); setTempItem(null);
     dragRef.current = null;
   };
@@ -5476,12 +5565,26 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       return;
     }
     const now = Date.now();
-    if (lastClickRef.current.id === it.id && now - lastClickRef.current.t < 400 && it.type !== "image" && it.type !== "sticker") {
+    // Double-click a video embed → enter "play" mode (its iframe becomes
+    // interactive). Kept separate from selection so a plain click never makes the
+    // iframe live — otherwise the iframe swallows the drag's pointerup and the
+    // card sticks to the cursor.
+    if (it.type === "embed" && lastClickRef.current.id === it.id && now - lastClickRef.current.t < 400) {
       lastClickRef.current = { id: null, t: 0 };
       dragRef.current = null;
-      setSel(it.id); setEditing(it.id);
+      setSel(it.id); setActiveEmbed(it.id);
       return;
     }
+    if (lastClickRef.current.id === it.id && now - lastClickRef.current.t < 400 && it.type !== "image" && it.type !== "sticker" && it.type !== "embed") {
+      lastClickRef.current = { id: null, t: 0 };
+      dragRef.current = null;
+      clearTimeout(linkOpenTimerRef.current); // this is a double-click (edit) — cancel the pending link open
+      setSel(it.id); setEditing(it.id); setWbLinkPop(false);
+      return;
+    }
+    // Any single click leaves embed play-mode, so the video is inert and draggable
+    // (double-click re-enters play). Prevents the "sticks to cursor" drag bug.
+    if (activeEmbed) setActiveEmbed(null);
     lastClickRef.current = { id: it.id, t: now };
     // A text node that's part of a mind map drags the WHOLE connected group
     // together — matches Figma/FigJam, where the map behaves as one rigid
@@ -5549,7 +5652,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         const ids = selIdsRef.current.length ? [...selIdsRef.current] : (selRef.current ? [selRef.current] : []);
         if (ids.length) { e.preventDefault(); ids.forEach(id => deleteItem(id)); setSelIds([]); }
       }
-      if (e.key === "Escape") { setSel(null); setSelIds([]); setEditing(null); }
+      if (e.key === "Escape") { setSel(null); setSelIds([]); setEditing(null); setActiveEmbed(null); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -5589,13 +5692,54 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     };
     img.src = url;
   };
+  // Drop a YouTube video embed (16:9 player card) on the board. `at` is a world
+  // point (defaults to the viewport centre). It's a normal box item, so it moves,
+  // resizes, deletes and syncs over realtime like any other element.
+  const addYoutubeEmbed = (videoId, at) => {
+    if (!videoId || !board) return null;
+    const w = 420, h = Math.round((w * 9) / 16);
+    let center = at;
+    if (!center && canvasRef.current) {
+      const r = canvasRef.current.getBoundingClientRect();
+      const c = camRef.current;
+      center = { x: (r.width / 2 - c.x) / c.s, y: (r.height / 2 - c.y) / c.s };
+    }
+    center = center || { x: 0, y: 0 };
+    const id = addItemLocal("embed", { x: center.x - w / 2, y: center.y - h / 2, w, h, provider: "youtube", videoId });
+    setSel(id); setTool("select");
+    return id;
+  };
+  // Paste a YouTube URL anywhere on the board → drop a playable video embed.
+  // Ignored while typing in a field or editing a node (there the paste belongs to
+  // the text). Registered once, but calls through addEmbedRef so it always runs
+  // the latest closure (current board/org), never a stale one from first mount.
+  const addEmbedRef = useRef(null);
+  addEmbedRef.current = addYoutubeEmbed;
+  useEffect(() => {
+    const onPaste = (e) => {
+      if (editingRef.current) return;
+      const t = e.target;
+      if (/^(INPUT|TEXTAREA)$/.test(t?.tagName || "") || t?.isContentEditable) return;
+      const text = e.clipboardData?.getData("text") || "";
+      // Only a real YouTube URL becomes an embed — ytVideoId's fallback would
+      // otherwise match any 11-char word in arbitrary pasted text.
+      if (!/youtube\.com|youtu\.be/i.test(text)) return;
+      const vid = ytVideoId(text);
+      if (vid) { e.preventDefault(); addEmbedRef.current?.(vid); }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const handleImageFiles = async (files, at) => {
     const file = Array.from(files || []).find(f => f.type.startsWith("image/"));
     if (!file || !board || !userOrg?.id) return;
     const ext = (file.name.split(".").pop() || "png").toLowerCase();
     const path = `whiteboards/${userOrg.id}/${crypto.randomUUID()}.${ext}`;
+    const room = await checkStorageRoom(userOrg?.id, file.size, { userId: session?.user?.id, email: session?.user?.email });
+    if (!room.ok) { alert(de ? `Speicher voll (${formatBytesGB(room.limit)}) — bitte upgraden.` : `Storage full (${formatBytesGB(room.limit)}) — please upgrade.`); return; }
     const { error } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type });
     if (error) { alert((de ? "Bild-Upload fehlgeschlagen: " : "Image upload failed: ") + error.message); return; }
+    trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "brand-assets", path, sizeBytes: file.size });
     const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
     addImageFromUrl(pub.publicUrl, at);
   };
@@ -5657,7 +5801,9 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (it.type === "ellipse") wrap = { ...wrap, background: fill, border: noBorder ? "none" : `2px solid ${stroke}`, borderRadius: "50%", padding: 16, display: "flex", alignItems: "center", justifyContent: "center" };
     if (isSvgShape) wrap = { ...wrap, background: "transparent", padding: 0 };
     if (it.type === "text") wrap = { ...wrap, padding: WB_TEXT_PAD };
+    if (it.type === "text" && d.url && !isEdit) wrap = { ...wrap, cursor: "pointer" }; // a hyperlink → single click opens it
     if (it.type === "image") wrap = { ...wrap, borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 22px rgba(0,0,0,0.12)" };
+    if (it.type === "embed") wrap = { ...wrap, borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 22px rgba(0,0,0,0.16)", background: "#000" };
     if (it.type === "sticker") wrap = { ...wrap, padding: 0 };
     if (it.type === "emoji") wrap = { ...wrap, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" };
     const sizeKey = d.size || (it.type === "text" ? "m" : "s");
@@ -5670,6 +5816,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     };
     const textContent = isEdit ? (
       <textarea ref={focusEditArea} defaultValue={d.text || ""}
+        placeholder={it.type === "text" ? (de ? "Text hinzufügen" : "Add text") : undefined}
         // Free-text nodes size the box to exactly fit the measured (unwrapped)
         // text. If the browser were still allowed to soft-wrap at that width, any
         // tiny mismatch between canvas measureText() and real font rendering could
@@ -5684,14 +5831,18 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           // Free-text nodes auto-fit their box to the typed content, live — this is
           // what keeps mind-map connector lines snug against the text as you type.
           const ta = e.target;
-          const box = wbFitTextBox(ta.value, d.size, d.bold);
+          // While empty, keep the box sized to the placeholder ("Text hinzufügen" /
+          // "Add text") so the greyed-out placeholder is never clipped — otherwise
+          // deleting all text collapses the box to the ~28px minimum and hides it.
+          const ph = de ? "Text hinzufügen" : "Add text";
+          const box = wbFitTextBox(ta.value.length ? ta.value : ph, d.size, d.bold);
           // Belt-and-suspenders: never let the box be narrower than what the live
           // textarea itself reports it needs (scrollWidth = full content width with
           // wrap=off, measured on the SAME element that draws the text, so it can't
           // disagree). This makes it impossible for typed text to scroll out of view
           // mid-word even if the mirror measurement is a hair off. It only grows
           // while editing; commitText snaps back to the tight fit on blur.
-          const need = ta.scrollWidth + WB_TEXT_H_PAD;
+          const need = ta.value.length ? ta.scrollWidth + WB_TEXT_H_PAD : box.w;
           patchItem(it.id, { w: Math.max(box.w, need), h: box.h });
         } : undefined}
         onKeyDown={(e) => {
@@ -5717,15 +5868,23 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         overflow: it.type === "text" ? "visible" : "hidden",
         display: isShape ? "flex" : "block", alignItems: "center", justifyContent: "center",
         userSelect: "none", pointerEvents: "none",
+        // A linked text node reads as a hyperlink: link-blue + underline.
+        ...(it.type === "text" && d.url ? { color: "#2563eb", textDecoration: "underline", textDecorationThickness: "1.5px", textUnderlineOffset: 2 } : null),
         position: isSvgShape ? "absolute" : "static", left: isSvgShape ? "12%" : undefined, top: isSvgShape ? "50%" : undefined, width: isSvgShape ? "76%" : "100%", height: isSvgShape ? "auto" : "100%", transform: isSvgShape ? "translateY(-50%)" : undefined,
       }}>
-        {d.text || ((it.type === "sticky" || it.type === "text") && !isEdit ? <span style={{ opacity: 0.35 }}>{de ? "Doppelklick zum Schreiben" : "Double-click to write"}</span> : "")}
+        {d.text || (!isEdit ? (
+          it.type === "text"
+            ? <span style={{ opacity: 0.4 }}>{de ? "Text hinzufügen" : "Add text"}</span>
+            : it.type === "sticky"
+            ? <span style={{ opacity: 0.35 }}>{de ? "Doppelklick zum Schreiben" : "Double-click to write"}</span>
+            : ""
+        ) : "")}
       </div>
     );
     return (
       <div key={it.id}
         onPointerDown={(e) => onItemPointerDown(e, it)}
-        onDoubleClick={(e) => { if (it.type !== "image" && it.type !== "sticker" && it.type !== "emoji") { e.stopPropagation(); setSel(it.id); setEditing(it.id); } }}
+        onDoubleClick={(e) => { if (it.type !== "image" && it.type !== "sticker" && it.type !== "emoji" && it.type !== "embed") { e.stopPropagation(); setSel(it.id); setEditing(it.id); } }}
         onPointerEnter={it.type === "text" ? () => setHoverId(it.id) : undefined}
         onPointerLeave={it.type === "text" ? () => setHoverId(h => h === it.id ? null : h) : undefined}
         style={wrap}>
@@ -5740,6 +5899,29 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           <img src={d.src} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none", display: "block", filter: "drop-shadow(0 3px 6px rgba(0,0,0,0.12))" }} />
         ) : it.type === "emoji" ? (
           <div style={{ fontSize: Math.min(w, h) * 0.82, lineHeight: 1, userSelect: "none", pointerEvents: "none" }}>{d.text}</div>
+        ) : it.type === "embed" ? (
+          <div style={{ position: "relative", width: "100%", height: "100%" }}>
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${d.videoId}?rel=0`}
+              title="YouTube"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              style={{ width: "100%", height: "100%", border: "none", display: "block", pointerEvents: activeEmbed === it.id ? "auto" : "none" }} />
+            {/* Until you double-click to "play", the iframe is inert and this layer
+                covers it so the card can be dragged/selected AND the drag's
+                pointerup always reaches the canvas (an interactive iframe would
+                swallow it → the card would stick to the cursor). */}
+            {activeEmbed !== it.id && (
+              <div style={{ position: "absolute", inset: 0, cursor: "move", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {/* Play hint — only while selected, so it doesn't clutter the board. */}
+                {isSel && (
+                  <div style={{ width: 54, height: 54, borderRadius: "50%", background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         ) : textContent}
         {/* Free-text nodes auto-fit to their content — no manual resize handle
             (it would just fight the live auto-sizing on the next keystroke). */}
@@ -5871,6 +6053,23 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (!selItem || selItem.type === "comment") return null; // comments use their own bubble popup
     const dta = selItem.data || {};
     const setSelData = (patch) => { patchItem(selItem.id, patch); persistById(selItem.id); };
+    // Apply the typed URL as the node's hyperlink. If it's a YouTube link, also
+    // drop a playable video embed just below the text (once — `ytEmbedded` guards
+    // against a second embed on re-apply).
+    const applyLink = () => {
+      const url = wbNormalizeUrl(linkDraft);
+      setSelData({ url });
+      const vid = ytVideoId(url);
+      if (vid && !dta.ytEmbedded) {
+        setSelData({ ytEmbedded: true });
+        const embedH = Math.round((420 * 9) / 16);
+        addYoutubeEmbed(vid, {
+          x: (dta.x || 0) + (dta.w || 200) / 2,
+          y: (dta.y || 0) + (dta.h || 40) + 24 + embedH / 2,
+        });
+      }
+      setWbLinkPop(false);
+    };
     const b = bboxOf(selItem);
     let top = b.y * cam.s + cam.y - 54;
     const below = top < 64;
@@ -5956,6 +6155,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">{alignIcon(dta.align || "left")}</svg>
             </div>
           )}
+          {selItem.type === "text" && (
+            <div onClick={() => { setLinkDraft(dta.url || ""); setWbColorPop(null); setWbLinkPop(v => !v); }} title={de ? "Link" : "Link"}
+              style={{ ...iconBtnStyle, background: (wbLinkPop || dta.url) ? "rgba(255,255,255,0.22)" : "transparent" }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            </div>
+          )}
           {selItem.type === "text" && (() => {
             // Toggle the node into mind-map mode. Off by default → it's a plain
             // text field. Turning it on reveals the left/right "+" branch handles.
@@ -5993,6 +6198,35 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
             ))}
           </div>
           ); })()}
+
+        {/* Link editor overlay — type a URL to turn the whole text node into a
+            hyperlink (single click on the node then opens it). Empty = no link. */}
+        {wbLinkPop && (
+          <div onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}
+            style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", [below ? "top" : "bottom"]: "calc(100% + 10px)", zIndex: 21,
+              padding: 8, borderRadius: 12, background: "#15151c", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 16px 44px rgba(0,0,0,0.34)",
+              display: "flex", alignItems: "center", gap: 6, width: 300 }}>
+            <input autoFocus value={linkDraft} onChange={e => setLinkDraft(e.target.value)}
+              onKeyDown={e => {
+                e.stopPropagation();
+                if (e.key === "Enter") applyLink();
+                if (e.key === "Escape") { e.preventDefault(); setWbLinkPop(false); }
+              }}
+              placeholder={de ? "URL einfügen…" : "Paste URL…"}
+              style={{ flex: 1, minWidth: 0, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 8,
+                color: "#fff", fontFamily: FONT, fontSize: 13, padding: "7px 10px", outline: "none" }} />
+            <div onClick={applyLink} title={de ? "Übernehmen" : "Apply"}
+              style={{ ...iconBtnStyle, width: 30, height: 30, background: "rgba(255,255,255,0.16)" }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            {dta.url && (
+              <div onClick={() => { setSelData({ url: "" }); setLinkDraft(""); setWbLinkPop(false); }} title={de ? "Link entfernen" : "Remove link"}
+                style={{ ...iconBtnStyle, width: 30, height: 30, color: "#ff8589" }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   })();
@@ -7960,6 +8194,139 @@ const STATUS_COLORS = {
   "Kunden-Sichtbar": "#8B7AFF",
 };
 
+// ── Workspace storage-quota accounting ──────────────────────────────────────
+// Per-tier storage caps (bytes). Free is generous enough to evaluate the product;
+// paid tiers scale up. Backed by the workspace_files ledger + the
+// workspace_storage_used() RPC (see the matching migration).
+const STORAGE_GB = 1024 * 1024 * 1024;
+const STORAGE_LIMITS = { free: 1 * STORAGE_GB, starter: 8 * STORAGE_GB, pro: 25 * STORAGE_GB, agency: 200 * STORAGE_GB };
+function storageLimitFor(plan, status) {
+  const paid = status === "active" || status === "trialing";
+  return STORAGE_LIMITS[(paid && plan) ? plan : "free"] ?? STORAGE_LIMITS.free;
+}
+// Record an uploaded object in the ledger (one row per object; re-uploads update
+// the size). Fire-and-forget — accounting must never block or fail the upload.
+function trackStorageUpload({ orgId, userId, bucket, path, sizeBytes }) {
+  if (!orgId || !bucket || !path) return;
+  supabase.from("workspace_files")
+    .upsert({ org_id: orgId, bucket, path, size_bytes: Math.max(0, Math.round(sizeBytes || 0)), created_by: userId || null }, { onConflict: "bucket,path" })
+    .then(({ error }) => { if (error) console.warn("[storage] track upload failed:", error.message); });
+}
+// Drop ledger rows for removed objects (call alongside storage .remove()).
+function trackStorageDelete({ bucket, paths }) {
+  const list = (Array.isArray(paths) ? paths : [paths]).filter(Boolean);
+  if (!bucket || !list.length) return;
+  supabase.from("workspace_files").delete().eq("bucket", bucket).in("path", list)
+    .then(({ error }) => { if (error) console.warn("[storage] track delete failed:", error.message); });
+}
+// Upload to Storage AND record it in the ledger in one call. Returns the raw
+// storage result ({ data, error }) so callers keep their existing error handling.
+async function uploadTracked({ bucket, path, file, orgId, userId, contentType, upsert = false, sizeBytes }) {
+  const res = await supabase.storage.from(bucket).upload(path, file, { contentType, upsert });
+  if (!res.error) trackStorageUpload({ orgId, userId, bucket, path, sizeBytes: sizeBytes ?? file?.size ?? 0 });
+  return res;
+}
+// Current workspace storage usage in bytes (aggregate RPC).
+async function fetchStorageUsed(orgId) {
+  if (!orgId) return 0;
+  const { data, error } = await supabase.rpc("workspace_storage_used", { p_org: orgId });
+  if (error) { console.warn("[storage] usage read failed:", error.message); return 0; }
+  return Number(data) || 0;
+}
+// The active workspace's storage cap in bytes. Loaded once per workspace from the
+// server-only billing status (see the App-root effect) and read here by the
+// upload guards, so enforcement doesn't have to fetch billing on every upload.
+let currentStorageLimitBytes = STORAGE_LIMITS.free;
+function setCurrentStorageLimit(bytes) { currentStorageLimitBytes = bytes || STORAGE_LIMITS.free; }
+// Pre-upload quota check. HARD cap — no grace: an upload that would push the
+// workspace over its limit is refused (ok=false). Also fires the 90% warning
+// (once) based on the projected usage, so both the block and the heads-up live in
+// one call. Pass { userId, email } so the warning can reach the user.
+// Returns { ok, used, limit, incoming }.
+async function checkStorageRoom(orgId, incomingBytes, ctx = {}) {
+  const limit = currentStorageLimitBytes;
+  const used = await fetchStorageUsed(orgId);
+  const projected = used + (incomingBytes || 0);
+  if (limit && projected / limit >= 0.9) {
+    maybeWarnStorage({ orgId, userId: ctx.userId, used: projected, limit, email: ctx.email });
+  }
+  return { ok: projected <= limit, used, limit, incoming: incomingBytes || 0 };
+}
+// Fire a ONE-TIME "storage almost full" warning (in-app notification + email) once
+// a workspace crosses 90% usage. Deduped via a recent storage_warning notification
+// so repeated uploads don't spam. Best-effort; never throws.
+async function maybeWarnStorage({ orgId, userId, used, limit, email }) {
+  try {
+    if (!orgId || !limit) return;
+    const pct = used / limit;
+    if (pct < 0.9) return; // only warn in the danger zone (90%+)
+    const since = new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString();
+    const { data: recent } = await supabase.from("notifications")
+      .select("id").eq("org_id", orgId).eq("type", "storage_warning").gte("created_at", since).limit(1);
+    if (recent && recent.length) return; // already warned recently
+    const pctInt = Math.min(100, Math.round(pct * 100));
+    if (userId) {
+      await supabase.from("notifications").insert({
+        user_id: userId, org_id: orgId, type: "storage_warning",
+        title: "Speicher fast voll", body: `Dein Workspace nutzt ${pctInt}% des Speichers. Upgrade, um weiter Dateien hochladen zu können.`,
+        metadata: { pct: pctInt },
+      });
+    }
+    if (email) {
+      fetch("/api/send", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "storage-warning", email, pct: pctInt }) }).catch(() => {});
+    }
+  } catch (e) { console.warn("[storage] warn failed:", e?.message); }
+}
+// Human-readable byte size for the usage UI (e.g. "6.2 GB").
+function formatBytesGB(bytes) {
+  const gb = (Number(bytes) || 0) / STORAGE_GB;
+  if (gb >= 10) return Math.round(gb) + " GB";
+  if (gb >= 0.1) return gb.toFixed(1) + " GB";
+  const mb = (Number(bytes) || 0) / (1024 * 1024);
+  return Math.max(0, Math.round(mb)) + " MB";
+}
+// Storage usage readout for the billing settings — "X of Y GB", with a bar that
+// turns red in the 90%+ danger zone. Reads the ledger total + the active cap.
+function StorageUsageBar({ orgId, theme, appLanguage = "de" }) {
+  const de = appLanguage === "de";
+  const [used, setUsed] = useState(null);
+  const [limit, setLimit] = useState(currentStorageLimitBytes);
+  useEffect(() => {
+    let on = true;
+    (async () => { const u = await fetchStorageUsed(orgId); if (on) { setUsed(u); setLimit(currentStorageLimitBytes); } })();
+    return () => { on = false; };
+  }, [orgId]);
+  const pct = limit ? Math.min(100, Math.round(((used || 0) / limit) * 100)) : 0;
+  const danger = pct >= 90;
+  const barColor = danger ? "#E86767" : (pct >= 70 ? "#E0A64D" : "#15151c");
+  return (
+    <div style={{ marginTop: 24, fontFamily: FONT }}>
+      {/* Grey section label above the card — same pattern as the Account / Billing
+          sections. Label = "Speicher"; the in-box heading is "Auslastung". */}
+      <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
+        {de ? "Speicher" : "Storage"}
+      </div>
+      <div style={{ borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`, padding: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: theme.text }}>{de ? "Auslastung" : "Usage"}</span>
+          <span style={{ fontSize: 13, fontWeight: 500, color: danger ? "#E86767" : theme.textDim }}>
+            {used == null ? "…" : `${formatBytesGB(used)} ${de ? "von" : "of"} ${formatBytesGB(limit)} · ${pct}%`}
+          </span>
+        </div>
+        <div style={{ height: 8, borderRadius: 999, background: theme.borderFaint, overflow: "hidden" }}>
+          <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: barColor, transition: "width .4s ease" }} />
+        </div>
+        {danger && (
+          <div style={{ marginTop: 12, fontSize: 12, color: "#E86767", lineHeight: 1.5 }}>
+            {de ? "Dein Speicher ist fast voll. Upgrade, um weiter Dateien hochladen zu können." : "Storage is almost full. Upgrade to keep uploading files."}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function formatFileSize(bytes) {
   if (!bytes) return "–";
   const n = parseInt(bytes);
@@ -8077,7 +8444,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
           .from("user_files").select("id, storage_path")
           .eq("user_id", session.user.id).in("folder_id", folderIds);
         const paths = (filesInFolder || []).map(f => f.storage_path).filter(Boolean);
-        if (paths.length > 0) await supabase.storage.from("user-files").remove(paths);
+        if (paths.length > 0) { await supabase.storage.from("user-files").remove(paths); trackStorageDelete({ bucket: "user-files", paths }); }
         if ((filesInFolder || []).length > 0) {
           await supabase.from("user_files").delete().eq("user_id", session.user.id).in("folder_id", folderIds);
         }
@@ -8501,11 +8868,14 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
           // ── Supabase Storage upload (default) ──────────────────────────
           const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
           const path = `${session.user.id}/${Date.now()}_${safeName}`;
+          const room = await checkStorageRoom(userOrg?.id, file.size, { userId: session?.user?.id, email: session?.user?.email });
+          if (!room.ok) { setError(`Speicher voll (${formatBytesGB(room.limit)}) — bitte upgraden.`); continue; }
           const { error: upErr } = await supabase.storage.from("user-files").upload(path, file, {
             contentType: file.type || "application/octet-stream",
             upsert: false,
           });
           if (upErr) { console.error("Storage upload error:", upErr); setError(`Upload fehlgeschlagen: ${file.name}`); continue; }
+          trackStorageUpload({ orgId: userOrg?.id, userId: session.user.id, bucket: "user-files", path, sizeBytes: file.size });
           const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(path, 60 * 60 * 24 * 365);
           const { data: inserted, error: insErr } = await supabase.from("user_files").insert({
             user_id: session.user.id,
@@ -9889,8 +10259,11 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       const ext = file.name.split(".").pop();
       const safeName = file.name.replace(/[^\w.-]/g, "_");
       const path = `${myId}/${Date.now()}_${safeName}`;
+      const room = await checkStorageRoom(userOrg?.id, file.size, { userId: session?.user?.id, email: session?.user?.email });
+      if (!room.ok) { alert(`Speicher voll (${formatBytesGB(room.limit)}) — bitte upgraden.`); setUploadingAttachment(false); return null; }
       const { data: up, error } = await supabase.storage.from("chat-attachments").upload(path, file, { contentType: file.type });
       if (error) { console.error("Upload error:", error); alert("Upload fehlgeschlagen: " + error.message); setUploadingAttachment(false); return null; }
+      trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "chat-attachments", path, sizeBytes: file.size });
       const { data: pub } = supabase.storage.from("chat-attachments").getPublicUrl(up.path);
       setUploadingAttachment(false);
       return { url: pub.publicUrl, name: file.name, type: file.type, size: file.size };
@@ -14077,6 +14450,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   // Assets has three tabs: Moodboards (curated boards), Creations (your generated
   // outputs) and Inspirations (saved references).
   const [tab, setTab] = useState("moodboards");
+  const tabInd = useTabIndicator(tab, [appLanguage]); // sliding underline for the tab switcher
   const [docOpen, setDocOpen] = useState(false); // a document is open in the editor → hide header/tabs
   // A notification deep-link → jump to the Documents tab so DocsTab can open it.
   useEffect(() => { if (docDeepLink?.documentId) setTab("docs"); }, [docDeepLink?.ts]); // eslint-disable-line
@@ -14213,8 +14587,11 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
       if (!file.type.startsWith("image/")) continue;
       const ext = (file.name.split(".").pop() || "png").toLowerCase();
       const path = `moodboards/${activeBoard.id}/${crypto.randomUUID()}.${ext}`;
+      const room = await checkStorageRoom(userOrg?.id, file.size, { userId: session?.user?.id, email: session?.user?.email });
+      if (!room.ok) { alert(appLanguage === "de" ? `Speicher voll (${formatBytesGB(room.limit)}) — bitte upgraden.` : `Storage full (${formatBytesGB(room.limit)}) — please upgrade.`); break; }
       const { error: upErr } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type, upsert: true });
       if (upErr) continue;
+      trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "brand-assets", path, sizeBytes: file.size });
       const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
       const url = pub?.publicUrl;
       const colors = url ? await extractColors(url) : [];
@@ -14685,19 +15062,19 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           </div>
           </>) : (assetSlotReady && headerSlotRef?.current ? createPortal(<div style={{ display: "flex", alignItems: "center", gap: 10 }}>{headerActions}</div>, headerSlotRef.current) : null)}
 
-          {/* Tab switcher — text only, solid purple underline (no gradient, no icons) */}
-          <div style={{ padding: "14px 26px 0", display: "flex", gap: 4, borderBottom: `1px solid ${theme.borderFaint}` }}>
+          {/* Tab switcher — text only, solid anthracite underline (no gradient, no icons) */}
+          <div ref={tabInd.containerRef} style={{ padding: "14px 26px 0", display: "flex", gap: 4, borderBottom: `1px solid ${theme.borderFaint}`, position: "relative" }}>
             {ASSET_TABS.map(tb => {
               const active = tab === tb.id;
               return (
-                <div key={tb.id} onClick={() => setTab(tb.id)}
+                <div key={tb.id} ref={tabInd.registerTab(tb.id)} onClick={() => setTab(tb.id)}
                   style={{ padding: "10px 14px 13px", cursor: "pointer", position: "relative",
                     fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: active ? theme.text : theme.textDim, transition: "color 0.2s ease" }}>
                   {tb.label}
-                  {active && <motion.div layoutId="assetsTabUnderline" style={{ position: "absolute", left: 8, right: 8, bottom: -1, height: 2.5, borderRadius: 2, background: "#23232b" }} />}
                 </div>
               );
             })}
+            <TabUnderline box={tabInd.box} />
           </div>
           </>)}
 
@@ -15115,8 +15492,11 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     for (const file of arr) {
       const ext = (file.name.split(".").pop() || "bin").toLowerCase();
       const path = `${session.user.id}/creations/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const room = await checkStorageRoom(userOrg?.id, file.size, { userId: session?.user?.id, email: session?.user?.email });
+      if (!room.ok) { alert(appLanguage === "de" ? `Speicher voll (${formatBytesGB(room.limit)}) — bitte upgraden.` : `Storage full (${formatBytesGB(room.limit)}) — please upgrade.`); break; }
       const { error: upErr } = await supabase.storage.from("user-files").upload(path, file, { contentType: file.type, upsert: false });
       if (upErr) continue;
+      trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "user-files", path, sizeBytes: file.size });
       const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(path, 60 * 60 * 24 * 365);
       const { data, error } = await supabase.from("user_files").insert({
         user_id: session.user.id, org_id: userOrg.id, project_id: projectId || null, name: file.name,
@@ -15186,8 +15566,11 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
         const mime = p.mimeType || blob.type || "application/octet-stream";
         const ext = (p.name?.split(".").pop() || (mime.split("/")[1] || "bin")).toLowerCase();
         const path = `${session.user.id}/creations/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const room = await checkStorageRoom(userOrg?.id, blob.size, { userId: session?.user?.id, email: session?.user?.email });
+        if (!room.ok) { failures.push({ label, reason: de ? `Speicher voll (${formatBytesGB(room.limit)})` : `Storage full (${formatBytesGB(room.limit)})` }); break; }
         const { error: upErr } = await supabase.storage.from("user-files").upload(path, blob, { contentType: mime, upsert: false });
         if (upErr) { console.error("[drive-import]", label, "storage upload failed", upErr); failures.push({ label, reason: de ? "konnte nicht gespeichert werden" : "couldn't be saved" }); continue; }
+        trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "user-files", path, sizeBytes: blob.size });
         const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(path, 60 * 60 * 24 * 365);
         const { data, error } = await supabase.from("user_files").insert({
           user_id: session.user.id, org_id: userOrg.id, project_id: projectId || null, name: p.name || `drive.${ext}`,
@@ -15240,7 +15623,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     const f = confirmDel; setConfirmDel(null); if (!f) return;
     setFiles(prev => (prev || []).filter(x => x.id !== f.id));
     if (f.storage_provider === "supabase" && f.storage_path) {
-      try { await supabase.storage.from("user-files").remove([f.storage_path]); } catch (_) {}
+      try { await supabase.storage.from("user-files").remove([f.storage_path]); trackStorageDelete({ bucket: "user-files", paths: [f.storage_path] }); } catch (_) {}
     }
     await supabase.from("user_files").delete().eq("id", f.id);
   };
@@ -17452,6 +17835,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
     const path = `documents/${userOrg?.id || "shared"}/${crypto.randomUUID()}.${ext}`;
     const { error } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type, upsert: true });
     if (error) throw error;
+    trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "brand-assets", path, sizeBytes: file.size });
     const { data } = supabase.storage.from("brand-assets").getPublicUrl(path);
     recordActivity("image_added");
     return data.publicUrl;
@@ -19661,26 +20045,22 @@ function BrandVision({ value, onChange, accent, theme, darkMode, onEditingChange
   }
 
   // ── INTRO (no data yet) ──
-  // Full-bleed background image at the top; BRAND VISION sits on the glowing
-  // centre (~43% of width tracks the circle across widths), then subtext 100px
-  // below the title, then the button.
+  // No background image — a clean centred block: BRAND VISION title, subtext, then
+  // the button. (Title colour follows the theme so it stays legible in dark mode.)
   if (!hasData) {
     return (
-      <div style={{ position: "relative", width: "100%", marginTop: -74 }}>
-        <img src="/vision-bg.png" alt="" style={{ display: "block", width: "100%", height: "auto", pointerEvents: "none" }} />
-        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
-          <span style={{ marginTop: "43%", fontSize: 34, fontFamily: FONT, fontWeight: 400, letterSpacing: 1, color: "#0f1320" }}>BRAND VISION</span>
-          <div style={{ marginTop: 100, fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 520 }}>
-            A vision is your destination plan. It aligns your team<br />and turns tasks into purpose.
-          </div>
-          {canEdit && (
-          <motion.button whileTap={{ scale: 0.97 }} onClick={startEdit}
-            style={{ marginTop: 28, padding: "13px 26px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 600,
-              background: darkMode ? "#fff" : "#0f1320", color: darkMode ? "#0f1320" : "#fff" }}>
-            Define Your Vision
-          </motion.button>
-          )}
+      <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", paddingTop: 215 }}>
+        <span style={{ fontSize: 60, fontFamily: FONT, fontWeight: 400, letterSpacing: 1, color: theme.text }}>BRAND VISION</span>
+        <div style={{ marginTop: 6, fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 520 }}>
+          A vision is your destination plan. It aligns your team<br />and turns tasks into purpose.
         </div>
+        {canEdit && (
+        <motion.button whileTap={{ scale: 0.97 }} onClick={startEdit}
+          style={{ marginTop: 28, padding: "13px 26px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 600,
+            background: darkMode ? "#fff" : "#0f1320", color: darkMode ? "#0f1320" : "#fff" }}>
+          Define Your Vision
+        </motion.button>
+        )}
       </div>
     );
   }
@@ -20467,6 +20847,7 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
         const path = `fonts/${crypto.randomUUID()}.${ext}`;
         const { error } = await supabase.storage.from("brand-assets").upload(path, file, { upsert: true, contentType: file.type || "font/woff2" });
         if (error) continue;
+        trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "brand-assets", path, sizeBytes: file.size });
         const { data } = supabase.storage.from("brand-assets").getPublicUrl(path);
         added.push({ url: data.publicUrl, weight: deriveFontWeight(file.name), label: file.name });
         if (!famGuess) famGuess = file.name.replace(/\.[^.]+$/, "").replace(/[-_ ]*(thin|hairline|extralight|ultralight|light|regular|book|medium|semibold|demibold|extrabold|ultrabold|bold|black|heavy|italic)\b/gi, "").replace(/[-_ ]+$/, "").trim();
@@ -22242,6 +22623,7 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
   // Second-level sub-tab within the active pillar; resets to the first when the pillar changes.
   const pillarSubs = BRAND_PILLAR_SUBTABS[brandTab] || [];
   const [brandSub, setBrandSub] = useState(pillarSubs[0]?.key);
+  const subInd = useTabIndicator(brandSub, [appLanguage, brandTab]); // sliding underline for the sub-tabs
   // Inline rich-text editing of the current section (Bearbeiten button toggles it).
   const [editingText, setEditingText] = useState(false);
   // ── Publish (public brand page via brand_shares) ──
@@ -22786,6 +23168,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
     const path = `${userOrg.id}/${pathPrefix}-${Date.now()}-${safeName}`;
     const { error } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type || "application/octet-stream", upsert: true });
     if (error) throw error;
+    trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "brand-assets", path, sizeBytes: file.size });
     const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
     return { url: pub.publicUrl, name: file.name, size: file.size, type: file.type };
   };
@@ -24185,19 +24568,19 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 pillars happens via the main menu, not here. Audience/Dateien (project
                 brand) render a bare embedded view, so no sub-tab bar. */}
             {!isEmbeddedPillar && (
-            <div style={{ display: "flex", gap: 4, padding: "10px 26px 0", borderBottom: `1px solid ${theme.borderFaint}` }}>
+            <div ref={subInd.containerRef} style={{ display: "flex", gap: 4, padding: "10px 26px 0", borderBottom: `1px solid ${theme.borderFaint}`, position: "relative" }}>
               {pillarSubs.map(({ key, label }) => {
                 const active = brandSub === key;
                 return (
-                  <div key={key} onClick={() => setBrandSub(key)}
+                  <div key={key} ref={subInd.registerTab(key)} onClick={() => setBrandSub(key)}
                     style={{ padding: "10px 14px 13px", cursor: "pointer", position: "relative",
                       fontSize: 13.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap",
                       color: active ? theme.text : theme.textDim, transition: "color 0.2s ease" }}>
                     {label}
-                    {active && <motion.div layoutId="brandSubUnderline" style={{ position: "absolute", left: 8, right: 8, bottom: -1, height: 2.5, borderRadius: 2, background: "#23232b" }} />}
                   </div>
                 );
               })}
+              <TabUnderline box={subInd.box} />
             </div>
             )}
 
@@ -24622,7 +25005,7 @@ export default function CircularMenu() {
   const [userOrgs, setUserOrgs] = useState([]);             // all orgs the user belongs to
   const [userOrgRole, setUserOrgRole] = useState(null);     // role in current org
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false); // workspace switcher dropdown
-  const [settingsTab, setSettingsTab] = useState("workspace"); // settings page tab: workspace | billing | ai | appearance | account
+  const [settingsTab, setSettingsTab] = useState("workspace"); // settings page tab: workspace | ai | appearance | account (billing lives under account)
   const [deleteWsOpen, setDeleteWsOpen] = useState(false);   // workspace-delete confirm modal
   const [deleteWsText, setDeleteWsText] = useState("");      // typed confirmation (must match workspace name)
   const [deletingWs, setDeletingWs] = useState(false);
@@ -24965,7 +25348,7 @@ export default function CircularMenu() {
     let hasPendingSelection = false;
     try { hasPendingSelection = Boolean(localStorage.getItem("i7os-pending-billing")); } catch (_) {}
     if (hasPendingSelection || params.has("checkout")) {
-      setSettingsTab("billing");
+      setSettingsTab("account"); // billing now lives under the Account tab
       setCurrentView("settings");
     }
   }, [session?.user?.id, userOrg?.id]);
@@ -25737,6 +26120,26 @@ export default function CircularMenu() {
     });
     if (error) console.warn("[Notification] insert failed:", type, error.message);
   }, [session?.user?.id, userOrg?.id]);
+
+  // Load this workspace's storage cap from the (server-only) billing status once
+  // per workspace, so the upload guards know the tier limit without fetching
+  // billing on every upload. Falls back to the Free cap on any error.
+  useEffect(() => {
+    if (!userOrg?.id || !session?.access_token) { setCurrentStorageLimit(STORAGE_LIMITS.free); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch("/api/billing-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ orgId: userOrg.id }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!cancelled) setCurrentStorageLimit(storageLimitFor(j?.billing?.plan, j?.billing?.status));
+      } catch { if (!cancelled) setCurrentStorageLimit(STORAGE_LIMITS.free); }
+    })();
+    return () => { cancelled = true; };
+  }, [userOrg?.id, session?.access_token]);
 
   const markNotifRead = useCallback(async (id) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
@@ -26902,8 +27305,11 @@ export default function CircularMenu() {
     // Auto-create / look up the "AI Generated" folder so the file lands there
     const folderId = await ensureAiFolder();
     try {
+      const room = await checkStorageRoom(userOrg?.id, blob.size, { userId: session?.user?.id, email: session?.user?.email });
+      if (!room.ok) { console.warn("[AI auto-save] storage full — skipping save"); return null; }
       const { error: upErr } = await supabase.storage.from("user-files").upload(storagePath, blob, { contentType: blob.type, upsert: false });
       if (upErr) throw upErr;
+      trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "user-files", path: storagePath, sizeBytes: blob.size });
       const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(storagePath, 60 * 60 * 24 * 365);
       const { data: inserted, error: insErr } = await supabase.from("user_files").insert({
         user_id: session.user.id,
@@ -26933,8 +27339,11 @@ export default function CircularMenu() {
     if (!blob) throw new Error("decode failed");
     const ext = (blob.type.split("/")[1] || "png").replace("jpeg", "jpg");
     const path = `ai-images/${userOrg.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const room = await checkStorageRoom(userOrg?.id, blob.size, { userId: session?.user?.id, email: session?.user?.email });
+    if (!room.ok) throw new Error(`Speicher voll (${formatBytesGB(room.limit)}) — bitte upgraden.`);
     const { error } = await supabase.storage.from("chat-attachments").upload(path, blob, { contentType: blob.type, upsert: false });
     if (error) throw new Error(error.message);
+    trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "chat-attachments", path, sizeBytes: blob.size });
     const { data: pub } = supabase.storage.from("chat-attachments").getPublicUrl(path);
     const targetUrl = pub.publicUrl;
 
@@ -29996,7 +30405,6 @@ export default function CircularMenu() {
               }}>
                 {[
                   { id: "workspace", label: "Workspace" },
-                  { id: "billing", label: appLanguage === "de" ? "Abo" : "Billing" },
                   { id: "ai", label: appLanguage === "de" ? "KI & Modelle" : "AI & Models" },
                   { id: "appearance", label: appLanguage === "de" ? "Darstellung" : "Appearance" },
                   { id: "account", label: "Account" },
@@ -30017,17 +30425,6 @@ export default function CircularMenu() {
                   );
                 })}
               </div>
-
-              {settingsTab === "billing" && userOrg && (
-                <BillingSettings
-                  session={session}
-                  org={userOrg}
-                  isAdmin={isOrgAdmin}
-                  theme={theme}
-                  darkMode={darkMode}
-                  appLanguage={appLanguage}
-                />
-              )}
 
               {/* ── Workspace & Team Management ── */}
               {settingsTab === "workspace" && userOrg && (
@@ -30418,7 +30815,6 @@ export default function CircularMenu() {
                   <div style={{
                     display: "flex", alignItems: "center", gap: 14,
                     padding: "16px 20px",
-                    borderBottom: `1px solid ${theme.borderFaint}`,
                   }}>
                     <div style={{
                       width: 36, height: 36, borderRadius: 10,
@@ -30439,9 +30835,9 @@ export default function CircularMenu() {
                         </svg>
                       )}
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{(session?.user?.app_metadata?.provider === "google") ? "Google Account" : (appLanguage === "de" ? "E-Mail-Account" : "Email account")}</div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session?.user?.email || (appLanguage === "de" ? "E-Mail-Account" : "Email account")}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
                         <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: session ? "#00B894" : "#E84393" }} />
                         <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{session ? (appLanguage === "de" ? "Verbunden" : "Connected") : (appLanguage === "de" ? "Nicht verbunden" : "Not connected")}</div>
                       </div>
@@ -30464,27 +30860,22 @@ export default function CircularMenu() {
                     </motion.div>
                   </div>
 
-                  {/* Subscription */}
-                  <div style={{
-                    display: "flex", alignItems: "center", gap: 14,
-                    padding: "16px 20px",
-                  }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: 10,
-                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z" stroke={theme.svgStroke} strokeWidth="1.5" strokeLinejoin="round" />
-                      </svg>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Plan</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{appLanguage === "de" ? "Früher Zugang" : "Early Access"}</div>
-                    </div>
-                    <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent }}>{appLanguage === "de" ? "Aktiv" : "Active"}</div>
-                  </div>
                 </div>
+
+                {/* Abo & Abrechnung — moved here from the former "Abo" tab */}
+                {userOrg && (
+                  <>
+                    <BillingSettings
+                      session={session}
+                      org={userOrg}
+                      isAdmin={isOrgAdmin}
+                      theme={theme}
+                      darkMode={darkMode}
+                      appLanguage={appLanguage}
+                    />
+                    <StorageUsageBar orgId={userOrg.id} theme={theme} appLanguage={appLanguage} />
+                  </>
+                )}
               </motion.div>
               )}
 

@@ -65,7 +65,9 @@ Realtime channels: `wb-<boardId>` (whiteboard items), `chat-<convId>`, `team-cal
 
 ## Serverless functions (`api/`)
 
-`chat-multi` (unified Claude/OpenAI/Gemini chat), `chat` (legacy, server-side Anthropic key), `fetch-brand` (multi-mode: brand analysis / weather / …), `fetch-brand-pdf`, `fetch-brand-zip`, `google-fonts` (CORS proxy), `img-proxy` (CORS image proxy for PDF export), `drive-download`, `redirect` (short links `/i/:slug`), `refresh-token` (Google OAuth), `send-invite`, `send-project-invite`, `send-push-setup`.
+`chat-multi` (unified Claude/OpenAI/Gemini chat), `fetch-brand` (multi-mode POST/GET: brand analysis / weather / preview / **`mode:"pdf"`** brand-book PDF parse / **`mode:"zip"`** brand-package ZIP inspect), `send` (multi-mode POST, dispatched by `mode`: `"invite"` / `"project-invite"` / `"push-setup"` email via Resend, `"push"` web-push via VAPID), `google-fonts` (CORS proxy, **edge**), `img-proxy` (CORS image proxy for PDF export, **edge**), `drive-download` (**edge**), `redirect` (short links `/i/:slug`), `refresh-token` (Google OAuth), `tts`. Plus billing (Stripe): `billing-status`, `create-checkout-session`, `create-customer-portal-session`, `stripe-webhook`.
+
+**Function budget:** Vercel Hobby caps **Serverless (Node)** functions at 12; **Edge** functions (`export const config = { runtime: "edge" }`) don't count. Currently ~10 Node + 3 Edge. To add an endpoint, prefer a new `mode` on an existing multi-mode file (`fetch-brand`, `send`) or the Edge runtime over a new Node file. `stripe-webhook` needs the raw body — keep it standalone, never fold it into a bundle.
 
 Env vars (Vercel): `ANTHROPIC_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `FISH_API_KEY`, `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`, `PUBLIC_APP_URL`. Client-side: `VITE_GOOGLE_API_KEY`, `VITE_GOOGLE_APP_ID`.
 

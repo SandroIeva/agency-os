@@ -128,6 +128,35 @@ export default async function handler(req, res) {
       return r.ok ? res.status(200).json({ success: true, id: r.id }) : res.status(r.status).json({ error: r.error });
     }
 
+    if (mode === "storage-warning") {
+      const { email, pct } = req.body;
+      if (!email) return res.status(400).json({ error: "Missing email" });
+      const usedPct = Math.min(100, Math.max(0, Math.round(Number(pct) || 90)));
+      const r = await sendResend({
+        from: "i7 OS <invite@i7os.com>",
+        to: email,
+        subject: `Dein Workspace-Speicher ist zu ${usedPct}% voll — i7 OS`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px; text-align: center;">
+            <div style="margin-bottom: 28px;">
+              <img src="${APP_URL}/i7OS-Logo.png" alt="i7 OS" width="96" height="59" style="display: block; margin: 0 auto 16px; border: 0;" />
+              <h1 style="font-size: 20px; font-weight: 600; color: #1a1a2e; margin: 0;">Dein Speicher wird knapp</h1>
+            </div>
+            <p style="font-size: 15px; color: #444; line-height: 1.6; margin-bottom: 24px;">
+              Dein i7 OS Workspace nutzt bereits <strong>${usedPct}%</strong> des verfügbaren Speichers.
+              Sobald er voll ist, kannst du keine neuen Dateien mehr hochladen.
+            </p>
+            <a href="${APP_URL}/?view=settings" style="display: inline-block; padding: 12px 28px; background: #111111; color: white; text-decoration: none; border-radius: 10px; font-weight: 500; font-size: 14px; margin-bottom: 24px;">Speicher upgraden</a>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0 16px;" />
+            <p style="font-size: 11px; color: #999; text-align: center; margin: 0;">
+              Du erhältst diese E-Mail, weil dein Workspace-Speicher fast erschöpft ist.
+            </p>
+          </div>
+        `,
+      });
+      return r.ok ? res.status(200).json({ success: true, id: r.id }) : res.status(r.status).json({ error: r.error });
+    }
+
     if (mode === "project-invite") {
       const { email, token, projectName, inviterName } = req.body;
       if (!email || !token) return res.status(400).json({ error: "Missing email or token" });
