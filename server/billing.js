@@ -202,8 +202,12 @@ export async function syncStripeSubscription(subscription) {
   // the original Checkout selection and doesn't change after a portal switch.
   const plan = mapped.plan || subscription.metadata?.plan;
   const billing = mapped.billing || subscription.metadata?.billing_interval;
-  const periodEnd = item?.current_period_end
-    ? new Date(item.current_period_end * 1000).toISOString()
+  // Stripe moved billing periods from the Subscription to its items in
+  // 2025-03-31.basil. Webhook endpoints can still deliver older API shapes,
+  // so support both locations while preferring the current one.
+  const currentPeriodEnd = item?.current_period_end ?? subscription.current_period_end;
+  const periodEnd = currentPeriodEnd
+    ? new Date(currentPeriodEnd * 1000).toISOString()
     : null;
 
   const { data, error } = await admin
