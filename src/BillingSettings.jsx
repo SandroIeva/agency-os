@@ -171,7 +171,7 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
       style={{ marginTop: 24, fontFamily: APP_FONT }}
     >
       <div style={{ fontSize: 10, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
-        {de ? "Abo & Abrechnung" : "Plan & Billing"} — {org?.name}
+        {de ? "Abo & Abrechnung" : "Plan & Billing"}
       </div>
 
       <div style={{ borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`, padding: 24 }}>
@@ -206,7 +206,7 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
                 aria-hidden="true"
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1.1, ease: "linear", repeat: Infinity }}
-                style={{ width: 28, height: 28, margin: "0 auto 15px", borderRadius: "50%", border: `2px solid ${theme.border}`, borderTopColor: "#8B7AFF" }}
+                style={{ width: 28, height: 28, margin: "0 auto 15px", borderRadius: "50%", border: `2px solid ${theme.border}`, borderTopColor: theme.text }}
               />
               <div style={{ color: theme.text, fontSize: 14, fontWeight: 600 }}>
                 {checkoutSyncDelayed ? (de ? "Fast geschafft" : "Almost there") : (de ? "Workspace wird aktualisiert" : "Updating your workspace")}
@@ -234,7 +234,7 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
               {PLAN_OPTIONS.map(plan => {
                 const selected = selectedPlan === plan.id;
                 return (
-                  <motion.button key={plan.id} whileHover={{ y: -2 }} whileTap={{ scale: 0.99 }} onClick={() => setSelectedPlan(plan.id)} style={{ minHeight: 155, padding: 17, textAlign: "left", borderRadius: 16, border: `1px solid ${selected ? "#8B7AFF" : theme.border}`, background: selected ? "rgba(139,122,255,.10)" : "transparent", color: theme.text, fontFamily: APP_FONT, cursor: "pointer", transition: "border-color .25s ease, background .25s ease" }}>
+                  <motion.button key={plan.id} whileHover={{ y: -2 }} whileTap={{ scale: 0.99 }} onClick={() => setSelectedPlan(plan.id)} style={{ minHeight: 155, padding: 17, textAlign: "left", borderRadius: 16, border: `1px solid ${selected ? theme.text : theme.border}`, background: selected ? (darkMode ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.04)") : "transparent", color: theme.text, fontFamily: APP_FONT, cursor: "pointer", transition: "border-color .25s ease, background .25s ease" }}>
                     <div style={{ fontSize: 14, fontWeight: 600 }}>{plan.name}</div>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginTop: 12 }}>
                       <strong style={{ fontSize: 30, fontWeight: 600 }}>€{plan[billingInterval]}</strong>
@@ -250,7 +250,7 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
               <div style={{ fontSize: 11, color: theme.textDim }}>
                 {!isAdmin && (de ? "Nur Workspace-Admins können ein Abo abschließen." : "Only workspace admins can start a subscription.")}
               </div>
-              <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }} onClick={startCheckout} disabled={!isAdmin || Boolean(action) || loading} style={{ padding: "11px 20px", border: 0, borderRadius: 12, background: "#8B7AFF", color: "#fff", fontFamily: APP_FONT, fontSize: 13, fontWeight: 600, cursor: !isAdmin || action || loading ? "not-allowed" : "pointer", opacity: !isAdmin || action || loading ? 0.55 : 1 }}>
+              <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }} onClick={startCheckout} disabled={!isAdmin || Boolean(action) || loading} style={{ padding: "12px 24px", border: 0, borderRadius: 999, background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontFamily: APP_FONT, fontSize: 13, fontWeight: 600, cursor: !isAdmin || action || loading ? "not-allowed" : "pointer", opacity: !isAdmin || action || loading ? 0.55 : 1 }}>
                 {action === "checkout" ? (de ? "Öffnet Checkout …" : "Opening checkout …") : (de ? "Weiter zum sicheren Checkout" : "Continue to secure checkout")}
               </motion.button>
             </div>

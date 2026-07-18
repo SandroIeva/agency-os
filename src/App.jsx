@@ -30873,7 +30873,6 @@ export default function CircularMenu() {
                       darkMode={darkMode}
                       appLanguage={appLanguage}
                     />
-                    <StorageUsageBar orgId={userOrg.id} theme={theme} appLanguage={appLanguage} />
                   </>
                 )}
               </motion.div>
@@ -31481,6 +31480,11 @@ export default function CircularMenu() {
                   </div>
                 </div>
               </motion.div>
+              )}
+
+              {/* Storage usage — lives under Workspace, styled like the other sections */}
+              {settingsTab === "workspace" && userOrg && (
+                <StorageUsageBar orgId={userOrg.id} theme={theme} appLanguage={appLanguage} />
               )}
 
               {/* Google Connection Status — only shown when broken so user can reconnect */}
