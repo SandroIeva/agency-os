@@ -99,7 +99,7 @@ const LINEAR_MENU_ITEMS_DEF = [
     { id: "assets",      labelKey: "linearMenu.assets" },
   ]},
   { id: "create",    labelKey: "linearMenu.create",    sub: [
-    { id: "project",  labelKey: "linearMenu.project" },
+    { id: "social-post", labelKey: "linearMenu.socialPost" },
     { id: "brief",    labelKey: "linearMenu.brief" },
     { id: "document", labelKey: "linearMenu.document" },
   ]},
@@ -8372,9 +8372,9 @@ function TokenUsageBar({ orgId, theme, darkMode, appLanguage = "de" }) {
         {de ? "KI-Nutzung" : "AI Usage"}
       </div>
       <div style={{ borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`, padding: 24 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: breakdown.length ? 16 : 0 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: breakdown.length ? 16 : 0 }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: theme.text }}>{monthLabel}</span>
-          <span style={{ fontSize: 14, fontWeight: 600, color: theme.text }}>
+          <span style={{ fontSize: 11.5, fontFamily: FONT, fontWeight: 500, color: theme.text, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", padding: "4px 11px", borderRadius: 20, flexShrink: 0 }}>
             {rows == null ? "…" : `${formatTokens(total)} ${de ? "Tokens" : "tokens"}`}
           </span>
         </div>
@@ -13858,9 +13858,597 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
   );
 }
 
-function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", canEdit = true, projectId = null, projectName = "", embedded = false }) {
+// ── Audience → Analytics — social performance via Zernio ────────────────────
+// Real integration (docs/zernio-integration.md): the client talks ONLY to our
+// /api/zernio function (modes: status/connect/disconnect/analytics/presign/post);
+// the ZERNIO_API_KEY lives server-side. Flow: user connects accounts per OAuth
+// (Zernio redirects back with ?zernio=connected → App root reopens this tab),
+// then the dashboard pulls top posts, follower stats and daily metrics.
+const ZERNIO_UI_PLATFORMS = ["linkedin", "instagram", "threads", "x", "pinterest"];
+// i7OS uses "x" as the UI key; Zernio's API still calls the platform "twitter".
+const zernioKeyFor = (uiKey) => (uiKey === "x" ? "twitter" : uiKey);
+const uiKeyFor = (zKey) => (zKey === "twitter" ? "x" : zKey);
+// POST /api/zernio — shared by the Analytics tab and the post composer.
+async function zernioRequest(session, body) {
+  const res = await fetch("/api/zernio", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { const e = new Error(data.error || "Zernio request failed"); e.code = data.code; throw e; }
+  return data;
+}
+// Compact number for metric readouts — "12,4 K" / "1,3 M" (locale-aware comma).
+const fmtMetric = (n, de = true) => {
+  n = Number(n) || 0;
+  const s = (v) => de ? String(v).replace(".", ",") : String(v);
+  if (n >= 1_000_000) return s((n / 1_000_000).toFixed(1)) + " M";
+  if (n >= 1_000) return s((n / 1_000).toFixed(1)) + " K";
+  return String(n);
+};
+
+function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg }) {
+  const de = appLanguage === "de";
+  const [accounts, setAccounts] = useState(null);   // null = loading
+  const [data, setData] = useState(null);           // { top, followers, daily }
+  const [platform, setPlatform] = useState("all");  // ui key or "all"
+  const [error, setError] = useState(null);
+  const [busyKey, setBusyKey] = useState(null);     // platform being connected / account being removed
+  const orgId = userOrg?.id;
+
+  const loadStatus = useCallback(async () => {
+    if (!orgId) return;
+    setError(null);
+    try { const r = await zernioRequest(session, { mode: "status", orgId }); setAccounts(r.accounts || []); }
+    catch (e) { setAccounts([]); setError(e); }
+  }, [orgId, session?.access_token]); // eslint-disable-line
+  useEffect(() => { loadStatus(); }, [loadStatus]);
+
+  useEffect(() => {
+    if (!orgId || !accounts || accounts.length === 0) return;
+    let on = true;
+    setData(null);
+    zernioRequest(session, { mode: "analytics", orgId, platform: platform === "all" ? undefined : zernioKeyFor(platform) })
+      .then(r => { if (on) setData(r); })
+      .catch(e => { if (on) { setData({}); setError(e); } });
+    return () => { on = false; };
+  }, [orgId, accounts, platform]); // eslint-disable-line
+
+  const connect = async (uiKey) => {
+    setBusyKey(uiKey); setError(null);
+    try {
+      const r = await zernioRequest(session, { mode: "connect", orgId, platform: zernioKeyFor(uiKey) });
+      window.location.assign(r.authUrl); // OAuth → Zernio redirects back with ?zernio=connected
+    } catch (e) { setError(e); setBusyKey(null); }
+  };
+  const disconnect = async (accountId) => {
+    setBusyKey(accountId); setError(null);
+    try { await zernioRequest(session, { mode: "disconnect", orgId, accountId }); await loadStatus(); }
+    catch (e) { setError(e); }
+    setBusyKey(null);
+  };
+
+  const card = { borderRadius: 18, background: theme.cardBg, border: `1px solid ${theme.border}`, padding: 20 };
+  const secLabel = { fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 14 };
+  const platformMeta = (uiKey) => TOUCHPOINT_PLATFORMS.find(p => p.key === uiKey);
+  const connectedUiKeys = [...new Set((accounts || []).map(a => uiKeyFor(a.platform)))];
+  const unconnected = ZERNIO_UI_PLATFORMS.filter(k => !connectedUiKeys.includes(k));
+
+  // ── Derived dashboard numbers (defensive — every part can be missing) ──
+  const followersOk = data?.followers && !data.followers.__unavailable;
+  const dailyOk = data?.daily && !data.daily.__unavailable;
+  const topOk = data?.top && !data.top.__unavailable;
+  const followerAccounts = followersOk
+    ? (data.followers.accounts || []).filter(a => platform === "all" || uiKeyFor(a.platform) === platform)
+    : [];
+  const followerTotal = followerAccounts.reduce((s, a) => s + (a.currentFollowers || 0), 0);
+  const followerGrowth = followerAccounts.reduce((s, a) => s + (a.growth || 0), 0);
+  const dailyRows = dailyOk ? (data.daily.dailyData || []) : [];
+  const sumMetric = (k) => dailyRows.reduce((s, r) => s + (r.metrics?.[k] || 0), 0);
+  const impressions = sumMetric("impressions");
+  const interactions = sumMetric("likes") + sumMetric("comments") + sumMetric("shares") + sumMetric("saves");
+  const postCount = dailyRows.reduce((s, r) => s + (r.postCount || 0), 0);
+  const engagementRate = impressions ? (interactions / impressions) * 100 : 0;
+  // Weekly buckets for the chart (last 8 ISO weeks from the daily series).
+  const weekly = (() => {
+    const buckets = new Map();
+    dailyRows.forEach(r => {
+      const d = new Date(r.date + "T00:00:00Z");
+      const wk = `${d.getUTCFullYear()}-${String(Math.ceil(((d - new Date(Date.UTC(d.getUTCFullYear(), 0, 1))) / 86400000 + 1) / 7)).padStart(2, "0")}`;
+      buckets.set(wk, (buckets.get(wk) || 0) + (r.metrics?.impressions || 0));
+    });
+    return [...buckets.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1).slice(-8).map(([, v]) => v);
+  })();
+  const maxWeek = Math.max(1, ...weekly);
+  const topPosts = topOk ? (data.top.posts || []).slice(0, 5) : [];
+  const addonMissing = data && ((data.followers?.__unavailable && [402, 403].includes(data.followers.status)) || (data.daily?.__unavailable && [402, 403].includes(data.daily.status)));
+
+  const kpis = [
+    { label: "Follower", value: followersOk ? fmtMetric(followerTotal, de) : "–", delta: followersOk && followerGrowth ? followerGrowth : null },
+    { label: de ? "Impressionen" : "Impressions", value: dailyOk ? fmtMetric(impressions, de) : "–", delta: null },
+    { label: de ? "Interaktionen" : "Interactions", value: dailyOk ? fmtMetric(interactions, de) : "–", delta: null },
+    { label: "Engagement-Rate", value: dailyOk && impressions ? ((de ? engagementRate.toFixed(1).replace(".", ",") : engagementRate.toFixed(1)) + " %") : "–", delta: null },
+  ];
+
+  const errorText = error
+    ? (error.code === "zernio_not_configured"
+        ? (de ? "Zernio ist noch nicht konfiguriert — ZERNIO_API_KEY als Env-Var hinterlegen (siehe docs/zernio-integration.md)." : "Zernio is not configured yet — set the ZERNIO_API_KEY env var (see docs/zernio-integration.md).")
+        : error.message)
+    : null;
+
+  // Reusable connect chip (icon + "Verbinden") for a platform.
+  const ConnectChip = ({ uiKey, big = false }) => {
+    const p = platformMeta(uiKey);
+    const busy = busyKey === uiKey;
+    return (
+      <motion.div whileTap={{ scale: 0.97 }} onClick={() => !busy && connect(uiKey)}
+        style={{ display: "flex", alignItems: "center", gap: 9, padding: big ? "12px 16px" : "7px 13px 7px 8px", borderRadius: big ? 14 : 999,
+          border: `1px solid ${theme.borderFaint}`, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>
+        <div style={{ width: big ? 30 : 22, height: big ? 30 : 22, borderRadius: big ? 9 : 7, background: p.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <svg width={tpGlyphSize(uiKey, big ? 16 : 13)} height={tpGlyphSize(uiKey, big ? 16 : 13)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
+        </div>
+        <span style={{ fontSize: big ? 13.5 : 12.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{p.label}</span>
+        <span style={{ fontSize: 11.5, fontFamily: FONT, fontWeight: 600, color: theme.textDim, marginLeft: big ? "auto" : 2 }}>
+          {busy ? "…" : (de ? "Verbinden" : "Connect")}
+        </span>
+      </motion.div>
+    );
+  };
+
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
+      {errorText && (
+        <div style={{ marginBottom: 18, padding: "10px 14px", borderRadius: 12, background: "rgba(232,103,103,.08)", border: "1px solid rgba(232,103,103,.16)", color: "#E86767", fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>
+          {errorText}
+        </div>
+      )}
+
+      {accounts == null ? (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{de ? "Lädt…" : "Loading…"}</div>
+      ) : accounts.length === 0 ? (
+        /* ── Empty state: connect the first account ── */
+        <div style={{ maxWidth: 560, margin: "40px auto 0", textAlign: "center" }}>
+          <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>{de ? "Verbinde deine Kanäle" : "Connect your channels"}</div>
+          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 26 }}>
+            {de ? "Verknüpfe deine Social-Media-Accounts, um Performance, Top-Posts und Follower-Entwicklung direkt hier zu sehen — und Posts aus i7OS zu veröffentlichen." : "Link your social accounts to see performance, top posts and follower growth right here — and publish posts from i7OS."}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10, textAlign: "left" }}>
+            {ZERNIO_UI_PLATFORMS.map(k => <ConnectChip key={k} uiKey={k} big />)}
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Platform filter pills + live badge */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 22, flexWrap: "wrap" }}>
+            {["all", ...connectedUiKeys].map(key => {
+              const on = platform === key;
+              const p = key === "all" ? null : platformMeta(key);
+              return (
+                <motion.div key={key} whileTap={{ scale: 0.96 }} onClick={() => setPlatform(key)}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: p ? "7px 14px 7px 8px" : "7px 16px", borderRadius: 999, cursor: "pointer",
+                    background: on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
+                    border: `1px solid ${on ? "transparent" : theme.borderFaint}`,
+                    color: on ? (darkMode ? "#15151c" : "#fff") : theme.textDim, transition: "background 0.15s ease, color 0.15s ease" }}>
+                  {p && (
+                    <div style={{ width: 22, height: 22, borderRadius: 7, background: p.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <svg width={tpGlyphSize(key, 13)} height={tpGlyphSize(key, 13)} viewBox="0 0 24 24">{touchpointGlyph(key)}</svg>
+                    </div>
+                  )}
+                  <span style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500 }}>{p ? p.label : (de ? "Alle" : "All")}</span>
+                </motion.div>
+              );
+            })}
+            <div style={{ flex: 1 }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", fontSize: 11, fontFamily: FONT, color: theme.textDim, flexShrink: 0 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#00B894" }} />
+              {de ? "Live · Zernio" : "Live · Zernio"}
+            </div>
+          </div>
+
+          {addonMissing && (
+            <div style={{ marginBottom: 18, padding: "10px 14px", borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>
+              {de ? "Follower- und Tages-Metriken benötigen das Zernio Analytics-Add-on." : "Follower and daily metrics require the Zernio analytics add-on."}
+            </div>
+          )}
+
+          {/* KPI tiles */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 22 }}>
+            {kpis.map((k, i) => (
+              <motion.div key={k.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.03 + i * 0.05, duration: 0.3 }} style={card}>
+                <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginBottom: 8 }}>{k.label}</div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                  <span style={{ fontSize: 24, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{data == null ? "…" : k.value}</span>
+                  {k.delta != null && (
+                    <span style={{ fontSize: 11, fontFamily: FONT, fontWeight: 600, color: k.delta >= 0 ? "#00B894" : "#E86767" }}>
+                      {k.delta >= 0 ? "+" : ""}{fmtMetric(k.delta, de)}
+                    </span>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Impressions trend — weekly buckets from the daily series */}
+          {dailyOk && weekly.length > 1 && (
+            <div style={{ ...card, marginBottom: 22 }}>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16 }}>
+                <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{de ? `Impressionen · letzte ${weekly.length} Wochen` : `Impressions · last ${weekly.length} weeks`}</span>
+                <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>{platform === "all" ? (de ? "Alle Kanäle" : "All channels") : platformMeta(platform)?.label}</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 120 }}>
+                {weekly.map((v, i) => (
+                  <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, height: "100%", justifyContent: "flex-end" }}>
+                    <motion.div initial={{ height: 0 }} animate={{ height: `${Math.max(2, Math.round((v / maxWeek) * 100))}%` }} transition={{ delay: 0.1 + i * 0.04, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+                      title={fmtMetric(v, de)}
+                      style={{ width: "100%", maxWidth: 44, borderRadius: 7, background: i === weekly.length - 1 ? (darkMode ? "#f4f4f7" : "#15151c") : (darkMode ? "rgba(255,255,255,0.16)" : "rgba(21,21,28,0.16)") }} />
+                    <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>W{i + 1}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Top posts + connected accounts */}
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) minmax(0, 1fr)", gap: 14, alignItems: "start" }}>
+            <div style={card}>
+              <div style={secLabel}>{de ? "Top 5 Posts (Engagement)" : "Top 5 posts (engagement)"}</div>
+              {data == null ? (
+                <div style={{ padding: "18px 0", color: theme.textDim, fontSize: 12.5, fontFamily: FONT }}>{de ? "Lädt…" : "Loading…"}</div>
+              ) : topPosts.length === 0 ? (
+                <div style={{ padding: "18px 0", color: theme.textDim, fontSize: 12.5, fontFamily: FONT, lineHeight: 1.6 }}>
+                  {de ? "Noch keine Post-Daten. Nach dem Verbinden synct Zernio die letzten Monate — schau in ein paar Minuten wieder rein." : "No post data yet. After connecting, Zernio syncs recent months — check back in a few minutes."}
+                </div>
+              ) : topPosts.map((post, i) => {
+                const uiKey = uiKeyFor(post.platform || "");
+                const meta = platformMeta(uiKey) || { color: "#15151c" };
+                const a = post.analytics || {};
+                const dateStr = post.publishedAt ? new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { day: "numeric", month: "short" }).format(new Date(post.publishedAt)) : "";
+                return (
+                  <div key={post._id || i} onClick={() => post.platformPostUrl && window.open(post.platformPostUrl, "_blank", "noopener")}
+                    style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "12px 0", borderBottom: i < topPosts.length - 1 ? `1px solid ${theme.borderFaint}` : "none", cursor: post.platformPostUrl ? "pointer" : "default" }}>
+                    <span style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.textFaint, width: 18, flexShrink: 0, paddingTop: 1 }}>{i + 1}</span>
+                    <div style={{ width: 30, height: 30, borderRadius: 9, background: meta.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <svg width={tpGlyphSize(uiKey, 15)} height={tpGlyphSize(uiKey, 15)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{post.content || (de ? "(ohne Text)" : "(no text)")}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 6, fontSize: 11, fontFamily: FONT, color: theme.textDim, flexWrap: "wrap" }}>
+                        {dateStr && <span style={{ color: theme.textFaint }}>{dateStr}</span>}
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 00-7.8 7.8l8.8 8.9 8.8-8.9a5.5 5.5 0 000-7.8z"/></svg>{fmtMetric(a.likes, de)}</span>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 11.5a8.4 8.4 0 01-9 8.4 8.6 8.6 0 01-3.9-.9L3 21l2-4.9a8.4 8.4 0 1116-4.6z"/></svg>{fmtMetric(a.comments, de)}</span>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>{fmtMetric(a.shares, de)}</span>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-7.5 11-7.5S23 12 23 12s-4 7.5-11 7.5S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>{fmtMetric(a.impressions, de)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={card}>
+                <div style={secLabel}>{de ? "Verbundene Accounts" : "Connected accounts"}</div>
+                {accounts.map((a, i) => {
+                  const uiKey = uiKeyFor(a.platform);
+                  const meta = platformMeta(uiKey) || { color: "#15151c", label: a.platform };
+                  return (
+                    <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 0", borderBottom: i < accounts.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
+                      <div style={{ width: 30, height: 30, borderRadius: 9, background: meta.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width={tpGlyphSize(uiKey, 15)} height={tpGlyphSize(uiKey, 15)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.displayName}</div>
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.username}</div>
+                      </div>
+                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: a.isActive ? "#00B894" : "#E86767", flexShrink: 0 }} title={a.isActive ? "OK" : (de ? "Neu verbinden nötig" : "Reconnect needed")} />
+                      <span onClick={() => busyKey !== a.id && disconnect(a.id)}
+                        style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2, opacity: busyKey === a.id ? 0.5 : 1 }}>
+                        {busyKey === a.id ? "…" : (de ? "Trennen" : "Remove")}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              {unconnected.length > 0 && (
+                <div style={card}>
+                  <div style={secLabel}>{de ? "Weitere verbinden" : "Connect more"}</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {unconnected.map(k => <ConnectChip key={k} uiKey={k} big />)}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Erstellen → Social Media Post — composer, publishes via Zernio ──────────
+// Accounts come from /api/zernio mode:"status" (the ones connected in Audience →
+// Analytics). Media: presigned direct upload to Zernio storage (bytes never pass
+// through our serverless function), then mode:"post" publishes/schedules/drafts.
+const POST_CHAR_LIMITS = { x: 280, threads: 500, pinterest: 500, instagram: 2200, linkedin: 3000 };
+
+function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage = "de", onOpenAudience }) {
+  const de = appLanguage === "de";
+  const [accounts, setAccounts] = useState(null);   // null = loading
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [text, setText] = useState("");
+  const [imageUrl, setImageUrl] = useState(null);   // local preview object URL
+  const imageFileRef = useRef(null);                // the actual File for upload
+  const [previewId, setPreviewId] = useState(null); // account whose platform the preview mimics
+  const [schedule, setSchedule] = useState("");
+  const [busy, setBusy] = useState(null);           // "post" | "draft"
+  const [result, setResult] = useState(null);       // last publish result
+  const [error, setError] = useState(null);
+  const fileRef = useRef(null);
+  const orgId = userOrg?.id;
+
+  useEffect(() => {
+    if (!orgId) return;
+    let on = true;
+    zernioRequest(session, { mode: "status", orgId })
+      .then(r => { if (on) setAccounts(r.accounts || []); })
+      .catch(e => { if (on) { setAccounts([]); setError(e); } });
+    return () => { on = false; };
+  }, [orgId]); // eslint-disable-line
+
+  const selected = (accounts || []).filter(a => selectedIds.includes(a.id));
+  const toggleAccount = (id) => setSelectedIds(prev => {
+    const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+    if (!next.includes(previewId) && next.length) setPreviewId(next[0]);
+    return next;
+  });
+  const charLimit = selected.length
+    ? Math.min(...selected.map(a => POST_CHAR_LIMITS[uiKeyFor(a.platform)] || 3000))
+    : 3000;
+  const overLimit = text.length > charLimit;
+  const onPickImage = (e) => {
+    const f = e.target.files?.[0];
+    if (f && f.type.startsWith("image/")) { imageFileRef.current = f; setImageUrl(URL.createObjectURL(f)); }
+    e.target.value = "";
+  };
+  const clearImage = () => { imageFileRef.current = null; setImageUrl(null); };
+
+  const submit = async (kind) => {
+    if (busy) return;
+    setError(null); setResult(null);
+    const isDraft = kind === "draft";
+    if (!isDraft && selected.length === 0) { setError(new Error(de ? "Wähle mindestens einen Account." : "Select at least one account.")); return; }
+    if (!text.trim() && !imageFileRef.current) { setError(new Error(de ? "Text oder Bild fehlt." : "Text or image required.")); return; }
+    if (overLimit) { setError(new Error(de ? `Text zu lang (max. ${charLimit} Zeichen für die gewählten Kanäle).` : `Text too long (max ${charLimit} chars for the selected channels).`)); return; }
+    setBusy(kind);
+    try {
+      // 1) Media: presigned direct upload (client → Zernio storage)
+      let mediaItems;
+      const file = imageFileRef.current;
+      if (file) {
+        const pre = await zernioRequest(session, { mode: "presign", orgId, filename: file.name, contentType: file.type || "image/png", size: file.size });
+        const up = await fetch(pre.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type || "image/png" }, body: file });
+        if (!up.ok) throw new Error(de ? "Bild-Upload fehlgeschlagen." : "Image upload failed.");
+        mediaItems = [{ type: "image", url: pre.publicUrl, filename: file.name }];
+      }
+      // 2) Publish / schedule / draft
+      const r = await zernioRequest(session, {
+        mode: "post", orgId,
+        content: text.trim() || undefined,
+        platforms: selected.map(a => ({ platform: a.platform, accountId: a.id })),
+        mediaItems,
+        isDraft: isDraft || undefined,
+        scheduledFor: (!isDraft && schedule) ? new Date(schedule).toISOString() : undefined,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      });
+      setResult(r);
+      if (r.status !== "failed") { setText(""); clearImage(); setSchedule(""); }
+    } catch (e) { setError(e); }
+    setBusy(null);
+  };
+
+  const brandName = userOrg?.name || "Brand";
+  const previewAccount = selected.find(a => a.id === previewId) || selected[0] || null;
+  const previewUiKey = previewAccount ? uiKeyFor(previewAccount.platform) : null;
+  const previewMeta = previewUiKey ? TOUCHPOINT_PLATFORMS.find(p => p.key === previewUiKey) : null;
+  const label = { fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 10 };
+  const statusLabel = (s) => ({ published: de ? "Veröffentlicht" : "Published", scheduled: de ? "Geplant" : "Scheduled", draft: de ? "Entwurf" : "Draft", pending: de ? "In Arbeit" : "Pending", failed: de ? "Fehlgeschlagen" : "Failed" }[s] || s);
+
+  return (
+    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
+      style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 40px 80px" }}>
+      <div style={{ width: "100%", maxWidth: 1050, height: "100%", ...frostedPanelStyle(darkMode), borderRadius: 26, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        {/* Header — back + title, primary actions top-right (design rule) */}
+        <div style={{ padding: "16px 24px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${theme.borderFaint}` }}>
+          <motion.div whileTap={{ scale: 0.92 }} onClick={onBack} style={{ cursor: "pointer", color: theme.textDim, display: "flex", flexShrink: 0 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </motion.div>
+          <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{brandName}</span>
+          <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim }}>Social Media Post</span>
+          <div style={{ flex: 1 }} />
+          <motion.button whileTap={{ scale: 0.97 }} onClick={() => submit("draft")} disabled={Boolean(busy)}
+            style={{ padding: "9px 16px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text, fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1 }}>
+            {busy === "draft" ? "…" : (de ? "Entwurf speichern" : "Save draft")}
+          </motion.button>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={() => submit("post")} disabled={Boolean(busy)}
+            style={{ padding: "9px 20px", borderRadius: 999, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 }}>
+            {busy === "post" ? (de ? "Wird gesendet…" : "Sending…") : schedule ? (de ? "Planen" : "Schedule") : (de ? "Posten" : "Post")}
+          </motion.button>
+        </div>
+
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
+          {error && (
+            <div style={{ marginBottom: 18, padding: "10px 14px", borderRadius: 12, background: "rgba(232,103,103,.08)", border: "1px solid rgba(232,103,103,.16)", color: "#E86767", fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>
+              {error.code === "zernio_not_configured"
+                ? (de ? "Zernio ist noch nicht konfiguriert — ZERNIO_API_KEY als Env-Var hinterlegen (siehe docs/zernio-integration.md)." : "Zernio is not configured yet — set the ZERNIO_API_KEY env var (see docs/zernio-integration.md).")
+                : error.message}
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.35fr) minmax(0, 1fr)", gap: 24, alignItems: "start" }}>
+            {/* ── Compose column ── */}
+            <div>
+              <div style={label}>{de ? "Accounts" : "Accounts"}</div>
+              {accounts == null ? (
+                <div style={{ padding: "14px 0 22px", color: theme.textDim, fontSize: 12.5, fontFamily: FONT }}>{de ? "Lädt…" : "Loading…"}</div>
+              ) : accounts.length === 0 ? (
+                <div style={{ padding: "22px 18px", borderRadius: 16, border: `1.5px dashed ${theme.borderFaint}`, textAlign: "center", marginBottom: 22 }}>
+                  <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 4 }}>{de ? "Noch keine Accounts verbunden" : "No accounts connected yet"}</div>
+                  <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 12 }}>{de ? "Verbinde deine Social-Media-Kanäle unter Audience → Analytics." : "Connect your social channels under Audience → Analytics."}</div>
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={onOpenAudience}
+                    style={{ padding: "9px 18px", borderRadius: 999, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
+                    {de ? "Accounts verbinden" : "Connect accounts"}
+                  </motion.button>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 22 }}>
+                  {accounts.map(a => {
+                    const uiKey = uiKeyFor(a.platform);
+                    const p = TOUCHPOINT_PLATFORMS.find(x => x.key === uiKey) || { color: "#15151c", label: a.platform };
+                    const on = selectedIds.includes(a.id);
+                    return (
+                      <motion.div key={a.id} whileTap={{ scale: 0.96 }} onClick={() => toggleAccount(a.id)}
+                        style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px 7px 8px", borderRadius: 999, cursor: "pointer",
+                          background: on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
+                          border: `1px solid ${on ? "transparent" : theme.borderFaint}`,
+                          color: on ? (darkMode ? "#15151c" : "#fff") : theme.textDim, transition: "background 0.15s ease, color 0.15s ease" }}>
+                        <div style={{ width: 22, height: 22, borderRadius: 7, background: p.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <svg width={tpGlyphSize(uiKey, 13)} height={tpGlyphSize(uiKey, 13)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
+                        </div>
+                        <span style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500 }}>{a.username || a.displayName}</span>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div style={label}>{de ? "Text" : "Text"}</div>
+              <div style={{ position: "relative", marginBottom: 22 }}>
+                <textarea value={text} onChange={e => setText(e.target.value)}
+                  placeholder={de ? "Was möchtest du teilen?" : "What do you want to share?"}
+                  style={{ width: "100%", minHeight: 190, boxSizing: "border-box", padding: "14px 16px 34px", borderRadius: 16,
+                    border: `1px solid ${overLimit ? "#E86767" : theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                    color: theme.text, fontSize: 14, fontFamily: FONT, lineHeight: 1.6, outline: "none", resize: "vertical", caretColor: theme.text }} />
+                <div style={{ position: "absolute", right: 14, bottom: 12, fontSize: 11, fontFamily: FONT, color: overLimit ? "#E86767" : theme.textFaint }}>
+                  {text.length} / {charLimit}
+                </div>
+              </div>
+
+              <div style={label}>{de ? "Medien" : "Media"}</div>
+              <input ref={fileRef} type="file" accept="image/*" onChange={onPickImage} style={{ display: "none" }} />
+              {imageUrl ? (
+                <div style={{ position: "relative", borderRadius: 16, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, marginBottom: 22 }}>
+                  <img src={imageUrl} alt="" style={{ display: "block", width: "100%", maxHeight: 260, objectFit: "cover" }} />
+                  <motion.div whileTap={{ scale: 0.9 }} onClick={clearImage}
+                    style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: 9, background: "rgba(21,21,28,0.72)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  </motion.div>
+                </div>
+              ) : (
+                <motion.div whileTap={{ scale: 0.99 }} onClick={() => fileRef.current?.click()}
+                  style={{ padding: "30px 18px", borderRadius: 16, border: `1.5px dashed ${theme.borderFaint}`, textAlign: "center", cursor: "pointer", marginBottom: 22 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 12, margin: "0 auto 10px", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.text }}>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="3.5"/><circle cx="8.5" cy="8.5" r="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/></svg>
+                  </div>
+                  <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{de ? "Bild hinzufügen" : "Add image"}</div>
+                  <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>{de ? "PNG, JPG — Upload direkt zu Zernio" : "PNG, JPG — uploads directly to Zernio"}</div>
+                </motion.div>
+              )}
+
+              <div style={label}>{de ? "Planen (optional)" : "Schedule (optional)"}</div>
+              <input type="datetime-local" value={schedule} onChange={e => setSchedule(e.target.value)}
+                style={{ padding: "10px 14px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                  color: schedule ? theme.text : theme.textDim, fontSize: 13, fontFamily: FONT, outline: "none", colorScheme: darkMode ? "dark" : "light" }} />
+            </div>
+
+            {/* ── Preview column ── */}
+            <div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ ...label, marginBottom: 0 }}>{de ? "Vorschau" : "Preview"}</div>
+                {selected.length > 1 && (
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {selected.map(a => {
+                      const uiKey = uiKeyFor(a.platform);
+                      const p = TOUCHPOINT_PLATFORMS.find(x => x.key === uiKey) || { color: "#15151c" };
+                      const on = (previewAccount?.id) === a.id;
+                      return (
+                        <div key={a.id} onClick={() => setPreviewId(a.id)} title={a.username}
+                          style={{ width: 26, height: 26, borderRadius: 8, background: p.color, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                            opacity: on ? 1 : 0.35, outline: on ? `2px solid ${theme.text}` : "none", outlineOffset: 1.5, transition: "opacity 0.15s ease" }}>
+                          <svg width={tpGlyphSize(uiKey, 13)} height={tpGlyphSize(uiKey, 13)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              {selected.length === 0 ? (
+                <div style={{ padding: "36px 18px", borderRadius: 16, border: `1.5px dashed ${theme.borderFaint}`, textAlign: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT, lineHeight: 1.6 }}>
+                  {de ? "Wähle mindestens einen Account, um die Vorschau zu sehen." : "Select at least one account to see the preview."}
+                </div>
+              ) : (
+                <div style={{ borderRadius: 18, background: theme.cardBg, border: `1px solid ${theme.border}`, overflow: "hidden" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "14px 16px 10px" }}>
+                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: darkMode ? "#f4f4f7" : "#15151c", color: darkMode ? "#15151c" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>
+                      {(previewAccount?.displayName || brandName)[0]}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{previewAccount?.displayName || brandName}</div>
+                      <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>{previewAccount?.username} · {schedule ? (de ? "geplant" : "scheduled") : (de ? "gerade eben" : "just now")}</div>
+                    </div>
+                    {previewMeta && (
+                      <div style={{ width: 24, height: 24, borderRadius: 7, background: previewMeta.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width={tpGlyphSize(previewUiKey, 13)} height={tpGlyphSize(previewUiKey, 13)} viewBox="0 0 24 24">{touchpointGlyph(previewUiKey)}</svg>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ padding: "0 16px 12px", fontSize: 13.5, fontFamily: FONT, color: text ? theme.text : theme.textFaint, lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                    {text || (de ? "Dein Text erscheint hier …" : "Your text will appear here …")}
+                  </div>
+                  {imageUrl && <img src={imageUrl} alt="" style={{ display: "block", width: "100%", maxHeight: 300, objectFit: "cover" }} />}
+                  <div style={{ display: "flex", alignItems: "center", gap: 22, padding: "11px 16px", borderTop: `1px solid ${theme.borderFaint}`, color: theme.textFaint }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontFamily: FONT }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 00-7.8 7.8l8.8 8.9 8.8-8.9a5.5 5.5 0 000-7.8z"/></svg>0</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontFamily: FONT }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 11.5a8.4 8.4 0 01-9 8.4 8.6 8.6 0 01-3.9-.9L3 21l2-4.9a8.4 8.4 0 1116-4.6z"/></svg>0</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontFamily: FONT }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>0</span>
+                  </div>
+                </div>
+              )}
+
+              {schedule && (
+                <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3" strokeLinecap="round"/></svg>
+                  {de ? "Geplant für" : "Scheduled for"} {new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(schedule))}
+                </div>
+              )}
+
+              {/* Publish result — per-platform status with links / errors */}
+              {result && (
+                <div style={{ marginTop: 14, borderRadius: 16, border: `1px solid ${theme.borderFaint}`, padding: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: (result.platforms || []).length ? 10 : 0 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: result.status === "failed" ? "#E86767" : "#00B894" }} />
+                    <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{statusLabel(result.status)}</span>
+                  </div>
+                  {(result.platforms || []).map((p, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
+                      <span style={{ minWidth: 70, color: theme.text }}>{(TOUCHPOINT_PLATFORMS.find(x => x.key === uiKeyFor(p.platform)) || { label: p.platform }).label}</span>
+                      <span>{statusLabel(p.status)}</span>
+                      {p.url && <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ color: theme.text, textDecoration: "underline", textUnderlineOffset: 2 }}>{de ? "Ansehen ↗" : "View ↗"}</a>}
+                      {p.error && <span style={{ color: "#E86767" }}>{p.error}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", canEdit = true, projectId = null, projectName = "", embedded = false, initialTab = "touchpoints" }) {
   const tpScope = (q) => projectId ? q.eq("project_id", projectId) : q.is("project_id", null);
-  const [audTab, setAudTab] = useState("touchpoints"); // "touchpoints" | "people"
+  const [audTab, setAudTab] = useState(initialTab); // "touchpoints" | "people" | "analytics"
   const peopleHeaderSlot = useRef(null); // top-right header slot the People detail edit button portals into
   const [profile, setProfile] = useState(null);
   const [channels, setChannels] = useState({});
@@ -13929,9 +14517,9 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
         </div>
         )}
 
-        {/* Tabs: Touchpoints · People (embedded gets the People header slot inline) */}
+        {/* Tabs: Touchpoints · People · Analytics (embedded gets the People header slot inline) */}
         <div style={{ padding: "0 24px", display: "flex", alignItems: "center", gap: 22, borderBottom: `1px solid ${theme.borderFaint}` }}>
-          {[["touchpoints", "Touchpoints"], ["people", "People"]].map(([k, lbl]) => {
+          {[["touchpoints", "Touchpoints"], ["people", "People"], ["analytics", "Analytics"]].map(([k, lbl]) => {
             const on = audTab === k;
             return (
               <div key={k} onClick={() => setAudTab(k)}
@@ -13945,6 +14533,8 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
 
         {audTab === "people" ? (
           <PeopleTab theme={theme} darkMode={darkMode} accent={accent} appLanguage={appLanguage} headerSlotRef={peopleHeaderSlot} />
+        ) : audTab === "analytics" ? (
+          <AnalyticsTab theme={theme} darkMode={darkMode} appLanguage={appLanguage} session={session} userOrg={userOrg} />
         ) : (
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
           {loading ? (
@@ -25087,6 +25677,9 @@ export default function CircularMenu() {
   const [userOrgRole, setUserOrgRole] = useState(null);     // role in current org
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false); // workspace switcher dropdown
   const [settingsTab, setSettingsTab] = useState("workspace"); // settings page tab: workspace | ai | appearance | account (billing lives under account)
+  // Which tab the Audience view opens on. Set to "analytics" by the Zernio OAuth
+  // return redirect and by the composer's "connect accounts" shortcut.
+  const [audienceInitialTab, setAudienceInitialTab] = useState("touchpoints");
   const [deleteWsOpen, setDeleteWsOpen] = useState(false);   // workspace-delete confirm modal
   const [deleteWsText, setDeleteWsText] = useState("");      // typed confirmation (must match workspace name)
   const [deletingWs, setDeletingWs] = useState(false);
@@ -25431,6 +26024,13 @@ export default function CircularMenu() {
     if (hasPendingSelection || params.has("checkout")) {
       setSettingsTab("account"); // billing now lives under the Account tab
       setCurrentView("settings");
+    }
+    // Zernio OAuth return (?zernio=connected&connected={platform}&accountId=…):
+    // jump straight back to Audience → Analytics so the user sees the new account.
+    if (params.get("zernio") === "connected") {
+      setAudienceInitialTab("analytics");
+      setCurrentView("touchpoints");
+      window.history.replaceState({}, "", window.location.pathname);
     }
   }, [session?.user?.id, userOrg?.id]);
   // Persist a chosen display name to auth metadata + profiles + localStorage.
@@ -27908,7 +28508,7 @@ export default function CircularMenu() {
     }
 
     // Let views with their own scrolling handle scroll natively
-    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "timeline" || currentView === "settings" || currentView === "notes" || currentView === "projects" || currentView === "brand" || currentView === "assets" || currentView === "touchpoints" || currentView === "whiteboard") {
+    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "timeline" || currentView === "settings" || currentView === "notes" || currentView === "projects" || currentView === "brand" || currentView === "assets" || currentView === "touchpoints" || currentView === "whiteboard" || currentView === "createpost") {
       return;
     }
 
@@ -28874,7 +29474,16 @@ export default function CircularMenu() {
         {/* TOUCHPOINTS VIEW (Brand → Touchpoints): social channels + strategy teaser */}
         <AnimatePresence>
           {currentView === "touchpoints" && (
-            <TouchpointsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} canEdit={canEditBrand} onBack={() => setCurrentView("dashboard")} />
+            <TouchpointsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} canEdit={canEditBrand} initialTab={audienceInitialTab}
+              onBack={() => { setAudienceInitialTab("touchpoints"); setCurrentView("dashboard"); }} />
+          )}
+        </AnimatePresence>
+
+        {/* CREATE SOCIAL MEDIA POST */}
+        <AnimatePresence>
+          {currentView === "createpost" && (
+            <CreatePostView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} appLanguage={appLanguage} onBack={() => setCurrentView("dashboard")}
+              onOpenAudience={() => { setAudienceInitialTab("analytics"); setCurrentView("touchpoints"); }} />
           )}
         </AnimatePresence>
 
@@ -29693,7 +30302,7 @@ export default function CircularMenu() {
                   })();
                   return;
                 }
-                if (subId === "project") { setCurrentView("projects"); return; }
+                if (subId === "social-post") { setCurrentView("createpost"); return; }
                 if (subId === "brief") { openBrainstorm(); return; }
                 return;
               }
@@ -30840,12 +31449,12 @@ export default function CircularMenu() {
                         }}>
                           <div style={{
                             width: 34, height: 34, borderRadius: 10,
-                            background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.2)",
+                            background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
                             display: "flex", alignItems: "center", justifyContent: "center",
                           }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#F59E0B" strokeWidth="1.5" />
-                              <path d="M22 6l-10 7L2 6" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" />
+                              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke={theme.text} strokeWidth="1.5" />
+                              <path d="M22 6l-10 7L2 6" stroke={theme.text} strokeWidth="1.5" strokeLinecap="round" />
                             </svg>
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
@@ -30872,8 +31481,8 @@ export default function CircularMenu() {
                           </div>
                           <div style={{
                             padding: "3px 10px", borderRadius: 8,
-                            background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.15)",
-                            fontSize: 11, fontFamily: FONT, color: "#F59E0B", flexShrink: 0,
+                            background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
+                            fontSize: 11, fontFamily: FONT, color: theme.textDim, flexShrink: 0,
                           }}>{appLanguage === "de" ? "Ausstehend" : "Pending"}</div>
                         </div>
                       ))}
