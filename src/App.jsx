@@ -8238,6 +8238,11 @@ async function fetchStorageUsed(orgId) {
 // upload guards, so enforcement doesn't have to fetch billing on every upload.
 let currentStorageLimitBytes = STORAGE_LIMITS.free;
 function setCurrentStorageLimit(bytes) { currentStorageLimitBytes = bytes || STORAGE_LIMITS.free; }
+// Active workspace context for AI token metering. Set once per workspace by the
+// App-root effect, so deeply-nested components (moodboard/brand image→prompt)
+// can attribute chat-multi calls without threading userOrg/session as props.
+let currentAiContext = { orgId: null, userId: null };
+function setCurrentAiContext(ctx) { currentAiContext = ctx || { orgId: null, userId: null }; }
 // Pre-upload quota check. HARD cap — no grace: an upload that would push the
 // workspace over its limit is refused (ok=false). Also fires the 90% warning
 // (once) based on the projected usage, so both the block and the heads-up live in
@@ -8322,6 +8327,79 @@ function StorageUsageBar({ orgId, theme, appLanguage = "de" }) {
             {de ? "Dein Speicher ist fast voll. Upgrade, um weiter Dateien hochladen zu können." : "Storage is almost full. Upgrade to keep uploading files."}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// Compact token count for the AI-usage UI (e.g. "1,2 Mio" / "340 K" / "812").
+function formatTokens(n) {
+  n = Number(n) || 0;
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(".0", "") + " Mio";
+  if (n >= 1_000) return Math.round(n / 1_000) + " K";
+  return String(n);
+}
+const TOKEN_FEATURE_LABELS = {
+  de: { chat: "Chat", voice: "Sprache", dictation: "Diktat", skill: "Skills", "brand-persona": "Brand: Persona", "brand-onboarding": "Brand: Onboarding", "image-to-prompt": "Bild → Prompt", other: "Sonstiges" },
+  en: { chat: "Chat", voice: "Voice", dictation: "Dictation", skill: "Skills", "brand-persona": "Brand: Persona", "brand-onboarding": "Brand: Onboarding", "image-to-prompt": "Image → Prompt", other: "Other" },
+};
+// AI token usage for the current month, per workspace — grey "KI-Nutzung" label +
+// card with the monthly total and a per-feature breakdown. Same section styling
+// as the Storage / Integrations sections.
+function TokenUsageBar({ orgId, theme, darkMode, appLanguage = "de" }) {
+  const de = appLanguage === "de";
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    let on = true;
+    (async () => {
+      const now = new Date();
+      const since = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const { data, error } = await supabase.rpc("workspace_token_usage", { p_org: orgId, p_since: since });
+      if (on) setRows(error ? [] : (data || []));
+    })();
+    return () => { on = false; };
+  }, [orgId]);
+  const tokensOf = (r) => Number(r.input_tokens || 0) + Number(r.output_tokens || 0);
+  const total = (rows || []).reduce((s, r) => s + tokensOf(r), 0);
+  const byFeature = {};
+  (rows || []).forEach(r => { const k = r.feature || "other"; byFeature[k] = (byFeature[k] || 0) + tokensOf(r); });
+  const breakdown = Object.entries(byFeature).sort((a, b) => b[1] - a[1]);
+  const labels = TOKEN_FEATURE_LABELS[de ? "de" : "en"];
+  const monthLabel = new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { month: "long" }).format(new Date());
+  return (
+    <div style={{ marginTop: 24, fontFamily: FONT }}>
+      <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
+        {de ? "KI-Nutzung" : "AI Usage"}
+      </div>
+      <div style={{ borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`, padding: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: breakdown.length ? 16 : 0 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: theme.text }}>{monthLabel}</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: theme.text }}>
+            {rows == null ? "…" : `${formatTokens(total)} ${de ? "Tokens" : "tokens"}`}
+          </span>
+        </div>
+        {rows != null && breakdown.length === 0 && (
+          <div style={{ fontSize: 12, color: theme.textDim, lineHeight: 1.5 }}>
+            {de ? "Diesen Monat noch keine KI genutzt." : "No AI used yet this month."}
+          </div>
+        )}
+        {breakdown.map(([feat, val]) => {
+          const pct = total ? Math.round((val / total) * 100) : 0;
+          return (
+            <div key={feat} style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5, fontSize: 12, color: theme.textDim }}>
+                <span>{labels[feat] || feat}</span>
+                <span>{formatTokens(val)} · {pct}%</span>
+              </div>
+              <div style={{ height: 6, borderRadius: 999, background: theme.borderFaint, overflow: "hidden" }}>
+                <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: "#15151c", transition: "width .4s ease" }} />
+              </div>
+            </div>
+          );
+        })}
+        <div style={{ marginTop: breakdown.length ? 6 : 12, fontSize: 11, color: theme.textFaint, lineHeight: 1.5 }}>
+          {de ? "Läuft aktuell über deine eigenen API-Keys. Grundlage für spätere KI-Credits." : "Currently via your own API keys. Basis for future AI credits."}
+        </div>
       </div>
     </div>
   );
@@ -11393,6 +11471,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
           provider,
           apiKey: apiKey || undefined,
           oauthToken: (!apiKey && oauthToken) ? oauthToken : undefined,
+          orgId: userOrg?.id, userId: session?.user?.id, feature: "dictation",
         }),
       });
       const data = await response.json();
@@ -16212,7 +16291,7 @@ function MoodboardItemDetail({ item, items = [], containers = [], currentContain
         : "Analyse this image very thoroughly and turn it into ONE detailed, reusable image-generation prompt in English that lets an AI produce a new image in exactly the same aesthetic. Capture subject, environment, composition, lighting, colour palette/mood, style/medium, textures and (for photos) camera character. Write ONE flowing, vivid prompt (about 5–8 sentences), not bullet points. Reply with ONLY the prompt — no preamble, heading or quotation marks.";
       const resp = await fetch("/api/chat-multi", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg, systemPrompt: sys, image: item.url, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 3000 }),
+        body: JSON.stringify({ message: msg, systemPrompt: sys, image: item.url, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 3000, orgId: currentAiContext.orgId, userId: currentAiContext.userId, feature: "image-to-prompt" }),
       });
       const data = await resp.json().catch(() => ({}));
       const text = ((data?.content || []).find(c => c.type === "text")?.text || data?.content?.[0]?.text || "").trim();
@@ -18125,7 +18204,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
         : "\n\n---\nImportant: Follow the skill instruction above and its output structure exactly. Return ONLY the finished document as Markdown (headings, lists, bold, etc.) — no preamble, no explanations, no code fences. Write in English.");
       const resp = await fetch("/api/chat-multi", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: skillInput.trim(), systemPrompt: sys, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 4000 }),
+        body: JSON.stringify({ message: skillInput.trim(), systemPrompt: sys, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 4000, orgId: userOrg?.id, userId: session?.user?.id, feature: "skill" }),
       });
       const data = await resp.json().catch(() => ({}));
       let md = ((data?.content || []).find(c => c.type === "text")?.text || data?.content?.[0]?.text || "").trim();
@@ -21068,6 +21147,7 @@ Write it as ONE flowing, highly vivid and detailed prompt (about 5–8 sentences
           provider: llmProvider || "gemini",
           apiKey: apiKey || undefined,
           oauthToken: oauthToken || undefined,
+          orgId: currentAiContext.orgId, userId: currentAiContext.userId, feature: "image-to-prompt",
           // Generous ceiling so the full prompt is never cut mid-sentence — Gemini
           // 2.5 also spends part of the budget on internal "thinking" tokens.
           maxTokens: 3000,
@@ -21854,7 +21934,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     try {
       const resp = await fetch("/api/chat-multi", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: promptStr, provider: llmProvider, apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, wantsImage: true, imageOrientation: "portrait" }),
+        body: JSON.stringify({ message: promptStr, provider: llmProvider, apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, wantsImage: true, imageOrientation: "portrait", orgId: currentAiContext.orgId, userId: currentAiContext.userId, feature: "brand-avatar" }),
       });
       const data = await resp.json().catch(() => ({}));
       const img = (data?.content || []).find(c => c.type === "image")?.url;
@@ -22732,6 +22812,7 @@ Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals
         provider: llmProvider || "gemini",
         apiKey: apiKey || undefined,
         oauthToken: oauthToken || undefined,
+        orgId: userOrg?.id, userId: session?.user?.id, feature: "brand-persona",
       }),
     });
     const data = await resp.json();
@@ -22829,7 +22910,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         headers: { "Content-Type": "application/json" },
         // Several full competitor profiles in one response need a high token ceiling,
         // otherwise the JSON gets truncated and only the main profile survives (fallback).
-        body: JSON.stringify({ message, systemPrompt: system, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 8000 }),
+        body: JSON.stringify({ message, systemPrompt: system, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 8000, orgId: userOrg?.id, userId: session?.user?.id, feature: "brand-onboarding" }),
       });
       const data = await resp.json();
       let txt = (data?.content?.[0]?.text || "").replace(/```json|```/g, "").trim();
@@ -26125,6 +26206,9 @@ export default function CircularMenu() {
   // per workspace, so the upload guards know the tier limit without fetching
   // billing on every upload. Falls back to the Free cap on any error.
   useEffect(() => {
+    // Publish the active workspace for AI token metering (used by deeply-nested
+    // components that can't reach userOrg/session as props).
+    setCurrentAiContext({ orgId: userOrg?.id || null, userId: session?.user?.id || null });
     if (!userOrg?.id || !session?.access_token) { setCurrentStorageLimit(STORAGE_LIMITS.free); return; }
     let cancelled = false;
     (async () => {
@@ -27503,6 +27587,7 @@ export default function CircularMenu() {
           apiKey: activeKey || undefined,
           oauthToken: googleToken || undefined,
           wantsImage,
+          orgId: userOrg?.id, userId: session?.user?.id, feature: "chat",
         }),
       });
       const data = await response.json();
@@ -27579,6 +27664,7 @@ export default function CircularMenu() {
             provider: llmProvider,
             apiKey: activeKey || undefined,
             oauthToken: googleToken || undefined,
+            orgId: userOrg?.id, userId: session?.user?.id, feature: "voice",
           }),
         });
         data = await response.json();
@@ -27600,6 +27686,7 @@ export default function CircularMenu() {
                   systemPrompt,
                   provider: llmProvider,
                   oauthToken: freshToken,
+                  orgId: userOrg?.id, userId: session?.user?.id, feature: "voice",
                 }),
               });
               data = await retryRes.json();
@@ -31412,6 +31499,7 @@ export default function CircularMenu() {
                     );
                   })}
                 </div>
+                {userOrg && <TokenUsageBar orgId={userOrg.id} theme={theme} darkMode={darkMode} appLanguage={appLanguage} />}
               </motion.div>
               )}
               </div>

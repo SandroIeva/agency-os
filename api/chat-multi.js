@@ -1,6 +1,7 @@
 // Unified chat endpoint for Claude / OpenAI / Gemini.
 // Normalizes responses to a common shape so the client doesn't have to branch.
 // On failure: returns a clear, user-readable `error` field with a hint about what's wrong.
+import { createClient } from "@supabase/supabase-js";
 
 const MAX_TOKENS_DEFAULT = 2000;       // generous — full answers, not truncated
 const UPSTREAM_TIMEOUT_MS = 45_000;    // give the model time to think but bail before Vercel kills us
@@ -10,6 +11,41 @@ function withTimeout(promise, ms, label) {
     promise,
     new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)),
   ]);
+}
+
+// ── AI token-usage metering (server-side, service key → clients can't spoof) ──
+let __usageDb;
+function usageDb() {
+  if (__usageDb !== undefined) return __usageDb;
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
+  __usageDb = (url && key) ? createClient(url, key, { auth: { persistSession: false } }) : null;
+  return __usageDb;
+}
+// Record one AI call's token usage for a workspace. Awaited before responding so
+// the write isn't lost when the serverless function freezes. Never throws — a
+// metering hiccup must not break the actual chat response.
+async function recordUsage({ orgId, userId, provider, model, feature, byok, usage }) {
+  try {
+    if (!orgId || !usage) return;
+    const db = usageDb();
+    if (!db) return;
+    // Normalise token fields across providers (Anthropic / OpenAI / Gemini).
+    const input = usage.input_tokens ?? usage.prompt_tokens ?? usage.promptTokenCount ?? 0;
+    const output = usage.output_tokens ?? usage.completion_tokens ?? usage.candidatesTokenCount ?? 0;
+    await db.from("token_usage").insert({
+      org_id: orgId,
+      user_id: userId || null,
+      provider,
+      model: model || null,
+      feature: feature || null,
+      input_tokens: Math.max(0, Math.round(input)),
+      output_tokens: Math.max(0, Math.round(output)),
+      byok: byok !== false,
+    });
+  } catch (e) {
+    console.warn("[token_usage] record failed:", e?.message);
+  }
 }
 
 // Upstream errors that are transient (rate-limit / server hiccup) and worth a quick
@@ -68,7 +104,10 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { message, messages, systemPrompt, provider = "claude", apiKey, oauthToken, model, maxTokens, wantsImage, image, imageOrientation } = req.body || {};
+  const { message, messages, systemPrompt, provider = "claude", apiKey, oauthToken, model, maxTokens, wantsImage, image, imageOrientation, orgId, userId, feature } = req.body || {};
+  // Everything is BYOK today (user's own key / Google OAuth). When a managed
+  // company key is added later, that path will pass byok:false to bill credits.
+  const byok = Boolean(apiKey || oauthToken);
 
   // Build a normalised conversation history: array of { role: "user" | "assistant", content: string }
   // Accept either legacy single-message format or full messages array.
@@ -152,6 +191,7 @@ export default async function handler(req, res) {
           provider: "claude",
         });
       }
+      await recordUsage({ orgId, userId, provider: "claude", model: claudeModel, feature, byok, usage: data.usage });
       return res.status(200).json({
         content: [{ type: "text", text }],
         provider: "claude",
@@ -282,6 +322,7 @@ export default async function handler(req, res) {
           provider: "openai",
         });
       }
+      await recordUsage({ orgId, userId, provider: "openai", model: openaiModel, feature, byok, usage: data.usage });
       return res.status(200).json({
         content: [{ type: "text", text }],
         provider: "openai",
@@ -560,6 +601,7 @@ export default async function handler(req, res) {
       const responseContent = [];
       if (text) responseContent.push({ type: "text", text });
       responseContent.push(...images);
+      await recordUsage({ orgId, userId, provider: "gemini", model: geminiModel, feature, byok, usage: data.usageMetadata });
       return res.status(200).json({
         content: responseContent,
         provider: "gemini",
