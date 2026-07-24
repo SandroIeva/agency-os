@@ -6,13 +6,60 @@ description: >-
 
 # Getting started
 
-#### Sign up <a href="#sign-up" id="sign-up"></a>
+### Create your account
 
-You can create an account directly from [our website](https://i7os.com/) or [sign up here](https://app.pletor.ai/signup). For the fastest setup, we recommend signing up with Google with your professional email address.
+Open [app.i7os.com](https://app.i7os.com/) and create an account. Signing in with your professional Google account is recommended when you plan to use Google Drive or Google Calendar.
 
-After signing up, you’ll receive an email to verify your address. Once verified, we’ll ask for a few quick details about you, and you’ll be ready to go.
+Complete the email verification and onboarding steps shown after sign-up.
 
-#### Joining as part of an organization? <a href="#joining-as-part-of-an-organization" id="joining-as-part-of-an-organization"></a>
+### Create or join a workspace
 
-If you’re part of a team or company using i7OS, subscribe to a paid plan to get everyone collaborating under one workspace.
+A workspace is the shared home for your team, projects, files, brand knowledge, and subscription.
+
+You can:
+
+* create a new workspace for your brand or agency;
+* accept an invitation to an existing workspace; or
+* create separate projects for different brands or clients.
+
+### Create your first brand project
+
+Create a project and use it as a dedicated brand workspace. Add a recognizable name, logo, and color so your team can identify it throughout i7OS.
+
+### Add the brand foundation
+
+Start with the information that should guide future work:
+
+* brand strategy and positioning;
+* identity and personality;
+* visual direction and references;
+* audiences or personas;
+* files, assets, and existing guidelines.
+
+You do not need to complete everything at once. Begin with the context your team uses most often and expand it over time.
+
+### Connect your tools
+
+In **Settings**, connect the services your workflow needs:
+
+* Google Drive for files and shared folders;
+* Google Calendar for events and reminders;
+* a supported AI provider;
+* social channels for analytics and publishing.
+
+Some integrations may require workspace administrator permissions.
+
+### Invite your team
+
+Invite collaborators from the workspace or project settings. Assign access based on what each person should be able to view or manage.
+
+### Recommended first workflow
+
+1. Create one brand project.
+2. Add its strategy, identity, and visual references.
+3. Create a project board and assign the next tasks.
+4. Connect Google Drive or upload the relevant files.
+5. Open the AI assistant and ask it to work from the current brand context.
+
+Next, see the Product tour.
 
