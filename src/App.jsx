@@ -25969,8 +25969,15 @@ export default function CircularMenu() {
     if (!userOrg?.id) return;
     setDeletingWs(true);
     try {
-      const { error } = await supabase.rpc("delete_organization", { p_org_id: userOrg.id });
-      if (error) throw error;
+      // Server-side wipe: removes ALL of the workspace's storage assets (any
+      // member's uploads) AND deletes the org (DB cascade). Admin-checked there.
+      const res = await fetch("/api/workspace-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({ orgId: userOrg.id }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || "Delete failed");
       const deletedId = userOrg.id;
       const remaining = userOrgs.filter(o => o.id !== deletedId);
       setUserOrgs(remaining);
@@ -26001,9 +26008,26 @@ export default function CircularMenu() {
     if (deletingAcc) return;
     setDeletingAcc(true);
     try {
-      // Remove the user's personal storage FIRST — after the RPC the session is
-      // gone and storage RLS would deny. Best-effort; never blocks the delete.
-      await deleteUserStorage(session?.user?.id);
+      const uid = session?.user?.id;
+      // 1) Personal storage under the user's own <uid>/ prefixes. Must run before
+      //    the RPC — after it the session is gone and storage RLS denies.
+      await deleteUserStorage(uid);
+      // 2) Fully wipe every workspace the user OWNS — including OTHER members'
+      //    assets (a user session can't remove those under RLS) — via the
+      //    server-side endpoint. Best-effort: if it fails, the RPC below still
+      //    deletes the org rows (storage would just orphan). After this the RPC's
+      //    "delete orgs where created_by = me" finds nothing left to do.
+      try {
+        const { data: owned } = await supabase.from("organizations").select("id").eq("created_by", uid);
+        for (const o of owned || []) {
+          await fetch("/api/workspace-delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+            body: JSON.stringify({ orgId: o.id }),
+          });
+        }
+      } catch (e) { console.warn("[DeleteAccount] owned-workspace cleanup:", e?.message); }
+      // 3) Delete the auth user + remaining personal data; anonymize foreign content.
       const { error } = await supabase.rpc("delete_own_account");
       if (error) throw error;
       setDeleteAccOpen(false);
