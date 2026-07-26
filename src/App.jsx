@@ -25881,6 +25881,7 @@ export default function CircularMenu() {
   const [deleteAccOpen, setDeleteAccOpen] = useState(false); // account-delete confirm modal
   const [deleteAccText, setDeleteAccText] = useState("");    // typed confirmation ("LÖSCHEN"/"DELETE")
   const [deletingAcc, setDeletingAcc] = useState(false);
+  const [ownedWorkspaces, setOwnedWorkspaces] = useState([]);  // workspaces the user created (deleted with the account)
   const [expandedMemberId, setExpandedMemberId] = useState(null); // members & permissions expander
   const [createWsOpen, setCreateWsOpen] = useState(false);   // create-workspace modal
   const [newWsName, setNewWsName] = useState("");
@@ -25963,6 +25964,16 @@ export default function CircularMenu() {
       if (avatarInputRef.current) avatarInputRef.current.value = "";
     }
   };
+  // Which workspaces the signed-in user OWNS (created). Drives the account danger
+  // zone: if you own any, deleting your account also deletes those workspaces
+  // (label "Account & Workspace löschen"); if none, only your account goes and
+  // your content stays with the workspaces you're a member of.
+  useEffect(() => {
+    const uid = session?.user?.id;
+    if (!uid) { setOwnedWorkspaces([]); return; }
+    supabase.from("organizations").select("id,name").eq("created_by", uid)
+      .then(({ data }) => setOwnedWorkspaces(data || []));
+  }, [session?.user?.id]);
   // Delete the current workspace (organization) + ALL its data. Admin-only,
   // enforced again server-side by the delete_organization RPC.
   const deleteWorkspace = async () => {
@@ -32643,8 +32654,9 @@ export default function CircularMenu() {
               </motion.div>
               )}
 
-              {/* Danger zone — delete workspace (admins only) */}
-              {settingsTab === "account" && userOrg && (userOrgRole === "admin" || userOrg?.role === "admin") && (
+              {/* Danger zone (single section: optional per-workspace delete for
+                  multi-workspace admins + always the account delete) */}
+              {settingsTab === "account" && session && (
                 <motion.div
                   initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
@@ -32653,13 +32665,18 @@ export default function CircularMenu() {
                   <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
                     {appLanguage === "de" ? "Gefahrenzone" : "Danger Zone"}
                   </div>
-                  <div style={{ borderRadius: 20, background: "rgba(232,67,67,0.05)", border: "1px solid rgba(232,67,67,0.18)", padding: "20px 24px", display: "flex", alignItems: "center", gap: 14 }}>
+
+                  {/* Delete a single workspace — only for admins who have MORE THAN ONE
+                      workspace (delete just this one, keep the account). Solo/single-
+                      workspace users use "Account löschen" below, which removes it too. */}
+                  {userOrg && userOrgs.length > 1 && (userOrgRole === "admin" || userOrg?.role === "admin") && (
+                  <div style={{ borderRadius: 20, background: "rgba(232,67,67,0.05)", border: "1px solid rgba(232,67,67,0.18)", padding: "20px 24px", display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
-                        {appLanguage === "de" ? "Workspace löschen" : "Delete workspace"}
+                        {appLanguage === "de" ? "Nur diesen Workspace löschen" : "Delete this workspace only"}
                       </div>
                       <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.4 }}>
-                        {appLanguage === "de" ? "Entfernt diesen Workspace und alle zugehörigen Daten unwiderruflich." : "Permanently removes this workspace and all of its data."}
+                        {appLanguage === "de" ? <>Entfernt <strong style={{ color: theme.text }}>{userOrg?.name}</strong> mit allen Daten unwiderruflich. Dein Account und deine anderen Workspaces bleiben bestehen.</> : <>Permanently removes <strong style={{ color: theme.text }}>{userOrg?.name}</strong> and all of its data. Your account and other workspaces stay.</>}
                       </div>
                     </div>
                     <motion.button whileHover={{ backgroundColor: "rgba(232, 67, 67, 0.08)" }} whileTap={{ scale: 0.97 }}
@@ -32671,27 +32688,31 @@ export default function CircularMenu() {
                       <span style={{ fontSize: 13, fontFamily: FONT, color: "#E84343", fontWeight: 500 }}>{appLanguage === "de" ? "Löschen" : "Delete"}</span>
                     </motion.button>
                   </div>
-                </motion.div>
-              )}
+                  )}
 
-              {/* Danger zone — delete account (everyone, not just admins) */}
-              {settingsTab === "account" && session && (
-                <motion.div
-                  initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.22, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
-                  style={{ marginTop: 24 }}
-                >
+                  {/* Delete account (everyone). If the user OWNS workspaces, this also
+                      deletes them (label reflects it); otherwise only the account goes
+                      and their content stays with the workspaces they're a member of. */}
                   <div style={{ borderRadius: 20, background: "rgba(232,67,67,0.05)", border: "1px solid rgba(232,67,67,0.18)", padding: "20px 24px", display: "flex", alignItems: "center", gap: 14 }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
-                        {appLanguage === "de" ? "Account löschen" : "Delete account"}
+                        {ownedWorkspaces.length > 0
+                          ? (appLanguage === "de" ? (ownedWorkspaces.length > 1 ? "Account & Workspaces löschen" : "Account & Workspace löschen") : (ownedWorkspaces.length > 1 ? "Delete account & workspaces" : "Delete account & workspace"))
+                          : (appLanguage === "de" ? "Account löschen" : "Delete account")}
                       </div>
                       <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.4 }}>
-                        {appLanguage === "de" ? "Löscht deinen Account und deine persönlichen Daten unwiderruflich. Von dir erstellte Workspaces werden mitgelöscht." : "Permanently deletes your account and personal data. Workspaces you own are deleted too."}
+                        {ownedWorkspaces.length > 0
+                          ? (appLanguage === "de" ? "Account, Workspace und alle Daten & Assets werden dauerhaft gelöscht." : "Account, workspace and all data & assets are permanently deleted.")
+                          : (appLanguage === "de" ? "Account und persönliche Daten werden gelöscht. Inhalte bleiben im Workspace." : "Account and personal data are deleted. Content stays in the workspace.")}
                       </div>
                     </div>
                     <motion.button whileHover={{ backgroundColor: "rgba(232, 67, 67, 0.08)" }} whileTap={{ scale: 0.97 }}
-                      onClick={() => { setDeleteAccText(""); setDeleteAccOpen(true); }}
+                      onClick={() => {
+                        setDeleteAccText(""); setDeleteAccOpen(true);
+                        const uid = session?.user?.id;
+                        if (uid) supabase.from("organizations").select("id,name").eq("created_by", uid)
+                          .then(({ data }) => setOwnedWorkspaces(data || []));
+                      }}
                       style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: 140, padding: "8px 14px", borderRadius: 10, background: "transparent", border: "1px solid rgba(232,67,67,0.2)", color: "#E84343", fontSize: 13, fontWeight: 500, fontFamily: FONT, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E84343" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />
@@ -32769,13 +32790,38 @@ export default function CircularMenu() {
                       style={{ width: "100%", maxWidth: 440, borderRadius: 20, background: darkMode ? "#1b1b24" : "#fff", border: `1px solid ${theme.border}`, padding: "28px 26px", boxShadow: "0 24px 60px rgba(0,0,0,0.3)" }}
                     >
                       <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>
-                        {appLanguage === "de" ? "Account wirklich löschen?" : "Delete account?"}
+                        {ownedWorkspaces.length > 0
+                          ? (appLanguage === "de" ? (ownedWorkspaces.length > 1 ? "Account & Workspaces löschen?" : "Account & Workspace löschen?") : (ownedWorkspaces.length > 1 ? "Delete account & workspaces?" : "Delete account & workspace?"))
+                          : (appLanguage === "de" ? "Account wirklich löschen?" : "Delete account?")}
                       </div>
-                      <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginBottom: 18 }}>
-                        {appLanguage === "de"
-                          ? <>Dein Account und deine persönlichen Daten werden dauerhaft gelöscht. <strong style={{ color: theme.text }}>Von dir erstellte Workspaces werden mit allen Daten mitgelöscht</strong> — auch für andere Mitglieder. Inhalte in fremden Workspaces bleiben erhalten, aber ohne deinen Namen. Das kann nicht rückgängig gemacht werden.</>
-                          : <>Your account and personal data will be permanently deleted. <strong style={{ color: theme.text }}>Workspaces you own are deleted with all their data</strong> — for other members too. Content in others' workspaces stays but is anonymized. This cannot be undone.</>}
+                      <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginBottom: 16 }}>
+                        {ownedWorkspaces.length > 0
+                          ? (appLanguage === "de"
+                              ? <>Dein Account und alle persönlichen Daten werden dauerhaft gelöscht. Das kann nicht rückgängig gemacht werden.</>
+                              : <>Your account and all personal data will be permanently deleted. This cannot be undone.</>)
+                          : (appLanguage === "de"
+                              ? <>Dein Account und alle persönlichen Daten werden dauerhaft gelöscht. Deine Inhalte bleiben im Workspace erhalten, aber ohne deinen Namen. Das kann nicht rückgängig gemacht werden.</>
+                              : <>Your account and all personal data will be permanently deleted. Your content stays with the workspace, but without your name. This cannot be undone.</>)}
                       </div>
+
+                      {/* Owned workspaces that go with the account — shown explicitly so it's clear everything is deleted */}
+                      {ownedWorkspaces.length > 0 && (
+                        <div style={{ borderRadius: 12, background: "rgba(232,67,67,0.06)", border: "1px solid rgba(232,67,67,0.18)", padding: "14px 16px", marginBottom: 16 }}>
+                          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 10, lineHeight: 1.4 }}>
+                            {appLanguage === "de"
+                              ? <>{ownedWorkspaces.length > 1 ? "Diese Workspaces werden" : "Dieser Workspace wird"} <strong style={{ color: "#E84343" }}>mit allen Daten und Assets gelöscht</strong> — auch für andere Mitglieder:</>
+                              : <>{ownedWorkspaces.length > 1 ? "These workspaces are" : "This workspace is"} <strong style={{ color: "#E84343" }}>deleted with all data and assets</strong> — for other members too:</>}
+                          </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                            {ownedWorkspaces.map(ws => (
+                              <span key={ws.id} style={{ fontSize: 12, fontFamily: FONT, fontWeight: 500, color: theme.text, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.border}`, borderRadius: 8, padding: "4px 9px" }}>
+                                {ws.name || (appLanguage === "de" ? "Unbenannter Workspace" : "Untitled workspace")}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 8 }}>
                         {appLanguage === "de" ? <>Tippe zur Bestätigung deine E-Mail <strong style={{ color: theme.text }}>{session?.user?.email}</strong> ein:</> : <>Type your email <strong style={{ color: theme.text }}>{session?.user?.email}</strong> to confirm:</>}
                       </div>
@@ -32793,7 +32839,11 @@ export default function CircularMenu() {
                           return (
                             <button onClick={deleteAccount} disabled={!canDelete}
                               style={{ padding: "10px 18px", borderRadius: 12, background: "#E84343", border: "none", color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: canDelete ? "pointer" : "not-allowed", opacity: canDelete ? 1 : 0.5 }}>
-                              {deletingAcc ? (appLanguage === "de" ? "Löscht…" : "Deleting…") : (appLanguage === "de" ? "Account löschen" : "Delete account")}
+                              {deletingAcc
+                                ? (appLanguage === "de" ? "Löscht…" : "Deleting…")
+                                : (ownedWorkspaces.length > 0
+                                    ? (appLanguage === "de" ? (ownedWorkspaces.length > 1 ? "Account & Workspaces löschen" : "Account & Workspace löschen") : (ownedWorkspaces.length > 1 ? "Delete account & workspaces" : "Delete account & workspace"))
+                                    : (appLanguage === "de" ? "Account löschen" : "Delete account"))}
                             </button>
                           );
                         })()}
