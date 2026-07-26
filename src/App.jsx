@@ -8233,6 +8233,43 @@ async function fetchStorageUsed(orgId) {
   if (error) { console.warn("[storage] usage read failed:", error.message); return 0; }
   return Number(data) || 0;
 }
+// Recursively collect every object path under a storage prefix (the Storage
+// list() call is not recursive — folders come back as entries with no id).
+async function listStoragePaths(bucket, prefix) {
+  const out = [];
+  const { data, error } = await supabase.storage.from(bucket).list(prefix, { limit: 1000 });
+  if (error || !data) return out;
+  for (const entry of data) {
+    const full = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.id == null || entry.metadata == null) out.push(...await listStoragePaths(bucket, full)); // folder
+    else out.push(full);
+  }
+  return out;
+}
+// Best-effort removal of a user's PERSONAL storage across buckets, used on account
+// deletion. Must run BEFORE delete_own_account() (after it the session is gone and
+// storage RLS denies). RLS lets the owner remove these (own <uid>/ prefix / owner
+// = uid). Workspace/brand content is intentionally left alone: content in others'
+// workspaces stays (anonymized), owned-workspace objects are an orphan-sweep
+// concern. Never throws — a storage hiccup must not block account deletion.
+async function deleteUserStorage(userId) {
+  if (!userId) return;
+  const targets = [
+    ["user-files", userId],        // uploads, creations, ai-generated
+    ["chat-attachments", userId],  // chat image/file uploads
+    ["os-visuals", userId],        // personal OS visuals
+    ["project-logos", userId],     // personal logo uploads
+    ["project-logos", `avatars/${userId}`], // avatar
+  ];
+  for (const [bucket, prefix] of targets) {
+    try {
+      const paths = await listStoragePaths(bucket, prefix);
+      for (let i = 0; i < paths.length; i += 100) {
+        await supabase.storage.from(bucket).remove(paths.slice(i, i + 100));
+      }
+    } catch (e) { console.warn("[deleteUserStorage]", bucket, e?.message); }
+  }
+}
 // The active workspace's storage cap in bytes. Loaded once per workspace from the
 // server-only billing status (see the App-root effect) and read here by the
 // upload guards, so enforcement doesn't have to fetch billing on every upload.
@@ -25964,6 +26001,9 @@ export default function CircularMenu() {
     if (deletingAcc) return;
     setDeletingAcc(true);
     try {
+      // Remove the user's personal storage FIRST — after the RPC the session is
+      // gone and storage RLS would deny. Best-effort; never blocks the delete.
+      await deleteUserStorage(session?.user?.id);
       const { error } = await supabase.rpc("delete_own_account");
       if (error) throw error;
       setDeleteAccOpen(false);
