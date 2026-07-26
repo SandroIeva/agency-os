@@ -3,6 +3,7 @@
 * [Welcome to i7OS](README.md)
 * [Getting started](getting-started.md)
 * [Workspaces and teams](workspaces-and-teams.md)
+* [Deleting workspaces and accounts](deleting-workspaces-and-accounts.md)
 * [Sharing and permissions](sharing-and-permissions.md)
 * [Brand workspace](brand-workspace.md)
 * [Integrations](integrations.md)
