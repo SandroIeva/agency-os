@@ -75,15 +75,28 @@ einfach den Array erweitern).
    Engagement (klickbar → Original-Post), verbundene Accounts (mit Trennen) und
    "Weitere verbinden".
 
-**Posten (Erstellen → Social Media Post):**
-1. Lädt die verbundenen Accounts (`mode:"status"`); keine → Hinweis + Button zu
-   Audience → Analytics.
-2. Accounts als Chips (Mehrfachauswahl), Text mit Zeichenlimit (Minimum der gewählten
-   Plattformen: X 280 · Threads/Pinterest 500 · Instagram 2200 · LinkedIn 3000),
-   optional Bild, optional Zeitplan (datetime-local, Browser-Zeitzone).
-3. "Posten"/"Planen": erst ggf. `presign` + direkter PUT-Upload, dann `mode:"post"`.
-   Ergebnisbox zeigt Status pro Plattform mit Link ("Ansehen ↗") bzw. Fehlermeldung.
-4. "Entwurf speichern" → `isDraft:true` (liegt dann in Zernio als Draft).
+**Posten (Erstellen → Social Media Post) — 4-Step-Wizard im Brand-Avatar-Stil**
+(nummerierte Step-Tabs, graue Box, Live-Vorschau-Karte rechts über alle Steps):
+
+1. **01 Kanäle** — verbundene Accounts als Chips (Mehrfachauswahl); keine →
+   Hinweis + Button zu Audience → Analytics.
+2. **02 Visual** — Mini-Creator-Tool: Bild hochladen + **Text-Overlays direkt auf
+   der Grafik** platzieren (draggen zum Positionieren, Größen-Slider, 5 Farben,
+   Bold-Toggle, mehrzeilig). Koordinaten/Größe sind relativ (0–1) gespeichert.
+   Beim Posten wird die Komposition per `<canvas>` in **nativer Bildauflösung als
+   JPEG gerendert** (`exportVisual()` in CreatePostView; ohne Overlays wird das
+   Original unverändert hochgeladen). "Vorlagen — bald"-Platzhalter für das
+   geplante Template-System.
+3. **03 Text** — Caption mit Zeichenlimit (Minimum der gewählten Plattformen:
+   X 280 · Threads/Pinterest 500 · Instagram 2200 · LinkedIn 3000).
+4. **04 Veröffentlichen** — optionaler Zeitplan (datetime-local, Browser-Zeitzone),
+   dann Posten/Planen (anthrazit) oder Entwurf (`isDraft:true`). Ablauf: ggf.
+   `presign` + direkter PUT-Upload des gerenderten JPEGs, dann `mode:"post"`.
+   Ergebnisbox zeigt Status pro Plattform mit Link ("Ansehen ↗") bzw. Fehler.
+
+Die Vorschau-Karte rechts zeigt Caption + komponiertes Visual live (Overlay-Skalierung
+über CSS-Container-Queries, `cqw`-Einheiten — gleiche Relativkoordinaten wie Editor
+und Canvas-Export).
 
 ## Wichtige Zernio-Eigenheiten
 
@@ -103,5 +116,6 @@ einfach den Array erweitern).
 - [ ] Geplante Posts / Entwürfe in i7OS anzeigen (`GET /v1/posts?status=scheduled|draft`).
 - [ ] Account-Health-Anzeige (`GET /v1/accounts/health`) + Reconnect-Flow.
 - [ ] Bild aus i7OS-Dateien wählen (statt nur lokalem Upload).
+- [ ] Template-System für den Visual-Step (ladbare Layouts mit vorplatzierten Text-Overlays; Platzhalter-Chip existiert schon).
 - [ ] Webhooks für Post-Status statt Polling (Zernio unterstützt Webhooks).
 - [ ] Weitere Social-Tool-Integration ist geplant (vom User angekündigt).

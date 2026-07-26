@@ -14167,24 +14167,40 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
 }
 
 // ── Erstellen → Social Media Post — composer, publishes via Zernio ──────────
-// Accounts come from /api/zernio mode:"status" (the ones connected in Audience →
-// Analytics). Media: presigned direct upload to Zernio storage (bytes never pass
-// through our serverless function), then mode:"post" publishes/schedules/drafts.
+// 4-step wizard in the Brand-Avatar style (numbered tab bar, grey box, live
+// preview card on the right): 01 Kanäle · 02 Visual · 03 Text · 04 Veröffentlichen.
+// The Visual step is a mini creator tool: upload an image and place editable,
+// draggable TEXT OVERLAYS on it; at publish time the composition is rendered to a
+// JPEG via <canvas> and uploaded through Zernio's presigned direct upload.
+// Templates (loadable layouts) are planned — see docs/zernio-integration.md.
 const POST_CHAR_LIMITS = { x: 280, threads: 500, pinterest: 500, instagram: 2200, linkedin: 3000 };
+const POST_OVERLAY_COLORS = ["#FFFFFF", "#15151c", "#F5C518", "#E86767", "#4D9FFF"];
 
 function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage = "de", onOpenAudience }) {
   const de = appLanguage === "de";
+  const L = (o) => (de ? o.de : o.en);
+  const steps = [{ de: "Kanäle", en: "Channels" }, { de: "Visual", en: "Visual" }, { de: "Text", en: "Text" }, { de: "Veröffentlichen", en: "Publish" }];
+  const [stepIdx, setStepIdx] = useState(0);
+  const [hoverTab, setHoverTab] = useState(null);
+
+  // Accounts (step 1)
   const [accounts, setAccounts] = useState(null);   // null = loading
   const [selectedIds, setSelectedIds] = useState([]);
+  // Visual (step 2)
+  const [visual, setVisual] = useState(null);       // { url, w, h } — local object URL + natural dims
+  const imageFileRef = useRef(null);
+  const [overlays, setOverlays] = useState([]);     // [{ id, text, x, y, size, color, bold }] — x/y/size relative to image
+  const [selOverlay, setSelOverlay] = useState(null);
+  const [stageW, setStageW] = useState(0);
+  const stageRef = useRef(null);
+  const overlayDragRef = useRef(null);
+  const fileRef = useRef(null);
+  // Text (step 3) + publish (step 4)
   const [text, setText] = useState("");
-  const [imageUrl, setImageUrl] = useState(null);   // local preview object URL
-  const imageFileRef = useRef(null);                // the actual File for upload
-  const [previewId, setPreviewId] = useState(null); // account whose platform the preview mimics
   const [schedule, setSchedule] = useState("");
   const [busy, setBusy] = useState(null);           // "post" | "draft"
-  const [result, setResult] = useState(null);       // last publish result
+  const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const fileRef = useRef(null);
   const orgId = userOrg?.id;
 
   useEffect(() => {
@@ -14196,42 +14212,102 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     return () => { on = false; };
   }, [orgId]); // eslint-disable-line
 
+  // Track the editor stage width so overlay font sizes (fractions of the image
+  // width) render correctly at any layout size.
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setStageW(el.offsetWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [visual]);
+
   const selected = (accounts || []).filter(a => selectedIds.includes(a.id));
-  const toggleAccount = (id) => setSelectedIds(prev => {
-    const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
-    if (!next.includes(previewId) && next.length) setPreviewId(next[0]);
-    return next;
-  });
-  const charLimit = selected.length
-    ? Math.min(...selected.map(a => POST_CHAR_LIMITS[uiKeyFor(a.platform)] || 3000))
-    : 3000;
+  const toggleAccount = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const charLimit = selected.length ? Math.min(...selected.map(a => POST_CHAR_LIMITS[uiKeyFor(a.platform)] || 3000)) : 3000;
   const overLimit = text.length > charLimit;
+
   const onPickImage = (e) => {
     const f = e.target.files?.[0];
-    if (f && f.type.startsWith("image/")) { imageFileRef.current = f; setImageUrl(URL.createObjectURL(f)); }
+    if (f && f.type.startsWith("image/")) {
+      imageFileRef.current = f;
+      const url = URL.createObjectURL(f);
+      const img = new Image();
+      img.onload = () => setVisual({ url, w: img.naturalWidth, h: img.naturalHeight });
+      img.src = url;
+    }
     e.target.value = "";
   };
-  const clearImage = () => { imageFileRef.current = null; setImageUrl(null); };
+  const clearVisual = () => { imageFileRef.current = null; setVisual(null); setOverlays([]); setSelOverlay(null); };
+  const addOverlay = () => {
+    const id = crypto.randomUUID();
+    setOverlays(prev => [...prev, { id, text: de ? "Dein Text" : "Your text", x: 0.07, y: 0.08, size: 0.065, color: "#FFFFFF", bold: true }]);
+    setSelOverlay(id);
+  };
+  const patchOverlay = (id, patch) => setOverlays(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o));
+  const removeOverlay = (id) => { setOverlays(prev => prev.filter(o => o.id !== id)); setSelOverlay(s => s === id ? null : s); };
+  // Drag an overlay across the stage — coordinates stay relative (0–1) so the
+  // canvas export lands the text in exactly the same spot at full resolution.
+  const onOverlayDown = (e, o) => {
+    e.preventDefault(); e.stopPropagation();
+    setSelOverlay(o.id);
+    const stage = stageRef.current; if (!stage) return;
+    const rect = stage.getBoundingClientRect();
+    overlayDragRef.current = { id: o.id, dx: e.clientX - (rect.left + o.x * rect.width), dy: e.clientY - (rect.top + o.y * rect.height) };
+    const move = (ev) => {
+      const d = overlayDragRef.current; if (!d) return;
+      const r = stage.getBoundingClientRect();
+      patchOverlay(d.id, {
+        x: Math.min(0.95, Math.max(0, (ev.clientX - d.dx - r.left) / r.width)),
+        y: Math.min(0.95, Math.max(0, (ev.clientY - d.dy - r.top) / r.height)),
+      });
+    };
+    const up = () => { overlayDragRef.current = null; window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  // Render the composition (image + text overlays) to a JPEG at the image's
+  // natural resolution. No overlays → the original file is used untouched.
+  const exportVisual = async () => {
+    const file = imageFileRef.current;
+    if (!file || !visual) return null;
+    if (overlays.length === 0) return { blob: file, type: file.type || "image/png", name: file.name };
+    try { await document.fonts?.load(`700 64px Geist`); await document.fonts?.load(`500 64px Geist`); } catch (_) {}
+    const bmp = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    canvas.width = bmp.width; canvas.height = bmp.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(bmp, 0, 0);
+    overlays.forEach(o => {
+      const px = Math.max(8, Math.round(o.size * bmp.width));
+      ctx.font = `${o.bold ? 700 : 500} ${px}px Geist, -apple-system, sans-serif`;
+      ctx.fillStyle = o.color;
+      ctx.textBaseline = "top";
+      o.text.split("\n").forEach((line, i) => ctx.fillText(line, Math.round(o.x * bmp.width), Math.round(o.y * bmp.height + i * px * 1.22)));
+    });
+    const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.92));
+    if (!blob) throw new Error(de ? "Visual konnte nicht gerendert werden." : "Could not render the visual.");
+    return { blob, type: "image/jpeg", name: "post-visual.jpg" };
+  };
 
   const submit = async (kind) => {
     if (busy) return;
     setError(null); setResult(null);
     const isDraft = kind === "draft";
-    if (!isDraft && selected.length === 0) { setError(new Error(de ? "Wähle mindestens einen Account." : "Select at least one account.")); return; }
-    if (!text.trim() && !imageFileRef.current) { setError(new Error(de ? "Text oder Bild fehlt." : "Text or image required.")); return; }
-    if (overLimit) { setError(new Error(de ? `Text zu lang (max. ${charLimit} Zeichen für die gewählten Kanäle).` : `Text too long (max ${charLimit} chars for the selected channels).`)); return; }
+    if (!isDraft && selected.length === 0) { setError(new Error(de ? "Wähle in Schritt 1 mindestens einen Account." : "Select at least one account in step 1.")); setStepIdx(0); return; }
+    if (!text.trim() && !imageFileRef.current) { setError(new Error(de ? "Text oder Visual fehlt." : "Text or visual required.")); return; }
+    if (overLimit) { setError(new Error(de ? `Text zu lang (max. ${charLimit} Zeichen für die gewählten Kanäle).` : `Text too long (max ${charLimit} chars for the selected channels).`)); setStepIdx(2); return; }
     setBusy(kind);
     try {
-      // 1) Media: presigned direct upload (client → Zernio storage)
       let mediaItems;
-      const file = imageFileRef.current;
-      if (file) {
-        const pre = await zernioRequest(session, { mode: "presign", orgId, filename: file.name, contentType: file.type || "image/png", size: file.size });
-        const up = await fetch(pre.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type || "image/png" }, body: file });
+      const rendered = await exportVisual();
+      if (rendered) {
+        const pre = await zernioRequest(session, { mode: "presign", orgId, filename: rendered.name, contentType: rendered.type, size: rendered.blob.size });
+        const up = await fetch(pre.uploadUrl, { method: "PUT", headers: { "Content-Type": rendered.type }, body: rendered.blob });
         if (!up.ok) throw new Error(de ? "Bild-Upload fehlgeschlagen." : "Image upload failed.");
-        mediaItems = [{ type: "image", url: pre.publicUrl, filename: file.name }];
+        mediaItems = [{ type: "image", url: pre.publicUrl, filename: rendered.name }];
       }
-      // 2) Publish / schedule / draft
       const r = await zernioRequest(session, {
         mode: "post", orgId,
         content: text.trim() || undefined,
@@ -14242,202 +14318,284 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
       setResult(r);
-      if (r.status !== "failed") { setText(""); clearImage(); setSchedule(""); }
+      if (r.status !== "failed" && !isDraft) { setText(""); clearVisual(); setSchedule(""); setSelectedIds([]); }
     } catch (e) { setError(e); }
     setBusy(null);
   };
 
   const brandName = userOrg?.name || "Brand";
-  const previewAccount = selected.find(a => a.id === previewId) || selected[0] || null;
+  const previewAccount = selected[0] || null;
   const previewUiKey = previewAccount ? uiKeyFor(previewAccount.platform) : null;
   const previewMeta = previewUiKey ? TOUCHPOINT_PLATFORMS.find(p => p.key === previewUiKey) : null;
+  const stepHead = (title, desc, mb = 18) => (
+    <div style={{ marginBottom: mb }}>
+      <div style={{ fontSize: 23, fontFamily: FONT, fontWeight: 500, letterSpacing: -0.3, color: theme.text }}>{title}</div>
+      {desc && <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55, marginTop: 8, maxWidth: 340 }}>{desc}</div>}
+    </div>
+  );
   const label = { fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 10 };
+  const nextBtn = (labelText) => (
+    <motion.button whileTap={{ scale: 0.97 }} onClick={() => setStepIdx(i => Math.min(3, i + 1))}
+      style={{ marginTop: 22, padding: "11px 24px", borderRadius: 999, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer", alignSelf: "flex-start" }}>
+      {labelText || (de ? "Weiter" : "Next")}
+    </motion.button>
+  );
   const statusLabel = (s) => ({ published: de ? "Veröffentlicht" : "Published", scheduled: de ? "Geplant" : "Scheduled", draft: de ? "Entwurf" : "Draft", pending: de ? "In Arbeit" : "Pending", failed: de ? "Fehlgeschlagen" : "Failed" }[s] || s);
+  const selectedOverlayObj = overlays.find(o => o.id === selOverlay) || null;
+
+  // ── Live preview card (right column, constant across steps) ──
+  const previewCard = (
+    <div style={{ borderRadius: 18, background: theme.cardBg, border: `1px solid ${theme.border}`, overflow: "hidden", alignSelf: "start" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "14px 16px 10px" }}>
+        <div style={{ width: 36, height: 36, borderRadius: "50%", background: darkMode ? "#f4f4f7" : "#15151c", color: darkMode ? "#15151c" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>
+          {(previewAccount?.displayName || brandName)[0]}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{previewAccount?.displayName || brandName}</div>
+          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>{previewAccount?.username || "@…"} · {schedule ? (de ? "geplant" : "scheduled") : (de ? "Vorschau" : "preview")}</div>
+        </div>
+        {previewMeta && (
+          <div style={{ width: 22, height: 22, borderRadius: 7, background: previewMeta.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <svg width={tpGlyphSize(previewUiKey, 12)} height={tpGlyphSize(previewUiKey, 12)} viewBox="0 0 24 24">{touchpointGlyph(previewUiKey)}</svg>
+          </div>
+        )}
+      </div>
+      <div style={{ padding: "0 16px 12px", fontSize: 13, fontFamily: FONT, color: text ? theme.text : theme.textFaint, lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+        {text || (de ? "Dein Text erscheint hier …" : "Your text will appear here …")}
+      </div>
+      {visual && (
+        /* Mini composited preview — same relative overlay coordinates as the
+           editor; cqw units (container query width) keep the text-to-image scale
+           identical at this smaller size. */
+        <div style={{ position: "relative", width: "100%", containerType: "inline-size" }}>
+          <img src={visual.url} alt="" style={{ display: "block", width: "100%" }} />
+          {overlays.map(o => (
+            <div key={o.id} style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color, fontFamily: FONT, fontWeight: o.bold ? 700 : 500, fontSize: `${o.size * 100}cqw`, lineHeight: 1.22, whiteSpace: "pre", pointerEvents: "none" }}>{o.text}</div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: "flex", alignItems: "center", gap: 20, padding: "10px 16px", borderTop: `1px solid ${theme.borderFaint}`, color: theme.textFaint }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontFamily: FONT }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 00-7.8 7.8l8.8 8.9 8.8-8.9a5.5 5.5 0 000-7.8z"/></svg>0</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontFamily: FONT }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 11.5a8.4 8.4 0 01-9 8.4 8.6 8.6 0 01-3.9-.9L3 21l2-4.9a8.4 8.4 0 1116-4.6z"/></svg>0</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontFamily: FONT }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>0</span>
+      </div>
+    </div>
+  );
 
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
       style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 40px 80px" }}>
-      <div style={{ width: "100%", maxWidth: 1050, height: "100%", ...frostedPanelStyle(darkMode), borderRadius: 26, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-        {/* Header — back + title, primary actions top-right (design rule) */}
+      <div style={{ width: "100%", maxWidth: 880, height: "100%", ...frostedPanelStyle(darkMode), borderRadius: 26, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        {/* Header — back + title */}
         <div style={{ padding: "16px 24px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${theme.borderFaint}` }}>
           <motion.div whileTap={{ scale: 0.92 }} onClick={onBack} style={{ cursor: "pointer", color: theme.textDim, display: "flex", flexShrink: 0 }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
           </motion.div>
           <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{brandName}</span>
           <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim }}>Social Media Post</span>
-          <div style={{ flex: 1 }} />
-          <motion.button whileTap={{ scale: 0.97 }} onClick={() => submit("draft")} disabled={Boolean(busy)}
-            style={{ padding: "9px 16px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text, fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1 }}>
-            {busy === "draft" ? "…" : (de ? "Entwurf speichern" : "Save draft")}
-          </motion.button>
-          <motion.button whileTap={{ scale: 0.97 }} onClick={() => submit("post")} disabled={Boolean(busy)}
-            style={{ padding: "9px 20px", borderRadius: 999, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 }}>
-            {busy === "post" ? (de ? "Wird gesendet…" : "Sending…") : schedule ? (de ? "Planen" : "Schedule") : (de ? "Posten" : "Post")}
-          </motion.button>
         </div>
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 24 }}>
           {error && (
-            <div style={{ marginBottom: 18, padding: "10px 14px", borderRadius: 12, background: "rgba(232,103,103,.08)", border: "1px solid rgba(232,103,103,.16)", color: "#E86767", fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>
+            <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 12, background: "rgba(232,103,103,.08)", border: "1px solid rgba(232,103,103,.16)", color: "#E86767", fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>
               {error.code === "zernio_not_configured"
                 ? (de ? "Zernio ist noch nicht konfiguriert — ZERNIO_API_KEY als Env-Var hinterlegen (siehe docs/zernio-integration.md)." : "Zernio is not configured yet — set the ZERNIO_API_KEY env var (see docs/zernio-integration.md).")
                 : error.message}
             </div>
           )}
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.35fr) minmax(0, 1fr)", gap: 24, alignItems: "start" }}>
-            {/* ── Compose column ── */}
-            <div>
-              <div style={label}>{de ? "Accounts" : "Accounts"}</div>
-              {accounts == null ? (
-                <div style={{ padding: "14px 0 22px", color: theme.textDim, fontSize: 12.5, fontFamily: FONT }}>{de ? "Lädt…" : "Loading…"}</div>
-              ) : accounts.length === 0 ? (
-                <div style={{ padding: "22px 18px", borderRadius: 16, border: `1.5px dashed ${theme.borderFaint}`, textAlign: "center", marginBottom: 22 }}>
-                  <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 4 }}>{de ? "Noch keine Accounts verbunden" : "No accounts connected yet"}</div>
-                  <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 12 }}>{de ? "Verbinde deine Social-Media-Kanäle unter Audience → Analytics." : "Connect your social channels under Audience → Analytics."}</div>
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={onOpenAudience}
-                    style={{ padding: "9px 18px", borderRadius: 999, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
-                    {de ? "Accounts verbinden" : "Connect accounts"}
-                  </motion.button>
+
+          {/* Numbered step tab bar — Brand-Avatar pattern (active = anthracite) */}
+          <div style={{ display: "flex", gap: 10, marginBottom: 22 }}>
+            {steps.map((s, i) => {
+              const active = i === stepIdx;
+              const hov = hoverTab === i;
+              return (
+                <div key={i} onClick={() => setStepIdx(i)}
+                  onMouseEnter={() => setHoverTab(i)} onMouseLeave={() => setHoverTab(null)}
+                  style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "13.5px 16px", borderRadius: 12, cursor: "pointer",
+                    background: active ? (hov ? "#0e0e14" : "#15151c") : (darkMode ? (hov ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.05)") : (hov ? "#e6e6eb" : "#f1f1f4")),
+                    color: active ? "#fff" : theme.text, transition: "background .38s cubic-bezier(0.33, 1, 0.68, 1)" }}>
+                  <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: active ? "rgba(255,255,255,0.5)" : theme.textDim }}>{String(i + 1).padStart(2, "0")}</span>
+                  <span style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{L(s)}</span>
+                  {i === 0 && selected.length > 0 && <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: FONT, fontWeight: 600, color: active ? "rgba(255,255,255,0.6)" : theme.textDim }}>{selected.length}</span>}
                 </div>
-              ) : (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 22 }}>
-                  {accounts.map(a => {
-                    const uiKey = uiKeyFor(a.platform);
-                    const p = TOUCHPOINT_PLATFORMS.find(x => x.key === uiKey) || { color: "#15151c", label: a.platform };
-                    const on = selectedIds.includes(a.id);
-                    return (
-                      <motion.div key={a.id} whileTap={{ scale: 0.96 }} onClick={() => toggleAccount(a.id)}
-                        style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px 7px 8px", borderRadius: 999, cursor: "pointer",
-                          background: on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
-                          border: `1px solid ${on ? "transparent" : theme.borderFaint}`,
-                          color: on ? (darkMode ? "#15151c" : "#fff") : theme.textDim, transition: "background 0.15s ease, color 0.15s ease" }}>
-                        <div style={{ width: 22, height: 22, borderRadius: 7, background: p.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          <svg width={tpGlyphSize(uiKey, 13)} height={tpGlyphSize(uiKey, 13)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
+              );
+            })}
+          </div>
+
+          {/* Grey box: left = step content, right = live preview (constant) */}
+          <div style={{ background: darkMode ? "rgba(255,255,255,0.03)" : "#f3f3f5", borderRadius: 22, padding: 26 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.78fr)", gap: 26, alignItems: "start" }}>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+
+                {/* ── 01 Kanäle ── */}
+                {stepIdx === 0 && (<>
+                  {stepHead(de ? "Kanäle" : "Channels", de ? "Wähle die verbundenen Accounts, auf denen dieser Post erscheinen soll." : "Pick the connected accounts this post should go to.")}
+                  {accounts == null ? (
+                    <div style={{ color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{de ? "Lädt…" : "Loading…"}</div>
+                  ) : accounts.length === 0 ? (
+                    <div style={{ padding: "22px 18px", borderRadius: 16, border: `1.5px dashed ${theme.borderFaint}`, textAlign: "center" }}>
+                      <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 4 }}>{de ? "Noch keine Accounts verbunden" : "No accounts connected yet"}</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 12 }}>{de ? "Verbinde deine Social-Media-Kanäle unter Audience → Analytics." : "Connect your social channels under Audience → Analytics."}</div>
+                      <motion.button whileTap={{ scale: 0.97 }} onClick={onOpenAudience}
+                        style={{ padding: "9px 18px", borderRadius: 999, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
+                        {de ? "Accounts verbinden" : "Connect accounts"}
+                      </motion.button>
+                    </div>
+                  ) : (<>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {accounts.map(a => {
+                        const uiKey = uiKeyFor(a.platform);
+                        const p = TOUCHPOINT_PLATFORMS.find(x => x.key === uiKey) || { color: "#15151c", label: a.platform };
+                        const on = selectedIds.includes(a.id);
+                        return (
+                          <motion.div key={a.id} whileTap={{ scale: 0.96 }} onClick={() => toggleAccount(a.id)}
+                            style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px 7px 8px", borderRadius: 999, cursor: "pointer",
+                              background: on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
+                              border: `1px solid ${on ? "transparent" : theme.borderFaint}`,
+                              color: on ? (darkMode ? "#15151c" : "#fff") : theme.textDim, transition: "background 0.15s ease, color 0.15s ease" }}>
+                            <div style={{ width: 22, height: 22, borderRadius: 7, background: p.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                              <svg width={tpGlyphSize(uiKey, 13)} height={tpGlyphSize(uiKey, 13)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
+                            </div>
+                            <span style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500 }}>{a.username || a.displayName}</span>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                    {nextBtn()}
+                  </>)}
+                </>)}
+
+                {/* ── 02 Visual — mini creator: image + draggable text overlays ── */}
+                {stepIdx === 1 && (<>
+                  {stepHead("Visual", de ? "Lade ein Bild hoch und platziere Text direkt auf der Grafik. Beim Posten wird alles als ein Bild gerendert." : "Upload an image and place text right on the graphic. It's rendered as one image when you post.")}
+                  <input ref={fileRef} type="file" accept="image/*" onChange={onPickImage} style={{ display: "none" }} />
+                  {!visual ? (
+                    <motion.div whileTap={{ scale: 0.99 }} onClick={() => fileRef.current?.click()}
+                      style={{ padding: "34px 18px", borderRadius: 16, border: `1.5px dashed ${theme.borderFaint}`, textAlign: "center", cursor: "pointer" }}>
+                      <div style={{ width: 38, height: 38, borderRadius: 12, margin: "0 auto 10px", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.text }}>
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="3.5"/><circle cx="8.5" cy="8.5" r="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/></svg>
+                      </div>
+                      <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{de ? "Bild hochladen" : "Upload image"}</div>
+                      <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>{de ? "PNG, JPG — oder ohne Visual weiter (reiner Textpost)" : "PNG, JPG — or continue without a visual (text-only post)"}</div>
+                    </motion.div>
+                  ) : (<>
+                    {/* Editor stage — overlays are draggable; click empty space deselects */}
+                    <div ref={stageRef} onPointerDown={() => setSelOverlay(null)}
+                      style={{ position: "relative", borderRadius: 14, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, userSelect: "none", touchAction: "none" }}>
+                      <img src={visual.url} alt="" draggable={false} style={{ display: "block", width: "100%" }} />
+                      {overlays.map(o => (
+                        <div key={o.id} onPointerDown={(e) => onOverlayDown(e, o)}
+                          style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color, fontFamily: FONT, fontWeight: o.bold ? 700 : 500,
+                            fontSize: Math.max(9, o.size * (stageW || 1)), lineHeight: 1.22, whiteSpace: "pre", cursor: "move",
+                            outline: selOverlay === o.id ? "1.5px dashed rgba(77,159,255,0.9)" : "none", outlineOffset: 3 }}>
+                          {o.text}
                         </div>
-                        <span style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500 }}>{a.username || a.displayName}</span>
+                      ))}
+                      <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); clearVisual(); }} onPointerDown={e => e.stopPropagation()}
+                        style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: 9, background: "rgba(21,21,28,0.72)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                       </motion.div>
-                    );
-                  })}
-                </div>
-              )}
-
-              <div style={label}>{de ? "Text" : "Text"}</div>
-              <div style={{ position: "relative", marginBottom: 22 }}>
-                <textarea value={text} onChange={e => setText(e.target.value)}
-                  placeholder={de ? "Was möchtest du teilen?" : "What do you want to share?"}
-                  style={{ width: "100%", minHeight: 190, boxSizing: "border-box", padding: "14px 16px 34px", borderRadius: 16,
-                    border: `1px solid ${overLimit ? "#E86767" : theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                    color: theme.text, fontSize: 14, fontFamily: FONT, lineHeight: 1.6, outline: "none", resize: "vertical", caretColor: theme.text }} />
-                <div style={{ position: "absolute", right: 14, bottom: 12, fontSize: 11, fontFamily: FONT, color: overLimit ? "#E86767" : theme.textFaint }}>
-                  {text.length} / {charLimit}
-                </div>
-              </div>
-
-              <div style={label}>{de ? "Medien" : "Media"}</div>
-              <input ref={fileRef} type="file" accept="image/*" onChange={onPickImage} style={{ display: "none" }} />
-              {imageUrl ? (
-                <div style={{ position: "relative", borderRadius: 16, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, marginBottom: 22 }}>
-                  <img src={imageUrl} alt="" style={{ display: "block", width: "100%", maxHeight: 260, objectFit: "cover" }} />
-                  <motion.div whileTap={{ scale: 0.9 }} onClick={clearImage}
-                    style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: 9, background: "rgba(21,21,28,0.72)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                  </motion.div>
-                </div>
-              ) : (
-                <motion.div whileTap={{ scale: 0.99 }} onClick={() => fileRef.current?.click()}
-                  style={{ padding: "30px 18px", borderRadius: 16, border: `1.5px dashed ${theme.borderFaint}`, textAlign: "center", cursor: "pointer", marginBottom: 22 }}>
-                  <div style={{ width: 38, height: 38, borderRadius: 12, margin: "0 auto 10px", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.text }}>
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="3.5"/><circle cx="8.5" cy="8.5" r="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/></svg>
-                  </div>
-                  <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{de ? "Bild hinzufügen" : "Add image"}</div>
-                  <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>{de ? "PNG, JPG — Upload direkt zu Zernio" : "PNG, JPG — uploads directly to Zernio"}</div>
-                </motion.div>
-              )}
-
-              <div style={label}>{de ? "Planen (optional)" : "Schedule (optional)"}</div>
-              <input type="datetime-local" value={schedule} onChange={e => setSchedule(e.target.value)}
-                style={{ padding: "10px 14px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                  color: schedule ? theme.text : theme.textDim, fontSize: 13, fontFamily: FONT, outline: "none", colorScheme: darkMode ? "dark" : "light" }} />
-            </div>
-
-            {/* ── Preview column ── */}
-            <div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                <div style={{ ...label, marginBottom: 0 }}>{de ? "Vorschau" : "Preview"}</div>
-                {selected.length > 1 && (
-                  <div style={{ display: "flex", gap: 6 }}>
-                    {selected.map(a => {
-                      const uiKey = uiKeyFor(a.platform);
-                      const p = TOUCHPOINT_PLATFORMS.find(x => x.key === uiKey) || { color: "#15151c" };
-                      const on = (previewAccount?.id) === a.id;
-                      return (
-                        <div key={a.id} onClick={() => setPreviewId(a.id)} title={a.username}
-                          style={{ width: 26, height: 26, borderRadius: 8, background: p.color, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-                            opacity: on ? 1 : 0.35, outline: on ? `2px solid ${theme.text}` : "none", outlineOffset: 1.5, transition: "opacity 0.15s ease" }}>
-                          <svg width={tpGlyphSize(uiKey, 13)} height={tpGlyphSize(uiKey, 13)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
+                    </div>
+                    {/* Editor toolbar */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                      <motion.button whileTap={{ scale: 0.97 }} onClick={addOverlay}
+                        style={{ padding: "8px 15px", borderRadius: 999, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
+                        + {de ? "Text hinzufügen" : "Add text"}
+                      </motion.button>
+                      <div style={{ padding: "6px 12px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`, fontSize: 11.5, fontFamily: FONT, color: theme.textFaint }}>
+                        {de ? "Vorlagen — bald" : "Templates — soon"}
+                      </div>
+                    </div>
+                    {/* Selected-overlay properties */}
+                    {selectedOverlayObj && (
+                      <div style={{ marginTop: 14, borderRadius: 14, border: `1px solid ${theme.borderFaint}`, background: theme.cardBg, padding: 14 }}>
+                        <textarea value={selectedOverlayObj.text} onChange={e => patchOverlay(selectedOverlayObj.id, { text: e.target.value })} rows={2}
+                          style={{ width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none", resize: "none", caretColor: theme.text, marginBottom: 12 }} />
+                        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                          <input type="range" min="0.02" max="0.16" step="0.005" value={selectedOverlayObj.size}
+                            onChange={e => patchOverlay(selectedOverlayObj.id, { size: parseFloat(e.target.value) })} style={{ width: 120, accentColor: "#15151c" }} />
+                          <div style={{ display: "flex", gap: 6 }}>
+                            {POST_OVERLAY_COLORS.map(c => (
+                              <div key={c} onClick={() => patchOverlay(selectedOverlayObj.id, { color: c })}
+                                style={{ width: 20, height: 20, borderRadius: "50%", background: c, cursor: "pointer", boxSizing: "border-box",
+                                  border: selectedOverlayObj.color === c ? "2px solid #4D9FFF" : `1.5px solid ${theme.borderFaint}` }} />
+                            ))}
+                          </div>
+                          <div onClick={() => patchOverlay(selectedOverlayObj.id, { bold: !selectedOverlayObj.bold })}
+                            style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontWeight: 800, fontSize: 13,
+                              background: selectedOverlayObj.bold ? (darkMode ? "rgba(255,255,255,0.14)" : "#15151c") : "transparent", color: selectedOverlayObj.bold ? "#fff" : theme.textDim, border: `1px solid ${selectedOverlayObj.bold ? "transparent" : theme.borderFaint}` }}>B</div>
+                          <div style={{ flex: 1 }} />
+                          <span onClick={() => removeOverlay(selectedOverlayObj.id)}
+                            style={{ fontSize: 11.5, fontFamily: FONT, color: "#E86767", cursor: "pointer" }}>{de ? "Entfernen" : "Remove"}</span>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              {selected.length === 0 ? (
-                <div style={{ padding: "36px 18px", borderRadius: 16, border: `1.5px dashed ${theme.borderFaint}`, textAlign: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT, lineHeight: 1.6 }}>
-                  {de ? "Wähle mindestens einen Account, um die Vorschau zu sehen." : "Select at least one account to see the preview."}
-                </div>
-              ) : (
-                <div style={{ borderRadius: 18, background: theme.cardBg, border: `1px solid ${theme.border}`, overflow: "hidden" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "14px 16px 10px" }}>
-                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: darkMode ? "#f4f4f7" : "#15151c", color: darkMode ? "#15151c" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>
-                      {(previewAccount?.displayName || brandName)[0]}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{previewAccount?.displayName || brandName}</div>
-                      <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>{previewAccount?.username} · {schedule ? (de ? "geplant" : "scheduled") : (de ? "gerade eben" : "just now")}</div>
-                    </div>
-                    {previewMeta && (
-                      <div style={{ width: 24, height: 24, borderRadius: 7, background: previewMeta.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <svg width={tpGlyphSize(previewUiKey, 13)} height={tpGlyphSize(previewUiKey, 13)} viewBox="0 0 24 24">{touchpointGlyph(previewUiKey)}</svg>
                       </div>
                     )}
-                  </div>
-                  <div style={{ padding: "0 16px 12px", fontSize: 13.5, fontFamily: FONT, color: text ? theme.text : theme.textFaint, lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                    {text || (de ? "Dein Text erscheint hier …" : "Your text will appear here …")}
-                  </div>
-                  {imageUrl && <img src={imageUrl} alt="" style={{ display: "block", width: "100%", maxHeight: 300, objectFit: "cover" }} />}
-                  <div style={{ display: "flex", alignItems: "center", gap: 22, padding: "11px 16px", borderTop: `1px solid ${theme.borderFaint}`, color: theme.textFaint }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontFamily: FONT }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 00-7.8 7.8l8.8 8.9 8.8-8.9a5.5 5.5 0 000-7.8z"/></svg>0</span>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontFamily: FONT }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 11.5a8.4 8.4 0 01-9 8.4 8.6 8.6 0 01-3.9-.9L3 21l2-4.9a8.4 8.4 0 1116-4.6z"/></svg>0</span>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontFamily: FONT }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>0</span>
-                  </div>
-                </div>
-              )}
+                  </>)}
+                  {nextBtn()}
+                </>)}
 
-              {schedule && (
-                <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3" strokeLinecap="round"/></svg>
-                  {de ? "Geplant für" : "Scheduled for"} {new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(schedule))}
-                </div>
-              )}
-
-              {/* Publish result — per-platform status with links / errors */}
-              {result && (
-                <div style={{ marginTop: 14, borderRadius: 16, border: `1px solid ${theme.borderFaint}`, padding: 16 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: (result.platforms || []).length ? 10 : 0 }}>
-                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: result.status === "failed" ? "#E86767" : "#00B894" }} />
-                    <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{statusLabel(result.status)}</span>
-                  </div>
-                  {(result.platforms || []).map((p, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
-                      <span style={{ minWidth: 70, color: theme.text }}>{(TOUCHPOINT_PLATFORMS.find(x => x.key === uiKeyFor(p.platform)) || { label: p.platform }).label}</span>
-                      <span>{statusLabel(p.status)}</span>
-                      {p.url && <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ color: theme.text, textDecoration: "underline", textUnderlineOffset: 2 }}>{de ? "Ansehen ↗" : "View ↗"}</a>}
-                      {p.error && <span style={{ color: "#E86767" }}>{p.error}</span>}
+                {/* ── 03 Text ── */}
+                {stepIdx === 2 && (<>
+                  {stepHead(de ? "Text" : "Text", de ? "Schreibe die Caption. Das Limit richtet sich nach dem strengsten gewählten Kanal." : "Write the caption. The limit follows the strictest selected channel.")}
+                  <div style={{ position: "relative" }}>
+                    <textarea value={text} onChange={e => setText(e.target.value)}
+                      placeholder={de ? "Was möchtest du teilen?" : "What do you want to share?"}
+                      style={{ width: "100%", minHeight: 190, boxSizing: "border-box", padding: "14px 16px 34px", borderRadius: 16,
+                        border: `1px solid ${overLimit ? "#E86767" : theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.6)",
+                        color: theme.text, fontSize: 14, fontFamily: FONT, lineHeight: 1.6, outline: "none", resize: "vertical", caretColor: theme.text }} />
+                    <div style={{ position: "absolute", right: 14, bottom: 12, fontSize: 11, fontFamily: FONT, color: overLimit ? "#E86767" : theme.textFaint }}>
+                      {text.length} / {charLimit}
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                  {nextBtn()}
+                </>)}
+
+                {/* ── 04 Veröffentlichen ── */}
+                {stepIdx === 3 && (<>
+                  {stepHead(de ? "Veröffentlichen" : "Publish", de ? "Prüfe die Vorschau rechts — dann direkt posten, planen oder als Entwurf speichern." : "Check the preview on the right — then post now, schedule, or save as draft.")}
+                  <div style={label}>{de ? "Planen (optional)" : "Schedule (optional)"}</div>
+                  <input type="datetime-local" value={schedule} onChange={e => setSchedule(e.target.value)}
+                    style={{ padding: "10px 14px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.6)",
+                      color: schedule ? theme.text : theme.textDim, fontSize: 13, fontFamily: FONT, outline: "none", colorScheme: darkMode ? "dark" : "light", alignSelf: "flex-start" }} />
+                  {schedule && (
+                    <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3" strokeLinecap="round"/></svg>
+                      {de ? "Geplant für" : "Scheduled for"} {new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(schedule))}
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
+                    <motion.button whileTap={{ scale: 0.97 }} onClick={() => submit("post")} disabled={Boolean(busy)}
+                      style={{ padding: "11px 24px", borderRadius: 999, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 }}>
+                      {busy === "post" ? (de ? "Wird gesendet…" : "Sending…") : schedule ? (de ? "Planen" : "Schedule") : (de ? "Posten" : "Post")}
+                    </motion.button>
+                    <motion.button whileTap={{ scale: 0.97 }} onClick={() => submit("draft")} disabled={Boolean(busy)}
+                      style={{ padding: "11px 18px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text, fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1 }}>
+                      {busy === "draft" ? "…" : (de ? "Entwurf speichern" : "Save draft")}
+                    </motion.button>
+                  </div>
+                  {result && (
+                    <div style={{ marginTop: 18, borderRadius: 16, border: `1px solid ${theme.borderFaint}`, background: theme.cardBg, padding: 16 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: (result.platforms || []).length ? 10 : 0 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: result.status === "failed" ? "#E86767" : "#00B894" }} />
+                        <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{statusLabel(result.status)}</span>
+                      </div>
+                      {(result.platforms || []).map((p, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
+                          <span style={{ minWidth: 70, color: theme.text }}>{(TOUCHPOINT_PLATFORMS.find(x => x.key === uiKeyFor(p.platform)) || { label: p.platform }).label}</span>
+                          <span>{statusLabel(p.status)}</span>
+                          {p.url && <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ color: theme.text, textDecoration: "underline", textUnderlineOffset: 2 }}>{de ? "Ansehen ↗" : "View ↗"}</a>}
+                          {p.error && <span style={{ color: "#E86767" }}>{p.error}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>)}
+              </div>
+
+              {/* Right — live preview, constant across steps (like the avatar card) */}
+              {previewCard}
             </div>
           </div>
         </div>
@@ -29047,7 +29205,12 @@ export default function CircularMenu() {
                           if (orgErr) throw orgErr;
                           const { error: memErr } = await supabase.from("org_members").insert({ org_id: org.id, user_id: session.user.id, role: "admin" });
                           if (memErr) throw memErr;
-                          setUserOrg(org); setOnboardingStep(null); setWsName("");
+                          // The creator is the workspace admin — carry the role so
+                          // admin-only UI (delete workspace, logo, invites) shows up
+                          // immediately, not only after the next full login.
+                          const orgWithRole = { ...org, role: "admin" };
+                          setUserOrgs(prev => [...prev.filter(o => o.id !== org.id), orgWithRole]);
+                          setUserOrg(orgWithRole); setUserOrgRole("admin"); setOnboardingStep(null); setWsName("");
                         } catch (err) { console.error("[Onboarding]", err); setOnboardingError(appLanguage === "de" ? "Fehler beim Erstellen. Bitte versuche es erneut." : "Failed to create workspace. Please try again."); setWsCreating(false); }
                       }}
                       placeholder={appLanguage === "de" ? "z.B. Meine Agentur" : "e.g. My Agency"}
@@ -29069,7 +29232,12 @@ export default function CircularMenu() {
                           if (orgErr) throw orgErr;
                           const { error: memErr } = await supabase.from("org_members").insert({ org_id: org.id, user_id: session.user.id, role: "admin" });
                           if (memErr) throw memErr;
-                          setUserOrg(org); setOnboardingStep(null); setWsName("");
+                          // The creator is the workspace admin — carry the role so
+                          // admin-only UI (delete workspace, logo, invites) shows up
+                          // immediately, not only after the next full login.
+                          const orgWithRole = { ...org, role: "admin" };
+                          setUserOrgs(prev => [...prev.filter(o => o.id !== org.id), orgWithRole]);
+                          setUserOrg(orgWithRole); setUserOrgRole("admin"); setOnboardingStep(null); setWsName("");
                         } catch (err) { console.error("[Onboarding]", err); setOnboardingError(appLanguage === "de" ? "Fehler beim Erstellen. Bitte versuche es erneut." : "Failed to create workspace. Please try again."); setWsCreating(false); }
                       }}
                       disabled={!wsName.trim() || wsCreating}
