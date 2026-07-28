@@ -1,13 +1,23 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import { PLAN_NAMES, PLAN_PRICES, planFeatures } from "./entitlements";
 
 const APP_FONT = "'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
-const PLAN_OPTIONS = [
-  { id: "starter", name: "Starter", monthly: 15, annual: 12, description: "A focused space for individual creative work." },
-  { id: "pro", name: "Pro", monthly: 24, annual: 20, description: "Shared brand context and collaboration for small teams." },
-  { id: "agency", name: "Agency", monthly: 85, annual: 72, description: "Flexible workspaces, roles, and support for agencies." },
-];
+// Prices and feature bullets come from src/entitlements.js — the same file the
+// limits are enforced from — so a card can never advertise a number the product
+// doesn't actually grant. Only the positioning line is written by hand.
+const PLAN_TAGLINES = {
+  starter: { de: "Ein fokussierter Ort für die eigene kreative Arbeit.", en: "A focused space for individual creative work." },
+  pro: { de: "Gemeinsamer Markenkontext und Zusammenarbeit im kleinen Team.", en: "Shared brand context and collaboration for small teams." },
+  agency: { de: "Flexible Workspaces, Rollen und Support für Agenturen.", en: "Flexible workspaces, roles, and support for agencies." },
+};
+const PLAN_OPTIONS = ["starter", "pro", "agency"].map(id => ({
+  id,
+  name: PLAN_NAMES[id],
+  monthly: PLAN_PRICES[id].monthly,
+  annual: PLAN_PRICES[id].annual,
+}));
 
 const MANAGEABLE_STATUSES = new Set(["active", "trialing", "incomplete", "past_due", "unpaid", "paused"]);
 const CHECKOUT_POLL_INTERVAL_MS = 1500;
@@ -27,11 +37,21 @@ function readPendingSelection() {
   return { plan: "pro", billing: "monthly" };
 }
 
-export default function BillingSettings({ session, org, isAdmin, theme, darkMode, appLanguage = "en" }) {
+export default function BillingSettings({ session, org, isAdmin, entitlements, onBillingChange, theme, darkMode, appLanguage = "en" }) {
   const initial = useMemo(readPendingSelection, []);
   const [selectedPlan, setSelectedPlan] = useState(initial.plan);
   const [billingInterval, setBillingInterval] = useState(initial.billing);
   const [billing, setBilling] = useState(null);
+  // One plan covers all of the owner's workspaces, so buying and managing it is
+  // the OWNER's action — an invited admin would get a 403 from the API. Seeded
+  // from the app-wide entitlements so the button doesn't flicker before the
+  // component's own status call lands.
+  const [isOwner, setIsOwner] = useState(() => Boolean(entitlements?.isOwner));
+  // Held in a ref, not the poll effect's deps: that effect clears the URL's
+  // ?checkout=success on its first run, so re-running it mid-poll would cancel
+  // the poll and never restart it.
+  const onBillingChangeRef = useRef(onBillingChange);
+  useEffect(() => { onBillingChangeRef.current = onBillingChange; }, [onBillingChange]);
   const [loading, setLoading] = useState(true);
   const [action, setAction] = useState(null);
   const [error, setError] = useState("");
@@ -66,6 +86,7 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
     try {
       const data = await request("/api/billing-status", { orgId: org.id });
       setBilling(data.billing);
+      setIsOwner(Boolean(data.isOwner));
       return data.billing;
     } catch (requestError) {
       setError(requestError.code === "billing_not_configured"
@@ -98,6 +119,10 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
         if (MANAGEABLE_STATUSES.has(latestBilling?.status)) {
           setCheckoutProcessing(false);
           setCheckoutSyncDelayed(false);
+          // The new plan changes limits app-wide (storage, seats, projects) —
+          // refresh the shared entitlements so the rest of the UI unlocks
+          // without a page reload.
+          onBillingChangeRef.current?.();
           return;
         }
 
@@ -125,7 +150,7 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
   }, [loadBilling]);
 
   const startCheckout = async () => {
-    if (!isAdmin || action) return;
+    if (!isOwner || action) return;
     setAction("checkout");
     setError("");
     try {
@@ -145,7 +170,7 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
   };
 
   const openPortal = async () => {
-    if (!isAdmin || action) return;
+    if (!isOwner || action) return;
     setAction("portal");
     setError("");
     try {
@@ -192,7 +217,7 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
                 : (de ? "Das Abo gilt für den gesamten aktuellen Workspace." : "The subscription applies to the entire current workspace.")}
             </div>
           </div>
-          {hasSubscription && isAdmin && (
+          {hasSubscription && isOwner && (
             <motion.button whileTap={{ scale: 0.97 }} onClick={openPortal} disabled={Boolean(action)} style={{ padding: "10px 15px", borderRadius: 11, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text, fontFamily: APP_FONT, fontSize: 12, fontWeight: 600, cursor: action ? "wait" : "pointer" }}>
               {action === "portal" ? "…" : (de ? "Abo verwalten" : "Manage billing")}
             </motion.button>
@@ -234,13 +259,25 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
               {PLAN_OPTIONS.map(plan => {
                 const selected = selectedPlan === plan.id;
                 return (
-                  <motion.button key={plan.id} whileHover={{ y: -2 }} whileTap={{ scale: 0.99 }} onClick={() => setSelectedPlan(plan.id)} style={{ minHeight: 155, padding: 17, textAlign: "left", borderRadius: 16, border: `1px solid ${selected ? theme.text : theme.border}`, background: selected ? (darkMode ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.04)") : "transparent", color: theme.text, fontFamily: APP_FONT, cursor: "pointer", transition: "border-color .25s ease, background .25s ease" }}>
+                  <motion.button key={plan.id} whileHover={{ y: -2 }} whileTap={{ scale: 0.99 }} onClick={() => setSelectedPlan(plan.id)} style={{ padding: 17, textAlign: "left", borderRadius: 16, border: `1px solid ${selected ? theme.text : theme.border}`, background: selected ? (darkMode ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.04)") : "transparent", color: theme.text, fontFamily: APP_FONT, cursor: "pointer", transition: "border-color .25s ease, background .25s ease" }}>
                     <div style={{ fontSize: 14, fontWeight: 600 }}>{plan.name}</div>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginTop: 12 }}>
                       <strong style={{ fontSize: 30, fontWeight: 600 }}>€{plan[billingInterval]}</strong>
                       <span style={{ fontSize: 10, color: theme.textDim }}>/ {de ? "Monat" : "month"}</span>
                     </div>
-                    <div style={{ fontSize: 11, color: theme.textDim, lineHeight: 1.45, marginTop: 10 }}>{plan.description}</div>
+                    <div style={{ fontSize: 11, color: theme.textDim, lineHeight: 1.45, marginTop: 10 }}>
+                      {PLAN_TAGLINES[plan.id][de ? "de" : "en"]}
+                    </div>
+                    <div style={{ marginTop: 13, paddingTop: 12, borderTop: `1px solid ${theme.border}` }}>
+                      {planFeatures(plan.id, de).map((feature, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 7, marginTop: i ? 6 : 0 }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 3 }}>
+                            <path d="M20 6L9 17l-5-5" stroke={theme.textDim} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                          <span style={{ fontSize: 11, color: theme.textSub, lineHeight: 1.4 }}>{feature}</span>
+                        </div>
+                      ))}
+                    </div>
                   </motion.button>
                 );
               })}
@@ -248,9 +285,9 @@ export default function BillingSettings({ session, org, isAdmin, theme, darkMode
 
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginTop: 20 }}>
               <div style={{ fontSize: 11, color: theme.textDim }}>
-                {!isAdmin && (de ? "Nur Workspace-Admins können ein Abo abschließen." : "Only workspace admins can start a subscription.")}
+                {!isOwner && (de ? "Nur der Besitzer dieses Workspaces kann das Abo verwalten. Ein Abo deckt alle Workspaces seines Kontos ab." : "Only this workspace’s owner can manage the subscription. One plan covers every workspace on their account.")}
               </div>
-              <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }} onClick={startCheckout} disabled={!isAdmin || Boolean(action) || loading} style={{ padding: "12px 24px", border: 0, borderRadius: 999, background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontFamily: APP_FONT, fontSize: 13, fontWeight: 600, cursor: !isAdmin || action || loading ? "not-allowed" : "pointer", opacity: !isAdmin || action || loading ? 0.55 : 1 }}>
+              <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }} onClick={startCheckout} disabled={!isOwner || Boolean(action) || loading} style={{ padding: "12px 24px", border: 0, borderRadius: 999, background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontFamily: APP_FONT, fontSize: 13, fontWeight: 600, cursor: !isOwner || action || loading ? "not-allowed" : "pointer", opacity: !isOwner || action || loading ? 0.55 : 1 }}>
                 {action === "checkout" ? (de ? "Öffnet Checkout …" : "Opening checkout …") : (de ? "Weiter zum sicheren Checkout" : "Continue to secure checkout")}
               </motion.button>
             </div>

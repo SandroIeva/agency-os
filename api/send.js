@@ -157,6 +157,51 @@ export default async function handler(req, res) {
       return r.ok ? res.status(200).json({ success: true, id: r.id }) : res.status(r.status).json({ error: r.error });
     }
 
+    // Sent by the lifecycle sweep before an inactive account's files are
+    // removed. Deliberately plain and specific about the date and the way out —
+    // nobody should lose work to a message they mistook for marketing.
+    if (mode === "lifecycle-warning") {
+      const { email, daysLeft, workspaces } = req.body;
+      if (!email) return res.status(400).json({ error: "Missing email" });
+      const days = Math.max(0, Math.round(Number(daysLeft) || 14));
+      const names = Array.isArray(workspaces) ? workspaces.filter(Boolean) : [];
+      const r = await sendResend({
+        from: "i7 OS <invite@i7os.com>",
+        to: email,
+        subject: days <= 3
+          ? `Letzte Erinnerung: Deine Dateien werden in ${days} Tagen gelöscht — i7 OS`
+          : `Deine i7 OS Dateien werden in ${days} Tagen gelöscht`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
+            <div style="text-align: center; margin-bottom: 28px;">
+              <img src="${APP_URL}/i7OS-Logo.png" alt="i7 OS" width="96" height="59" style="display: block; margin: 0 auto 16px; border: 0;" />
+              <h1 style="font-size: 20px; font-weight: 600; color: #1a1a2e; margin: 0;">Deine Dateien werden bald gelöscht</h1>
+            </div>
+            <p style="font-size: 15px; color: #444; line-height: 1.6;">
+              Dein i7 OS Konto hat seit einer Weile keinen aktiven Plan. In <strong>${days} Tagen</strong>
+              entfernen wir deshalb die hochgeladenen Dateien${names.length ? ` aus ${names.length === 1 ? "deinem Workspace" : "deinen Workspaces"} <strong>${names.join(", ")}</strong>` : ""}.
+            </p>
+            <p style="font-size: 15px; color: #444; line-height: 1.6;">
+              Deine Projekte, Aufgaben und Markendaten bleiben zunächst erhalten und sind weiterhin sichtbar.
+              Wenn du einen Plan wählst, passiert nichts davon — alles bleibt, wo es ist.
+            </p>
+            <div style="text-align: center; margin: 28px 0;">
+              <a href="${APP_URL}/?view=settings" style="display: inline-block; padding: 12px 28px; background: #111111; color: white; text-decoration: none; border-radius: 10px; font-weight: 500; font-size: 14px;">Plan wählen</a>
+            </div>
+            <p style="font-size: 13px; color: #666; line-height: 1.6;">
+              Du möchtest deine Inhalte behalten, aber nicht weitermachen? Melde dich an und exportiere sie,
+              solange sie noch da sind.
+            </p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0 16px;" />
+            <p style="font-size: 11px; color: #999; text-align: center; margin: 0;">
+              Du erhältst diese E-Mail, weil dein i7 OS Konto derzeit keinen aktiven Plan hat.
+            </p>
+          </div>
+        `,
+      });
+      return r.ok ? res.status(200).json({ success: true, id: r.id }) : res.status(r.status).json({ error: r.error });
+    }
+
     if (mode === "project-invite") {
       const { email, token, projectName, inviterName } = req.body;
       if (!email || !token) return res.status(400).json({ error: "Missing email or token" });

@@ -6,6 +6,7 @@ import { buildSystemPrompt } from "./systemPrompt";
 import { getTranslation } from "./translations";
 import { openGooglePicker, openGoogleFolderPicker } from "./googlePicker";
 import BillingSettings from "./BillingSettings";
+import { PLAN_ENTITLEMENTS, PLAN_NAMES, PLAN_PRICES, STORAGE_GB, limitsFor, planFeatures } from "./entitlements";
 import { useCreateBlockNote, getDefaultReactSlashMenuItems, SuggestionMenuController, createReactBlockSpec, FormattingToolbar, FormattingToolbarController, getFormattingToolbarItems, useComponentsContext } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { de as blockNoteDe } from "@blocknote/core/locales";
@@ -8195,15 +8196,11 @@ const STATUS_COLORS = {
 };
 
 // ── Workspace storage-quota accounting ──────────────────────────────────────
-// Per-tier storage caps (bytes). Free is generous enough to evaluate the product;
-// paid tiers scale up. Backed by the workspace_files ledger + the
-// workspace_storage_used() RPC (see the matching migration).
-const STORAGE_GB = 1024 * 1024 * 1024;
-const STORAGE_LIMITS = { free: 1 * STORAGE_GB, starter: 8 * STORAGE_GB, pro: 25 * STORAGE_GB, agency: 200 * STORAGE_GB };
-function storageLimitFor(plan, status) {
-  const paid = status === "active" || status === "trialing";
-  return STORAGE_LIMITS[(paid && plan) ? plan : "free"] ?? STORAGE_LIMITS.free;
-}
+// The caps themselves live in src/entitlements.js — shared with the serverless
+// billing functions so a limit is defined exactly once. Storage is ONE pooled
+// allowance per paying account, spread across every workspace its owner created,
+// so usage is read with the account_storage_used() RPC rather than the
+// per-workspace total. Backed by the workspace_files ledger.
 // Record an uploaded object in the ledger (one row per object; re-uploads update
 // the size). Fire-and-forget — accounting must never block or fail the upload.
 function trackStorageUpload({ orgId, userId, bucket, path, sizeBytes }) {
@@ -8226,10 +8223,13 @@ async function uploadTracked({ bucket, path, file, orgId, userId, contentType, u
   if (!res.error) trackStorageUpload({ orgId, userId, bucket, path, sizeBytes: sizeBytes ?? file?.size ?? 0 });
   return res;
 }
-// Current workspace storage usage in bytes (aggregate RPC).
+// Storage used against the pool this workspace draws from — i.e. the total
+// across every workspace owned by THIS workspace's owner, not just this one.
+// Takes the org (not an owner id) so the RPC can use membership as its
+// permission check.
 async function fetchStorageUsed(orgId) {
   if (!orgId) return 0;
-  const { data, error } = await supabase.rpc("workspace_storage_used", { p_org: orgId });
+  const { data, error } = await supabase.rpc("account_storage_used", { p_org: orgId });
   if (error) { console.warn("[storage] usage read failed:", error.message); return 0; }
   return Number(data) || 0;
 }
@@ -8270,11 +8270,126 @@ async function deleteUserStorage(userId) {
     } catch (e) { console.warn("[deleteUserStorage]", bucket, e?.message); }
   }
 }
-// The active workspace's storage cap in bytes. Loaded once per workspace from the
-// server-only billing status (see the App-root effect) and read here by the
-// upload guards, so enforcement doesn't have to fetch billing on every upload.
-let currentStorageLimitBytes = STORAGE_LIMITS.free;
-function setCurrentStorageLimit(bytes) { currentStorageLimitBytes = bytes || STORAGE_LIMITS.free; }
+// The active workspace's entitlements, loaded once per workspace from the
+// server-only /api/billing-status (see the App-root effect). Mirrored at module
+// level so the upload guards — which are plain functions far outside the React
+// tree — can read the cap without fetching billing on every upload. React code
+// should prefer the `entitlements` state in App, which holds the same object.
+const FREE_ENTITLEMENTS = {
+  plan: "free",
+  limits: PLAN_ENTITLEMENTS.free,
+  usage: { storageBytes: 0, seats: 0, workspaces: 0, projects: 0 },
+  trial: { active: false, expired: false, endsAt: null, daysLeft: 0 },
+  isOwner: false,
+  // False until /api/billing-status has answered. The UI must not show a limit
+  // it hasn't actually confirmed — on first paint this object still says "free,
+  // 0 projects", and blocking on that would flash a wrong lock at every load.
+  loaded: false,
+};
+let currentEntitlements = FREE_ENTITLEMENTS;
+function setCurrentEntitlements(e) {
+  currentEntitlements = e ? { ...FREE_ENTITLEMENTS, ...e, limits: e.limits || limitsFor(e.plan) } : FREE_ENTITLEMENTS;
+}
+
+// ── Plan limit checks ───────────────────────────────────────────────────────
+// These are ADVISORY. The authoritative gate is the Postgres triggers (see
+// supabase/migrations/…_enforce_plan_limits.sql) — every table involved is
+// writable through the anon key, so the client can never be the boundary. They
+// exist so the UI can explain a limit before the user fills in a form, rather
+// than surfacing a database error afterwards.
+//
+// `kind` is one of "projects" | "workspaces" | "seats" — the key is deliberately
+// identical in limits and usage, so the two always line up.
+function planAllows(kind) {
+  const limit = currentEntitlements.limits?.[kind];
+  const used = currentEntitlements.usage?.[kind] ?? 0;
+  const plan = currentEntitlements.plan || "free";
+  // Entitlements not in yet (first paint, or the billing call failed): say yes.
+  // The database triggers still refuse anything genuinely over the limit, so the
+  // worst case is an honest error instead of a lock we invented.
+  if (!currentEntitlements.loaded) return { ok: true, used, limit, plan, pending: true };
+  if (limit == null) return { ok: true, used, limit: null, plan }; // unlimited
+  return { ok: used < limit, used, limit, plan };
+}
+
+// Keep the local counts honest between billing-status refreshes: after creating
+// a project the next check must already know about it, or the UI would happily
+// offer a fourth one and let the database do the refusing.
+function bumpUsage(kind, delta = 1) {
+  const usage = currentEntitlements.usage || {};
+  currentEntitlements = {
+    ...currentEntitlements,
+    usage: { ...usage, [kind]: Math.max(0, (usage[kind] ?? 0) + delta) },
+  };
+}
+
+// The plan a user has to reach to get past this limit — used to name a concrete
+// next step instead of a vague "upgrade your plan".
+function nextPlanFor(kind, plan) {
+  if (kind === "seats") return plan === "pro" ? "agency" : "pro";
+  if (kind === "workspaces") return plan === "pro" ? "agency" : "pro";
+  return "pro"; // projects: Pro already lifts the cap entirely
+}
+function limitMessage(kind, de) {
+  const { used, limit, plan } = planAllows(kind);
+  const current = PLAN_NAMES[plan] || plan;
+  const next = PLAN_NAMES[nextPlanFor(kind, plan)];
+  if (kind === "projects") {
+    return de
+      ? `Dein ${current}-Plan erlaubt ${limit} Projekte (${used} genutzt). Mit ${next} sind es unbegrenzt viele.`
+      : `Your ${current} plan allows ${limit} projects (${used} in use). ${next} makes it unlimited.`;
+  }
+  if (kind === "workspaces") {
+    return de
+      ? `Dein ${current}-Plan erlaubt ${limit === 1 ? "einen Workspace" : `${limit} Workspaces`} (${used} genutzt). Mehr gibt es ab ${next}.`
+      : `Your ${current} plan allows ${limit === 1 ? "one workspace" : `${limit} workspaces`} (${used} in use). ${next} allows more.`;
+  }
+  return de
+    ? (limit === 1
+      ? `Dein ${current}-Plan ist für eine Person. Für Zusammenarbeit brauchst du mindestens ${next}.`
+      : `Dein ${current}-Plan erlaubt ${limit} Personen (${used} belegt). Mehr Plätze gibt es ab ${next}.`)
+    : (limit === 1
+      ? `Your ${current} plan is for one person. Collaboration starts with ${next}.`
+      : `Your ${current} plan allows ${limit} people (${used} in use). ${next} adds more seats.`);
+}
+// Opening the upgrade dialog from anywhere. Registered once by the App root;
+// deeply-nested views (ProjectsView, the invite panels) call requestUpgrade()
+// without threading a callback through every level in between — the same
+// module-level pattern this file already uses for currentAiContext.
+let openUpgradeDialogFn = null;
+function registerUpgradeDialog(fn) { openUpgradeDialogFn = fn; }
+// `kind` is "projects" | "workspaces" | "seats". Falls back to an alert only if
+// the dialog somehow isn't mounted, so a limit is never silently swallowed.
+function requestUpgrade(kind, de) {
+  if (openUpgradeDialogFn) openUpgradeDialogFn(kind);
+  else alert(limitMessage(kind, de));
+}
+
+// Backstop for when the database trigger fires anyway — a stale client-side
+// usage count, or a second browser tab. Turns the raw token into the same
+// sentence the pre-check would have shown.
+function planLimitError(error, de) {
+  const raw = `${error?.message || ""} ${error?.details || ""}`;
+  if (raw.includes("i7os_read_only")) {
+    return de
+      ? "Dein Konto hat aktuell keinen aktiven Plan. Deine Inhalte bleiben sichtbar und exportierbar, aber Änderungen sind erst mit einem Plan wieder möglich."
+      : "Your account has no active plan. Your content stays visible and exportable, but changes need a plan.";
+  }
+  if (raw.includes("i7os_project_limit")) return limitMessage("projects", de);
+  if (raw.includes("i7os_workspace_limit")) return limitMessage("workspaces", de);
+  if (raw.includes("i7os_seat_limit")) return limitMessage("seats", de);
+  return null;
+}
+// Same seat limit, seen from the other side. Someone accepting an invitation
+// can't upgrade anything — the plan belongs to the workspace's owner — so
+// "upgrade your plan" would be advice they cannot act on.
+function joinBlockedMessage(error, de) {
+  const raw = `${error?.message || ""} ${error?.details || ""}`;
+  if (!raw.includes("i7os_seat_limit")) return null;
+  return de
+    ? "In diesem Workspace ist kein Platz mehr frei. Das Konto, dem er gehört, muss den Plan erweitern."
+    : "This workspace has no seats left. The account that owns it needs a larger plan.";
+}
 // Active workspace context for AI token metering. Set once per workspace by the
 // App-root effect, so deeply-nested components (moodboard/brand image→prompt)
 // can attribute chat-multi calls without threading userOrg/session as props.
@@ -8286,7 +8401,7 @@ function setCurrentAiContext(ctx) { currentAiContext = ctx || { orgId: null, use
 // one call. Pass { userId, email } so the warning can reach the user.
 // Returns { ok, used, limit, incoming }.
 async function checkStorageRoom(orgId, incomingBytes, ctx = {}) {
-  const limit = currentStorageLimitBytes;
+  const limit = currentEntitlements.limits.storageBytes;
   const used = await fetchStorageUsed(orgId);
   const projected = used + (incomingBytes || 0);
   if (limit && projected / limit >= 0.9) {
@@ -8320,6 +8435,115 @@ async function maybeWarnStorage({ orgId, userId, used, limit, email }) {
     }
   } catch (e) { console.warn("[storage] warn failed:", e?.message); }
 }
+// The upgrade dialog shown when a plan limit stops an action. Replaces what
+// would otherwise be an alert() dead end: it names the limit, shows what the
+// next plan changes, and offers the way out. Only the account owner sees the
+// call to action — nobody else can buy anything, so offering it to them would
+// be a dead end of a different kind.
+function UpgradeDialog({ open, kind, entitlements, isOwner, onClose, onGoToBilling, theme, darkMode, appLanguage = "de" }) {
+  const de = appLanguage === "de";
+  // Remember the last kind so the closing animation still has something to
+  // render — `kind` goes null the moment the dialog is dismissed, and without
+  // this the panel would vanish instantly instead of fading out.
+  const [shown, setShown] = useState(kind);
+  useEffect(() => { if (kind) setShown(kind); }, [kind]);
+  if (!shown) return null;
+
+  const plan = entitlements?.plan || "free";
+  const target = nextPlanFor(shown, plan);
+  const price = PLAN_PRICES[target];
+  const heading = shown === "projects"
+    ? (de ? "Mehr Projekte" : "More projects")
+    : shown === "workspaces"
+      ? (de ? "Mehr Workspaces" : "More workspaces")
+      : (de ? "Mehr Plätze im Team" : "More seats");
+
+  return createPortal(
+    <AnimatePresence>
+      {open && (
+      <motion.div
+        key="upgrade-backdrop"
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={onClose}
+        style={{
+          // Above every other overlay in the app (the workspace dialog that can
+          // trigger this one sits at 9999). A modal nobody can see is worse than
+          // no modal at all.
+          position: "fixed", inset: 0, zIndex: 100003, display: "flex",
+          alignItems: "center", justifyContent: "center", padding: 20,
+          background: "rgba(0,0,0,0.45)", backdropFilter: "blur(3px)",
+        }}
+      >
+        <motion.div
+          initial={{ scale: 0.96, opacity: 0, y: 12 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.96, opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1] }}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            width: "100%", maxWidth: 430, borderRadius: 20, padding: "28px 26px",
+            background: darkMode ? "#1b1b24" : "#fff", border: `1px solid ${theme.border}`,
+            boxShadow: "0 24px 60px rgba(0,0,0,0.3)", fontFamily: FONT,
+          }}
+        >
+          <div style={{ fontSize: 18, fontWeight: 600, color: theme.text, marginBottom: 8 }}>{heading}</div>
+          <div style={{ fontSize: 13, color: theme.textDim, lineHeight: 1.55, marginBottom: isOwner ? 20 : 22 }}>
+            {limitMessage(kind, de)}
+          </div>
+
+          {isOwner ? (
+            <>
+              <div style={{
+                borderRadius: 14, border: `1px solid ${theme.borderFaint}`, padding: "16px 17px", marginBottom: 20,
+                background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+              }}>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: theme.text }}>{PLAN_NAMES[target]}</span>
+                  {price && (
+                    <span style={{ fontSize: 12, color: theme.textDim }}>
+                      {de ? `ab €${price.annual} / Monat` : `from €${price.annual} / month`}
+                    </span>
+                  )}
+                </div>
+                {planFeatures(target, de).map((f, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: i ? 7 : 0 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                      <path d="M20 6L9 17l-5-5" stroke={theme.textDim} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <span style={{ fontSize: 12.5, color: theme.textSub }}>{f}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                <button onClick={onClose}
+                  style={{ padding: "10px 18px", borderRadius: 12, background: "transparent", border: `1px solid ${theme.border}`, color: theme.text, fontSize: 13, fontWeight: 500, fontFamily: FONT, cursor: "pointer" }}>
+                  {de ? "Später" : "Not now"}
+                </button>
+                <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }} onClick={onGoToBilling}
+                  style={{
+                    padding: "10px 18px", borderRadius: 12, border: "none", cursor: "pointer",
+                    background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
+                    fontSize: 13, fontWeight: 600, fontFamily: FONT,
+                  }}>
+                  {de ? "Pläne ansehen" : "See plans"}
+                </motion.button>
+              </div>
+            </>
+          ) : (
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={onClose}
+                style={{ padding: "10px 18px", borderRadius: 12, background: "transparent", border: `1px solid ${theme.border}`, color: theme.text, fontSize: 13, fontWeight: 500, fontFamily: FONT, cursor: "pointer" }}>
+                {de ? "Verstanden" : "Got it"}
+              </button>
+            </div>
+          )}
+        </motion.div>
+      </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body,
+  );
+}
+
 // Human-readable byte size for the usage UI (e.g. "6.2 GB").
 function formatBytesGB(bytes) {
   const gb = (Number(bytes) || 0) / STORAGE_GB;
@@ -8333,10 +8557,10 @@ function formatBytesGB(bytes) {
 function StorageUsageBar({ orgId, theme, appLanguage = "de" }) {
   const de = appLanguage === "de";
   const [used, setUsed] = useState(null);
-  const [limit, setLimit] = useState(currentStorageLimitBytes);
+  const [limit, setLimit] = useState(currentEntitlements.limits.storageBytes);
   useEffect(() => {
     let on = true;
-    (async () => { const u = await fetchStorageUsed(orgId); if (on) { setUsed(u); setLimit(currentStorageLimitBytes); } })();
+    (async () => { const u = await fetchStorageUsed(orgId); if (on) { setUsed(u); setLimit(currentEntitlements.limits.storageBytes); } })();
     return () => { on = false; };
   }, [orgId]);
   const pct = limit ? Math.min(100, Math.round(((used || 0) / limit) * 100)) : 0;
@@ -8350,11 +8574,16 @@ function StorageUsageBar({ orgId, theme, appLanguage = "de" }) {
         {de ? "Speicher" : "Storage"}
       </div>
       <div style={{ borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`, padding: 24 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: theme.text }}>{de ? "Auslastung" : "Usage"}</span>
           <span style={{ fontSize: 13, fontWeight: 500, color: danger ? "#E86767" : theme.textDim }}>
             {used == null ? "…" : `${formatBytesGB(used)} ${de ? "von" : "of"} ${formatBytesGB(limit)} · ${pct}%`}
           </span>
+        </div>
+        {/* The number counts every workspace on this account, so an empty
+            workspace can still show usage. Saying so avoids a support ticket. */}
+        <div style={{ fontSize: 11, color: theme.textFaint, marginBottom: 12 }}>
+          {de ? "Gilt für alle Workspaces deines Kontos zusammen" : "Shared across every workspace on your account"}
         </div>
         <div style={{ height: 8, borderRadius: 999, background: theme.borderFaint, overflow: "hidden" }}>
           <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: barColor, transition: "width .4s ease" }} />
@@ -12335,7 +12564,11 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userOrg?.id]);
 
+  // Checked before the form opens, not after it is filled in — being told the
+  // plan is full only once you hit Save is the frustrating version of this.
+  const projectRoom = planAllows("projects");
   const openNew = () => {
+    if (!projectRoom.ok) { requestUpgrade("projects", appLanguage === "de"); return; }
     setEditing({});
     setForm({ name: "", logo_url: "", color: "#6366F1", is_brand: false });
     setLogoPreview(null);
@@ -12454,6 +12687,9 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
     // Check if already a member
     const alreadyMember = members.some(m => m.profiles?.email?.toLowerCase() === email);
     if (alreadyMember) { alert("Diese Person ist bereits Mitglied."); return; }
+    // A project invite grants access to the account's content, so it consumes a
+    // seat just like a workspace invite does.
+    if (!planAllows("seats").ok) { requestUpgrade("seats", appLanguage === "de"); return; }
     setInviteSending(true);
     try {
       const { data: inv, error } = await supabase
@@ -12479,7 +12715,8 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
       setInviteEmail("");
       loadMembers(editing.id);
     } catch (e) {
-      alert("Einladung fehlgeschlagen: " + (e.message || "Unbekannter Fehler"));
+      alert(planLimitError(e, appLanguage === "de")
+        || "Einladung fehlgeschlagen: " + (e.message || "Unbekannter Fehler"));
     } finally {
       setInviteSending(false);
     }
@@ -12527,7 +12764,15 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
       }
       await supabase.from("projects").update(payload).eq("id", editing.id);
     } else {
-      await supabase.from("projects").insert({ ...payload, owner_id: session.user.id, org_id: userOrg?.id || null });
+      const { error } = await supabase.from("projects").insert({ ...payload, owner_id: session.user.id, org_id: userOrg?.id || null });
+      if (error) {
+        // The trigger is the real gate; this catches the case where the local
+        // usage count was stale (another tab, another workspace of the account).
+        alert(planLimitError(error, appLanguage === "de")
+          || (appLanguage === "de" ? "Projekt konnte nicht angelegt werden: " : "Couldn't create the project: ") + error.message);
+        return;
+      }
+      bumpUsage("projects");
     }
     if (editing?.id && openProject?.id === editing.id) setOpenProject(prev => ({ ...prev, ...payload }));
     closeEditor();
@@ -12615,17 +12860,28 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
           <span style={{ minWidth: 22, height: 22, padding: "0 7px", borderRadius: 999, background: "#4D34E4", color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600, display: "inline-flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>{myProjects.length}</span>
           <div style={{ flex: 1 }} />
           {canCreateNewProject && (
-          <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-            onClick={openNew}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer",
-              padding: "8px 14px", borderRadius: 999, fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
-              background: "#23232b", color: "#fff", border: "none",
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Neues Projekt
-          </motion.button>
+          <>
+            {!projectRoom.ok && (
+              <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginRight: 2 }}>
+                {appLanguage === "de"
+                  ? `${projectRoom.used}/${projectRoom.limit} Projekten genutzt`
+                  : `${projectRoom.used}/${projectRoom.limit} projects used`}
+              </span>
+            )}
+            <motion.button whileHover={{ scale: projectRoom.ok ? 1.04 : 1 }} whileTap={{ scale: 0.96 }}
+              onClick={openNew}
+              title={projectRoom.ok ? undefined : limitMessage("projects", appLanguage === "de")}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer",
+                padding: "8px 14px", borderRadius: 999, fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
+                background: "#23232b", color: "#fff", border: "none",
+                opacity: projectRoom.ok ? 1 : 0.5,
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Neues Projekt
+            </motion.button>
+          </>
           )}
         </motion.div>
 
@@ -26056,6 +26312,7 @@ export default function CircularMenu() {
   const createWorkspace = async () => {
     const name = newWsName.trim();
     if (!name || creatingWs || !session?.user?.id) return;
+    if (!planAllows("workspaces").ok) { requestUpgrade("workspaces", appLanguage === "de"); return; }
     setCreatingWs(true);
     try {
       const slug = name.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").slice(0, 40);
@@ -26066,6 +26323,7 @@ export default function CircularMenu() {
       const { error: memErr } = await supabase.from("org_members").insert({ org_id: org.id, user_id: session.user.id, role: "admin" });
       if (memErr) throw memErr;
       const orgWithRole = { ...org, role: "admin" };
+      bumpUsage("workspaces");
       setUserOrgs(prev => [...prev, orgWithRole]);
       setUserOrg(orgWithRole);
       setUserOrgRole("admin");
@@ -26081,7 +26339,8 @@ export default function CircularMenu() {
       setCurrentView("dashboard");
     } catch (e) {
       console.error("[CreateWorkspace]", e);
-      alert((appLanguage === "de" ? "Erstellen fehlgeschlagen: " : "Create failed: ") + (e.message || ""));
+      alert(planLimitError(e, appLanguage === "de")
+        || (appLanguage === "de" ? "Erstellen fehlgeschlagen: " : "Create failed: ") + (e.message || ""));
     } finally {
       setCreatingWs(false);
     }
@@ -27059,28 +27318,53 @@ export default function CircularMenu() {
     if (error) console.warn("[Notification] insert failed:", type, error.message);
   }, [session?.user?.id, userOrg?.id]);
 
-  // Load this workspace's storage cap from the (server-only) billing status once
-  // per workspace, so the upload guards know the tier limit without fetching
-  // billing on every upload. Falls back to the Free cap on any error.
+  // Load this workspace's entitlements from the (server-only) billing status once
+  // per workspace: which plan is in force for its owner, what that plan allows,
+  // and how much of the owner's pooled allowance is already used. Single source
+  // for every limit in the app — nothing else should fetch billing. Falls back
+  // to Free on any error, so a billing outage restricts rather than unlocks.
+  const [entitlements, setEntitlements] = useState(FREE_ENTITLEMENTS);
+  // Latest-wins guard: switching workspaces fires a second request while the
+  // first is in flight, and the slower response must not publish limits for a
+  // workspace the user already left.
+  const entitlementsReqRef = useRef(0);
+  const reloadEntitlements = useCallback(async () => {
+    const token = ++entitlementsReqRef.current;
+    const apply = (next) => {
+      if (entitlementsReqRef.current !== token) return next;
+      setCurrentEntitlements(next === FREE_ENTITLEMENTS ? null : next);
+      setEntitlements(next);
+      return next;
+    };
+    if (!userOrg?.id || !session?.access_token) return apply(FREE_ENTITLEMENTS);
+    try {
+      const r = await fetch("/api/billing-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ orgId: userOrg.id }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.limits) throw new Error(j?.error || "billing status unavailable");
+      return apply({ plan: j.plan, limits: j.limits, usage: j.usage, trial: j.trial, isOwner: !!j.isOwner, loaded: true });
+    } catch (e) {
+      console.warn("[entitlements] load failed:", e?.message);
+      return apply(FREE_ENTITLEMENTS);
+    }
+  }, [userOrg?.id, session?.access_token]);
+
   useEffect(() => {
     // Publish the active workspace for AI token metering (used by deeply-nested
     // components that can't reach userOrg/session as props).
     setCurrentAiContext({ orgId: userOrg?.id || null, userId: session?.user?.id || null });
-    if (!userOrg?.id || !session?.access_token) { setCurrentStorageLimit(STORAGE_LIMITS.free); return; }
-    let cancelled = false;
-    (async () => {
-      try {
-        const r = await fetch("/api/billing-status", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ orgId: userOrg.id }),
-        });
-        const j = await r.json().catch(() => ({}));
-        if (!cancelled) setCurrentStorageLimit(storageLimitFor(j?.billing?.plan, j?.billing?.status));
-      } catch { if (!cancelled) setCurrentStorageLimit(STORAGE_LIMITS.free); }
-    })();
-    return () => { cancelled = true; };
-  }, [userOrg?.id, session?.access_token]);
+    reloadEntitlements();
+  }, [userOrg?.id, session?.access_token, reloadEntitlements]);
+
+  // Let any view open the upgrade dialog without prop threading.
+  const [upgradeKind, setUpgradeKind] = useState(null);
+  useEffect(() => {
+    registerUpgradeDialog((kind) => setUpgradeKind(kind));
+    return () => registerUpgradeDialog(null);
+  }, []);
 
   const markNotifRead = useCallback(async (id) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
@@ -27311,6 +27595,10 @@ export default function CircularMenu() {
       } catch (e) {
         console.error("Project invite accept failed:", e);
         localStorage.removeItem("agencyos-project-invite-token");
+        // A seat-limited invite raises out of the RPC. Without this the link
+        // would appear to do nothing at all, which reads as a broken invite.
+        const blocked = joinBlockedMessage(e, appLanguage === "de");
+        if (blocked) alert(blocked);
       }
     })();
   }, [session?.user?.id]);
@@ -29310,7 +29598,7 @@ export default function CircularMenu() {
                           const orgWithRole = { ...org, role: "admin" };
                           setUserOrgs(prev => [...prev.filter(o => o.id !== org.id), orgWithRole]);
                           setUserOrg(orgWithRole); setUserOrgRole("admin"); setOnboardingStep(null); setWsName("");
-                        } catch (err) { console.error("[Onboarding]", err); setOnboardingError(appLanguage === "de" ? "Fehler beim Erstellen. Bitte versuche es erneut." : "Failed to create workspace. Please try again."); setWsCreating(false); }
+                        } catch (err) { console.error("[Onboarding]", err); setOnboardingError(planLimitError(err, appLanguage === "de") || (appLanguage === "de" ? "Fehler beim Erstellen. Bitte versuche es erneut." : "Failed to create workspace. Please try again.")); setWsCreating(false); }
                       }}
                       placeholder={appLanguage === "de" ? "z.B. Meine Agentur" : "e.g. My Agency"}
                       style={{
@@ -29337,7 +29625,7 @@ export default function CircularMenu() {
                           const orgWithRole = { ...org, role: "admin" };
                           setUserOrgs(prev => [...prev.filter(o => o.id !== org.id), orgWithRole]);
                           setUserOrg(orgWithRole); setUserOrgRole("admin"); setOnboardingStep(null); setWsName("");
-                        } catch (err) { console.error("[Onboarding]", err); setOnboardingError(appLanguage === "de" ? "Fehler beim Erstellen. Bitte versuche es erneut." : "Failed to create workspace. Please try again."); setWsCreating(false); }
+                        } catch (err) { console.error("[Onboarding]", err); setOnboardingError(planLimitError(err, appLanguage === "de") || (appLanguage === "de" ? "Fehler beim Erstellen. Bitte versuche es erneut." : "Failed to create workspace. Please try again.")); setWsCreating(false); }
                       }}
                       disabled={!wsName.trim() || wsCreating}
                       style={{
@@ -29403,7 +29691,7 @@ export default function CircularMenu() {
                               await supabase.from("invitations").update({ status: "accepted" }).eq("id", inv.id);
                               const { data: org } = await supabase.from("organizations").select("*").eq("id", inv.org_id).single();
                               setUserOrg(org); setOnboardingStep(null);
-                            } catch (e) { setOnboardingError(appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join."); setJoining(false); }
+                            } catch (e) { setOnboardingError(joinBlockedMessage(e, appLanguage === "de") || (appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join.")); setJoining(false); }
                           }}
                           style={{
                             padding: "14px 18px", borderRadius: 14, marginBottom: 8, cursor: "pointer",
@@ -29449,7 +29737,7 @@ export default function CircularMenu() {
                           await supabase.from("invitations").update({ status: "accepted" }).eq("id", inv.id);
                           const { data: org } = await supabase.from("organizations").select("*").eq("id", inv.org_id).single();
                           setUserOrg(org); setOnboardingStep(null); setInviteCode("");
-                        } catch (err) { setOnboardingError(appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join."); setJoining(false); }
+                        } catch (err) { setOnboardingError(joinBlockedMessage(err, appLanguage === "de") || (appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join.")); setJoining(false); }
                       }}
                       placeholder={appLanguage === "de" ? "Code einfügen..." : "Paste invite code..."}
                       style={{
@@ -29472,7 +29760,7 @@ export default function CircularMenu() {
                           await supabase.from("invitations").update({ status: "accepted" }).eq("id", inv.id);
                           const { data: org } = await supabase.from("organizations").select("*").eq("id", inv.org_id).single();
                           setUserOrg(org); setOnboardingStep(null); setInviteCode("");
-                        } catch (err) { setOnboardingError(appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join."); setJoining(false); }
+                        } catch (err) { setOnboardingError(joinBlockedMessage(err, appLanguage === "de") || (appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join.")); setJoining(false); }
                       }}
                       disabled={!inviteCode.trim() || joining}
                       style={{
@@ -29524,6 +29812,34 @@ export default function CircularMenu() {
               fontSize: 20, color: "#79787D", zIndex: 50, fontFamily: FONT, fontWeight: 400, gap: 10,
             }}
           >
+            {/* Trial countdown — a cardless trial converts almost entirely on
+                the strength of people knowing it's running out. Turns amber in
+                the last two days; clicking goes straight to the plans. */}
+            {entitlements?.trial?.active && (
+              <motion.div
+                whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                onClick={() => { setSettingsTab("account"); setCurrentView("settings"); }}
+                title={appLanguage === "de" ? "Plan wählen" : "Choose a plan"}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer",
+                  padding: "6px 12px", borderRadius: 999, fontSize: 11.5, fontFamily: FONT, fontWeight: 500,
+                  color: entitlements.trial.daysLeft <= 2 ? "#E0A64D" : theme.textDim,
+                  background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                  border: `1px solid ${entitlements.trial.daysLeft <= 2 ? "rgba(224,166,77,0.35)" : "transparent"}`,
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+                {entitlements.trial.daysLeft <= 1
+                  ? (appLanguage === "de" ? "Test endet heute" : "Trial ends today")
+                  : (appLanguage === "de"
+                    ? `Test · noch ${entitlements.trial.daysLeft} Tage`
+                    : `Trial · ${entitlements.trial.daysLeft} days left`)}
+              </motion.div>
+            )}
+
             {/* Bell */}
             <div style={{ position: "relative", marginTop: 1, marginRight: -3 }}>
               <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
@@ -31347,8 +31663,17 @@ export default function CircularMenu() {
                                 style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", cursor: "pointer" }}
                               >
                                 <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, border: `1px dashed ${theme.borderFaint}`, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, fontSize: 16, lineHeight: 1 }}>+</div>
-                                <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
-                                  {appLanguage === "de" ? "Neuer Workspace" : "New workspace"}
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
+                                    {appLanguage === "de" ? "Neuer Workspace" : "New workspace"}
+                                  </div>
+                                  {!planAllows("workspaces").ok && (
+                                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>
+                                      {appLanguage === "de"
+                                        ? `${planAllows("workspaces").used}/${planAllows("workspaces").limit} genutzt · Upgrade nötig`
+                                        : `${planAllows("workspaces").used}/${planAllows("workspaces").limit} used · upgrade needed`}
+                                    </div>
+                                  )}
                                 </div>
                               </motion.div>
                             </div>
@@ -31524,6 +31849,23 @@ export default function CircularMenu() {
                             emails.push(remaining);
                           }
                           if (emails.length === 0) return;
+                          // Bulk invite: check the whole batch against the seats
+                          // still free, so we don't send three emails and have the
+                          // fourth insert fail halfway through the loop.
+                          {
+                            const seatRoom = planAllows("seats");
+                            const free = seatRoom.limit == null ? Infinity : Math.max(0, seatRoom.limit - seatRoom.used);
+                            if (emails.length > free) {
+                              if (free > 0) {
+                                alert(appLanguage === "de"
+                                  ? `Du hast noch ${free} freie(n) Platz/Plätze, willst aber ${emails.length} Personen einladen.`
+                                  : `You have ${free} seat(s) left but are inviting ${emails.length} people.`);
+                              } else {
+                                requestUpgrade("seats", appLanguage === "de");
+                              }
+                              return;
+                            }
+                          }
                           try {
                             const failed = []; // { email, reason } — surfaced to the user
                             for (const email of emails) {
@@ -31585,7 +31927,7 @@ export default function CircularMenu() {
                             }
                           } catch (e) {
                             console.error("[Invite]", e);
-                            alert(e.message || "Failed to send invite");
+                            alert(planLimitError(e, appLanguage === "de") || e.message || "Failed to send invite");
                           }
                         }}
                         style={{
@@ -31832,6 +32174,8 @@ export default function CircularMenu() {
                       session={session}
                       org={userOrg}
                       isAdmin={isOrgAdmin}
+                      entitlements={entitlements}
+                      onBillingChange={reloadEntitlements}
                       theme={theme}
                       darkMode={darkMode}
                       appLanguage={appLanguage}
@@ -32870,7 +33214,9 @@ export default function CircularMenu() {
                         {appLanguage === "de" ? "Neuer Workspace" : "New workspace"}
                       </div>
                       <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginBottom: 18 }}>
-                        {appLanguage === "de" ? "Gib deinem Workspace einen Namen. Du wirst automatisch als Admin hinzugefügt." : "Give your workspace a name. You'll be added as its admin."}
+                        {planAllows("workspaces").ok
+                          ? (appLanguage === "de" ? "Gib deinem Workspace einen Namen. Du wirst automatisch als Admin hinzugefügt." : "Give your workspace a name. You'll be added as its admin.")
+                          : limitMessage("workspaces", appLanguage === "de")}
                       </div>
                       <input value={newWsName} onChange={(e) => setNewWsName(e.target.value)} autoFocus
                         placeholder={appLanguage === "de" ? "z.B. Meine Agentur" : "e.g. My Agency"}
@@ -32882,7 +33228,7 @@ export default function CircularMenu() {
                           {appLanguage === "de" ? "Abbrechen" : "Cancel"}
                         </button>
                         {(() => {
-                          const canCreate = !creatingWs && !!newWsName.trim();
+                          const canCreate = !creatingWs && !!newWsName.trim() && planAllows("workspaces").ok;
                           return (
                             <button onClick={createWorkspace} disabled={!canCreate}
                               style={{ padding: "10px 18px", borderRadius: 12, background: "#8B7AFF", border: "none", color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: canCreate ? "pointer" : "not-allowed", opacity: canCreate ? 1 : 0.5 }}>
@@ -32900,6 +33246,50 @@ export default function CircularMenu() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Read-only banner. Persistent and not dismissible on purpose: every
+          write in the workspace is failing, and a banner the user can close
+          would just turn that into a series of unexplained errors. */}
+      {entitlements?.limits?.readOnly && entitlements?.loaded && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, zIndex: 100001,
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
+          padding: "9px 20px", fontFamily: FONT, fontSize: 12.5, fontWeight: 500,
+          background: "#15151c", color: "#fff",
+        }}>
+          <span style={{ opacity: 0.92 }}>
+            {appLanguage === "de"
+              ? (entitlements.trial?.expired
+                ? "Deine Testphase ist beendet. Deine Inhalte bleiben erhalten — Änderungen brauchen einen Plan."
+                : "Dein Konto hat keinen aktiven Plan. Deine Inhalte bleiben erhalten — Änderungen brauchen einen Plan.")
+              : (entitlements.trial?.expired
+                ? "Your trial has ended. Your content is safe — changes need a plan."
+                : "Your account has no active plan. Your content is safe — changes need a plan.")}
+          </span>
+          {entitlements.isOwner && (
+            <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+              onClick={() => { setSettingsTab("account"); setCurrentView("settings"); }}
+              style={{
+                padding: "5px 13px", borderRadius: 999, border: "none", cursor: "pointer",
+                background: "#fff", color: "#15151c", fontFamily: FONT, fontSize: 12, fontWeight: 600,
+              }}>
+              {appLanguage === "de" ? "Plan wählen" : "Choose a plan"}
+            </motion.button>
+          )}
+        </div>
+      )}
+
+      <UpgradeDialog
+        open={!!upgradeKind}
+        kind={upgradeKind}
+        entitlements={entitlements}
+        isOwner={!!entitlements?.isOwner}
+        onClose={() => setUpgradeKind(null)}
+        onGoToBilling={() => { setUpgradeKind(null); setSettingsTab("account"); setCurrentView("settings"); }}
+        theme={theme}
+        darkMode={darkMode}
+        appLanguage={appLanguage}
+      />
 
       {/* Bottom bar — in document fullscreen only the AI orb floats above the overlay */}
       <div style={{

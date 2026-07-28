@@ -2,13 +2,13 @@ import {
   HttpError,
   getAdminSupabase,
   getAppUrl,
+  getBillingAccount,
   getOrCreateCustomer,
   getPriceId,
   getStripe,
-  getWorkspaceBilling,
   parsePlanSelection,
   readJsonBody,
-  requireOrgMember,
+  requireOrgOwner,
   requireUser,
   sendBillingError,
 } from "../server/billing.js";
@@ -23,11 +23,14 @@ export default async function handler(req, res) {
     const body = await readJsonBody(req);
     const orgId = body.orgId;
     const { plan, billing } = parsePlanSelection(body.plan, body.billing);
-    await requireOrgMember(user.id, orgId, { adminOnly: true });
+    await requireOrgOwner(user.id, orgId);
 
-    const existing = await getWorkspaceBilling(orgId);
-    if (existing && MANAGED_STATUSES.has(existing.status)) {
-      throw new HttpError(409, "This workspace already has a subscription. Manage it in the billing portal.", "subscription_exists");
+    // Checked against the ACCOUNT, not the workspace: one plan covers all of the
+    // owner's workspaces, so a second checkout would double-charge for access
+    // they already have.
+    const existing = await getBillingAccount(user.id);
+    if (existing?.stripe_subscription_id && MANAGED_STATUSES.has(existing.status)) {
+      throw new HttpError(409, "You already have a subscription. Manage it in the billing portal.", "subscription_exists");
     }
 
     const customerId = await getOrCreateCustomer({ orgId, user });

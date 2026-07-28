@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
+import { resolveEntitlements } from "../src/entitlements.js";
 
 const PLANS = new Set(["starter", "pro", "agency"]);
 const BILLING_INTERVALS = new Set(["monthly", "annual"]);
@@ -101,6 +102,22 @@ export async function requireOrgMember(userId, orgId, { adminOnly = false } = {}
   return data;
 }
 
+// Buying a plan is the OWNER's call, not any admin's. Without this an admin who
+// was merely invited into someone else's workspace could start a second
+// subscription for a workspace already covered by its owner's plan.
+export async function requireOrgOwner(userId, orgId) {
+  await requireOrgMember(userId, orgId);
+  const ownerUserId = await getOrgOwner(orgId);
+  if (ownerUserId !== userId) {
+    throw new HttpError(
+      403,
+      "Only the workspace owner can manage the subscription for this workspace",
+      "owner_required",
+    );
+  }
+  return ownerUserId;
+}
+
 export function getPriceId(plan, billing) {
   const key = `STRIPE_PRICE_${plan.toUpperCase()}_${billing.toUpperCase()}`;
   return requiredEnv(key);
@@ -126,8 +143,83 @@ export async function getWorkspaceBilling(orgId) {
   return data;
 }
 
+// ── Account-level billing ──────────────────────────────────────────────────
+// A plan belongs to the person who CREATED a workspace and covers every
+// workspace they own, with one pooled storage/seat allowance. So every lookup
+// starts by resolving a workspace to its owner.
+
+export async function getOrgOwner(orgId) {
+  const { data, error } = await getAdminSupabase()
+    .from("organizations")
+    .select("created_by")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new HttpError(404, "Workspace not found", "unknown_workspace");
+  return data.created_by || null;
+}
+
+export async function getBillingAccount(ownerUserId) {
+  if (!ownerUserId) return null;
+  const { data, error } = await getAdminSupabase()
+    .from("billing_accounts")
+    .select("*")
+    .eq("owner_user_id", ownerUserId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+// Current pooled consumption for an account, across all workspaces it owns.
+// Counts are what the limits in src/entitlements.js are compared against.
+export async function getAccountUsage(ownerUserId) {
+  const empty = { storageBytes: 0, seats: 0, workspaces: 0, projects: 0 };
+  if (!ownerUserId) return empty;
+  const admin = getAdminSupabase();
+
+  const { data: orgs, error: orgErr } = await admin
+    .from("organizations")
+    .select("id")
+    .eq("created_by", ownerUserId);
+  if (orgErr) throw orgErr;
+
+  const orgIds = (orgs || []).map(o => o.id);
+  if (!orgIds.length) return empty;
+
+  const [files, seats, projects] = await Promise.all([
+    admin.from("workspace_files").select("size_bytes").in("org_id", orgIds),
+    // Deliberately the same DB function the enforcement triggers use, rather
+    // than a second count here. Seats span org_members AND project_members (a
+    // project invite grants access without workspace membership) and include
+    // still-pending invitations, because a sent invite is a seat someone can
+    // walk into. Two implementations of that rule would eventually disagree.
+    admin.rpc("account_seats_reserved", { p_owner: ownerUserId }),
+    admin.from("projects").select("id", { count: "exact", head: true }).in("org_id", orgIds),
+  ]);
+  if (files.error) throw files.error;
+  if (seats.error) throw seats.error;
+  if (projects.error) throw projects.error;
+
+  return {
+    storageBytes: (files.data || []).reduce((sum, row) => sum + Number(row.size_bytes || 0), 0),
+    seats: Number(seats.data) || 0,
+    workspaces: orgIds.length,
+    projects: projects.count || 0,
+  };
+}
+
+// The full entitlement picture for a workspace: which plan is in force (trial
+// expiry resolved), what it allows, and what the owner has already used.
+export async function getEntitlementsForOrg(orgId) {
+  const ownerUserId = await getOrgOwner(orgId);
+  const account = await getBillingAccount(ownerUserId);
+  const resolved = resolveEntitlements(account);
+  const usage = await getAccountUsage(ownerUserId);
+  return { ownerUserId, account, ...resolved, usage };
+}
+
 export async function getOrCreateCustomer({ orgId, user }) {
-  const existing = await getWorkspaceBilling(orgId);
+  const existing = await getBillingAccount(user.id);
   if (existing?.stripe_customer_id) return existing.stripe_customer_id;
 
   const stripe = getStripe();
@@ -141,13 +233,12 @@ export async function getOrCreateCustomer({ orgId, user }) {
   });
 
   const { error } = await getAdminSupabase()
-    .from("workspace_subscriptions")
+    .from("billing_accounts")
     .upsert({
-      org_id: orgId,
+      owner_user_id: user.id,
       stripe_customer_id: customer.id,
-      status: "inactive",
       updated_at: new Date().toISOString(),
-    }, { onConflict: "org_id" });
+    }, { onConflict: "owner_user_id" });
   if (error) throw error;
   return customer.id;
 }
@@ -195,7 +286,31 @@ export async function syncStripeSubscription(subscription) {
       .maybeSingle();
     orgId = data?.org_id || null;
   }
-  if (!orgId) return null;
+
+  // The subscription belongs to the account, so the owner is what actually
+  // matters. Prefer deriving it from the workspace (authoritative), then the
+  // existing customer row, and only then the Checkout metadata — which records
+  // who clicked buy, and is stale if ownership ever moves.
+  let ownerUserId = null;
+  if (orgId) {
+    const { data } = await admin
+      .from("organizations")
+      .select("created_by")
+      .eq("id", orgId)
+      .maybeSingle();
+    ownerUserId = data?.created_by || null;
+  }
+  if (!ownerUserId && customerId) {
+    const { data } = await admin
+      .from("billing_accounts")
+      .select("owner_user_id")
+      .eq("stripe_customer_id", customerId)
+      .maybeSingle();
+    ownerUserId = data?.owner_user_id || null;
+  }
+  if (!ownerUserId) ownerUserId = subscription.metadata?.supabase_user_id || null;
+
+  if (!orgId && !ownerUserId) return null;
 
   const mapped = getPlanForPrice(priceId);
   // The active Stripe price is authoritative. Subscription metadata reflects
@@ -210,24 +325,39 @@ export async function syncStripeSubscription(subscription) {
     ? new Date(currentPeriodEnd * 1000).toISOString()
     : null;
 
-  const { data, error } = await admin
-    .from("workspace_subscriptions")
-    .upsert({
-      org_id: orgId,
-      stripe_customer_id: customerId,
-      stripe_subscription_id: subscription.id,
-      stripe_product_id: productId,
-      stripe_price_id: priceId || null,
-      plan: plan || null,
-      billing_interval: billing || null,
-      status: subscription.status,
-      cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
-      current_period_end: periodEnd,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "org_id" })
-    .select()
-    .single();
+  const shared = {
+    stripe_customer_id: customerId,
+    stripe_subscription_id: subscription.id,
+    stripe_product_id: productId,
+    stripe_price_id: priceId || null,
+    plan: plan || null,
+    billing_interval: billing || null,
+    status: subscription.status,
+    cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
+    current_period_end: periodEnd,
+    updated_at: new Date().toISOString(),
+  };
 
-  if (error) throw error;
-  return data;
+  // billing_accounts is the table the app reads. workspace_subscriptions is
+  // written too for as long as the transition lasts, so rolling the code back
+  // doesn't strand a paying customer with no subscription record.
+  let account = null;
+  if (ownerUserId) {
+    const { data, error } = await admin
+      .from("billing_accounts")
+      .upsert({ owner_user_id: ownerUserId, ...shared }, { onConflict: "owner_user_id" })
+      .select()
+      .single();
+    if (error) throw error;
+    account = data;
+  }
+
+  if (orgId) {
+    const { error } = await admin
+      .from("workspace_subscriptions")
+      .upsert({ org_id: orgId, ...shared }, { onConflict: "org_id" });
+    if (error) throw error;
+  }
+
+  return account;
 }
