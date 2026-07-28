@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { PLAN_NAMES, PLAN_PRICES, planFeatures } from "./entitlements";
+import { PLAN_NAMES, PLAN_PRICES, TRIAL_DAYS, TRIAL_PLAN, planFeatures } from "./entitlements";
 
 const APP_FONT = "'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
@@ -49,6 +49,8 @@ export default function BillingSettings({ session, org, isAdmin, entitlements, o
   const [isOwner, setIsOwner] = useState(() => Boolean(entitlements?.isOwner));
   const [effectivePlan, setEffectivePlan] = useState(() => entitlements?.plan || null);
   const [comped, setComped] = useState(false);
+  const [hasStripeSub, setHasStripeSub] = useState(false);
+  const [trial, setTrial] = useState(() => entitlements?.trial || null);
   // Held in a ref, not the poll effect's deps: that effect clears the URL's
   // ?checkout=success on its first run, so re-running it mid-poll would cancel
   // the poll and never restart it.
@@ -94,6 +96,8 @@ export default function BillingSettings({ session, org, isAdmin, entitlements, o
       // (plan_override) can put the account on a different one.
       setEffectivePlan(data.plan || null);
       setComped(Boolean(data.comped));
+      setHasStripeSub(Boolean(data.stripeSubscription));
+      setTrial(data.trial || null);
       return data.billing;
     } catch (requestError) {
       setError(requestError.code === "billing_not_configured"
@@ -189,7 +193,11 @@ export default function BillingSettings({ session, org, isAdmin, entitlements, o
     }
   };
 
-  const hasSubscription = MANAGEABLE_STATUSES.has(billing?.status);
+  // A real, billed Stripe subscription — NOT merely status "trialing", which our
+  // own cardless trial also carries. Getting this wrong hid the plan picker from
+  // trial users and pointed them at a customer portal that cannot open.
+  const hasSubscription = hasStripeSub && MANAGEABLE_STATUSES.has(billing?.status);
+  const onTrial = Boolean(trial?.active) && !hasSubscription;
   // Show what the account actually gets. A manual grant or a running trial can
   // put it on a different plan than the Stripe subscription says, and showing
   // the Stripe one then looks like the app is simply wrong.
@@ -223,7 +231,9 @@ export default function BillingSettings({ session, org, isAdmin, entitlements, o
               {checkoutProcessing
                 ? (checkoutSyncDelayed ? (de ? "Deine Zahlung wird verarbeitet" : "Your payment is being processed") : (de ? "Dein Plan wird aktiviert …" : "Activating your plan …"))
                 : !statusKnown ? (de ? "Abo wird geladen …" : "Loading subscription …")
+                : onTrial ? (de ? "Kostenlose Testphase" : "Free trial")
                 : (hasSubscription || comped) ? `${activePlan?.name || shownPlan} Plan`
+                : trial?.expired ? (de ? "Testphase beendet" : "Trial ended")
                 : (de ? "Wähle deinen Plan" : "Choose your plan")}
             </div>
             <div style={{ fontSize: 12, color: theme.textDim, marginTop: 5, lineHeight: 1.5 }}>
@@ -232,6 +242,16 @@ export default function BillingSettings({ session, org, isAdmin, entitlements, o
                   ? (de ? "Die Synchronisierung dauert länger als üblich. Du kannst diese Seite sicher verlassen und in Kürze zurückkehren." : "Synchronization is taking longer than usual. You can safely leave this page and return shortly.")
                   : (de ? "Stripe hat den Checkout bestätigt. Wir synchronisieren das Abo gerade mit diesem Workspace." : "Stripe confirmed the checkout. We’re syncing the subscription with this workspace."))
                 : !statusKnown ? ""
+                : onTrial
+                // Concrete and actionable: how long it runs, how much is left,
+                // and what happens at the end. "trialing" told the user nothing.
+                ? (de
+                  ? `Du testest i7 OS ${TRIAL_DAYS} Tage lang mit allen ${PLAN_NAMES[TRIAL_PLAN]}-Funktionen — ${trial.daysLeft === 1 ? "noch 1 Tag" : `noch ${trial.daysLeft} Tage`}. Danach bleiben deine Inhalte erhalten, für Änderungen brauchst du einen Plan.`
+                  : `You're trying i7 OS for ${TRIAL_DAYS} days with every ${PLAN_NAMES[TRIAL_PLAN]} feature — ${trial.daysLeft === 1 ? "1 day left" : `${trial.daysLeft} days left`}. Afterwards your content stays, but changes need a plan.`)
+                : trial?.expired
+                ? (de
+                  ? "Deine Testphase ist beendet. Deine Inhalte bleiben erhalten und lassen sich exportieren — für Änderungen brauchst du einen Plan."
+                  : "Your trial has ended. Your content stays and can be exported — changes need a plan.")
                 : comped
                 // Manually granted: name the Stripe subscription separately so
                 // the two plan names on this screen don't look contradictory.

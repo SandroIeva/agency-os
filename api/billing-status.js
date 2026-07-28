@@ -29,6 +29,11 @@ export default async function handler(req, res) {
       // has to distinguish it, or a comped Agency account reads as a billing
       // error next to a Stripe subscription that still says "starter".
       comped: entitlements.isComped,
+      // Whether a real Stripe subscription exists. The status alone can't answer
+      // this: our cardless trial is also stored as 'trialing', and treating that
+      // as a subscription hides the plan picker and offers a customer portal
+      // that has no customer to open.
+      stripeSubscription: Boolean(account?.stripe_subscription_id),
       limits: entitlements.limits,
       usage: entitlements.usage,
       trial: {
