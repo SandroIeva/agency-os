@@ -47,6 +47,8 @@ export default function BillingSettings({ session, org, isAdmin, entitlements, o
   // from the app-wide entitlements so the button doesn't flicker before the
   // component's own status call lands.
   const [isOwner, setIsOwner] = useState(() => Boolean(entitlements?.isOwner));
+  const [effectivePlan, setEffectivePlan] = useState(() => entitlements?.plan || null);
+  const [comped, setComped] = useState(false);
   // Held in a ref, not the poll effect's deps: that effect clears the URL's
   // ?checkout=success on its first run, so re-running it mid-poll would cancel
   // the poll and never restart it.
@@ -87,6 +89,11 @@ export default function BillingSettings({ session, org, isAdmin, entitlements, o
       const data = await request("/api/billing-status", { orgId: org.id });
       setBilling(data.billing);
       setIsOwner(Boolean(data.isOwner));
+      // The plan actually in force, which is NOT billing.plan: that column holds
+      // the Stripe subscription's plan, while a trial or a manual grant
+      // (plan_override) can put the account on a different one.
+      setEffectivePlan(data.plan || null);
+      setComped(Boolean(data.comped));
       return data.billing;
     } catch (requestError) {
       setError(requestError.code === "billing_not_configured"
@@ -183,7 +190,17 @@ export default function BillingSettings({ session, org, isAdmin, entitlements, o
   };
 
   const hasSubscription = MANAGEABLE_STATUSES.has(billing?.status);
-  const activePlan = PLAN_OPTIONS.find(item => item.id === billing?.plan);
+  // Show what the account actually gets. A manual grant or a running trial can
+  // put it on a different plan than the Stripe subscription says, and showing
+  // the Stripe one then looks like the app is simply wrong.
+  const shownPlan = effectivePlan && effectivePlan !== "free" ? effectivePlan : billing?.plan;
+  const activePlan = PLAN_OPTIONS.find(item => item.id === shownPlan);
+  // The plan picker must stay hidden until the status is known, otherwise it
+  // flashes for a second on every visit to the Account tab before being
+  // replaced by the active-plan view. Deliberately just !loading: a failed
+  // request also ends the loading state, and showing the picker then is the
+  // right fallback — waiting forever on a placeholder is not.
+  const statusKnown = !loading;
   const periodEnd = billing?.currentPeriodEnd
     ? new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "medium" }).format(new Date(billing.currentPeriodEnd))
     : null;
@@ -205,16 +222,25 @@ export default function BillingSettings({ session, org, isAdmin, entitlements, o
             <div style={{ fontSize: 18, fontWeight: 600, color: theme.text }}>
               {checkoutProcessing
                 ? (checkoutSyncDelayed ? (de ? "Deine Zahlung wird verarbeitet" : "Your payment is being processed") : (de ? "Dein Plan wird aktiviert …" : "Activating your plan …"))
-                : loading ? (de ? "Abo wird geladen …" : "Loading subscription …") : hasSubscription ? `${activePlan?.name || billing.plan} Plan` : (de ? "Wähle deinen Plan" : "Choose your plan")}
+                : !statusKnown ? (de ? "Abo wird geladen …" : "Loading subscription …")
+                : (hasSubscription || comped) ? `${activePlan?.name || shownPlan} Plan`
+                : (de ? "Wähle deinen Plan" : "Choose your plan")}
             </div>
             <div style={{ fontSize: 12, color: theme.textDim, marginTop: 5, lineHeight: 1.5 }}>
               {checkoutProcessing
                 ? (checkoutSyncDelayed
                   ? (de ? "Die Synchronisierung dauert länger als üblich. Du kannst diese Seite sicher verlassen und in Kürze zurückkehren." : "Synchronization is taking longer than usual. You can safely leave this page and return shortly.")
                   : (de ? "Stripe hat den Checkout bestätigt. Wir synchronisieren das Abo gerade mit diesem Workspace." : "Stripe confirmed the checkout. We’re syncing the subscription with this workspace."))
+                : !statusKnown ? ""
+                : comped
+                // Manually granted: name the Stripe subscription separately so
+                // the two plan names on this screen don't look contradictory.
+                ? (de
+                  ? `Manuell freigeschaltet — nicht über Stripe abgerechnet.${billing?.plan ? ` Hinterlegtes Abo: ${PLAN_NAMES[billing.plan] || billing.plan}.` : ""}`
+                  : `Granted manually — not billed through Stripe.${billing?.plan ? ` Stripe subscription: ${PLAN_NAMES[billing.plan] || billing.plan}.` : ""}`)
                 : hasSubscription
                 ? `${billing.status}${periodEnd ? ` · ${billing.cancelAtPeriodEnd ? (de ? "Endet" : "Ends") : (de ? "Verlängert sich" : "Renews")} ${periodEnd}` : ""}`
-                : (de ? "Das Abo gilt für den gesamten aktuellen Workspace." : "The subscription applies to the entire current workspace.")}
+                : (de ? "Ein Abo gilt für alle Workspaces deines Kontos." : "One plan covers every workspace on your account.")}
             </div>
           </div>
           {hasSubscription && isOwner && (
@@ -245,7 +271,13 @@ export default function BillingSettings({ session, org, isAdmin, entitlements, o
           </div>
         )}
 
-        {!hasSubscription && !checkoutProcessing && (
+        {/* Placeholder while the status is still unknown. Same height as the
+            plan grid, so the card doesn't jump once the answer arrives. */}
+        {!statusKnown && !checkoutProcessing && (
+          <div style={{ minHeight: 235, borderRadius: 16, border: `1px solid ${theme.border}`, background: darkMode ? "rgba(255,255,255,.025)" : "rgba(0,0,0,.018)" }} />
+        )}
+
+        {statusKnown && !hasSubscription && !comped && !checkoutProcessing && (
           <>
             <div style={{ display: "inline-flex", gap: 4, padding: 4, borderRadius: 12, background: darkMode ? "rgba(255,255,255,.05)" : "rgba(0,0,0,.045)", marginBottom: 18 }}>
               {["monthly", "annual"].map(interval => (

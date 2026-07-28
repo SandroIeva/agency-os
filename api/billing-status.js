@@ -25,6 +25,10 @@ export default async function handler(req, res) {
       // Only the owner can buy or manage the plan; everyone else sees it read-only.
       isOwner: entitlements.ownerUserId === user.id,
       plan: entitlements.plan,
+      // True when the plan was granted outside Stripe (plan_override). The UI
+      // has to distinguish it, or a comped Agency account reads as a billing
+      // error next to a Stripe subscription that still says "starter".
+      comped: entitlements.isComped,
       limits: entitlements.limits,
       usage: entitlements.usage,
       trial: {
