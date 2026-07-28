@@ -61,8 +61,21 @@ export default async function handler(req) {
 
   // Start the clock for accounts that just lost access — and, more importantly,
   // stop it for anyone who got access back.
+  // A run that dies early must still leave a trace, or a broken job is
+  // indistinguishable from a quiet one when reading the log.
+  const logFailure = async (stage, message) => {
+    await admin.from("account_lifecycle_log").insert({
+      owner_user_id: null,
+      action: "heartbeat",
+      detail: { armed, error: stage, message },
+    });
+  };
+
   const { error: refreshErr } = await admin.rpc("refresh_access_ended");
-  if (refreshErr) return json({ error: "refresh failed", detail: refreshErr.message }, 500);
+  if (refreshErr) {
+    await logFailure("refresh_access_ended", refreshErr.message);
+    return json({ error: "refresh failed", detail: refreshErr.message }, 500);
+  }
 
   const { data: due, error: dueErr } = await admin
     .from("account_lifecycle_due")
@@ -70,7 +83,10 @@ export default async function handler(req) {
     .in("due_action", ["warn", "purge_storage", "purge"])
     .order("access_ended_at", { ascending: true })
     .limit(MAX_PER_RUN);
-  if (dueErr) return json({ error: "lookup failed", detail: dueErr.message }, 500);
+  if (dueErr) {
+    await logFailure("account_lifecycle_due", dueErr.message);
+    return json({ error: "lookup failed", detail: dueErr.message }, 500);
+  }
 
   const result = { armed, warned: 0, storagePurged: 0, purged: 0, failed: 0, considered: (due || []).length };
 
@@ -159,6 +175,16 @@ export default async function handler(req) {
       result.failed += 1;
     }
   }
+
+  // Heartbeat: one row per run, even when nothing was due. Without it an empty
+  // log is ambiguous — "nobody is due" and "the job never ran" look identical,
+  // and those are exactly the two states you need to tell apart before arming
+  // irreversible deletions.
+  await admin.from("account_lifecycle_log").insert({
+    owner_user_id: null,
+    action: "heartbeat",
+    detail: result,
+  });
 
   return json({ ok: true, ...result });
 }

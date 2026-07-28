@@ -147,9 +147,23 @@ Safeguards, all deliberate:
 - `refresh_access_ended()` clears the clock the moment access returns, so a
   returning customer cannot be caught by a purge already in progress.
 
-**Before arming it**, run the cron endpoint by hand and inspect the outcome:
+**Is the job alive?** Every run writes a `heartbeat` row, even when nothing was
+due — so an empty log means the job is NOT running, never "all quiet". Check the
+most recent runs:
 
 ```sql
-select action, detail, created_at from public.account_lifecycle_log
+select * from public.account_lifecycle_runs limit 14;
+```
+
+**Before arming it**, inspect who it would have deleted. `dry_run` rows name the
+accounts and the reason:
+
+```sql
+select action, owner_user_id, detail, created_at
+from public.account_lifecycle_log
+where action <> 'heartbeat'
 order by created_at desc limit 50;
 ```
+
+Nothing appears until an account has been without a plan for ~16 days, so plan
+the review around the first warning date rather than the day after deploying.
