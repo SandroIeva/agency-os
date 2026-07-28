@@ -29808,8 +29808,13 @@ export default function CircularMenu() {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, filter: "blur(4px)" }}
             transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
             style={{
-              position: "absolute", top: 16, right: 24, display: "flex", alignItems: "center",
+              // Pushed below the read-only banner when it is showing — that bar
+              // is fixed at top: 0 and would otherwise cover the bell.
+              position: "absolute",
+              top: (entitlements?.limits?.readOnly && entitlements?.loaded) ? 52 : 16,
+              right: 24, display: "flex", alignItems: "center",
               fontSize: 20, color: "#79787D", zIndex: 50, fontFamily: FONT, fontWeight: 400, gap: 10,
+              transition: "top .25s ease",
             }}
           >
             {/* Trial countdown — a cardless trial converts almost entirely on

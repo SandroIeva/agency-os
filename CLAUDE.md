@@ -5,18 +5,19 @@ Multi-tenant workspace OS for creative agencies. React 19 + Vite SPA, Supabase (
 ## Golden rules (violating these has caused real regressions)
 
 1. **Almost everything lives in `src/App.jsx` (~32k lines).** This is intentional. Do NOT split it into files unless explicitly asked. Navigate by searching for component names (`function WhiteboardView`), not line numbers — they shift constantly.
-2. **Verify before shipping:** `npx vite build` must end with `✓ built` (cold build takes ~8–9 min; warm cache can be seconds — both are normal). There are no tests; the build is the gate.
-3. **Deploy = push:** committing to `main` and pushing triggers the Vercel deploy. Commit messages end with `Co-Authored-By: Claude <model> <noreply@anthropic.com>`.
-4. **Language:** every user-visible string AND every AI-generated output must respect `appLanguage` (`de`/`en`), usually via the local `const de = appLanguage === "de"` or the `t(...)` translations helper (`src/translations.js`). Never hardcode German (or English) in new UI.
-5. **Design system:**
+2. **NEVER claim a feature doesn't exist based on a search that found nothing.** In a 32k-line file, a miss usually means the pattern was wrong, not that the code is absent. This has already caused a real error: a single-line grep for `from("organizations").insert` missed `createWorkspace`, where the call is wrapped over three lines, and produced the confident, false claim that the app had no UI for creating a workspace. Before stating that something is missing: search again with a *short* fragment (`from("organizations")`, `createWorkspace`), search the UI strings (`"Neuer Workspace"`), and check the write-path index below. If it still looks absent, say "I could not find it" — not "it does not exist".
+3. **Verify before shipping:** `npx vite build` must end with `✓ built` (cold build takes ~20–25 min on the current machine; warm cache can be seconds — both are normal). There are no tests; the build is the gate. The build only covers the browser bundle — it says nothing about whether the `api/` functions resolve their imports (see "Verifying a deploy").
+4. **Deploy = push:** committing to `main` and pushing triggers the Vercel deploy. Commit messages end with `Co-Authored-By: Claude <model> <noreply@anthropic.com>`.
+5. **Language:** every user-visible string AND every AI-generated output must respect `appLanguage` (`de`/`en`), usually via the local `const de = appLanguage === "de"` or the `t(...)` translations helper (`src/translations.js`). Never hardcode German (or English) in new UI.
+6. **Design system:**
    - No purple/lilac accents. Active/selected states use anthracite **`#15151c`** (dark pill, white text). Exception: in dark mode the main nav menu's selected pill is *inverted* (light bg `rgba(244,244,247,0.95)`, text `#15151c`).
    - Use the shared **`<Dropdown>`** component in App.jsx for any select/menu. Never a native `<select>`, never a one-off menu.
    - Primary action buttons belong in the **top-right header slot** of a view (some views expose a `headerSlotRef` portal target for embedded tabs).
    - Controls must never sit flush against a container edge — keep inner padding (esp. select chevrons).
    - Speech-to-text UI: a "Diktieren" link (mic icon + label) ABOVE the field, right-aligned; turns into red "Stopp" while recording.
    - Fonts: `FONT` constant (`'Geist', -apple-system, sans-serif`). Framer Motion for animation, `createPortal` for overlays.
-6. **React StrictMode is ON** (`main.jsx`). One-shot effects must tolerate double-invocation; do NOT pair a cancel-on-cleanup guard with an "already tried" ref — in dev that combination silently drops the result.
-7. **Framer Motion transform trap:** never put positioning transforms (`translateX(-50%)`) on a `motion.div` that also animates `x/y/scale` — Framer overwrites the whole `transform`. Put positioning on a plain wrapper div (see the sticker/emoji/asset pickers for the pattern).
+7. **React StrictMode is ON** (`main.jsx`). One-shot effects must tolerate double-invocation; do NOT pair a cancel-on-cleanup guard with an "already tried" ref — in dev that combination silently drops the result.
+8. **Framer Motion transform trap:** never put positioning transforms (`translateX(-50%)`) on a `motion.div` that also animates `x/y/scale` — Framer overwrites the whole `transform`. Put positioning on a plain wrapper div (see the sticker/emoji/asset pickers for the pattern).
 
 ## Repo map
 
@@ -44,6 +45,63 @@ Navigation is state-based (`currentView` string in `App`), not a router. The mai
 
 Brand structure: ONE shared `BrandView` scoped by `projectId` — `projects.is_brand` toggles a per-project brand workspace. Public brand sharing = `brand_shares` snapshot table + `?b=<token>` route; the snapshot is frozen until the user clicks "Aktualisieren".
 
+## Write-path index — where things are actually created
+
+Look here FIRST before adding a gate, a limit, a validation or a "create X"
+feature. Search by the function name, never by line number. This table exists
+because a missed write path once led to the false claim that workspaces could
+not be created from the UI at all.
+
+| Thing | Function / place | File |
+|---|---|---|
+| **Workspace** | `createWorkspace` (Settings → workspace dropdown → "Neuer Workspace") **and** two more paths in the first-login onboarding screen (Enter key + button) | App.jsx |
+| **Project** | `saveProject` (also handles edit) in `ProjectsView` | App.jsx |
+| **Workspace invite** | inline in the Settings members panel — the "Einladen" button's `onClick`, a loop over `invitations` inserts. No named function. | App.jsx |
+| **Project invite** | `sendInvite` in `ProjectsView` | App.jsx |
+| **Invite acceptance** | onboarding: pending-invite tile + invite-code field (3 paths, all inserting `org_members`); project invites: `accept_project_invitation` RPC, called from the `?project-invite=` effect | App.jsx / Postgres |
+| **Task** | `KanbanBoard` — created inline in the column composer | App.jsx |
+| **Whiteboard** | `createBoard` in `IdeasTab`, plus `openBrainstorm` in the App root (Erstellen → Brainstorm) | App.jsx |
+| **Document** | `createDoc` | App.jsx |
+| **Moodboard** | `createBoard` in the assets area | App.jsx |
+| **Note** | `createNote` | App.jsx |
+| **Calendar event** | `createTeamEvent` | App.jsx |
+| **Chat conversation** | `startConversation` (1:1) and the group-creation modal | App.jsx |
+| **File upload** | always through `uploadTracked` — never call `supabase.storage.upload` directly, or the storage ledger drifts | App.jsx |
+
+⚠ **Two things are created from MORE than one place**: workspaces (3) and
+whiteboards (2). A gate applied to only one of them is a hole.
+
+## Billing, plans and limits
+
+The paying entity is the **user who created a workspace**
+(`organizations.created_by`), not the workspace. One plan covers every workspace
+that owner has, with a pooled storage and seat allowance. Full detail lives in
+`docs/stripe-billing-setup.md`; the essentials:
+
+- **`src/entitlements.js` is the single source for every limit.** Imported by
+  the browser bundle AND by the serverless functions (through
+  `server/billing.js`). Keep it dependency-free — it loads in both runtimes.
+- The numbers exist a **second** time in the `plan_limits` table, because the
+  Postgres triggers cannot call JavaScript. Change a limit in **both**.
+- **Postgres triggers are the real gate**; the client checks (`planAllows`,
+  `limitMessage`, `planLimitError` in App.jsx) only explain a limit early. Every
+  table involved is writable through the anon key, so the client can never be
+  the boundary.
+- `/api/billing-status` is the ONE endpoint that answers "what may this
+  workspace do". The App root loads it once per workspace into the
+  `entitlements` state plus a module-level mirror (`currentEntitlements`) for
+  the upload guards outside the React tree — read those, never re-fetch.
+  (`BillingSettings.jsx` calls the endpoint a second time on purpose: it polls
+  after returning from Stripe Checkout. That is the only other caller.)
+- Seats count PEOPLE across `org_members` **and** `project_members` — a project
+  invite grants access without workspace membership.
+- Read-only mode freezes writes for accounts with no plan via 30 triggers.
+  DELETE and service-key writes (`auth.uid() is null`) pass through on purpose.
+- `billing_accounts.plan_override` grants a plan outside Stripe; the webhook
+  never writes it.
+- `api/lifecycle-sweep.js` (daily cron, Edge) deletes abandoned workspaces in
+  stages and **does nothing** unless `LIFECYCLE_PURGE_ENABLED=true`.
+
 ## Data model (Supabase)
 
 Multi-tenant: nearly every row carries `org_id` (workspace) and often `project_id`. Security is Row-Level Security; the client uses the public anon key.
@@ -67,9 +125,29 @@ Realtime channels: `wb-<boardId>` (whiteboard items), `chat-<convId>`, `team-cal
 
 `chat-multi` (unified Claude/OpenAI/Gemini chat), `fetch-brand` (multi-mode POST/GET: brand analysis / weather / preview / **`mode:"pdf"`** brand-book PDF parse / **`mode:"zip"`** brand-package ZIP inspect), `send` (multi-mode POST, dispatched by `mode`: `"invite"` / `"project-invite"` / `"push-setup"` email via Resend, `"push"` web-push via VAPID), `google-fonts` (CORS proxy, **edge**), `img-proxy` (CORS image proxy for PDF export, **edge**), `drive-download` (**edge**), `workspace-delete` (**edge**: admin-only; wipes ALL of a workspace's storage assets via the service key — using the `org_storage_objects` RPC — then deletes the org so nothing is left on the server), `redirect` (short links `/i/:slug`), `refresh-token` (Google OAuth), `tts`, `zernio` (multi-mode POST, social integration via Zernio: `status`/`connect`/`disconnect`/`analytics`/`presign`/`post` — see `docs/zernio-integration.md`). Plus billing (Stripe): `billing-status`, `create-checkout-session`, `create-customer-portal-session`, `stripe-webhook`.
 
-**Function budget:** Vercel Hobby caps **Serverless (Node)** functions at 12; **Edge** functions (`export const config = { runtime: "edge" }`) don't count. Currently ~11 Node + 4 Edge. To add an endpoint, prefer a new `mode` on an existing multi-mode file (`fetch-brand`, `send`) or the Edge runtime over a new Node file. `stripe-webhook` needs the raw body — keep it standalone, never fold it into a bundle.
+Also `lifecycle-sweep` (**edge**, daily Vercel Cron via `vercel.json`): warns, then purges storage, then deletes rows of workspaces whose owner has had no plan for 30/90 days (60/180 if they ever paid). Disarmed unless `LIFECYCLE_PURGE_ENABLED=true`.
 
-Env vars (Vercel): `ANTHROPIC_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `FISH_API_KEY`, `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`, `PUBLIC_APP_URL`. Client-side: `VITE_GOOGLE_API_KEY`, `VITE_GOOGLE_APP_ID`.
+**🚨 Function budget — the cap is REACHED.** Vercel Hobby allows **12 Serverless (Node)** functions and the last production deploy reported exactly `nodejs: 12`. **A new Node function will break the deploy.** **Edge** functions (`export const config = { runtime: "edge" }`) don't count — there are 5. To add an endpoint you must either add a `mode` to an existing multi-mode file (`fetch-brand`, `send`, `zernio`) or write it as Edge. Verify with:
+
+```bash
+for f in api/*.js; do grep -q 'runtime:\s*"edge"' "$f" || echo "$f"; done | wc -l
+```
+
+`stripe-webhook` needs the raw body — keep it standalone, never fold it into a bundle. Edge functions can't use the Node Stripe SDK's webhook verification, so that one has to stay Node.
+
+Env vars (Vercel): `ANTHROPIC_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `FISH_API_KEY`, `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`, `PUBLIC_APP_URL`, `CRON_SECRET` (lifecycle sweep; Vercel sends it as the cron `Authorization` header automatically), `LIFECYCLE_PURGE_ENABLED`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, six `STRIPE_PRICE_…`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. Client-side: `VITE_GOOGLE_API_KEY`, `VITE_GOOGLE_APP_ID`.
+
+## Verifying a deploy
+
+`npx vite build` proves nothing about the `api/` functions — Vercel bundles those separately with its own dependency tracing. An import chain like `api/billing-status.js → server/billing.js → src/entitlements.js` can pass the local build and still fail in production.
+
+After a deploy, smoke-test the endpoints unauthenticated and read the shape of the error, not just the status:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -X POST https://app.i7os.com/api/billing-status -H "Content-Type: application/json" -d '{"orgId":"00000000-0000-0000-0000-000000000000"}'
+```
+
+**401 = good** (the function loaded and rejected the request). **500 = the module failed to resolve.** The same trick reveals missing env vars: `lifecycle-sweep` answers 503 when `CRON_SECRET` is absent and 401 when it is set.
 
 ## Local development
 
@@ -116,3 +194,9 @@ FigJam-style infinite canvas (`WhiteboardView`), reachable via Erstellen → Bra
 - supabase-js builders are LAZY: `supabase.from(...).update(...).eq(...)` without `await` or `.then()` never sends the request. Fire-and-forget calls must end in `.then(() => {})` (this silently broke Timeline drag persistence).
 - Modals that seed their state from props via `useState` initializers (e.g. `TimelineItemModal`) need a subject-derived `key` — swapping the subject without unmounting keeps the old state.
 - Views that scope data client-side for non-admins (e.g. Timeline project scoping) must apply the same scoping in every refetch path, not just the initial load.
+- **A multi-line supabase-js chain defeats a single-line grep.** `supabase.from("organizations")\n  .insert({…})` will NOT match `from("organizations").insert`. Grep the table name alone, then read the hits. This produced a wrong "that feature doesn't exist" claim (golden rule 2).
+- **Column names are not guessable.** `tasks` uses `creator_id`, not `created_by`; `task_comments` stores `text`, not `content`. Read `information_schema.columns` before writing a query or a test — a wrong column name inside a plpgsql `EXCEPTION` block looks exactly like the trigger you were trying to test.
+- New overlays must clear the app's real z-index ceiling: overlays reach **100002**, and the workspace-create modal alone sits at 9999. A modal placed at 4000 renders behind the very dialog that opened it (the upgrade dialog now uses 100003).
+- Anything `position: fixed` at the top of the viewport collides with the dashboard's top-right bar (bell/weather, `top: 16`). The read-only banner shifts that bar to `top: 52` while visible.
+- Vercel Cron only fires on **production** deployments, and Hobby allows one run per day. A cron entry in `vercel.json` does nothing on Preview.
+- Trigger logic can be tested safely against production: wrap test inserts in a plpgsql `BEGIN … EXCEPTION` block that ends with `raise exception 'undo'` — the savepoint rolls everything back. To make `auth.uid()` return a user inside such a test, `perform set_config('request.jwt.claims', json_build_object('sub', <uuid>)::text, true)`.
