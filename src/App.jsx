@@ -19862,7 +19862,21 @@ const DEFAULT_TAGLINES = [
 
 function BrandTaglines({ value, editing, theme, darkMode, t, onChange }) {
   const divider = darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)";
-  const fieldStyle = { padding: "8px 10px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none", lineHeight: 1.5, resize: "vertical", width: "100%" };
+  // Editor styling: the number and the delete button used to sit in the same
+  // row as the input, indenting the field on both sides. They now live in a
+  // quiet header line above it, so both fields run the full width.
+  const hairline = darkMode ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.08)";
+  const focusLine = darkMode ? "rgba(255,255,255,0.30)" : "rgba(21,21,28,0.34)";
+  const [focusedKey, setFocusedKey] = useState(null);
+  const fieldStyle = (key, extra = {}) => ({
+    padding: "10px 12px", borderRadius: 9,
+    border: `1px solid ${focusedKey === key ? focusLine : hairline}`,
+    background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.015)",
+    color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none",
+    lineHeight: 1.55, resize: "vertical", width: "100%", boxSizing: "border-box",
+    transition: "border-color .18s ease",
+    ...extra,
+  });
   const [entries, setEntries] = useState(value && value.length ? value : DEFAULT_TAGLINES);
   useEffect(() => { if (editing) setEntries((value && value.length) ? JSON.parse(JSON.stringify(value)) : JSON.parse(JSON.stringify(DEFAULT_TAGLINES))); }, [editing]);
   const display = (value && value.length) ? value : DEFAULT_TAGLINES;
@@ -19875,22 +19889,48 @@ function BrandTaglines({ value, editing, theme, darkMode, t, onChange }) {
 
   if (editing) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         {entries.map((e, i) => (
-          <div key={i} style={{ padding: 16, borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 22, fontFamily: FONT, fontWeight: 800, color: theme.textDim, letterSpacing: -0.5, flexShrink: 0 }}>{num(i)}</span>
-              <input value={e.tagline} onChange={ev => setField(i, "tagline", ev.target.value)} placeholder="Tagline" style={{ ...fieldStyle, fontWeight: 600 }} />
-              <div onClick={() => removeEntry(i)} title={t("common.delete") || "Löschen"} style={{ cursor: "pointer", color: theme.textDim, padding: 6, flexShrink: 0 }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-              </div>
+          // A hairline instead of a filled card: one line separates the entries
+          // where three stacked surfaces (card, input, textarea) used to.
+          <div key={i} style={{
+            display: "flex", flexDirection: "column", gap: 8,
+            paddingTop: i ? 20 : 0,
+            borderTop: i ? `1px solid ${hairline}` : "none",
+          }}>
+            {/* Header line: index left, delete right. Both quiet — they label
+                the entry, they aren't the content. */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, paddingLeft: 2 }}>
+              <span style={{ fontSize: 11, fontFamily: FONT, fontWeight: 600, color: theme.textFaint, letterSpacing: 1.6 }}>{num(i)}</span>
+              <motion.div
+                whileHover={{ opacity: 1 }} whileTap={{ scale: 0.9 }}
+                onClick={() => removeEntry(i)}
+                title={t("common.delete") || "Löschen"}
+                style={{ cursor: "pointer", color: theme.textFaint, opacity: 0.7, display: "flex", padding: 3, transition: "color .18s ease" }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+              </motion.div>
             </div>
-            <textarea rows={3} value={e.desc} onChange={ev => setField(i, "desc", ev.target.value)} placeholder="Beschreibung" style={fieldStyle} />
+            <input
+              value={e.tagline}
+              onChange={ev => setField(i, "tagline", ev.target.value)}
+              onFocus={() => setFocusedKey(`${i}-t`)} onBlur={() => setFocusedKey(null)}
+              placeholder="Tagline"
+              style={fieldStyle(`${i}-t`, { fontWeight: 600, fontSize: 14.5 })}
+            />
+            <textarea
+              rows={3}
+              value={e.desc}
+              onChange={ev => setField(i, "desc", ev.target.value)}
+              onFocus={() => setFocusedKey(`${i}-d`)} onBlur={() => setFocusedKey(null)}
+              placeholder="Beschreibung"
+              style={fieldStyle(`${i}-d`, { fontSize: 13.5, color: theme.textSub })}
+            />
           </div>
         ))}
         <motion.div whileTap={{ scale: 0.97 }} onClick={addEntry}
-          style={{ marginTop: 4, display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, border: `1px dashed ${theme.borderFaint}`, color: theme.text, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          style={{ marginTop: 2, alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 13px", borderRadius: 999, border: `1px solid ${hairline}`, color: theme.textSub, fontSize: 12.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Tagline hinzufügen
         </motion.div>
       </div>
