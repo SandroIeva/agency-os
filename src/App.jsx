@@ -413,14 +413,17 @@ function AISphere({ darkMode = true }) {
         vec3 blue   = vec3(0.55, 0.72, 0.99);
 
         // Saturation rises toward the rim; the centre stays pale/milky-white.
-        float sat = smoothstep(0.12, 0.95, r);
+        // On dark the colours have to start much closer to the centre, otherwise
+        // the milky-white core swallows the whole orb and it reads as a blown-out
+        // white dot instead of an iridescent bubble.
+        float sat = smoothstep(${darkMode ? "0.02, 0.68" : "0.12, 0.95"}, r);
 
         vec3 color = white;
         color = mix(color, cyan,   smoothstep(0.30, 0.72, flow) * sat);
         color = mix(color, purple, smoothstep(0.45, 0.85, q.x) * sat);
         color = mix(color, pink,   smoothstep(0.50, 0.90, q.z) * sat);
         color = mix(color, blue,   smoothstep(0.40, 0.80, q.y) * sat * 0.6);
-        color = mix(color, white,  wisp * 0.78);
+        color = mix(color, white,  wisp * ${darkMode ? "0.30" : "0.78"});
 
         // Bright cyan / pink thin-film at the very rim — the luminous ring.
         color = mix(color, cyan, smoothstep(0.55, 0.95, fres) * 0.55);
@@ -428,16 +431,23 @@ function AISphere({ darkMode = true }) {
 
         // ── Lighting — minimal, kept bright & airy so it reads pastel ────
         vec3 lightDir = normalize(vec3(0.3, 0.7, 1.0));
-        float diffuse = max(dot(vNormal, lightDir), 0.0) * 0.16 + 0.86;
+        // Dark mode gets a lower ambient floor and more directional falloff, so
+        // the orb has shading instead of sitting at near-full brightness.
+        float diffuse = max(dot(vNormal, lightDir), 0.0) * ${darkMode ? "0.46" : "0.16"} + ${darkMode ? "0.60" : "0.86"};
 
         vec3 final = color * diffuse;
 
         // Luminous rim glow
         float rim = pow(fres, 1.7);
-        final += mix(cyan, white, 0.5) * rim * 0.50;
+        final += mix(cyan, white, 0.5) * rim * ${darkMode ? "0.24" : "0.50"};
 
         // Lift slightly toward white for the soft, milky bubble look
-        final = mix(final, white, ${darkMode ? "0.05" : "0.10"});
+        final = mix(final, white, ${darkMode ? "0.0" : "0.10"});
+
+        // Dark mode: push saturation away from the luminance axis so the
+        // iridescence reads as actual colour instead of a pale grey-blue wash.
+        // One knob for "punchier" — raise it, don't re-tune the mixes above.
+        final = mix(vec3(dot(final, vec3(0.2126, 0.7152, 0.0722))), final, ${darkMode ? "1.45" : "1.0"});
 
         // Centre reads marginally more translucent than the glowing rim
         float alpha = 0.92 + rim * 0.08;
@@ -496,9 +506,14 @@ function AISphere({ darkMode = true }) {
           mostly milky white with only a faint cyan (bottom) / pink (top) tint.
           Sits behind the canvas, doesn't affect layout. */}
       <div style={{
-        position: "absolute", inset: -14, borderRadius: "50%", pointerEvents: "none",
-        background: "radial-gradient(circle at 50% 42%, rgba(255,255,255,0.6) 0%, rgba(210,245,250,0.34) 46%, rgba(240,200,235,0.16) 66%, rgba(255,255,255,0) 82%)",
-        filter: "blur(6px)",
+        position: "absolute", inset: darkMode ? -24 : -14, borderRadius: "50%", pointerEvents: "none",
+        // Dark mode: the same core brightness spread over a much longer tail.
+        // The reach roughly doubles while the mid stops drop, so the halo keeps
+        // its presence near the orb and thins out to nothing at the edge.
+        background: darkMode
+          ? "radial-gradient(circle at 50% 42%, rgba(255,255,255,0.30) 0%, rgba(205,240,250,0.17) 26%, rgba(190,225,245,0.085) 44%, rgba(230,190,225,0.038) 60%, rgba(255,255,255,0.016) 74%, rgba(255,255,255,0.005) 88%, rgba(255,255,255,0) 100%)"
+          : "radial-gradient(circle at 50% 42%, rgba(255,255,255,0.6) 0%, rgba(210,245,250,0.34) 46%, rgba(240,200,235,0.16) 66%, rgba(255,255,255,0) 82%)",
+        filter: darkMode ? "blur(14px)" : "blur(6px)",
       }} />
       <div ref={containerRef} style={{ position: "relative", width: 48, height: 48, borderRadius: "50%", overflow: "hidden" }} />
     </motion.div>
@@ -703,26 +718,33 @@ function AISpeakingSphere({ darkMode = true, speaking = false, audioLevel = null
         vec3 pink   = vec3(0.98, 0.56, 0.88);
         vec3 blue   = vec3(0.55, 0.72, 0.99);
 
-        float sat = smoothstep(0.12, 0.95, r) * (1.0 + amp * 0.18);
+        float sat = smoothstep(${darkMode ? "0.02, 0.68" : "0.12, 0.95"}, r) * (1.0 + amp * 0.18);
 
         vec3 color = white;
         color = mix(color, cyan,   smoothstep(0.30, 0.72, flow) * sat);
         color = mix(color, purple, smoothstep(0.45, 0.85, q.x) * sat);
         color = mix(color, pink,   smoothstep(0.50, 0.90, q.z) * sat);
         color = mix(color, blue,   smoothstep(0.40, 0.80, q.y) * sat * 0.6);
-        color = mix(color, white,  wisp * 0.78);
+        color = mix(color, white,  wisp * ${darkMode ? "0.30" : "0.78"});
 
         color = mix(color, cyan, smoothstep(0.55, 0.95, fres) * 0.55);
         color = mix(color, pink, smoothstep(0.82, 1.00, fres) * 0.28);
 
         vec3 lightDir = normalize(vec3(0.3, 0.7, 1.0));
-        float diffuse = max(dot(vNormal, lightDir), 0.0) * 0.16 + 0.86;
+        // Dark mode gets a lower ambient floor and more directional falloff, so
+        // the orb has shading instead of sitting at near-full brightness.
+        float diffuse = max(dot(vNormal, lightDir), 0.0) * ${darkMode ? "0.46" : "0.16"} + ${darkMode ? "0.60" : "0.86"};
         vec3 final = color * diffuse;
 
         float rim = pow(fres, 1.7);
-        final += mix(cyan, white, 0.5) * rim * (0.50 + amp * 0.30);
+        final += mix(cyan, white, 0.5) * rim * (${darkMode ? "0.24" : "0.50"} + amp * 0.30);
 
-        final = mix(final, white, ${darkMode ? "0.05" : "0.10"});
+        final = mix(final, white, ${darkMode ? "0.0" : "0.10"});
+
+        // Dark mode: push saturation away from the luminance axis so the
+        // iridescence reads as actual colour instead of a pale grey-blue wash.
+        // One knob for "punchier" — raise it, don't re-tune the mixes above.
+        final = mix(vec3(dot(final, vec3(0.2126, 0.7152, 0.0722))), final, ${darkMode ? "1.45" : "1.0"});
 
         float alpha = 0.92 + rim * 0.08;
         gl_FragColor = vec4(final, alpha);
@@ -822,9 +844,11 @@ function AISpeakingSphere({ darkMode = true, speaking = false, audioLevel = null
     <div style={{ width: 200, height: 200, position: "relative" }}>
       {/* Soft bloom halo to match the small sphere */}
       <div style={{
-        position: "absolute", inset: -24, borderRadius: "50%", pointerEvents: "none",
-        background: "radial-gradient(circle at 50% 42%, rgba(255,255,255,0.5) 0%, rgba(210,245,250,0.28) 48%, rgba(240,200,235,0.14) 68%, rgba(255,255,255,0) 82%)",
-        filter: "blur(14px)",
+        position: "absolute", inset: darkMode ? -46 : -24, borderRadius: "50%", pointerEvents: "none",
+        background: darkMode
+          ? "radial-gradient(circle at 50% 42%, rgba(255,255,255,0.26) 0%, rgba(205,240,250,0.145) 26%, rgba(190,225,245,0.072) 44%, rgba(230,190,225,0.032) 60%, rgba(255,255,255,0.013) 74%, rgba(255,255,255,0.004) 88%, rgba(255,255,255,0) 100%)"
+          : "radial-gradient(circle at 50% 42%, rgba(255,255,255,0.5) 0%, rgba(210,245,250,0.28) 48%, rgba(240,200,235,0.14) 68%, rgba(255,255,255,0) 82%)",
+        filter: darkMode ? "blur(28px)" : "blur(14px)",
       }} />
       <div ref={containerRef} style={{ position: "relative", width: 200, height: 200, borderRadius: "50%", overflow: "hidden" }} />
     </div>
@@ -948,12 +972,15 @@ function useTabIndicator(activeKey, deps = []) {
 // `initial={false}` makes it appear at its target position with no entrance
 // animation (so it's "just there" on open); only later box changes (tab switches)
 // animate x/width. Inset 8px each side to match the old look.
-function TabUnderline({ box }) {
+function TabUnderline({ box, darkMode = false }) {
   if (!box) return null;
   return <motion.div initial={false}
     animate={{ x: box.left + 8, width: Math.max(0, box.width - 16) }}
     transition={{ type: "spring", stiffness: 500, damping: 40 }}
-    style={{ position: "absolute", left: 0, bottom: -1, height: 2.5, borderRadius: 2, background: "#23232b" }} />;
+    // Inverted on dark. The line used to be a fixed anthracite (#23232b), which
+    // is dark-on-dark and effectively invisible in dark mode.
+    style={{ position: "absolute", left: 0, bottom: -1, height: 2.5, borderRadius: 2,
+      background: darkMode ? "rgba(244,244,247,0.95)" : "#23232b" }} />;
 }
 
 // ImageLightbox — full-screen viewer for AI-generated images, with action toolbar:
@@ -8289,6 +8316,27 @@ const FREE_ENTITLEMENTS = {
 let currentEntitlements = FREE_ENTITLEMENTS;
 function setCurrentEntitlements(e) {
   currentEntitlements = e ? { ...FREE_ENTITLEMENTS, ...e, limits: e.limits || limitsFor(e.plan) } : FREE_ENTITLEMENTS;
+}
+
+// Primary action button fill. Anthracite on light, INVERTED on dark (near-white
+// pill, anthracite label) — the same rule the main nav's selected pill follows.
+// Defined once so the colour can't drift back into per-button hex codes; purple
+// is not an accent for buttons in this app.
+const PRIMARY_BTN_LIGHT = { background: "#15151c", color: "#ffffff" };
+const PRIMARY_BTN_DARK = { background: "rgba(244,244,247,0.95)", color: "#15151c" };
+function primaryBtn(darkMode) {
+  return darkMode ? { ...PRIMARY_BTN_DARK } : { ...PRIMARY_BTN_LIGHT };
+}
+
+// Tab labels. The two themes are NOT symmetric: theme.textDim is 66% opacity on
+// light but only 33% on dark, so an inactive tab that reads as merely secondary
+// in light mode all but vanishes in dark mode. Tabs therefore use a brighter
+// inactive tone on dark, keeping the active/inactive relationship comparable in
+// both. (The underline still marks the active tab, so the colour gap doesn't
+// have to carry the whole signal.)
+function tabColor(active, theme, darkMode) {
+  if (active) return theme.text;
+  return darkMode ? "#ffffff90" : theme.textDim;
 }
 
 // ── Plan limit checks ───────────────────────────────────────────────────────
@@ -16189,12 +16237,12 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
               return (
                 <div key={tb.id} ref={tabInd.registerTab(tb.id)} onClick={() => setTab(tb.id)}
                   style={{ padding: "10px 14px 13px", cursor: "pointer", position: "relative",
-                    fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: active ? theme.text : theme.textDim, transition: "color 0.2s ease" }}>
+                    fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: tabColor(active, theme, darkMode), transition: "color 0.2s ease" }}>
                   {tb.label}
                 </div>
               );
             })}
-            <TabUnderline box={tabInd.box} />
+            <TabUnderline box={tabInd.box} darkMode={darkMode} />
           </div>
           </>)}
 
@@ -19866,15 +19914,20 @@ function BrandTaglines({ value, editing, theme, darkMode, t, onChange }) {
   // row as the input, indenting the field on both sides. They now live in a
   // quiet header line above it, so both fields run the full width.
   const hairline = darkMode ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.08)";
-  const focusLine = darkMode ? "rgba(255,255,255,0.30)" : "rgba(21,21,28,0.34)";
   const [focusedKey, setFocusedKey] = useState(null);
+  // Borderless: the fill alone lifts the field off the surface behind it. Focus
+  // is a slightly stronger fill rather than a border, so the quiet look holds
+  // while it stays obvious where you're typing.
+  const fieldBg = (focused) => darkMode
+    ? (focused ? "rgba(255,255,255,0.085)" : "rgba(255,255,255,0.05)")
+    : (focused ? "rgba(0,0,0,0.065)" : "rgba(0,0,0,0.04)");
   const fieldStyle = (key, extra = {}) => ({
     padding: "10px 12px", borderRadius: 9,
-    border: `1px solid ${focusedKey === key ? focusLine : hairline}`,
-    background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.015)",
+    border: "none",
+    background: fieldBg(focusedKey === key),
     color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none",
     lineHeight: 1.55, resize: "vertical", width: "100%", boxSizing: "border-box",
-    transition: "border-color .18s ease",
+    transition: "background .18s ease",
     ...extra,
   });
   const [entries, setEntries] = useState(value && value.length ? value : DEFAULT_TAGLINES);
@@ -25717,8 +25770,10 @@ If you don't know a field, infer a plausible value. Write all text values in the
               <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => setEditingText(v => !v)}
                 style={{
                   padding: "9px 18px", borderRadius: 999, cursor: "pointer",
-                  background: editingText ? theme.accent : "#23232b", border: "none",
-                  color: "#fff", fontSize: 12.5, fontWeight: 600, fontFamily: FONT,
+                  border: "none", fontSize: 12.5, fontWeight: 600, fontFamily: FONT,
+                  // This is the view's primary action in the header slot, in both
+                  // states — the label carries Bearbeiten vs. Fertig.
+                  ...primaryBtn(darkMode),
                 }}
               >{editingText ? (appLanguage === "de" ? "Fertig" : "Done") : (appLanguage === "de" ? "Bearbeiten" : "Edit")}</motion.button>
               ) : null}
@@ -25737,12 +25792,12 @@ If you don't know a field, infer a plausible value. Write all text values in the
                   <div key={key} ref={subInd.registerTab(key)} onClick={() => setBrandSub(key)}
                     style={{ padding: "10px 14px 13px", cursor: "pointer", position: "relative",
                       fontSize: 13.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap",
-                      color: active ? theme.text : theme.textDim, transition: "color 0.2s ease" }}>
+                      color: tabColor(active, theme, darkMode), transition: "color 0.2s ease" }}>
                     {label}
                   </div>
                 );
               })}
-              <TabUnderline box={subInd.box} />
+              <TabUnderline box={subInd.box} darkMode={darkMode} />
             </div>
             )}
 
@@ -29670,8 +29725,10 @@ export default function CircularMenu() {
                       disabled={!wsName.trim() || wsCreating}
                       style={{
                         width: "100%", marginTop: 16, padding: "14px 24px", borderRadius: 14,
-                        background: wsName.trim() ? "#8B7AFF" : "rgba(255,255,255,0.06)",
-                        border: "none", color: wsName.trim() ? "#fff" : "#ffffff30",
+                        // Onboarding is always on a dark canvas, so the inverted
+                        // (near-white) primary fill applies regardless of theme.
+                        background: wsName.trim() ? PRIMARY_BTN_DARK.background : "rgba(255,255,255,0.06)",
+                        border: "none", color: wsName.trim() ? PRIMARY_BTN_DARK.color : "#ffffff30",
                         fontSize: 14, fontWeight: 500, fontFamily: FONT, cursor: wsName.trim() ? "pointer" : "default",
                         transition: "all 0.25s ease", opacity: wsCreating ? 0.6 : 1,
                       }}
@@ -29805,8 +29862,8 @@ export default function CircularMenu() {
                       disabled={!inviteCode.trim() || joining}
                       style={{
                         width: "100%", marginTop: 16, padding: "14px 24px", borderRadius: 14,
-                        background: inviteCode.trim() ? "#8B7AFF" : "rgba(255,255,255,0.06)",
-                        border: "none", color: inviteCode.trim() ? "#fff" : "#ffffff30",
+                        background: inviteCode.trim() ? PRIMARY_BTN_DARK.background : "rgba(255,255,255,0.06)",
+                        border: "none", color: inviteCode.trim() ? PRIMARY_BTN_DARK.color : "#ffffff30",
                         fontSize: 14, fontWeight: 500, fontFamily: FONT, cursor: inviteCode.trim() ? "pointer" : "default",
                         transition: "all 0.25s ease", opacity: joining ? 0.6 : 1,
                       }}
@@ -32974,9 +33031,9 @@ export default function CircularMenu() {
                       }}
                       style={{
                         padding: "10px 20px", borderRadius: 12,
-                        background: pushSubExists ? "rgba(0, 184, 148, 0.15)" : "#8B7AFF",
+                        background: pushSubExists ? "rgba(0, 184, 148, 0.15)" : primaryBtn(darkMode).background,
                         border: pushSubExists ? "1px solid rgba(0, 184, 148, 0.3)" : "none",
-                        color: pushSubExists ? "#00B894" : "#fff",
+                        color: pushSubExists ? "#00B894" : primaryBtn(darkMode).color,
                         fontSize: 13, fontWeight: 500, fontFamily: FONT,
                         cursor: "pointer",
                         opacity: pushSetupSending ? 0.6 : 1,
@@ -33276,7 +33333,7 @@ export default function CircularMenu() {
                           const canCreate = !creatingWs && !!newWsName.trim() && planAllows("workspaces").ok;
                           return (
                             <button onClick={createWorkspace} disabled={!canCreate}
-                              style={{ padding: "10px 18px", borderRadius: 12, background: "#8B7AFF", border: "none", color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: canCreate ? "pointer" : "not-allowed", opacity: canCreate ? 1 : 0.5 }}>
+                              style={{ padding: "10px 18px", borderRadius: 12, border: "none", ...primaryBtn(darkMode), fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: canCreate ? "pointer" : "not-allowed", opacity: canCreate ? 1 : 0.5 }}>
                               {creatingWs ? (appLanguage === "de" ? "Erstellt…" : "Creating…") : (appLanguage === "de" ? "Erstellen" : "Create")}
                             </button>
                           );
@@ -33725,8 +33782,8 @@ export default function CircularMenu() {
                       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                         <label style={{
                           padding: "8px 14px", borderRadius: 10, cursor: uploading ? "wait" : "pointer",
-                          background: customIcon ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)") : "#8B7AFF",
-                          color: customIcon ? theme.textDim : "#fff",
+                          background: customIcon ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)") : primaryBtn(darkMode).background,
+                          color: customIcon ? theme.textDim : primaryBtn(darkMode).color,
                           border: customIcon ? `1px solid ${theme.borderFaint}` : "none",
                           fontSize: 12, fontFamily: FONT, fontWeight: 500,
                           opacity: uploading ? 0.6 : 1,
