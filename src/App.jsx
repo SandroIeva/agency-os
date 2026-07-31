@@ -898,12 +898,17 @@ async function saveStockImage(item, { orgId, userId, email }) {
 // The 300 ms debounce is not polish: the hourly quota (200 requests) belongs to
 // our single key for ALL users, so firing on every keystroke would exhaust it
 // within one person's session.
+const PER_PAGE = 30; // 30 keeps whole rows in the auto-fill grid at most widths
+
 function StockImagePicker({ open, session, userOrg, theme, darkMode, appLanguage = "de", onPick, onClose }) {
   const de = appLanguage === "de";
   const [query, setQuery] = useState("");
   const [items, setItems] = useState([]);
   const [provider, setProvider] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
   const [saving, setSaving] = useState(null); // id of the image being copied
   const [error, setError] = useState("");
   const reqRef = useRef(0);
@@ -933,39 +938,56 @@ function StockImagePicker({ open, session, userOrg, theme, darkMode, appLanguage
     onPick(res.url, item);
   };
 
+  // One fetch used for both the first page and every subsequent one. `append`
+  // decides whether results replace the grid (new search) or extend it.
+  const fetchPage = useCallback(async (pageNum, append) => {
+    const token = ++reqRef.current;
+    append ? setLoadingMore(true) : setLoading(true);
+    if (!append) setError("");
+    try {
+      const r = await fetch("/api/stock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({ query, page: pageNum, perPage: PER_PAGE }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (reqRef.current !== token) return; // a newer search already started
+      if (!r.ok) {
+        setError(j.code === "rate_limited"
+          ? (de ? "Das Suchkontingent ist gerade erschöpft. Bitte kurz warten." : "The search quota is exhausted right now. Please wait a moment.")
+          : j.code === "not_configured"
+            ? (de ? "Die Bildsuche ist noch nicht eingerichtet." : "Image search is not set up yet.")
+            : (j.error || "Fehler"));
+        if (!append) setItems([]);
+        setHasMore(false);
+        return;
+      }
+      // Providers can repeat an item across pages; de-duplicate by id so React
+      // doesn't get two children with the same key.
+      setItems(prev => {
+        const next = append ? [...prev, ...(j.items || [])] : (j.items || []);
+        const seen = new Set();
+        return next.filter(i => (seen.has(i.id) ? false : seen.add(i.id)));
+      });
+      setProvider(j.provider || "");
+      setHasMore(Boolean(j.hasMore));
+      setPage(pageNum);
+    } catch (e) {
+      if (reqRef.current === token) {
+        setError(e?.message || "Fehler");
+        if (!append) setItems([]);
+      }
+    } finally {
+      if (reqRef.current === token) { setLoading(false); setLoadingMore(false); }
+    }
+  }, [de, query, session?.access_token]);
+
+  // New search (or opening the dialog) → back to page 1.
   useEffect(() => {
     if (!open) return;
-    const token = ++reqRef.current;
-    const run = async () => {
-      setLoading(true); setError("");
-      try {
-        const r = await fetch("/api/stock", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
-          body: JSON.stringify({ query, perPage: 24 }),
-        });
-        const j = await r.json().catch(() => ({}));
-        if (reqRef.current !== token) return; // a newer search already started
-        if (!r.ok) {
-          setError(j.code === "rate_limited"
-            ? (de ? "Das Suchkontingent ist gerade erschöpft. Bitte kurz warten." : "The search quota is exhausted right now. Please wait a moment.")
-            : j.code === "not_configured"
-              ? (de ? "Die Bildsuche ist noch nicht eingerichtet." : "Image search is not set up yet.")
-              : (j.error || "Fehler"));
-          setItems([]);
-        } else {
-          setItems(j.items || []);
-          setProvider(j.provider || "");
-        }
-      } catch (e) {
-        if (reqRef.current === token) { setError(e?.message || "Fehler"); setItems([]); }
-      } finally {
-        if (reqRef.current === token) setLoading(false);
-      }
-    };
-    const t = setTimeout(run, query ? 300 : 0);
+    const t = setTimeout(() => fetchPage(1, false), query ? 300 : 0);
     return () => clearTimeout(t);
-  }, [open, query, session?.access_token]);
+  }, [open, query, fetchPage]);
 
   if (!open) return null;
 
@@ -1051,6 +1073,20 @@ function StockImagePicker({ open, session, userOrg, theme, darkMode, appLanguage
                     </a>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Explicit button rather than infinite scroll: each page is one
+                upstream request against a shared quota, so loading more should
+                be the user's decision, not a side effect of scrolling. */}
+            {!error && hasMore && items.length > 0 && (
+              <div style={{ display: "flex", justifyContent: "center", marginTop: 18 }}>
+                <button type="button" disabled={loadingMore} onClick={() => fetchPage(page + 1, true)}
+                  style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`,
+                    background: "transparent", color: theme.textDim, fontSize: 13, fontFamily: FONT,
+                    cursor: loadingMore ? "wait" : "pointer", opacity: loadingMore ? 0.6 : 1 }}>
+                  {loadingMore ? (de ? "Lädt …" : "Loading …") : (de ? "Mehr laden" : "Load more")}
+                </button>
               </div>
             )}
           </div>

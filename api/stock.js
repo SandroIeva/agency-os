@@ -125,7 +125,9 @@ export default async function handler(req) {
 
   const query = String(body.query || "").trim().slice(0, 100);
   const page = Math.min(50, Math.max(1, Number(body.page) || 1));
-  const perPage = Math.min(40, Math.max(3, Number(body.perPage) || 24));
+  // Pixabay allows up to 200 per request, Pexels 80 — cap at the lower one so
+  // the same value is valid whichever provider is configured.
+  const perPage = Math.min(80, Math.max(3, Number(body.perPage) || 30));
   const orientation = ["landscape", "portrait", "square"].includes(body.orientation) ? body.orientation : "";
 
   const { url, headers } = provider.build(key, { query, page, perPage, orientation });
