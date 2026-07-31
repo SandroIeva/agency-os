@@ -855,6 +855,212 @@ function AISpeakingSphere({ darkMode = true, speaking = false, audioLevel = null
   );
 }
 
+// Copy a picked stock image into the workspace's own storage.
+//
+// Deliberately client-side: it reuses checkStorageRoom() and trackStorageUpload()
+// — the same quota check and storage ledger every other upload goes through — so
+// stock images can't quietly bypass a workspace's limit. Doing it server-side
+// would have meant a second implementation of both.
+//
+// The bytes come via /api/img-proxy because the provider's CDN doesn't send CORS
+// headers, so the browser can't read the response otherwise.
+//
+// Returns { ok, url } or { ok: false, reason: "quota" | "fetch" | "upload" }.
+async function saveStockImage(item, { orgId, userId, email }) {
+  if (!item?.full || !orgId) return { ok: false, reason: "fetch" };
+  let blob;
+  try {
+    const r = await fetch(`/api/img-proxy?url=${encodeURIComponent(item.full)}`);
+    if (!r.ok) return { ok: false, reason: "fetch" };
+    blob = await r.blob();
+  } catch { return { ok: false, reason: "fetch" }; }
+
+  const room = await checkStorageRoom(orgId, blob.size, { userId, email });
+  if (!room.ok) return { ok: false, reason: "quota", limit: room.limit };
+
+  const ext = (blob.type.split("/")[1] || "jpg").replace("jpeg", "jpg").split("+")[0];
+  const path = `stock/${orgId}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from("brand-assets").upload(path, blob, { contentType: blob.type });
+  if (error) return { ok: false, reason: "upload", message: error.message };
+
+  trackStorageUpload({ orgId, userId, bucket: "brand-assets", path, sizeBytes: blob.size });
+  const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
+  return { ok: true, url: pub.publicUrl };
+}
+
+// ── Stock image picker ───────────────────────────────────────────────────────
+// Search overlay backed by api/pexels.js (the key stays server-side there).
+//
+// Pexels' guidelines require a visible link back to pexels.com and a credit for
+// the photographer, so both are part of the UI rather than an afterthought —
+// the credit rides along on insert via onPick's second argument.
+//
+// The 300 ms debounce is not polish: the hourly quota (200 requests) belongs to
+// our single key for ALL users, so firing on every keystroke would exhaust it
+// within one person's session.
+function StockImagePicker({ open, session, userOrg, theme, darkMode, appLanguage = "de", onPick, onClose }) {
+  const de = appLanguage === "de";
+  const [query, setQuery] = useState("");
+  const [items, setItems] = useState([]);
+  const [provider, setProvider] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(null); // id of the image being copied
+  const [error, setError] = useState("");
+  const reqRef = useRef(0);
+
+  // Picking copies the file into the workspace's storage before handing back a
+  // URL, so callers only ever receive something that belongs to the workspace.
+  const pick = async (item) => {
+    if (saving) return;
+    setSaving(item.id);
+    setError("");
+    const res = await saveStockImage(item, {
+      orgId: userOrg?.id,
+      userId: session?.user?.id,
+      email: session?.user?.email,
+    });
+    setSaving(null);
+    if (!res.ok) {
+      setError(
+        res.reason === "quota"
+          ? (de ? `Dein Speicher ist voll (${formatBytesGB(res.limit)}). Räume auf oder erweitere den Plan.` : `Storage is full (${formatBytesGB(res.limit)}). Free up space or upgrade.`)
+          : res.reason === "fetch"
+            ? (de ? "Das Bild konnte nicht geladen werden." : "The image could not be loaded.")
+            : (de ? "Speichern fehlgeschlagen: " : "Saving failed: ") + (res.message || "")
+      );
+      return;
+    }
+    onPick(res.url, item);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const token = ++reqRef.current;
+    const run = async () => {
+      setLoading(true); setError("");
+      try {
+        const r = await fetch("/api/stock", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+          body: JSON.stringify({ query, perPage: 24 }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (reqRef.current !== token) return; // a newer search already started
+        if (!r.ok) {
+          setError(j.code === "rate_limited"
+            ? (de ? "Das Suchkontingent ist gerade erschöpft. Bitte kurz warten." : "The search quota is exhausted right now. Please wait a moment.")
+            : j.code === "not_configured"
+              ? (de ? "Die Bildsuche ist noch nicht eingerichtet." : "Image search is not set up yet.")
+              : (j.error || "Fehler"));
+          setItems([]);
+        } else {
+          setItems(j.items || []);
+          setProvider(j.provider || "");
+        }
+      } catch (e) {
+        if (reqRef.current === token) { setError(e?.message || "Fehler"); setItems([]); }
+      } finally {
+        if (reqRef.current === token) setLoading(false);
+      }
+    };
+    const t = setTimeout(run, query ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [open, query, session?.access_token]);
+
+  if (!open) return null;
+
+  return createPortal(
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={onClose}
+        style={{ position: "fixed", inset: 0, zIndex: 100003, display: "flex", alignItems: "center", justifyContent: "center",
+          padding: 20, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}
+      >
+        <motion.div
+          initial={{ scale: 0.97, opacity: 0, y: 12 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.97, opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1] }}
+          onClick={e => e.stopPropagation()}
+          style={{ width: "100%", maxWidth: 880, maxHeight: "86vh", display: "flex", flexDirection: "column",
+            borderRadius: 20, background: darkMode ? "#1b1b24" : "#fff", border: `1px solid ${theme.border}`,
+            boxShadow: "0 24px 60px rgba(0,0,0,0.35)", fontFamily: FONT, overflow: "hidden" }}
+        >
+          <div style={{ padding: "18px 22px 14px", borderBottom: `1px solid ${theme.borderFaint}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <input
+                autoFocus
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder={de ? "Bilder suchen …" : "Search photos …"}
+                style={{ flex: 1, minWidth: 0, padding: "9px 12px", borderRadius: 10, border: "none",
+                  background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                  color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none" }}
+              />
+              <button type="button" onClick={onClose}
+                style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`,
+                  background: "transparent", color: theme.textDim, fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>
+                {de ? "Schließen" : "Close"}
+              </button>
+            </div>
+            {/* Credit back to the source. Pexels requires it; Pixabay only asks
+                for it — we show it either way, and it also tells the user where
+                the results are coming from. */}
+            <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 9 }}>
+              {de ? "Bilder von " : "Images from "}
+              <a href={provider === "pexels" ? "https://www.pexels.com" : "https://pixabay.com"} target="_blank" rel="noopener noreferrer"
+                style={{ color: theme.textDim, textDecoration: "underline" }}>
+                {provider === "pexels" ? "Pexels" : "Pixabay"}
+              </a>
+              {de ? " · beim Auswählen wird das Bild in deinen Workspace kopiert" : " · picking copies the image into your workspace"}
+            </div>
+          </div>
+
+          <div style={{ overflowY: "auto", padding: 18 }}>
+            {error ? (
+              <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: "#E86767" }}>{error}</div>
+            ) : loading && !items.length ? (
+              <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: theme.textDim }}>{de ? "Suche …" : "Searching …"}</div>
+            ) : !items.length ? (
+              <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: theme.textDim }}>{de ? "Nichts gefunden." : "Nothing found."}</div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 12 }}>
+                {items.map(it => (
+                  <div key={it.id} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                    <motion.div
+                      whileHover={{ y: saving ? 0 : -3 }} whileTap={{ scale: 0.98 }}
+                      onClick={() => pick(it)}
+                      style={{ cursor: saving ? "wait" : "pointer", borderRadius: 12, overflow: "hidden", aspectRatio: "4 / 3",
+                        position: "relative", opacity: saving && saving !== it.id ? 0.45 : 1,
+                        background: it.avgColor || (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)") }}
+                    >
+                      <img src={it.thumb} alt={it.alt} loading="lazy"
+                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                      {saving === it.id && (
+                        <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center",
+                          background: "rgba(0,0,0,0.45)", color: "#fff", fontSize: 12, fontWeight: 600 }}>
+                          {de ? "Wird gespeichert …" : "Saving …"}
+                        </div>
+                      )}
+                    </motion.div>
+                    {/* Photographer credit — a guideline requirement, not decoration. */}
+                    <a href={it.photographerUrl} target="_blank" rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      style={{ fontSize: 10.5, color: theme.textFaint, textDecoration: "none",
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {it.photographer}
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>,
+    document.body,
+  );
+}
+
 // ── Reusable Dropdown ────────────────────────────────────────────────────────
 // Anthracite pill trigger + frosted popover with hover-row items and a modern
 // check on the active one. options: [{ value, label, icon?, sub? }].
@@ -5072,6 +5278,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [emojiCat, setEmojiCat] = useState("smileys");
   const [imgMenuOpen, setImgMenuOpen] = useState(false); // image button's Upload / Assets choice menu
   const [assetsOpen, setAssetsOpen] = useState(false);   // Assets image picker panel above the toolbar
+  const [pexelsOpen, setPexelsOpen] = useState(false);   // Pexels stock photo search overlay
   const [assetImages, setAssetImages] = useState([]);    // org's uploaded images (user_files)
   const [assetsLoading, setAssetsLoading] = useState(false);
   const [commentOpenId, setCommentOpenId] = useState(null); // comment pin whose bubble is open
@@ -6813,10 +7020,33 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
                 {de ? "Aus Assets" : "From Assets"}
               </div>
+              <div onClick={() => { setImgMenuOpen(false); setPexelsOpen(true); }}
+                onMouseEnter={e => e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"} style={row}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                {de ? "Stockfotos suchen" : "Search stock photos"}
+              </div>
             </motion.div>
             </div>
           </>
           ); })(), document.body)}
+
+      <StockImagePicker
+        open={pexelsOpen}
+        session={session}
+        userOrg={userOrg}
+        theme={theme}
+        darkMode={darkMode}
+        appLanguage={appLanguage}
+        onClose={() => setPexelsOpen(false)}
+        onPick={(url) => {
+          // The picker has already copied the file into the workspace, so this
+          // is our own storage URL — the board won't break if the image later
+          // disappears upstream.
+          addImageFromUrl(url);
+          setPexelsOpen(false);
+        }}
+      />
 
       {/* Assets image picker — the org's uploaded images, click to drop onto the board */}
         {assetsOpen && createPortal((() => {
@@ -17770,13 +18000,52 @@ function MoodboardItemDetail({ item, items = [], containers = [], currentContain
 // Lightweight rich-text editor (no deps) for editing Brand section text. Uses a
 // contentEditable surface + execCommand toolbar: H1/H2/H3, paragraph, bold,
 // italic, bullet list and links. Saves the resulting HTML back to the section.
-function RichTextEditor({ initialHTML, theme, darkMode, onSave, onCancel }) {
+// `simple` strips the block/inline formatting and leaves only links — for
+// places where the text is a short explanatory paragraph, not a document.
+// `placeholder` shows greyed hint text while the field is empty, so an empty
+// editor doesn't look like a broken box.
+function RichTextEditor({ initialHTML, theme, darkMode, onSave, onCancel, simple = false, placeholder = "" }) {
   const ref = useRef(null);
-  useEffect(() => { if (ref.current) ref.current.innerHTML = initialHTML || "<p></p>"; }, []);
+  const [empty, setEmpty] = useState(true);
+  const checkEmpty = () => {
+    const el = ref.current;
+    if (!el) return;
+    // innerHTML is never "" here — contentEditable keeps a <p><br></p> husk —
+    // so emptiness has to be judged by the text, not the markup.
+    setEmpty(!el.textContent.trim() && !el.querySelector("img"));
+  };
+  useEffect(() => { if (ref.current) { ref.current.innerHTML = initialHTML || "<p></p>"; checkEmpty(); } }, []);
   const exec = (cmd, val) => { document.execCommand(cmd, false, val); ref.current?.focus(); };
-  const addLink = () => {
-    const url = prompt("Link-URL:");
-    if (url) exec("createLink", /^https?:\/\//i.test(url) ? url : "https://" + url);
+
+  // Link entry as an inline row instead of window.prompt(). Clicking into the
+  // input collapses the contentEditable selection, so the range is captured
+  // when the toolbar button is pressed and restored before createLink runs —
+  // otherwise the link would be applied to nothing.
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const savedRange = useRef(null);
+  const openLink = () => {
+    try {
+      const sel = window.getSelection();
+      savedRange.current = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+    } catch { savedRange.current = null; }
+    setLinkUrl("");
+    setLinkOpen(true);
+  };
+  const applyLink = () => {
+    const raw = linkUrl.trim();
+    setLinkOpen(false);
+    if (!raw) return;
+    const url = /^https?:\/\//i.test(raw) ? raw : "https://" + raw;
+    ref.current?.focus();
+    try {
+      if (savedRange.current) {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(savedRange.current);
+      }
+    } catch {}
+    exec("createLink", url);
   };
   const Btn = ({ onClick, title, children }) => (
     <button type="button" title={title} onMouseDown={(e) => e.preventDefault()} onClick={onClick}
@@ -17785,22 +18054,54 @@ function RichTextEditor({ initialHTML, theme, darkMode, onSave, onCancel }) {
   return (
     <div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
-        <Btn title="Überschrift 1" onClick={() => exec("formatBlock", "H1")}>H1</Btn>
-        <Btn title="Überschrift 2" onClick={() => exec("formatBlock", "H2")}>H2</Btn>
-        <Btn title="Überschrift 3" onClick={() => exec("formatBlock", "H3")}>H3</Btn>
-        <Btn title="Absatz" onClick={() => exec("formatBlock", "P")}>¶</Btn>
-        <Btn title="Fett" onClick={() => exec("bold")}><b>B</b></Btn>
-        <Btn title="Kursiv" onClick={() => exec("italic")}><i>I</i></Btn>
-        <Btn title="Liste" onClick={() => exec("insertUnorderedList")}>• Liste</Btn>
-        <Btn title="Link einfügen" onClick={addLink}>🔗 Link</Btn>
+        {!simple && <>
+          <Btn title="Überschrift 1" onClick={() => exec("formatBlock", "H1")}>H1</Btn>
+          <Btn title="Überschrift 2" onClick={() => exec("formatBlock", "H2")}>H2</Btn>
+          <Btn title="Überschrift 3" onClick={() => exec("formatBlock", "H3")}>H3</Btn>
+          <Btn title="Absatz" onClick={() => exec("formatBlock", "P")}>¶</Btn>
+          <Btn title="Fett" onClick={() => exec("bold")}><b>B</b></Btn>
+          <Btn title="Kursiv" onClick={() => exec("italic")}><i>I</i></Btn>
+          <Btn title="Liste" onClick={() => exec("insertUnorderedList")}>• Liste</Btn>
+          <Btn title="Link einfügen" onClick={openLink}>🔗 Link</Btn>
+        </>}
         <div style={{ flex: 1 }} />
         <button type="button" onClick={() => onSave(ref.current?.innerHTML || "")}
-          style={{ padding: "6px 16px", borderRadius: 8, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Speichern</button>
+          style={{ padding: "6px 16px", borderRadius: 8, border: "none", ...primaryBtn(darkMode), fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Speichern</button>
         <button type="button" onClick={onCancel}
           style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>Abbrechen</button>
       </div>
-      <div ref={ref} contentEditable suppressContentEditableWarning className="brand-rich"
-        style={{ outline: "none", minHeight: 200, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, padding: "14px 16px", background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.012)", color: theme.text, fontSize: 14, fontFamily: FONT, lineHeight: 1.7 }} />
+      {linkOpen && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, padding: 10, borderRadius: 10,
+          background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}>
+          <input
+            autoFocus
+            value={linkUrl}
+            onChange={e => setLinkUrl(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); applyLink(); } if (e.key === "Escape") setLinkOpen(false); }}
+            placeholder="beispiel.de/seite"
+            style={{ flex: 1, minWidth: 0, padding: "6px 10px", borderRadius: 8, border: "none",
+              background: darkMode ? "rgba(255,255,255,0.05)" : "#fff", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none" }}
+          />
+          <button type="button" onClick={applyLink}
+            style={{ padding: "6px 14px", borderRadius: 8, border: "none", ...primaryBtn(darkMode), fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Einfügen</button>
+          <button type="button" onClick={() => setLinkOpen(false)}
+            style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>Abbrechen</button>
+        </div>
+      )}
+
+      <div style={{ position: "relative" }}>
+        {placeholder && empty && (
+          // Sits behind the caret and ignores clicks, so typing starts in the
+          // real field rather than on the hint.
+          <div style={{ position: "absolute", top: 14, left: 16, right: 16, pointerEvents: "none",
+            color: theme.textFaint, fontSize: 14, fontFamily: FONT, lineHeight: 1.7 }}>
+            {placeholder}
+          </div>
+        )}
+        <div ref={ref} contentEditable suppressContentEditableWarning className="brand-rich"
+          onInput={checkEmpty} onBlur={checkEmpty}
+          style={{ outline: "none", minHeight: 200, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, padding: "14px 16px", background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.012)", color: theme.text, fontSize: 14, fontFamily: FONT, lineHeight: 1.7 }} />
+      </div>
     </div>
   );
 }
@@ -21679,19 +21980,240 @@ function colorShades(hex, n = 8) {
   return ramp.map(r => ({ hex: r.hex, isBase: r.isBase }));
 }
 
+// ── Palette discovery ────────────────────────────────────────────────────────
+// Hand-curated rather than pulled from a service. The obvious public sources
+// don't fit a paid product: Colormind is HTTP-only (blocked as mixed content on
+// an HTTPS origin) and non-commercial, and the popular npm palette packs carry
+// an MIT wrapper around ColourLovers data whose own licence is unresolved.
+// These are ours, they need no key or network, and they can't go down.
+//
+// RULE: every palette must span SEVERAL hue families. Earlier versions were
+// ramps of one colour ("Mitternacht" ran #0b132b → #1c2541 → #3a506b), which is
+// exactly what the shade-ramp view already produces from any single colour —
+// so a palette that only varies lightness adds nothing. The theme sets the
+// mood; the colours inside it still have to contrast with each other.
+const CURATED_PALETTES = [
+  { theme: "Warm & erdig", items: [
+    { name: "Terrakotta & Salbei", colors: ["#c4633f", "#7d8c64", "#efd9c5", "#2f3a34", "#e0a458"] },
+    { name: "Wüste & Petrol",      colors: ["#d97742", "#3e6b7a", "#f2e2c4", "#8c4a3d", "#1f2933"] },
+    { name: "Safran & Indigo",     colors: ["#e5a33c", "#2d3e6b", "#f5ede0", "#a0522d", "#6b8f71"] },
+    { name: "Ocker & Olive",       colors: ["#c89b3c", "#55603a", "#ede6d6", "#9c4a2f", "#2b2a26"] },
+  ] },
+  { theme: "Kühl & klar", items: [
+    { name: "Nordlicht",           colors: ["#2e5266", "#6fb3a0", "#e8eef1", "#c46d5e", "#16202b"] },
+    { name: "Arktis & Bernstein",  colors: ["#1b3a4b", "#5fa8d3", "#f1faee", "#e0a458", "#0d1f26"] },
+    { name: "Lagune & Koralle",    colors: ["#0e7c7b", "#17bebb", "#d4f4dd", "#e4572e", "#1a1a2e"] },
+    { name: "Graphit & Eisblau",   colors: ["#3a4750", "#7fb2c4", "#edf1f3", "#d98e5a", "#202830"] },
+  ] },
+  { theme: "Kontrastreich", items: [
+    { name: "Signal",     colors: ["#0a0a0a", "#ff4d2e", "#ffffff", "#ffc300", "#4a4a4a"] },
+    { name: "Elektrisch", colors: ["#101820", "#00e5ff", "#f5f5f5", "#ff3366", "#2c3a47"] },
+    { name: "Neon-Nacht", colors: ["#12002e", "#7b2fff", "#00ffc2", "#f2f2f2", "#ff2e88"] },
+    { name: "Primär",     colors: ["#1d1d1f", "#0055ff", "#ff5c00", "#f5f5f7", "#00c48c"] },
+  ] },
+  { theme: "Gedeckt & ruhig", items: [
+    { name: "Salbei", colors: ["#7c8c74", "#b3c0a4", "#e4e7dc", "#4f5a48", "#a89f91"] },
+    { name: "Nebel",  colors: ["#8e9aaf", "#cbc0d3", "#efd3d7", "#5c6378", "#feeafa"] },
+    { name: "Leinen", colors: ["#a69c8f", "#d6cfc4", "#f0ebe3", "#6b6258", "#c0b6a8"] },
+    { name: "Rauch",  colors: ["#6f7378", "#a3a7ab", "#d5d7d9", "#43464a", "#efefef"] },
+  ] },
+  { theme: "Frisch & lebendig", items: [
+    { name: "Zitrus", colors: ["#ff7a00", "#ffd400", "#00a86b", "#fff3e0", "#1f2933"] },
+    { name: "Tropen", colors: ["#00b894", "#fdcb6e", "#e17055", "#ffffff", "#2d3436"] },
+    { name: "Beere",  colors: ["#e84393", "#6c5ce7", "#fdcb6e", "#fff0f6", "#2d3436"] },
+    { name: "Sommer", colors: ["#ff6b6b", "#4ecdc4", "#ffe66d", "#f7fff7", "#1a535c"] },
+  ] },
+  { theme: "Dunkel & edel", items: [
+    { name: "Mitternacht & Gold",  colors: ["#0b132b", "#c9a227", "#3a506b", "#e8e9eb", "#5bc0be"] },
+    { name: "Bordeaux & Messing",  colors: ["#2b0a12", "#8c2f39", "#b08d57", "#e8dcca", "#3f4a3c"] },
+    { name: "Tiefwald & Ocker",    colors: ["#0f1e13", "#c8a165", "#3e6b43", "#e7e3d8", "#7a4a32"] },
+    { name: "Nachtblau & Kupfer",  colors: ["#101828", "#b87333", "#4a5d7e", "#ede8e1", "#7d9d9c"] },
+  ] },
+];
+
+// Harmonies computed from one seed colour. This is colour theory, not data —
+// rotating the hue by fixed intervals is what "harmonious" means, so there is
+// nothing to fetch and nothing that can be out of date.
+function harmonyPalettes(seedHex) {
+  const { h, s, l } = hexToHsl(seedHex);
+  // A near-grey seed has no hue to rotate, so every "harmony" would come back
+  // as the same grey. Derive from a workable saturation instead — the user
+  // still gets a usable palette out of black, white or grey.
+  const sBase = s < 12 ? 45 : s;
+  const at = (dh, ds = 0, dl = 0) => hslToHex(
+    (h + dh + 360) % 360,
+    Math.min(100, Math.max(0, sBase + ds)),
+    Math.min(96, Math.max(6, l + dl)),
+  );
+  return [
+    { name: "Analog", hint: "benachbarte Töne — ruhig, stimmig",
+      colors: [seedHex, at(-30), at(30), at(-15, -18, 26), at(15, 8, -28)] },
+    { name: "Komplementär", hint: "Gegenfarbe — starker Kontrast",
+      colors: [seedHex, at(180), at(0, -22, 30), at(180, -26, 24), at(0, 6, -30)] },
+    { name: "Triadisch", hint: "drei gleich verteilte Töne — lebendig",
+      colors: [seedHex, at(120), at(240), at(120, -30, 28), at(0, 4, -30)] },
+    { name: "Split-komplementär", hint: "Kontrast, aber weicher",
+      colors: [seedHex, at(150), at(210), at(180, -30, 28), at(0, 4, -30)] },
+    // Via colorShades rather than fixed lightness offsets: those collapse into
+    // duplicates when the seed is already near white or black (a white seed
+    // produced #f5f5f5 twice). colorShades spreads across the full range and
+    // keeps the seed among the steps.
+    { name: "Monochrom", hint: "eine Farbe, gestaffelt — sehr reduziert",
+      colors: colorShades(seedHex, 5).map(x => x.hex) },
+  ];
+}
+
+// Palette picker overlay. Opened from the colour editor; applying a palette
+// fills primary / secondary / accents so the user can keep editing from there
+// rather than starting from a blank set of swatches.
+function PaletteDiscovery({ open, seed, theme, darkMode, onApply, onClose }) {
+  const [base, setBase] = useState(seed && /^#[0-9a-fA-F]{6}$/.test(seed) ? seed : "#4a7c8c");
+  const [tab, setTab] = useState("themes"); // themes | harmony
+  if (!open) return null;
+
+  const harmonies = harmonyPalettes(base);
+
+  const PaletteRow = ({ name, hint, colors }) => (
+    <motion.div
+      whileHover={{ y: -3 }} whileTap={{ scale: 0.995 }}
+      onClick={() => onApply(colors)}
+      style={{ cursor: "pointer", borderRadius: 12, overflow: "hidden", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}
+    >
+      <div style={{ display: "flex", height: 62 }}>
+        {colors.map((c, i) => <div key={i} style={{ flex: 1, background: c }} />)}
+      </div>
+      <div style={{ padding: "8px 11px 10px" }}>
+        <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{name}</div>
+        {hint && <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 1 }}>{hint}</div>}
+      </div>
+    </motion.div>
+  );
+
+  const tabBtn = (id, label) => (
+    <div onClick={() => setTab(id)}
+      style={{ padding: "7px 14px", borderRadius: 999, cursor: "pointer", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
+        ...(tab === id ? primaryBtn(darkMode) : { background: "transparent", color: theme.textDim }) }}>
+      {label}
+    </div>
+  );
+
+  return createPortal(
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={onClose}
+        style={{ position: "fixed", inset: 0, zIndex: 100003, display: "flex", alignItems: "center", justifyContent: "center",
+          padding: 20, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}
+      >
+        <motion.div
+          initial={{ scale: 0.97, opacity: 0, y: 12 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.97, opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1] }}
+          onClick={(e) => e.stopPropagation()}
+          style={{ width: "100%", maxWidth: 860, maxHeight: "86vh", display: "flex", flexDirection: "column",
+            borderRadius: 20, background: darkMode ? "#1b1b24" : "#fff", border: `1px solid ${theme.border}`,
+            boxShadow: "0 24px 60px rgba(0,0,0,0.35)", fontFamily: FONT, overflow: "hidden" }}
+        >
+          <div style={{ padding: "20px 24px 14px", borderBottom: `1px solid ${theme.borderFaint}` }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+              <div>
+                <div style={{ fontSize: 17, fontWeight: 600, color: theme.text }}>Farbpaletten entdecken</div>
+                <div style={{ fontSize: 12.5, color: theme.textDim, marginTop: 3 }}>
+                  Wähle eine Palette — sie wird übernommen und bleibt danach frei bearbeitbar.
+                </div>
+              </div>
+              <motion.div whileTap={{ scale: 0.9 }} onClick={onClose} title="Schließen"
+                style={{ cursor: "pointer", color: theme.textDim, padding: 4, display: "flex" }}>
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </motion.div>
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
+              {tabBtn("themes", "Nach Thema")}
+              {tabBtn("harmony", "Aus deiner Farbe")}
+            </div>
+          </div>
+
+          <div style={{ overflowY: "auto", padding: "18px 24px 24px" }}>
+            {tab === "harmony" ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                  <input type="color" value={base} onChange={e => setBase(e.target.value)}
+                    style={{ width: 38, height: 38, borderRadius: 10, border: `1px solid ${theme.borderFaint}`, padding: 0, background: "transparent", cursor: "pointer", flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: theme.text }}>Grundfarbe</div>
+                    <div style={{ fontSize: 11, color: theme.textFaint }}>Alle Vorschläge unten werden daraus berechnet</div>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
+                  {harmonies.map(p => <PaletteRow key={p.name} name={p.name} hint={p.hint} colors={p.colors} />)}
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
+                {CURATED_PALETTES.map(group => (
+                  <div key={group.theme} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: theme.text, letterSpacing: 1.6, textTransform: "uppercase" }}>
+                      {group.theme}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
+                      {group.items.map(p => <PaletteRow key={p.name} name={p.name} colors={p.colors} />)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>,
+    document.body,
+  );
+}
+
 // ── Brand Colors ─────────────────────────────────────────────────────────────
 // Tall rounded colour bars with the hex inside at the bottom, plus an editable
 // description above (reuses the rich-text editor via section_content["design/colors"]).
 // Clicking a colour animates the others away and reveals its shade ramp.
-function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, onCancel, onSavePalette }) {
+// Four gradients derived from the brand palette, used until the user saves
+// their own. Pairs are picked so each gradient spans two DIFFERENT hues where
+// possible — primary→secondary reads as the brand pair, the accents give the
+// variations. Falls back to shades of one colour if the palette is thin, so the
+// section is never empty and never shows a "gradient" from a colour to itself.
+function defaultGradients(paletteHexes) {
+  const c = paletteHexes.filter(Boolean);
+  if (!c.length) return [];
+  const at = (i) => c[i % c.length];
+  const pair = (a, b) => (a === b ? [a, colorShades(a, 8)[6]?.hex || b] : [a, b]);
+  const defs = [
+    { name: "Primär", stops: pair(at(0), at(1)) },
+    { name: "Akzent", stops: pair(at(1), at(2)) },
+    { name: "Tief", stops: pair(at(0), at(2)) },
+    { name: "Weich", stops: [at(0), at(1), at(2)].filter((v, i, a) => a.indexOf(v) === i) },
+  ];
+  return defs.map((d, i) => ({
+    id: `g${i + 1}`,
+    name: d.name,
+    stops: d.stops.length >= 2 ? d.stops : pair(at(0), at(0)),
+  }));
+}
+
+function BrandColors({ cp, colors, gradients, editing, savedHtml, theme, darkMode, onSave, onCancel, onSavePalette, onSaveGradients }) {
   const lum = (hex) => { try { const h = String(hex).replace("#", ""); const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16); return (0.299 * r + 0.587 * g + 0.114 * b) / 255; } catch { return 0.5; } };
   const norm = (c) => { if (!c) return ""; let h = String(c).trim(); if (!h.startsWith("#")) h = "#" + h; return /^#[0-9a-fA-F]{6}$/.test(h) ? h.toLowerCase() : ""; };
+
+  // One type scale for this whole section. It had grown to ten sizes
+  // (10.5 / 11 / 11.5 / 12 / 12.5 / 13 / 13.5 / 14 / 15 / 16), which reads as
+  // noise rather than hierarchy. Everything below maps onto these four; the
+  // description keeps 14 because it is prose, not UI chrome.
+  const FS = { label: 11, meta: 12, body: 13, title: 15 };
 
   const [names, setNames] = useState({});
   const [openColor, setOpenColor] = useState(null); // { hex, role } when viewing shades
   const [copied, setCopied] = useState(null);
   const [draft, setDraft] = useState(null); // editable palette while editing
+  const [gradDraft, setGradDraft] = useState(null); // editable gradients while editing
+  const [discoverOpen, setDiscoverOpen] = useState(false);
   const copyHex = (hx) => { try { navigator.clipboard?.writeText(String(hx).toUpperCase()); } catch {} setCopied(hx); setTimeout(() => setCopied(c => c === hx ? null : c), 1200); };
+  const copyText = (text, key) => { try { navigator.clipboard?.writeText(text); } catch {} setCopied(key); setTimeout(() => setCopied(c => c === key ? null : c), 1200); };
 
   // Seed the editable palette when edit mode opens (from color_palette, falling back to colors[]).
   useEffect(() => {
@@ -21702,11 +22224,32 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
         accents: (cp?.accents && cp.accents.length) ? [...cp.accents] : (colors || []).slice(2),
       });
       setOpenColor(null);
-    } else { setDraft(null); }
+      // Seed the gradient draft too — from saved ones, or from the palette so
+      // the user starts with four editable gradients instead of a blank slate.
+      setGradDraft(
+        (Array.isArray(gradients) && gradients.length)
+          ? JSON.parse(JSON.stringify(gradients))
+          : defaultGradients([cp?.primary, cp?.secondary, ...((cp?.accents) || []), ...(colors || [])]
+              .map(c => { const h = norm(c); return h; }).filter(Boolean))
+      );
+    } else { setDraft(null); setGradDraft(null); }
   }, [editing]);
 
   const effPal = (editing && draft) ? draft : { primary: cp?.primary || "", secondary: cp?.secondary || "", accents: cp?.accents || [] };
   const update = (next) => { setDraft(next); onSavePalette?.(next); };
+
+  // Gradients: saved ones win; otherwise derive from the palette so the section
+  // has something to show from the first visit. Derived ones are NOT persisted
+  // until the user edits them — writing them on render would freeze a snapshot
+  // of the palette and silently stop tracking later colour changes.
+  const paletteHexes = [norm(effPal.primary), norm(effPal.secondary), ...(effPal.accents || []).map(norm)].filter(Boolean);
+  const savedGradients = Array.isArray(gradients) && gradients.length ? gradients : null;
+  const effGradients = (editing && gradDraft) ? gradDraft : (savedGradients || defaultGradients(paletteHexes));
+  const updateGradients = (next) => { setGradDraft(next); onSaveGradients?.(next); };
+  // Always top-to-bottom. An angle control was tried and removed: it cluttered
+  // the card and its range input has an intrinsic minimum width, which pushed
+  // the four columns wider than the container and caused horizontal scrolling.
+  const gradientCss = (g) => `linear-gradient(180deg, ${(g.stops || []).map(norm).filter(Boolean).join(", ")})`;
 
   // Build the displayed list from the effective palette (normalised, deduped).
   const entries = [];
@@ -21731,10 +22274,14 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
   }, [listKey]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
+    // minWidth: 0 so a wide child can never push this container past the
+    // viewport and turn the whole page into a horizontal scroller.
+    <div style={{ display: "flex", flexDirection: "column", gap: 26, minWidth: 0, maxWidth: "100%" }}>
       {/* Description */}
       {editing ? (
-        <RichTextEditor key="colors-desc" initialHTML={savedHtml || "<p></p>"} theme={theme} darkMode={darkMode} onSave={onSave} onCancel={onCancel} />
+        <RichTextEditor key="colors-desc" initialHTML={savedHtml || "<p></p>"} theme={theme} darkMode={darkMode} onSave={onSave} onCancel={onCancel}
+          simple
+          placeholder="Wofür steht eure Farbwelt? Beschreibe, welche Farbe wofür eingesetzt wird — z. B. Primärfarbe für Flächen und Buttons, Akzentfarbe sparsam für Hervorhebungen — und was die Farben über die Marke aussagen sollen." />
       ) : savedHtml ? (
         <div className="brand-rich" dangerouslySetInnerHTML={{ __html: savedHtml }} />
       ) : (
@@ -21769,9 +22316,78 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
             ))}
             <button onClick={() => update({ ...draft, accents: [...(draft.accents || []), "#888888"] })}
               style={{ alignSelf: "flex-start", padding: "8px 13px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>+ Akzentfarbe</button>
+
+            {/* Discovery, nested inside the editor: three ready suggestions
+                derived from the current base colour, with the full catalogue one
+                click away. Showing results immediately beats a bare button —
+                someone who doesn't know what they want can see options without
+                first deciding to go looking for them. */}
+            {(() => {
+              const seed = norm(draft.primary) || norm(draft.secondary) || "#4a7c8c";
+              const picks = harmonyPalettes(seed).slice(0, 3);
+              return (
+                <div style={{ marginTop: 8, padding: 13, borderRadius: 12,
+                  background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+                  border: `1px solid ${theme.borderFaint}` }}>
+                  <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Farbvorschläge</div>
+                  <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginTop: 3 }}>
+                    {norm(draft.primary)
+                      ? "Vorschläge, die zu eurer Grundfarbe passen. Ein Klick übernimmt die Palette — danach bleibt alles frei bearbeitbar."
+                      : "Noch keine Grundfarbe gewählt — hier ein paar Startpunkte. Ein Klick übernimmt die Palette."}
+                  </div>
+
+                  <div style={{ display: "flex", gap: 10, marginTop: 11 }}>
+                    {picks.map(p => (
+                      <motion.div key={p.name} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
+                        onClick={() => update({ primary: p.colors[0] || "", secondary: p.colors[1] || "", accents: p.colors.slice(2) })}
+                        title={p.hint}
+                        style={{ flex: 1, minWidth: 0, cursor: "pointer" }}>
+                        <div style={{ display: "flex", height: 34, borderRadius: 8, overflow: "hidden" }}>
+                          {p.colors.map((c, i) => <div key={i} style={{ flex: 1, background: c }} />)}
+                        </div>
+                        <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+                      </motion.div>
+                    ))}
+                  </div>
+
+                  {/* Same shape as the editor's Abbrechen button — 6/12 padding,
+                      radius 8, 13px — rather than inventing a third button style
+                      inside a panel that already has two. */}
+                  <button type="button" onClick={() => setDiscoverOpen(true)}
+                    style={{ marginTop: 11, padding: "6px 12px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`,
+                      background: "transparent", color: theme.textDim, fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>
+                    Mehr entdecken
+                  </button>
+                </div>
+              );
+            })()}
           </div>
         );
       })()}
+
+      <PaletteDiscovery
+        open={discoverOpen}
+        seed={norm(effPal.primary) || ""}
+        theme={theme}
+        darkMode={darkMode}
+        onClose={() => setDiscoverOpen(false)}
+        onApply={(cols) => {
+          // First two become primary/secondary, the rest accents — the same
+          // shape the editor below already works with, so the user lands in a
+          // filled-in editor instead of having to re-enter anything.
+          update({ primary: cols[0] || "", secondary: cols[1] || "", accents: cols.slice(2) });
+          setDiscoverOpen(false);
+        }}
+      />
+
+      {/* Section heading — the colours and the gradients below are now two
+          distinct blocks, so each is labelled. Hidden while a single colour's
+          shade ramp is open, since that view has its own header. */}
+      {!openColor && (
+        <div style={{ fontSize: 11, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: 1.6, textTransform: "uppercase", marginBottom: -12 }}>
+          Farbpaletten
+        </div>
+      )}
 
       {/* Colour bars ↔ shade ramp (animated) */}
       {list.length > 0 ? (
@@ -21836,8 +22452,142 @@ function BrandColors({ cp, colors, editing, savedHtml, theme, darkMode, onSave, 
           Noch keine Farben hinterlegt.
         </div>
       )}
+
+      {/* ── Farbverläufe ─────────────────────────────────────────────────── */}
+      {!openColor && effGradients.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 10 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+            <div style={{ fontSize: 11, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: 1.6, textTransform: "uppercase" }}>
+              Farbverläufe
+            </div>
+            {!editing && !savedGradients && (
+              // Says why these exist before anyone saved anything, so they don't
+              // look like stale data someone forgot to change.
+              <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint }}>
+                aus eurer Palette abgeleitet — über „Bearbeiten" anpassbar
+              </div>
+            )}
+          </div>
+
+          {/* Same flex distribution as the palette bars above, so the four
+              gradients line up with the swatches in a single row instead of
+              wrapping onto a second one. */}
+          <div style={{ display: "flex", gap: 16 }}>
+            {effGradients.map((g, i) => {
+              const css = gradientCss(g);
+              const key = `grad-${i}`;
+              return (
+                <div key={g.id || i} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 9 }}>
+                  <motion.div
+                    whileHover={{ y: editing ? 0 : -5 }} whileTap={{ scale: 0.99 }}
+                    onClick={() => !editing && copyText(css, key)}
+                    title={editing ? undefined : "CSS kopieren"}
+                    style={{ height: 190, borderRadius: 18, background: css, cursor: editing ? "default" : "pointer",
+                      boxShadow: "0 10px 34px rgba(0,0,0,0.07)", position: "relative", overflow: "hidden" }}
+                  >
+                    {copied === key && (
+                      <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center",
+                        background: "rgba(0,0,0,0.32)", color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600 }}>
+                        CSS kopiert ✓
+                      </div>
+                    )}
+                  </motion.div>
+
+                  {editing ? (
+                    <GradientEditor
+                      gradient={g}
+                      theme={theme}
+                      darkMode={darkMode}
+                      norm={norm}
+                      onChange={(next) => updateGradients(effGradients.map((x, j) => j === i ? next : x))}
+                    />
+                  ) : (
+                    <div>
+                      <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{g.name || `Verlauf ${i + 1}`}</div>
+                      <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                        {(g.stops || []).map(s => String(s).toUpperCase()).join(" → ")}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+// One gradient's controls. Kept out of BrandColors so the colour inputs keep a
+// stable element identity across re-renders — the native picker closes if its
+// input is remounted on every change (same reason the palette rows are a plain
+// function, not a nested component).
+function GradientEditor({ gradient, theme, darkMode, norm, onChange }) {
+  const g = gradient || {};
+  const stops = g.stops || [];
+  const hasMiddle = stops.length >= 3;
+  const swatch = { width: 30, height: 30, borderRadius: 8, border: `1px solid ${theme.borderFaint}`, padding: 0, background: "transparent", cursor: "pointer", flexShrink: 0 };
+  const setStop = (idx, v) => onChange({ ...g, stops: stops.map((s, j) => j === idx ? v : s) });
+  // The middle stop is always index 1, so adding/removing never disturbs the
+  // start and end the user already chose.
+  const addMiddle = () => onChange({ ...g, stops: [stops[0], mixHex(norm(stops[0]), norm(stops[stops.length - 1])), stops[stops.length - 1]] });
+  const removeMiddle = () => onChange({ ...g, stops: [stops[0], stops[stops.length - 1]] });
+
+  const label = { fontSize: 10.5, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.6, textTransform: "uppercase", minWidth: 46 };
+  const row = { display: "flex", alignItems: "center", gap: 9 };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12, borderRadius: 12, minWidth: 0,
+      background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.025)" }}>
+      <input
+        value={g.name || ""}
+        onChange={e => onChange({ ...g, name: e.target.value })}
+        placeholder="Name"
+        style={{ padding: "7px 9px", borderRadius: 8, border: "none", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+          color: theme.text, fontSize: 13, fontFamily: FONT, fontWeight: 600, outline: "none", width: "100%", boxSizing: "border-box" }}
+      />
+
+      <div style={row}>
+        <span style={label}>Start</span>
+        <input type="color" value={norm(stops[0]) || "#888888"} onChange={e => setStop(0, e.target.value)} style={swatch} />
+      </div>
+
+      {hasMiddle && (
+        <div style={row}>
+          <span style={label}>Mitte</span>
+          <input type="color" value={norm(stops[1]) || "#888888"} onChange={e => setStop(1, e.target.value)} style={swatch} />
+          <button onClick={removeMiddle} title="Zwischenton entfernen"
+            style={{ width: 26, height: 26, borderRadius: 7, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, cursor: "pointer", lineHeight: 1 }}>×</button>
+        </div>
+      )}
+
+      <div style={row}>
+        <span style={label}>Ende</span>
+        <input type="color" value={norm(stops[stops.length - 1]) || "#888888"} onChange={e => setStop(stops.length - 1, e.target.value)} style={swatch} />
+      </div>
+
+      {!hasMiddle && (
+        <button onClick={addMiddle}
+          style={{ alignSelf: "flex-start", padding: "6px 11px", borderRadius: 8, border: `1px dashed ${theme.borderFaint}`,
+            background: "transparent", color: theme.textSub, fontSize: 11.5, fontFamily: FONT, cursor: "pointer" }}>
+          + Zwischenton
+        </button>
+      )}
+
+    </div>
+  );
+}
+
+// Midpoint between two hex colours — used to seed a gradient's middle stop with
+// something that sits on the existing ramp instead of an arbitrary grey.
+function mixHex(a, b) {
+  try {
+    const p = (h) => [1, 3, 5].map(i => parseInt(String(h).slice(i, i + 2), 16));
+    const [r1, g1, b1] = p(a), [r2, g2, b2] = p(b);
+    const mid = [(r1 + r2) / 2, (g1 + g2) / 2, (b1 + b2) / 2].map(v => Math.round(v).toString(16).padStart(2, "0"));
+    return "#" + mid.join("");
+  } catch { return a || "#888888"; }
 }
 
 // ── Brand Typography ─────────────────────────────────────────────────────────
@@ -24165,6 +24915,24 @@ If you don't know a field, infer a plausible value. Write all text values in the
       }
     }, 500);
   };
+  // Brand gradients. Own debounce and own column — the palette editor writes on
+  // every keystroke too, and sharing a timer would let one overwrite the other.
+  const gradientsTimer = useRef(null);
+  const saveGradients = (grads) => {
+    setProfile(p => ({ ...(p || {}), gradients: grads }));
+    clearTimeout(gradientsTimer.current);
+    gradientsTimer.current = setTimeout(async () => {
+      const cur = profileRef.current;
+      if (cur?.id) {
+        await supabase.from("brand_profile").update({ gradients: grads }).eq("id", cur.id);
+      } else if (userOrg?.id) {
+        const { data } = await supabase.from("brand_profile")
+          .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: (projectId ? projectName : userOrg?.name) || "", gradients: grads })
+          .select("id").single();
+        if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
+      }
+    }, 500);
+  };
   const typographyTimer = useRef(null);
   const saveTypography = (typo) => {
     setProfile(p => ({ ...(p || {}), typography: typo }));
@@ -25943,8 +26711,8 @@ If you don't know a field, infer a plausible value. Write all text values in the
                       ) : k === "strategy/positioning" ? (
                         <BrandVision value={profile.vision} onChange={saveVision} accent={theme.accent} theme={theme} darkMode={darkMode} onEditingChange={setVisionEditing} canEdit={canEditCurrent} />
                       ) : k === "design/colors" ? (
-                        <BrandColors cp={cp} colors={profile.colors} editing={editingText} savedHtml={savedHtml} theme={theme} darkMode={darkMode}
-                          onSave={(html) => saveSection(k, html)} onCancel={() => setEditingText(false)} onSavePalette={saveColorPalette} />
+                        <BrandColors cp={cp} colors={profile.colors} gradients={profile.gradients} editing={editingText} savedHtml={savedHtml} theme={theme} darkMode={darkMode}
+                          onSave={(html) => saveSection(k, html)} onCancel={() => setEditingText(false)} onSavePalette={saveColorPalette} onSaveGradients={saveGradients} />
                       ) : k === "design/typography" ? (
                         <BrandTypography value={profile.typography} fonts={fonts} editing={editingText} theme={theme} darkMode={darkMode}
                           onChange={saveTypography} session={session} userOrg={userOrg} />
