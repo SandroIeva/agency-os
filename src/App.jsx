@@ -141,6 +141,11 @@ const deriveWsRole = (m) => {
 };
 
 const FONT = "'Geist', -apple-system, sans-serif";
+
+// How long a plan choice carried over from the pricing site stays actionable.
+// Covers a magic-link login (open mail, click, come back) without ever becoming
+// a permanent "always open Settings on load" flag.
+const PENDING_BILLING_TTL_MS = 60 * 60 * 1000;
 const VAPID_PUBLIC_KEY = "BJJ_TXEs7qnwTKLnYO5_pvuuzr6oB59d4xpSCssTZCkfujAaQYlCwxptfnUPXxhSnikKcG4rPH1FuU4CTYh4gvg";
 
 // OS visual slots — user-customizable icons (key → metadata)
@@ -27437,21 +27442,38 @@ export default function CircularMenu() {
 
   // Pricing links from i7os.com arrive with ?plan=...&billing=.... Keep the
   // selection through login and open the workspace Billing settings once the
-  // authenticated workspace is ready.
+  // authenticated workspace is ready. Long enough for a magic-link round trip
+  // (open mail, click, land back in the app), short enough that it can't turn
+  // into a permanent redirect.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const plan = params.get("plan");
     const billing = params.get("billing");
     if (["starter", "pro", "agency"].includes(plan) && ["monthly", "annual"].includes(billing)) {
-      try { localStorage.setItem("i7os-pending-billing", JSON.stringify({ plan, billing })); } catch (_) {}
+      try { localStorage.setItem("i7os-pending-billing", JSON.stringify({ plan, billing, at: Date.now() })); } catch (_) {}
     }
   }, []);
 
   useEffect(() => {
     if (!session?.user?.id || !userOrg?.id) return;
     const params = new URLSearchParams(window.location.search);
+    // The stored selection describes an EVENT — "just clicked a plan on the
+    // pricing site" — and only exists to survive the magic-link login, which
+    // drops the URL params. It was previously treated as permanent state and
+    // only cleared on a completed checkout, so anyone who arrived via a pricing
+    // link and didn't buy was sent to Settings on every single page load,
+    // forever. It now expires, and a stale entry is thrown away on sight.
     let hasPendingSelection = false;
-    try { hasPendingSelection = Boolean(localStorage.getItem("i7os-pending-billing")); } catch (_) {}
+    try {
+      const raw = localStorage.getItem("i7os-pending-billing");
+      if (raw) {
+        const stored = JSON.parse(raw);
+        // No timestamp = written before this fix; treat as stale.
+        const fresh = typeof stored?.at === "number" && Date.now() - stored.at < PENDING_BILLING_TTL_MS;
+        if (fresh) hasPendingSelection = true;
+        else localStorage.removeItem("i7os-pending-billing");
+      }
+    } catch (_) {}
     if (hasPendingSelection || params.has("checkout")) {
       setSettingsTab("account"); // billing now lives under the Account tab
       setCurrentView("settings");

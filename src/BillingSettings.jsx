@@ -28,7 +28,10 @@ function readPendingSelection() {
     const params = new URLSearchParams(window.location.search);
     const fromUrl = { plan: params.get("plan"), billing: params.get("billing") };
     if (PLAN_OPTIONS.some(item => item.id === fromUrl.plan) && ["monthly", "annual"].includes(fromUrl.billing)) {
-      localStorage.setItem("i7os-pending-billing", JSON.stringify(fromUrl));
+      // The timestamp matters: App.jsx uses it to decide whether to open
+      // Settings on load. Writing this without one would resurrect the entry as
+      // undated — i.e. permanently stale — and reinstate the redirect loop.
+      localStorage.setItem("i7os-pending-billing", JSON.stringify({ ...fromUrl, at: Date.now() }));
       return fromUrl;
     }
     const stored = JSON.parse(localStorage.getItem("i7os-pending-billing") || "null");
