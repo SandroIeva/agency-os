@@ -910,7 +910,11 @@ async function saveStockImage(item, { orgId, userId, email }) {
 const PER_PAGE = 30;
 const LOAD_AHEAD_PX = 500;
 
-function StockImagePicker({ open, session, userOrg, theme, darkMode, appLanguage = "de", onPick, onClose }) {
+// The search itself: field, result grid, scroll-loading and the copy-on-pick.
+// Split out from the overlay so it can also live inside another dialog (the
+// document image modal renders it as one of its tabs) without nesting a modal
+// inside a modal. It fills whatever container it's placed in.
+function StockSearchPanel({ session, userOrg, theme, darkMode, appLanguage = "de", onPick, onClose = null }) {
   const de = appLanguage === "de";
   const [query, setQuery] = useState("");
   const [items, setItems] = useState([]);
@@ -1008,32 +1012,15 @@ function StockImagePicker({ open, session, userOrg, theme, darkMode, appLanguage
     }
   }, [de, query, session?.access_token]);
 
-  // New search (or opening the dialog) → back to page 1.
+  // New search (or first mount) → back to page 1.
   useEffect(() => {
-    if (!open) return;
     const t = setTimeout(() => fetchPage(1, false), query ? 300 : 0);
     return () => clearTimeout(t);
-  }, [open, query, fetchPage]);
+  }, [query, fetchPage]);
 
-  if (!open) return null;
-
-  return createPortal(
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        onClick={onClose}
-        style={{ position: "fixed", inset: 0, zIndex: 100003, display: "flex", alignItems: "center", justifyContent: "center",
-          padding: 20, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}
-      >
-        <motion.div
-          initial={{ scale: 0.97, opacity: 0, y: 12 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.97, opacity: 0 }}
-          transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1] }}
-          onClick={e => e.stopPropagation()}
-          style={{ width: "100%", maxWidth: 880, maxHeight: "86vh", display: "flex", flexDirection: "column",
-            borderRadius: 20, background: darkMode ? "#1b1b24" : "#fff", border: `1px solid ${theme.border}`,
-            boxShadow: "0 24px 60px rgba(0,0,0,0.35)", fontFamily: FONT, overflow: "hidden" }}
-        >
-          <div style={{ padding: "18px 22px 14px", borderBottom: `1px solid ${theme.borderFaint}` }}>
+  return (
+    <>
+          <div style={{ padding: "18px 22px 14px", borderBottom: `1px solid ${theme.borderFaint}`, flexShrink: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
               <input
                 autoFocus
@@ -1044,11 +1031,15 @@ function StockImagePicker({ open, session, userOrg, theme, darkMode, appLanguage
                   background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
                   color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none" }}
               />
-              <button type="button" onClick={onClose}
-                style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`,
-                  background: "transparent", color: theme.textDim, fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>
-                {de ? "Schließen" : "Close"}
-              </button>
+              {/* Only shown when hosted in its own overlay — inside another
+                  dialog that dialog already has its own close control. */}
+              {onClose && (
+                <button type="button" onClick={onClose}
+                  style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`,
+                    background: "transparent", color: theme.textDim, fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>
+                  {de ? "Schließen" : "Close"}
+                </button>
+              )}
             </div>
             {/* Credit back to the source. Pexels requires it; Pixabay only asks
                 for it — we show it either way, and it also tells the user where
@@ -1111,6 +1102,31 @@ function StockImagePicker({ open, session, userOrg, theme, darkMode, appLanguage
               </div>
             )}
           </div>
+    </>
+  );
+}
+
+// The panel in its own overlay — used where there is no surrounding dialog
+// (the whiteboard toolbar).
+function StockImagePicker({ open, onClose, theme, darkMode, ...rest }) {
+  if (!open) return null;
+  return createPortal(
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={onClose}
+        style={{ position: "fixed", inset: 0, zIndex: 100003, display: "flex", alignItems: "center", justifyContent: "center",
+          padding: 20, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}
+      >
+        <motion.div
+          initial={{ scale: 0.97, opacity: 0, y: 12 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.97, opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1] }}
+          onClick={e => e.stopPropagation()}
+          style={{ width: "100%", maxWidth: 880, maxHeight: "86vh", display: "flex", flexDirection: "column",
+            borderRadius: 20, background: darkMode ? "#1b1b24" : "#fff", border: `1px solid ${theme.border}`,
+            boxShadow: "0 24px 60px rgba(0,0,0,0.35)", fontFamily: FONT, overflow: "hidden" }}
+        >
+          <StockSearchPanel theme={theme} darkMode={darkMode} onClose={onClose} {...rest} />
         </motion.div>
       </motion.div>
     </AnimatePresence>,
@@ -18388,13 +18404,14 @@ function CommentPopover({ block, comments, memberById, mentionables, currentUser
   );
 }
 
-// Unified image-insert modal for documents. Three tabs:
+// Unified image-insert modal for documents. Four tabs:
 //   • Creations — searchable grid of the workspace's existing images (user_files)
+//   • Stock     — stock photo search; picking copies the file into the workspace
 //   • Hochladen — pick a file from disk (reuses the editor's uploadFile)
 //   • URL       — paste an image URL
-// All three resolve to a URL and call onPick(url) → inserted as an image block.
-function ImageInsertModal({ orgId, uploadFile, theme, darkMode, accent, onPick, onClose }) {
-  const [tab, setTab] = useState("creations"); // "creations" | "upload" | "url"
+// All of them resolve to a URL and call onPick(url) → inserted as an image block.
+function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadFile, theme, darkMode, accent, onPick, onClose }) {
+  const [tab, setTab] = useState("creations"); // "creations" | "stock" | "upload" | "url"
   const [imgs, setImgs] = useState(null); // null = loading
   const [q, setQ] = useState("");
   const [url, setUrl] = useState("");
@@ -18458,6 +18475,7 @@ function ImageInsertModal({ orgId, uploadFile, theme, darkMode, accent, onPick, 
           </div>
           <div style={{ display: "inline-flex", gap: 3, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
             {tabBtn("creations", "Creations")}
+            {tabBtn("stock", "Stock")}
             {tabBtn("upload", "Hochladen")}
             {tabBtn("url", "URL")}
           </div>
@@ -18494,6 +18512,21 @@ function ImageInsertModal({ orgId, uploadFile, theme, darkMode, accent, onPick, 
                 ))}
               </div>
             )
+          ) : tab === "stock" ? (
+            // Rendered inline rather than as its own overlay — this modal is
+            // already one, and stacking two would trap the user behind two
+            // close buttons. Negative margins undo the shared tab padding so
+            // the panel's own header sits flush with the modal edges.
+            <div style={{ height: "100%", display: "flex", flexDirection: "column", margin: "-14px -20px 0", minHeight: 0 }}>
+              <StockSearchPanel
+                session={session}
+                userOrg={userOrg}
+                theme={theme}
+                darkMode={darkMode}
+                appLanguage={appLanguage}
+                onPick={(url) => onPick(url)}
+              />
+            </div>
           ) : tab === "upload" ? (
             <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}>
               <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; handleFile(f); }} />
@@ -18538,7 +18571,7 @@ function ImageInsertModal({ orgId, uploadFile, theme, darkMode, accent, onPick, 
     </motion.div>, document.body);
 }
 
-function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = [], memberById = {}, mentionables = [], currentUserId, onAddComment, onDeleteComment, uploadFile, orgId, focusBlockId }) {
+function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = [], memberById = {}, mentionables = [], currentUserId, onAddComment, onDeleteComment, uploadFile, orgId, focusBlockId , session, userOrg, appLanguage = "de" }) {
   const timer = useRef(null);
   const wrapRef = useRef(null);
   const moveRaf = useRef(0);
@@ -18796,7 +18829,8 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
       )}
       <AnimatePresence>
         {pickerOpen && (
-          <ImageInsertModal orgId={orgId} uploadFile={uploadFile} theme={theme} darkMode={darkMode} accent={accent}
+          <ImageInsertModal orgId={orgId} session={session} userOrg={userOrg} appLanguage={appLanguage}
+            uploadFile={uploadFile} theme={theme} darkMode={darkMode} accent={accent}
             onPick={handlePickImage} onClose={() => setPickerOpen(false)} />
         )}
       </AnimatePresence>
@@ -19781,7 +19815,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
               onChange={(html) => persist({ content: html })}
               comments={comments} memberById={memberById} mentionables={mentionables}
               currentUserId={session?.user?.id} onAddComment={addComment} onDeleteComment={deleteComment}
-              uploadFile={uploadDocImage} orgId={userOrg?.id}
+              uploadFile={uploadDocImage} orgId={userOrg?.id} session={session} userOrg={userOrg} appLanguage={appLanguage}
               focusBlockId={openDoc.id === deepLink?.documentId ? focusBlockId : null} />
           </div>
         </div>
