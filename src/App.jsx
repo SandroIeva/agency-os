@@ -889,15 +889,16 @@ async function saveStockImage(item, { orgId, userId, email }) {
 }
 
 // ── Stock image picker ───────────────────────────────────────────────────────
-// Search overlay backed by api/pexels.js (the key stays server-side there).
+// Search overlay backed by api/stock.js (the provider key stays server-side).
 //
-// Pexels' guidelines require a visible link back to pexels.com and a credit for
-// the photographer, so both are part of the UI rather than an afterthought —
-// the credit rides along on insert via onPick's second argument.
+// ⚠ ATTRIBUTION: only the source link in the header is shown. That satisfies
+// Pixabay, which asks for credit but does not require it. PEXELS DOES REQUIRE a
+// per-image photographer credit — so if STOCK_PROVIDER is ever switched to
+// pexels, the credit under each tile has to come back. The API still returns
+// `photographer` and `photographerUrl` for exactly that reason.
 //
-// The 300 ms debounce is not polish: the hourly quota (200 requests) belongs to
-// our single key for ALL users, so firing on every keystroke would exhaust it
-// within one person's session.
+// The 300 ms debounce is not polish: the quota belongs to our single key for ALL
+// users, so firing on every keystroke would exhaust it within one session.
 // Constant on purpose. Providers page by `page × per_page`, so asking for 30 and
 // then 60 would return items 61–120 and silently skip 31–60. Loading starts well
 // before the bottom instead, which is what makes it feel continuous.
@@ -1067,31 +1068,29 @@ function StockImagePicker({ open, session, userOrg, theme, darkMode, appLanguage
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 12 }}>
                 {items.map(it => (
-                  <div key={it.id} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                    <motion.div
-                      whileHover={{ y: saving ? 0 : -3 }} whileTap={{ scale: 0.98 }}
-                      onClick={() => pick(it)}
-                      style={{ cursor: saving ? "wait" : "pointer", borderRadius: 12, overflow: "hidden", aspectRatio: "4 / 3",
-                        position: "relative", opacity: saving && saving !== it.id ? 0.45 : 1,
-                        background: it.avgColor || (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)") }}
-                    >
-                      <img src={it.thumb} alt={it.alt} loading="lazy"
-                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                      {saving === it.id && (
-                        <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center",
-                          background: "rgba(0,0,0,0.45)", color: "#fff", fontSize: 12, fontWeight: 600 }}>
-                          {de ? "Wird gespeichert …" : "Saving …"}
-                        </div>
-                      )}
-                    </motion.div>
-                    {/* Photographer credit — a guideline requirement, not decoration. */}
-                    <a href={it.photographerUrl} target="_blank" rel="noopener noreferrer"
-                      onClick={e => e.stopPropagation()}
-                      style={{ fontSize: 10.5, color: theme.textFaint, textDecoration: "none",
-                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {it.photographer}
-                    </a>
-                  </div>
+                  <motion.div
+                    key={it.id}
+                    // Darkens softly on hover instead of shifting position — a
+                    // moving tile in a dense grid nudges the eye around.
+                    // brightness(1) has to be in the base style: animating a
+                    // filter from undefined is a no-op and logs a warning.
+                    whileHover={saving ? {} : { filter: "brightness(0.74)" }}
+                    whileTap={{ scale: 0.985 }}
+                    transition={{ duration: 0.28, ease: [0.22, 0.68, 0.35, 1] }}
+                    onClick={() => pick(it)}
+                    style={{ cursor: saving ? "wait" : "pointer", borderRadius: 12, overflow: "hidden", aspectRatio: "4 / 3",
+                      position: "relative", filter: "brightness(1)", opacity: saving && saving !== it.id ? 0.45 : 1,
+                      background: it.avgColor || (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)") }}
+                  >
+                    <img src={it.thumb} alt={it.alt} loading="lazy"
+                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                    {saving === it.id && (
+                      <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center",
+                        background: "rgba(0,0,0,0.45)", color: "#fff", fontSize: 12, fontWeight: 600 }}>
+                        {de ? "Wird gespeichert …" : "Saving …"}
+                      </div>
+                    )}
+                  </motion.div>
                 ))}
               </div>
             )}
