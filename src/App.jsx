@@ -898,7 +898,11 @@ async function saveStockImage(item, { orgId, userId, email }) {
 // The 300 ms debounce is not polish: the hourly quota (200 requests) belongs to
 // our single key for ALL users, so firing on every keystroke would exhaust it
 // within one person's session.
-const PER_PAGE = 30; // 30 keeps whole rows in the auto-fill grid at most widths
+// Constant on purpose. Providers page by `page × per_page`, so asking for 30 and
+// then 60 would return items 61–120 and silently skip 31–60. Loading starts well
+// before the bottom instead, which is what makes it feel continuous.
+const PER_PAGE = 30;
+const LOAD_AHEAD_PX = 500;
 
 function StockImagePicker({ open, session, userOrg, theme, darkMode, appLanguage = "de", onPick, onClose }) {
   const de = appLanguage === "de";
@@ -912,6 +916,21 @@ function StockImagePicker({ open, session, userOrg, theme, darkMode, appLanguage
   const [saving, setSaving] = useState(null); // id of the image being copied
   const [error, setError] = useState("");
   const reqRef = useRef(0);
+  const scrollRef = useRef(null);
+  // Scroll fires far faster than state updates settle, so `loadingMore` alone
+  // would let several page requests slip through on one flick of the wheel.
+  const loadingRef = useRef(false);
+
+  // Auto-load while scrolling. Triggers LOAD_AHEAD_PX before the end so the next
+  // batch is usually already in place by the time the user gets there.
+  const onScroll = (e) => {
+    if (!hasMore || loadingRef.current) return;
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - LOAD_AHEAD_PX) {
+      loadingRef.current = true;
+      fetchPage(page + 1, true);
+    }
+  };
 
   // Picking copies the file into the workspace's storage before handing back a
   // URL, so callers only ever receive something that belongs to the workspace.
@@ -979,6 +998,7 @@ function StockImagePicker({ open, session, userOrg, theme, darkMode, appLanguage
       }
     } finally {
       if (reqRef.current === token) { setLoading(false); setLoadingMore(false); }
+      loadingRef.current = false;
     }
   }, [de, query, session?.access_token]);
 
@@ -1037,7 +1057,7 @@ function StockImagePicker({ open, session, userOrg, theme, darkMode, appLanguage
             </div>
           </div>
 
-          <div style={{ overflowY: "auto", padding: 18 }}>
+          <div ref={scrollRef} onScroll={onScroll} style={{ overflowY: "auto", padding: 18 }}>
             {error ? (
               <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: "#E86767" }}>{error}</div>
             ) : loading && !items.length ? (
@@ -1076,17 +1096,14 @@ function StockImagePicker({ open, session, userOrg, theme, darkMode, appLanguage
               </div>
             )}
 
-            {/* Explicit button rather than infinite scroll: each page is one
-                upstream request against a shared quota, so loading more should
-                be the user's decision, not a side effect of scrolling. */}
-            {!error && hasMore && items.length > 0 && (
-              <div style={{ display: "flex", justifyContent: "center", marginTop: 18 }}>
-                <button type="button" disabled={loadingMore} onClick={() => fetchPage(page + 1, true)}
-                  style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`,
-                    background: "transparent", color: theme.textDim, fontSize: 13, fontFamily: FONT,
-                    cursor: loadingMore ? "wait" : "pointer", opacity: loadingMore ? 0.6 : 1 }}>
-                  {loadingMore ? (de ? "Lädt …" : "Loading …") : (de ? "Mehr laden" : "Load more")}
-                </button>
+            {/* Status line only — loading happens on scroll. Kept at a fixed
+                height so the grid doesn't jump as it appears and disappears. */}
+            {items.length > 0 && (
+              <div style={{ height: 34, display: "flex", alignItems: "center", justifyContent: "center",
+                marginTop: 14, fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>
+                {loadingMore
+                  ? (de ? "Lädt weitere Bilder …" : "Loading more …")
+                  : !hasMore ? (de ? "Keine weiteren Bilder" : "No more images") : ""}
               </div>
             )}
           </div>
