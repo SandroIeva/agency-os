@@ -1106,34 +1106,6 @@ function StockSearchPanel({ session, userOrg, theme, darkMode, appLanguage = "de
   );
 }
 
-// The panel in its own overlay — used where there is no surrounding dialog
-// (the whiteboard toolbar).
-function StockImagePicker({ open, onClose, theme, darkMode, ...rest }) {
-  if (!open) return null;
-  return createPortal(
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        onClick={onClose}
-        style={{ position: "fixed", inset: 0, zIndex: 100003, display: "flex", alignItems: "center", justifyContent: "center",
-          padding: 20, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}
-      >
-        <motion.div
-          initial={{ scale: 0.97, opacity: 0, y: 12 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.97, opacity: 0 }}
-          transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1] }}
-          onClick={e => e.stopPropagation()}
-          style={{ width: "100%", maxWidth: 880, maxHeight: "86vh", display: "flex", flexDirection: "column",
-            borderRadius: 20, background: darkMode ? "#1b1b24" : "#fff", border: `1px solid ${theme.border}`,
-            boxShadow: "0 24px 60px rgba(0,0,0,0.35)", fontFamily: FONT, overflow: "hidden" }}
-        >
-          <StockSearchPanel theme={theme} darkMode={darkMode} onClose={onClose} {...rest} />
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>,
-    document.body,
-  );
-}
-
 // ── Reusable Dropdown ────────────────────────────────────────────────────────
 // Anthracite pill trigger + frosted popover with hover-row items and a modern
 // check on the active one. options: [{ value, label, icon?, sub? }].
@@ -5349,11 +5321,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [mediaTab, setMediaTab] = useState("emoji");   // "emoji" | "sticker" — top toggle in the picker
   const [stickerCat, setStickerCat] = useState("Life");
   const [emojiCat, setEmojiCat] = useState("smileys");
-  const [imgMenuOpen, setImgMenuOpen] = useState(false); // image button's Upload / Assets choice menu
-  const [assetsOpen, setAssetsOpen] = useState(false);   // Assets image picker panel above the toolbar
-  const [pexelsOpen, setPexelsOpen] = useState(false);   // Pexels stock photo search overlay
-  const [assetImages, setAssetImages] = useState([]);    // org's uploaded images (user_files)
-  const [assetsLoading, setAssetsLoading] = useState(false);
+  const [imgMenuOpen, setImgMenuOpen] = useState(false); // shared image-insert modal
   const [commentOpenId, setCommentOpenId] = useState(null); // comment pin whose bubble is open
   const [wbColorPop, setWbColorPop] = useState(null); // format-bar color overlay: null | "color" | "fill"
   const [wbLinkPop, setWbLinkPop] = useState(false); // format-bar URL editor for text hyperlinks
@@ -5373,7 +5341,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const fileRef = useRef(null);
   const toolbarRef = useRef(null); // bottom toolbar — used to center the emoji picker over it
   const mediaBtnRef = useRef(null); // combined emoji/sticker toolbar button — the picker centers on this
-  const imgBtnRef = useRef(null); // image toolbar button — the Upload/Assets menu & picker center on this
+  const imgBtnRef = useRef(null); // image toolbar button
   const commentAreaRef = useRef(null); // the comment textarea while a comment bubble is open
   const camRef = useRef(cam); camRef.current = cam;
   const itemsRef = useRef(items); itemsRef.current = items;
@@ -6038,38 +6006,28 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const handleImageFiles = async (files, at) => {
-    const file = Array.from(files || []).find(f => f.type.startsWith("image/"));
-    if (!file || !board || !userOrg?.id) return;
+  // Upload one file and RETURN its URL. Split out from handleImageFiles so the
+  // shared image modal — which expects uploadFile(file) → url — can reuse the
+  // exact same quota check and storage ledger as drag-and-drop and paste.
+  const uploadBoardImage = async (file) => {
+    if (!file || !userOrg?.id) return null;
     const ext = (file.name.split(".").pop() || "png").toLowerCase();
     const path = `whiteboards/${userOrg.id}/${crypto.randomUUID()}.${ext}`;
     const room = await checkStorageRoom(userOrg?.id, file.size, { userId: session?.user?.id, email: session?.user?.email });
-    if (!room.ok) { alert(de ? `Speicher voll (${formatBytesGB(room.limit)}) — bitte upgraden.` : `Storage full (${formatBytesGB(room.limit)}) — please upgrade.`); return; }
+    if (!room.ok) { alert(de ? `Speicher voll (${formatBytesGB(room.limit)}) — bitte upgraden.` : `Storage full (${formatBytesGB(room.limit)}) — please upgrade.`); return null; }
     const { error } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type });
-    if (error) { alert((de ? "Bild-Upload fehlgeschlagen: " : "Image upload failed: ") + error.message); return; }
+    if (error) { alert((de ? "Bild-Upload fehlgeschlagen: " : "Image upload failed: ") + error.message); return null; }
     trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "brand-assets", path, sizeBytes: file.size });
     const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
-    addImageFromUrl(pub.publicUrl, at);
+    return pub.publicUrl;
   };
-  // Assets picker: the org's already-uploaded image files (same source as the
-  // Assets view — the user_files table, images only). Loaded lazily the first
-  // time the picker is opened.
-  const loadAssetImages = async () => {
-    if (!userOrg?.id) return;
-    setAssetsLoading(true);
-    const { data, error } = await supabase.from("user_files")
-      .select("id,name,public_url,mime_type,created_at")
-      .eq("org_id", userOrg.id)
-      // Filter to images server-side — otherwise an org with many PDFs/videos could
-      // eat the 200-row limit before a single image makes it into the picker.
-      .like("mime_type", "image/%")
-      .order("created_at", { ascending: false })
-      .limit(200);
-    setAssetsLoading(false);
-    if (error) { console.warn("[wb] asset load failed:", error.message); setAssetImages([]); return; }
-    setAssetImages((data || []).filter(f => (f.mime_type || "").startsWith("image/") && f.public_url));
+  // Drop / paste path: upload, then place the image at the drop position.
+  const handleImageFiles = async (files, at) => {
+    const file = Array.from(files || []).find(f => f.type.startsWith("image/"));
+    if (!file || !board) return;
+    const url = await uploadBoardImage(file);
+    if (url) addImageFromUrl(url, at);
   };
-  const openAssetsPicker = () => { setImgMenuOpen(false); setAssetsOpen(true); loadAssetImages(); };
 
   // ── Rendering ──
   // Focus the edit textarea reliably (autoFocus alone can lose the race against
@@ -6963,9 +6921,9 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><line x1="9" y1="9.5" x2="9.01" y2="9.5"/><line x1="15" y1="9.5" x2="15.01" y2="9.5"/></svg>
             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}><polyline points="6 9 12 15 18 9"/></svg>
           </motion.div>
-          <motion.div ref={imgBtnRef} whileTap={{ scale: 0.9 }} onClick={() => { setImgMenuOpen(o => !o); setAssetsOpen(false); }} title={de ? "Bild einfügen" : "Insert image"}
+          <motion.div ref={imgBtnRef} whileTap={{ scale: 0.9 }} onClick={() => setImgMenuOpen(o => !o)} title={de ? "Bild einfügen" : "Insert image"}
             style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-              background: (imgMenuOpen || assetsOpen) ? "#15151c" : "transparent", color: (imgMenuOpen || assetsOpen) ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
+              background: imgMenuOpen ? "#15151c" : "transparent", color: imgMenuOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
           </motion.div>
           <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { handleImageFiles(e.target.files); e.target.value = ""; }} />
@@ -7066,103 +7024,24 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           ); })(), document.body)}
 
       {/* Image button → small "Upload / from Assets" choice menu */}
-        {imgMenuOpen && createPortal((() => {
-          const bt = imgBtnRef.current?.getBoundingClientRect();
-          const W = 220;
-          const rawCx = bt ? bt.left + bt.width / 2 : window.innerWidth / 2;
-          const cx = Math.min(Math.max(rawCx, W / 2 + 12), window.innerWidth - W / 2 - 12);
-          const bottomPx = bt ? window.innerHeight - bt.top + 14 : 90;
-          const row = { display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text };
-          return (
-          <>
-            <div onClick={() => setImgMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
-            <div style={{ position: "fixed", left: cx, bottom: bottomPx, transform: "translateX(-50%)", zIndex: 5001, width: W }}>
-            <motion.div initial={{ opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
-              onPointerDown={e => e.stopPropagation()}
-              style={{ width: "100%", padding: 6,
-                background: darkMode ? "rgba(22,22,30,0.97)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.borderFaint}`, borderRadius: 14, boxShadow: "0 18px 50px rgba(0,0,0,0.24)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
-              <div onClick={() => { setImgMenuOpen(false); fileRef.current?.click(); }}
-                onMouseEnter={e => e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"} style={row}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                {de ? "Datei hochladen" : "Upload file"}
-              </div>
-              <div onClick={openAssetsPicker}
-                onMouseEnter={e => e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"} style={row}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-                {de ? "Aus Assets" : "From Assets"}
-              </div>
-              <div onClick={() => { setImgMenuOpen(false); setPexelsOpen(true); }}
-                onMouseEnter={e => e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"} style={row}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-                {de ? "Stockfotos suchen" : "Search stock photos"}
-              </div>
-            </motion.div>
-            </div>
-          </>
-          ); })(), document.body)}
-
-      <StockImagePicker
-        open={pexelsOpen}
-        session={session}
-        userOrg={userOrg}
-        theme={theme}
-        darkMode={darkMode}
-        appLanguage={appLanguage}
-        onClose={() => setPexelsOpen(false)}
-        onPick={(url) => {
-          // The picker has already copied the file into the workspace, so this
-          // is our own storage URL — the board won't break if the image later
-          // disappears upstream.
-          addImageFromUrl(url);
-          setPexelsOpen(false);
-        }}
-      />
-
-      {/* Assets image picker — the org's uploaded images, click to drop onto the board */}
-        {assetsOpen && createPortal((() => {
-          const bt = imgBtnRef.current?.getBoundingClientRect();
-          const W = 340;
-          const rawCx = bt ? bt.left + bt.width / 2 : window.innerWidth / 2;
-          const cx = Math.min(Math.max(rawCx, W / 2 + 12), window.innerWidth - W / 2 - 12);
-          const bottomPx = bt ? window.innerHeight - bt.top + 14 : 90;
-          return (
-          <>
-            <div onClick={() => setAssetsOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
-            <div style={{ position: "fixed", left: cx, bottom: bottomPx, transform: "translateX(-50%)", zIndex: 5001, width: W }}>
-            <motion.div initial={{ opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
-              onPointerDown={e => e.stopPropagation()}
-              style={{ width: "100%",
-                background: darkMode ? "rgba(22,22,30,0.97)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.borderFaint}`, borderRadius: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.24)", overflow: "hidden", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderBottom: `1px solid ${theme.borderFaint}` }}>
-                <div onClick={() => { setAssetsOpen(false); setImgMenuOpen(true); }} title={de ? "Zurück" : "Back"} style={{ cursor: "pointer", display: "flex", color: theme.textDim }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-                </div>
-                <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{de ? "Aus Assets" : "From Assets"}</div>
-              </div>
-              <div className="no-scrollbar" style={{ maxHeight: 280, overflowY: "auto", padding: 10 }}>
-                {assetsLoading ? (
-                  <div style={{ padding: "26px 0", textAlign: "center", fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>{de ? "Wird geladen…" : "Loading…"}</div>
-                ) : assetImages.length === 0 ? (
-                  <div style={{ padding: "26px 14px", textAlign: "center", fontSize: 12.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>{de ? "Noch keine Bilder unter Assets." : "No images in Assets yet."}</div>
-                ) : (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-                    {assetImages.map(a => (
-                      <motion.div key={a.id} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.94 }} title={a.name || ""}
-                        onClick={() => { addImageFromUrl(a.public_url); setAssetsOpen(false); }}
-                        style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 9, cursor: "pointer", overflow: "hidden", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}>
-                        <img src={a.public_url} alt="" draggable={false} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none", display: "block" }} />
-                      </motion.div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </motion.div>
-            </div>
-          </>
-          ); })(), document.body)}
+        {/* Shared image modal — the same one documents use, so both places
+            offer Creations / Stock / Hochladen / URL instead of each inventing
+            their own menu. Replaces the old three-item dropdown plus its
+            separate assets panel and stock overlay. */}
+        {imgMenuOpen && (
+          <ImageInsertModal
+            orgId={userOrg?.id}
+            session={session}
+            userOrg={userOrg}
+            appLanguage={appLanguage}
+            uploadFile={uploadBoardImage}
+            theme={theme}
+            darkMode={darkMode}
+            accent={theme.accent}
+            onPick={(url) => { addImageFromUrl(url); setImgMenuOpen(false); }}
+            onClose={() => setImgMenuOpen(false)}
+          />
+        )}
     </motion.div>
   );
 }
