@@ -74,8 +74,12 @@ export default function AdminView() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
 
-  const load = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+  // Takes the session as an argument instead of fetching it. Calling
+  // supabase.auth.getSession() from inside an onAuthStateChange callback
+  // deadlocks — the callback holds the auth lock and getSession() waits for the
+  // same one, so the promise never settles and the page sits on "Lädt …"
+  // forever. The callback already hands us the session; use that.
+  const load = useCallback(async (session) => {
     if (!session?.access_token) { setState({ status: "anon" }); return; }
     try {
       const r = await fetch("/api/admin-stats", {
@@ -93,9 +97,13 @@ export default function AdminView() {
   }, []);
 
   useEffect(() => {
-    load();
-    const { data: sub } = supabase.auth.onAuthStateChange(() => load());
-    return () => sub?.subscription?.unsubscribe();
+    let cancelled = false;
+    // Initial read happens OUTSIDE any auth callback, so it's safe here.
+    supabase.auth.getSession().then(({ data }) => { if (!cancelled) load(data?.session); });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!cancelled) load(session);
+    });
+    return () => { cancelled = true; sub?.subscription?.unsubscribe(); };
   }, [load]);
 
   const signIn = async (e) => {
@@ -165,7 +173,9 @@ export default function AdminView() {
     <>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, marginBottom: 22 }}>
         <div style={{ fontSize: 20, fontWeight: 600 }}>i7 OS — Interne Übersicht</div>
-        <button onClick={() => { setState({ status: "loading" }); load(); }}
+        {/* Fetches the session first — load() no longer looks it up itself.
+            Safe outside an auth callback, which a click always is. */}
+        <button onClick={() => { setState({ status: "loading" }); supabase.auth.getSession().then(({ data }) => load(data?.session)); }}
           style={{ padding: "7px 13px", borderRadius: 9, border: `1px solid ${LINE}`, background: "transparent",
             color: DIM, fontSize: 12.5, fontFamily: FONT, cursor: "pointer" }}>Aktualisieren</button>
       </div>
