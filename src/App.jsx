@@ -5342,6 +5342,16 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const toolbarRef = useRef(null); // bottom toolbar — used to center the emoji picker over it
   const mediaBtnRef = useRef(null); // combined emoji/sticker toolbar button — the picker centers on this
   const imgBtnRef = useRef(null); // image toolbar button
+
+  // Default ink for strokes, resolved at RENDER time from the current theme
+  // rather than baked in when the item is drawn. Storing the colour would make
+  // a board theme-specific: a white line drawn in dark mode would be invisible
+  // in light mode, and vice versa. The legacy value is treated as "default" too,
+  // so boards drawn before this change follow the theme as well — it is the same
+  // colour as the palette's default swatch, so an explicit pick of it behaves
+  // identically.
+  const INK = darkMode ? "#f4f4f7" : "#15151c";
+  const inkOf = (c) => (!c || c === "#15151c") ? INK : c;
   const commentAreaRef = useRef(null); // the comment textarea while a comment bubble is open
   const camRef = useRef(cam); camRef.current = cam;
   const itemsRef = useRef(items); itemsRef.current = items;
@@ -5669,7 +5679,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const x = direction === "left" ? curX - gap - box.w : curX + curW + gap;
     const y = curY + curH / 2 - box.h / 2;
     const id = addItemLocal("text", { x, y, w: box.w, h: box.h, text: "", color: sd.color || "#15151c", size: WB_MINDMAP_BRANCH_SIZE, bold: sd.bold });
-    addItemLocal("link", { fromId: sourceId, toId: id, color: "#15151c" });
+    addItemLocal("link", { fromId: sourceId, toId: id });
     setSel(id); setEditing(id); setTool("select");
   };
 
@@ -5694,7 +5704,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     // the cursor leaves the canvas mid-drag.
     canvasRef.current?.setPointerCapture?.(e.pointerId);
     if (tool === "hand") { dragRef.current = { mode: "pan", sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y }; return; }
-    if (tool === "pen") { dragRef.current = { mode: "draw" }; setTempStroke({ points: [[pt.x, pt.y]], color: "#15151c" }); return; }
+    if (tool === "pen") { dragRef.current = { mode: "draw" }; setTempStroke({ points: [[pt.x, pt.y]] }); return; }
     if (WB_SHAPE_TYPES.includes(tool)) { dragRef.current = { mode: "create", type: tool, sx: pt.x, sy: pt.y }; setTempItem({ type: tool, x: pt.x, y: pt.y, w: 1, h: 1 }); return; }
     if (tool === "arrow" || tool === "line") { dragRef.current = { mode: "arrow" }; setTempItem({ type: tool, x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y }); return; }
     // select tool on empty canvas: start a marquee (drag a box to select multiple).
@@ -5781,7 +5791,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (d?.mode === "arrow" && tempItem) {
       if (Math.hypot(tempItem.x2 - tempItem.x1, tempItem.y2 - tempItem.y1) > 12) {
         // arrow (with head) or line (no head) — hs only matters for arrows.
-        const id = addItemLocal(tempItem.type, { x1: tempItem.x1, y1: tempItem.y1, x2: tempItem.x2, y2: tempItem.y2, color: "#15151c", sw: 4, hs: "m" });
+        const id = addItemLocal(tempItem.type, { x1: tempItem.x1, y1: tempItem.y1, x2: tempItem.x2, y2: tempItem.y2, sw: 4, hs: "m" });
         setSel(id);
       }
       setTool("select");
@@ -6229,7 +6239,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     return (
       <svg key={it.id} width={Math.max(...xs) - minX + pad * 2} height={Math.max(...ys) - minY + pad * 2}
         style={{ position: "absolute", left: minX + ox - pad, top: minY + oy - pad, overflow: "visible", pointerEvents: "none" }}>
-        <path d={path} stroke={d.color || "#15151c"} strokeWidth={(d.sw || 2.5) + (selIds.includes(it.id) ? 0.8 : 0)} fill="none" strokeLinecap="round" strokeLinejoin="round"
+        <path d={path} stroke={inkOf(d.color)} strokeWidth={(d.sw || 2.5) + (selIds.includes(it.id) ? 0.8 : 0)} fill="none" strokeLinecap="round" strokeLinejoin="round"
           style={{ pointerEvents: "stroke", cursor: "move" }} onPointerDown={(e) => onItemPointerDown(e, it)} />
       </svg>
     );
@@ -6244,7 +6254,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const hl = WB_ARROW_HEAD_SIZES[d.hs] || WB_ARROW_HEAD_SIZES.m; // arrowhead length
     const hx1 = x2 - hl * Math.cos(ang - 0.46), hy1 = y2 - hl * Math.sin(ang - 0.46);
     const hx2 = x2 - hl * Math.cos(ang + 0.46), hy2 = y2 - hl * Math.sin(ang + 0.46);
-    const col = d.color || "#15151c";
+    const col = inkOf(d.color);
     return (
       <svg key={it.id} width={Math.abs(x2 - x1) + pad * 2} height={Math.abs(y2 - y1) + pad * 2}
         style={{ position: "absolute", left: minX, top: minY, overflow: "visible", pointerEvents: "none" }}>
@@ -6292,7 +6302,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const x2 = aCenterX <= bCenterX ? b.x : b.x + b.w;
     const y1 = a.y + a.h / 2, y2 = b.y + b.h / 2;
     const minX = Math.min(x1, x2) - 4, minY = Math.min(y1, y2) - 4;
-    const col = d.color || "#15151c";
+    const col = inkOf(d.color);
     return (
       <svg key={it.id} width={Math.abs(x2 - x1) + 8} height={Math.abs(y2 - y1) + 8}
         style={{ position: "absolute", left: minX, top: minY, overflow: "visible", pointerEvents: "none" }}>
@@ -6572,7 +6582,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
             const minX = Math.min(...xs), minY = Math.min(...ys);
             const path = tempStroke.points.map((p, i) => `${i ? "L" : "M"}${(p[0] - minX + 8).toFixed(1)} ${(p[1] - minY + 8).toFixed(1)}`).join(" ");
             return <svg width={Math.max(...xs) - minX + 16} height={Math.max(...ys) - minY + 16} style={{ position: "absolute", left: minX - 8, top: minY - 8, overflow: "visible", pointerEvents: "none" }}>
-              <path d={path} stroke={tempStroke.color} strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+              <path d={path} stroke={inkOf(tempStroke.color)} strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>;
           })()}
           {/* Uniform selection frame around selected pen strokes (like images/shapes) */}
           {!editing && items.filter(i => i.type === "draw" && selIds.includes(i.id)).map(i => {
@@ -6599,13 +6609,13 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               <div style={{ position: "absolute", left: tempItem.x, top: tempItem.y, width: tempItem.w, height: tempItem.h, border: "2px dashed #15151c", borderRadius: tempItem.type === "ellipse" ? "50%" : 12, pointerEvents: "none" }} />
             ) : (
               <svg width={Math.max(2, tempItem.w)} height={Math.max(2, tempItem.h)} style={{ position: "absolute", left: tempItem.x, top: tempItem.y, pointerEvents: "none", overflow: "visible" }}>
-                <polygon points={wbShapePoints(tempItem.type, Math.max(2, tempItem.w), Math.max(2, tempItem.h))} fill="none" stroke="#15151c" strokeWidth={2} strokeDasharray="6 5" strokeLinejoin="round" />
+                <polygon points={wbShapePoints(tempItem.type, Math.max(2, tempItem.w), Math.max(2, tempItem.h))} fill="none" stroke={INK} strokeWidth={2} strokeDasharray="6 5" strokeLinejoin="round" />
               </svg>
             )
           )}
           {tempItem && (tempItem.type === "arrow" || tempItem.type === "line") && (
             <svg style={{ position: "absolute", left: 0, top: 0, overflow: "visible", pointerEvents: "none" }}>
-              <line x1={tempItem.x1} y1={tempItem.y1} x2={tempItem.x2} y2={tempItem.y2} stroke="#15151c" strokeWidth={4} strokeDasharray="6 5" strokeLinecap="round" />
+              <line x1={tempItem.x1} y1={tempItem.y1} x2={tempItem.x2} y2={tempItem.y2} stroke={INK} strokeWidth={4} strokeDasharray="6 5" strokeLinecap="round" />
             </svg>
           )}
         </div>
