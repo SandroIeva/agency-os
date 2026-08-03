@@ -5607,7 +5607,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     // node isn't a sliver — typing then live-refits the box to the real content.
     const ph = de ? "Text hinzufügen" : "Add text";
     const box = wbFitTextBox(ph, "m", false);
-    const id = addItemLocal("text", { x: pt.x, y: pt.y - box.h / 2, w: box.w, h: box.h, text: "", color: "#15151c" });
+    const id = addItemLocal("text", { x: pt.x, y: pt.y - box.h / 2, w: box.w, h: box.h, text: "" });
     setSel(id); setEditing(id); setTool("select");
   };
   const placeSticker = (cat, file) => {
@@ -5678,7 +5678,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const gap = 70;
     const x = direction === "left" ? curX - gap - box.w : curX + curW + gap;
     const y = curY + curH / 2 - box.h / 2;
-    const id = addItemLocal("text", { x, y, w: box.w, h: box.h, text: "", color: sd.color || "#15151c", size: WB_MINDMAP_BRANCH_SIZE, bold: sd.bold });
+    const id = addItemLocal("text", { x, y, w: box.w, h: box.h, text: "", color: sd.color, size: WB_MINDMAP_BRANCH_SIZE, bold: sd.bold });
     addItemLocal("link", { fromId: sourceId, toId: id });
     setSel(id); setEditing(id); setTool("select");
   };
@@ -5785,7 +5785,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         w = h = 300;
         x = d.sx - w / 2; y = d.sy - h / 2;
       }
-      const id = addItemLocal(tempItem.type, { x, y, w, h, text: "", color: "#15151c", fill: WB_SHAPE_DEFAULT_FILL });
+      const id = addItemLocal(tempItem.type, { x, y, w, h, text: "", fill: WB_SHAPE_DEFAULT_FILL });
       setSel(id); setTool("select");
     }
     if (d?.mode === "arrow" && tempItem) {
@@ -6068,7 +6068,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const isShape = WB_SHAPE_TYPES.includes(it.type);
     const isSvgShape = it.type === "diamond" || it.type === "triangle";
     const { x = 0, y = 0, w = 160, h = 120 } = d;
-    const stroke = d.color || "#15151c";
+    const stroke = inkOf(d.color);
     const noBorder = stroke === "transparent";
     const fill = d.fill && d.fill !== "transparent" ? d.fill : "transparent";
     let wrap = { position: "absolute", left: x, top: y, width: w, height: h, boxSizing: "border-box", cursor: isEdit ? "auto" : "move", outline: isSel ? "1.5px solid #3B82F6" : "none", outlineOffset: 2 };
@@ -6385,7 +6385,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       : selItem.type === "sticky" ? WB_STICKY_COLORS
       : isShape ? ["transparent", ...WB_PALETTE]
       : WB_PALETTE;
-    const popCurrent = wbColorPop === "fill" ? (dta.fill || "transparent") : (dta.color || (selItem.type === "sticky" ? WB_STICKY_DEFAULT : "#15151c"));
+    const popCurrent = wbColorPop === "fill" ? (dta.fill || "transparent") : (selItem.type === "sticky" ? (dta.color || WB_STICKY_DEFAULT) : inkOf(dta.color));
     const applyPop = (c) => { setSelData(wbColorPop === "fill" ? { fill: c } : { color: c }); setWbColorPop(null); };
     return (
       <div onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.preventDefault()}
@@ -6415,7 +6415,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         </>)}
         {isShape && (<>
           <span style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.55)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{de ? "Rand" : "Border"}</span>
-          {swatch("color", dta.color || "#15151c")}
+          {swatch("color", inkOf(dta.color))}
           {divider}
           <span style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.55)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{de ? "Füllung" : "Fill"}</span>
           {swatch("fill", dta.fill || "transparent")}
