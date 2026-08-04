@@ -19184,6 +19184,10 @@ const DOC_SKILLS = [
 // Docs tab — Google-Docs-style: a list of workspace documents + a rich-text
 // editor. Documents are stored in brand_documents (org-scoped).
 function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "de", orgMembers, createNotification, deepLink, fullscreen, setFullscreen, createRef, uploadPdfRef, importRef, onImportingChange, skillsRef, newFolderRef, llmProvider, llmKeys, getProviderToken, ensureValidToken, autoReLogin, onOpenChange, projectId = null }) {
+  // Component-level language flag. The three `const de` further down sit inside
+  // nested functions, so anything at this level could not see them — which is
+  // exactly how the PDF upload shipped a ReferenceError.
+  const de = appLanguage === "de";
   const [docs, setDocs] = useState([]);
   // Folders (document_folders) — same principle as the Assets/Creations tab.
   const [folders, setFolders] = useState([]);
