@@ -1237,6 +1237,71 @@ function TabUnderline({ box, darkMode = false }) {
 // ImageLightbox — full-screen viewer for AI-generated images, with action toolbar:
 //   Download · Copy Image · Copy Link · Upload to Drive · Open in new tab
 // Pulls heavy actions (upload to Supabase / Drive) in from the parent via callbacks.
+// Full-screen PDF viewer, matching ImageLightbox: same dark backdrop, same
+// top bar, closes on backdrop click or Escape. A PDF embedded in the document
+// column only ever got a fraction of the screen, which is the opposite of what
+// you want when reading one.
+function PdfLightbox({ url, title, onClose, appLanguage = "de" }) {
+  const de = appLanguage === "de";
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 99999,
+        background: "rgba(8, 8, 12, 0.92)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        display: "flex", flexDirection: "column", padding: 24,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 12, minWidth: 0 }}>
+          <span style={{ fontSize: 11, fontFamily: FONT, color: "#ffffff60", letterSpacing: 2, textTransform: "uppercase", fontWeight: 600, flexShrink: 0 }}>
+            PDF
+          </span>
+          <span style={{ fontSize: 13, fontFamily: FONT, color: "#ffffffAA", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {title}
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+          <a href={url} target="_blank" rel="noopener noreferrer"
+            style={{ padding: "7px 13px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.16)", background: "transparent",
+              color: "#ffffffCC", fontSize: 12.5, fontFamily: FONT, textDecoration: "none" }}>
+            {de ? "In neuem Tab" : "New tab"}
+          </a>
+          <button onClick={onClose}
+            style={{ padding: "7px 13px", borderRadius: 9, border: "none", background: "rgba(255,255,255,0.95)",
+              color: "#15151c", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
+            {de ? "Schließen" : "Close"}
+          </button>
+        </div>
+      </div>
+
+      {/* onClick stops here so a click inside the document doesn't close the
+          viewer — only the backdrop around it does. */}
+      <div onClick={(e) => e.stopPropagation()} style={{ flex: 1, minHeight: 0, borderRadius: 12, overflow: "hidden", background: "#fff" }}>
+        <object data={`${url}#toolbar=1&navpanes=0`} type="application/pdf" style={{ width: "100%", height: "100%", border: 0 }}>
+          <div style={{ padding: 32, textAlign: "center", fontFamily: FONT, fontSize: 14, color: "#444" }}>
+            {de ? "Dieses PDF kann hier nicht direkt angezeigt werden." : "This PDF can't be displayed inline here."}
+            <div style={{ marginTop: 14 }}>
+              <a href={url} target="_blank" rel="noopener noreferrer"
+                style={{ display: "inline-block", padding: "9px 18px", borderRadius: 999, background: "#15151c", color: "#fff", textDecoration: "none", fontSize: 13, fontWeight: 600 }}>
+                {de ? "PDF öffnen" : "Open PDF"}
+              </a>
+            </div>
+          </div>
+        </object>
+      </div>
+    </motion.div>,
+    document.body,
+  );
+}
+
 function ImageLightbox({ url, onClose, onUploadStorage, onUploadDrive, theme, darkMode, appLanguage }) {
   const [toast, setToast] = useState(null); // { text, kind: "ok"|"err" }
   const [linkUrl, setLinkUrl] = useState(null); // once we've uploaded, cache the public URL so subsequent "Copy link" doesn't re-upload
@@ -19404,6 +19469,13 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   // as Moodboards/Creations for consistency).
   // PDF upload. Lands in the same list, folder and visibility model as a
   // document — only `kind` and `file_url` differ.
+  const [pdfView, setPdfView] = useState(null); // { url, title } — full-screen PDF viewer
+  // A PDF has nothing to edit, so it opens in a viewer rather than the document
+  // editor. Routing happens here so both list layouts stay identical.
+  const openRow = (d) => {
+    if (d.kind === "pdf") { setPdfView({ url: d.file_url, title: d.title || "PDF" }); return; }
+    setOpenDoc(d); setTitle(d.title || "");
+  };
   const pdfInputRef = useRef(null);
   const [pdfBusy, setPdfBusy] = useState(false);
   const uploadPdf = async (file) => {
@@ -19439,7 +19511,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
       }).select().single();
       if (error) { alert((de ? "PDF konnte nicht gespeichert werden: " : "Could not save the PDF: ") + error.message); return; }
       setDocs(prev => [data, ...prev]);
-      setOpenDoc(data); setTitle(data.title || "");
+      setPdfView({ url: data.file_url, title: data.title || "PDF" });
       recordActivity("created", data.id);
     } finally { setPdfBusy(false); }
   };
@@ -19753,31 +19825,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
                 theme={theme} darkMode={darkMode} accent={accent} onClose={() => setInfoOpen(false)} />
             )}
           </div>
-          {openDoc.kind === "pdf" ? (
-            // Rendered by the browser's own PDF viewer. No pdf.js bundle: every
-            // target browser ships a viewer with search, zoom and printing, and
-            // adding a renderer would grow an already 3 MB bundle for a worse
-            // version of what is already there.
-            <div style={{ padding: "8px 24px 24px", height: "100%", minHeight: 0, display: "flex", flexDirection: "column" }}>
-              <object data={`${openDoc.file_url}#toolbar=1&navpanes=0`} type="application/pdf"
-                style={{ width: "100%", flex: 1, minHeight: 520, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.02)" : "#fff" }}>
-                {/* Shown when the browser refuses to display it inline —
-                    typically iOS Safari, where the object falls back rather
-                    than embedding. Without this the user gets a blank box. */}
-                <div style={{ padding: 28, textAlign: "center", fontFamily: FONT, fontSize: 13.5, color: theme.textDim }}>
-                  {de ? "Dieses PDF kann hier nicht direkt angezeigt werden." : "This PDF can't be displayed inline here."}
-                  <div style={{ marginTop: 12 }}>
-                    <a href={openDoc.file_url} target="_blank" rel="noopener noreferrer"
-                      style={{ display: "inline-block", padding: "8px 16px", borderRadius: 999, textDecoration: "none",
-                        ...primaryBtn(darkMode), fontSize: 13, fontWeight: 600 }}>
-                      {de ? "PDF öffnen" : "Open PDF"}
-                    </a>
-                  </div>
-                </div>
-              </object>
-            </div>
-          ) : (
-          /* Writing area gets more side padding than the header bar */
+          {/* Writing area gets more side padding than the header bar */}
           <div style={{ padding: "8px 40px 0" }}>
             <DocEditor key={openDoc.id} initialHTML={openDoc.content} theme={theme} darkMode={darkMode} accent={accent}
               onChange={(html) => persist({ content: html })}
@@ -19786,7 +19834,6 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
               uploadFile={uploadDocImage} orgId={userOrg?.id} session={session} userOrg={userOrg} appLanguage={appLanguage}
               focusBlockId={openDoc.id === deepLink?.documentId ? focusBlockId : null} />
           </div>
-          )}
         </div>
       </div>
     );
@@ -19892,6 +19939,12 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
           in the open-document view there is nothing to upload from. */}
       <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" style={{ display: "none" }}
         onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; uploadPdf(f); }} />
+      <AnimatePresence>
+        {pdfView && (
+          <PdfLightbox url={pdfView.url} title={pdfView.title} appLanguage={appLanguage}
+            onClose={() => setPdfView(null)} />
+        )}
+      </AnimatePresence>
       {pdfBusy && (
         <div style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 10, fontSize: 13, fontFamily: FONT,
           color: theme.textDim, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
@@ -19990,7 +20043,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
           {visibleDocs.map(d => {
             const creator = memberById[d.created_by];
             return (
-            <motion.div key={d.id} className="doc-row" whileHover={{ y: -3 }} onClick={() => { setOpenDoc(d); setTitle(d.title || ""); }}
+            <motion.div key={d.id} className="doc-row" whileHover={{ y: -3 }} onClick={() => openRow(d)}
               style={{ position: "relative", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)", boxShadow: "0 5px 16px rgba(0,0,0,0.06)", padding: 18, cursor: "pointer", minHeight: 116, display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div className="doc-row-icon" style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16, d)}</div>
@@ -20012,7 +20065,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
           {visibleDocs.map((d, i) => {
             const creator = memberById[d.created_by];
             return (
-            <motion.div key={d.id} className="doc-row" whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }} onClick={() => { setOpenDoc(d); setTitle(d.title || ""); }}
+            <motion.div key={d.id} className="doc-row" whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }} onClick={() => openRow(d)}
               style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", cursor: "pointer", borderBottom: i < visibleDocs.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
               <div className="doc-row-icon" style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16, d)}</div>
               <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || "Unbenanntes Dokument"}</div>
