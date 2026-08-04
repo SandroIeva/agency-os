@@ -15845,6 +15845,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     return () => window.removeEventListener("keydown", onKey);
   }, [boardFullscreen]);
   const docsCreate = useRef(null); // DocsTab registers its "new document" fn here
+  const docsUploadPdf = useRef(null); // …and its "upload PDF" fn here
   const docsNewFolder = useRef(null); // DocsTab registers its "create folder" fn here
   const ideasCreate = useRef(null); // IdeasTab registers its "new board" fn here
   const ideasNewFolder = useRef(null); // IdeasTab registers its "create folder" fn here
@@ -16302,6 +16303,10 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             sub: appLanguage === "de" ? "Leeres Dokument erstellen" : "Create a blank document",
                             icon: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></>,
                             onClick: () => { setDocsAddOpen(false); docsCreate.current?.(); } },
+                          { key: "pdf", label: appLanguage === "de" ? "PDF hochladen" : "Upload PDF",
+                            sub: appLanguage === "de" ? "PDF ablegen und im Browser lesen" : "Store a PDF and read it here",
+                            icon: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15h1.5a1.5 1.5 0 0 0 0-3H9v6"/><path d="M14 18v-6h1a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2z"/></>,
+                            onClick: () => { setDocsAddOpen(false); docsUploadPdf.current?.(); } },
                           { key: "drive", label: appLanguage === "de" ? "Aus Google Drive importieren" : "Import from Google Drive",
                             sub: appLanguage === "de" ? "Google-Doc als Dokument übernehmen" : "Bring a Google Doc in as a document",
                             icon: <><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="8 17 12 21 16 17"/><line x1="12" y1="15" x2="12" y2="21"/></>,
@@ -16466,7 +16471,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 
           {/* ── DOCS tab ── */}
           {tab === "docs" && (
-            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} orgMembers={orgMembers} createNotification={createNotification} projectId={projectId} deepLink={docDeepLink} fullscreen={docFullscreen} setFullscreen={setDocFullscreen} createRef={docsCreate} importRef={docsImport} onImportingChange={setDocsImporting} skillsRef={docsSkills} newFolderRef={docsNewFolder} llmProvider={llmProvider} llmKeys={llmKeys} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} onOpenChange={setDocOpen} />
+            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} orgMembers={orgMembers} createNotification={createNotification} projectId={projectId} deepLink={docDeepLink} fullscreen={docFullscreen} setFullscreen={setDocFullscreen} createRef={docsCreate} uploadPdfRef={docsUploadPdf} importRef={docsImport} onImportingChange={setDocsImporting} skillsRef={docsSkills} newFolderRef={docsNewFolder} llmProvider={llmProvider} llmKeys={llmKeys} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} onOpenChange={setDocOpen} />
           )}
 
           {/* ── IDEAS tab (Brainstorm whiteboards) ── */}
@@ -19178,7 +19183,7 @@ const DOC_SKILLS = [
 
 // Docs tab — Google-Docs-style: a list of workspace documents + a rich-text
 // editor. Documents are stored in brand_documents (org-scoped).
-function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "de", orgMembers, createNotification, deepLink, fullscreen, setFullscreen, createRef, importRef, onImportingChange, skillsRef, newFolderRef, llmProvider, llmKeys, getProviderToken, ensureValidToken, autoReLogin, onOpenChange, projectId = null }) {
+function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "de", orgMembers, createNotification, deepLink, fullscreen, setFullscreen, createRef, uploadPdfRef, importRef, onImportingChange, skillsRef, newFolderRef, llmProvider, llmKeys, getProviderToken, ensureValidToken, autoReLogin, onOpenChange, projectId = null }) {
   const [docs, setDocs] = useState([]);
   // Folders (document_folders) — same principle as the Assets/Creations tab.
   const [folders, setFolders] = useState([]);
@@ -19393,6 +19398,49 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   };
   // Expose create to the AssetsView header (keeps the action in the same slot
   // as Moodboards/Creations for consistency).
+  // PDF upload. Lands in the same list, folder and visibility model as a
+  // document — only `kind` and `file_url` differ.
+  const pdfInputRef = useRef(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const uploadPdf = async (file) => {
+    if (!file || !userOrg?.id) return;
+    if (file.type !== "application/pdf" && !/\.pdf$/i.test(file.name || "")) {
+      alert(de ? "Bitte eine PDF-Datei wählen." : "Please choose a PDF file.");
+      return;
+    }
+    setPdfBusy(true);
+    try {
+      // The document area never checked the storage quota — images inserted
+      // into documents bypassed it entirely. A PDF is far larger than an
+      // inline image, so the check belongs here at the latest.
+      const room = await checkStorageRoom(userOrg.id, file.size, { userId: session?.user?.id, email: session?.user?.email });
+      if (!room.ok) {
+        alert(de ? `Speicher voll (${formatBytesGB(room.limit)}) — bitte aufräumen oder Plan erweitern.` : `Storage full (${formatBytesGB(room.limit)}) — free up space or upgrade.`);
+        return;
+      }
+      const path = `documents/${userOrg.id}/${crypto.randomUUID()}.pdf`;
+      const { error: upErr } = await supabase.storage.from("brand-assets")
+        .upload(path, file, { contentType: "application/pdf" });
+      if (upErr) { alert((de ? "Upload fehlgeschlagen: " : "Upload failed: ") + upErr.message); return; }
+      trackStorageUpload({ orgId: userOrg.id, userId: session?.user?.id, bucket: "brand-assets", path, sizeBytes: file.size });
+      const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
+
+      let pref = "workspace"; try { pref = localStorage.getItem("agencyos-doc-default-visibility") || "workspace"; } catch (_) {}
+      const { data, error } = await supabase.from("brand_documents").insert({
+        org_id: userOrg.id, project_id: projectId || null, folder_id: currentFolder || null,
+        title: (file.name || "PDF").replace(/\.pdf$/i, ""), content: "",
+        kind: "pdf", file_url: pub.publicUrl, file_size: file.size,
+        created_by: session?.user?.id,
+        visibility: pref === "private" ? "restricted" : "workspace",
+      }).select().single();
+      if (error) { alert((de ? "PDF konnte nicht gespeichert werden: " : "Could not save the PDF: ") + error.message); return; }
+      setDocs(prev => [data, ...prev]);
+      setOpenDoc(data); setTitle(data.title || "");
+      recordActivity("created", data.id);
+    } finally { setPdfBusy(false); }
+  };
+  if (uploadPdfRef) uploadPdfRef.current = () => pdfInputRef.current?.click();
+
   if (createRef) createRef.current = createDoc;
 
   // ── Folders (document_folders) ──────────────────────────
@@ -19701,7 +19749,31 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
                 theme={theme} darkMode={darkMode} accent={accent} onClose={() => setInfoOpen(false)} />
             )}
           </div>
-          {/* Writing area gets more side padding than the header bar */}
+          {openDoc.kind === "pdf" ? (
+            // Rendered by the browser's own PDF viewer. No pdf.js bundle: every
+            // target browser ships a viewer with search, zoom and printing, and
+            // adding a renderer would grow an already 3 MB bundle for a worse
+            // version of what is already there.
+            <div style={{ padding: "8px 24px 24px", height: "100%", minHeight: 0, display: "flex", flexDirection: "column" }}>
+              <object data={`${openDoc.file_url}#toolbar=1&navpanes=0`} type="application/pdf"
+                style={{ width: "100%", flex: 1, minHeight: 520, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.02)" : "#fff" }}>
+                {/* Shown when the browser refuses to display it inline —
+                    typically iOS Safari, where the object falls back rather
+                    than embedding. Without this the user gets a blank box. */}
+                <div style={{ padding: 28, textAlign: "center", fontFamily: FONT, fontSize: 13.5, color: theme.textDim }}>
+                  {de ? "Dieses PDF kann hier nicht direkt angezeigt werden." : "This PDF can't be displayed inline here."}
+                  <div style={{ marginTop: 12 }}>
+                    <a href={openDoc.file_url} target="_blank" rel="noopener noreferrer"
+                      style={{ display: "inline-block", padding: "8px 16px", borderRadius: 999, textDecoration: "none",
+                        ...primaryBtn(darkMode), fontSize: 13, fontWeight: 600 }}>
+                      {de ? "PDF öffnen" : "Open PDF"}
+                    </a>
+                  </div>
+                </div>
+              </object>
+            </div>
+          ) : (
+          /* Writing area gets more side padding than the header bar */
           <div style={{ padding: "8px 40px 0" }}>
             <DocEditor key={openDoc.id} initialHTML={openDoc.content} theme={theme} darkMode={darkMode} accent={accent}
               onChange={(html) => persist({ content: html })}
@@ -19710,6 +19782,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
               uploadFile={uploadDocImage} orgId={userOrg?.id} session={session} userOrg={userOrg} appLanguage={appLanguage}
               focusBlockId={openDoc.id === deepLink?.documentId ? focusBlockId : null} />
           </div>
+          )}
         </div>
       </div>
     );
@@ -19735,8 +19808,12 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   for (const d of docs) { const k = d.folder_id; if (k) docFolderCounts[k] = (docFolderCounts[k] || 0) + 1; }
   const showDocFolders = !searching && currentFolder == null && folders.length > 0;
   const currentFolderObj = folders.find(f => f.id === currentFolder) || null;
-  const docIcon = (size) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg>
+  // Takes the row so a PDF is distinguishable at a glance — same list, and the
+  // two behave differently when opened, so they should not look identical.
+  const docIcon = (size, d = null) => (
+    d?.kind === "pdf"
+      ? <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#E86767" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8.5 17v-4h1.2a1.3 1.3 0 0 1 0 2.6H8.5"/><path d="M13.5 17v-4h1a1.8 1.8 0 0 1 1.8 1.8v.4A1.8 1.8 0 0 1 14.5 17z"/></svg>
+      : <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg>
   );
   const iconBg = darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)";
   const creatorAvatar = (m, size = 22) => (
@@ -19807,6 +19884,16 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   };
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
+      {/* Lives in the LIST view because that is where the add menu triggers it;
+          in the open-document view there is nothing to upload from. */}
+      <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" style={{ display: "none" }}
+        onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; uploadPdf(f); }} />
+      {pdfBusy && (
+        <div style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 10, fontSize: 13, fontFamily: FONT,
+          color: theme.textDim, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+          {de ? "PDF wird hochgeladen …" : "Uploading PDF …"}
+        </div>
+      )}
       {/* Toolbar: search · sort · view toggle */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "none", maxWidth: 340 }}>
@@ -19902,7 +19989,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
             <motion.div key={d.id} className="doc-row" whileHover={{ y: -3 }} onClick={() => { setOpenDoc(d); setTitle(d.title || ""); }}
               style={{ position: "relative", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)", boxShadow: "0 5px 16px rgba(0,0,0,0.06)", padding: 18, cursor: "pointer", minHeight: 116, display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div className="doc-row-icon" style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16)}</div>
+                <div className="doc-row-icon" style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16, d)}</div>
                 <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || "Unbenanntes Dokument"}</div>
                 {moveBtn(d)}
                 {dupBtn(d)}
@@ -19923,7 +20010,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
             return (
             <motion.div key={d.id} className="doc-row" whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }} onClick={() => { setOpenDoc(d); setTitle(d.title || ""); }}
               style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", cursor: "pointer", borderBottom: i < visibleDocs.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
-              <div className="doc-row-icon" style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16)}</div>
+              <div className="doc-row-icon" style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16, d)}</div>
               <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || "Unbenanntes Dokument"}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, width: 140 }}>
                 {creator?.display_name && <>{creatorAvatar(creator)}<span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{creator.display_name}</span></>}
