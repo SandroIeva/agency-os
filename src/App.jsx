@@ -6187,7 +6187,11 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (it.type === "emoji") wrap = { ...wrap, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" };
     const sizeKey = d.size || (it.type === "text" ? "m" : "s");
     const fontSize = WB_TEXT_SIZES[sizeKey] || 16;
-    const textColor = it.type === "sticky" ? "#2c2c25" : (it.type === "text" ? stroke : stroke);
+    // Shapes get their OWN text colour. Previously text and border shared
+    // d.color, so a white border made the label white on white. A text node has
+    // no border, so there d.color IS the text colour and stays that way; a
+    // sticky keeps its fixed dark ink, which suits every sticky background.
+    const textColor = it.type === "sticky" ? "#2c2c25" : (isShape ? inkOf(d.textColor) : stroke);
     const textStyle = {
       width: "100%", height: "100%", background: "transparent", border: "none", outline: "none", resize: "none",
       fontFamily: FONT, fontSize, fontWeight: d.bold ? 700 : (it.type === "sticky" ? 500 : 400), lineHeight: 1.4,
@@ -6473,7 +6477,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       : <><line x1="4" y1="6" x2="16" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="16" y2="18"/></>;
     // A single swatch button that opens the color grid overlay.
     const swatch = (kind, cur) => (
-      <div onClick={() => setWbColorPop(p => p === kind ? null : kind)} title={kind === "fill" ? (de ? "Füllung" : "Fill") : (de ? "Farbe" : "Color")}
+      <div onClick={() => setWbColorPop(p => p === kind ? null : kind)} title={kind === "fill" ? (de ? "Füllung" : "Fill") : kind === "textColor" ? (de ? "Textfarbe" : "Text colour") : (de ? "Farbe" : "Color")}
         style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 6px 3px 4px", borderRadius: 8, cursor: "pointer",
           background: wbColorPop === kind ? "rgba(255,255,255,0.16)" : "transparent" }}>
         <div style={{ width: 20, height: 20, borderRadius: "50%", position: "relative", overflow: "hidden", flexShrink: 0,
@@ -6485,11 +6489,17 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     );
     // Palette shown in the overlay for the active swatch.
     const popPalette = wbColorPop === "fill" ? ["transparent", ...WB_PALETTE]
+      // No "transparent" for text — invisible text is never the intent, and it
+      // would look like the label had been lost.
+      : wbColorPop === "textColor" ? WB_PALETTE
       : selItem.type === "sticky" ? WB_STICKY_COLORS
       : isShape ? ["transparent", ...WB_PALETTE]
       : WB_PALETTE;
-    const popCurrent = wbColorPop === "fill" ? (dta.fill || "transparent") : (selItem.type === "sticky" ? (dta.color || WB_STICKY_DEFAULT) : inkOf(dta.color));
-    const applyPop = (c) => { setSelData(wbColorPop === "fill" ? { fill: c } : { color: c }); setWbColorPop(null); };
+    const popCurrent = wbColorPop === "fill" ? (dta.fill || "transparent") : wbColorPop === "textColor" ? inkOf(dta.textColor) : (selItem.type === "sticky" ? (dta.color || WB_STICKY_DEFAULT) : inkOf(dta.color));
+    const applyPop = (c) => {
+      setSelData(wbColorPop === "fill" ? { fill: c } : wbColorPop === "textColor" ? { textColor: c } : { color: c });
+      setWbColorPop(null);
+    };
     return (
       <div onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.preventDefault()}
         style={{ position: "absolute", left: cx, top, transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 13, zIndex: 20,
@@ -6522,6 +6532,9 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           {divider}
           <span style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.55)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{de ? "Füllung" : "Fill"}</span>
           {swatch("fill", dta.fill || "transparent")}
+          {divider}
+          <span style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.55)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{de ? "Text" : "Text"}</span>
+          {swatch("textColor", inkOf(dta.textColor))}
         </>)}
         {/* Text formatting */}
         {hasText && (<>
