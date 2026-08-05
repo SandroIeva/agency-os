@@ -86,6 +86,10 @@ function pickBrand(row) {
     accent: (pal && pal.primary) || (Array.isArray(row.colors) && row.colors[0]) || "#1b1b1b",
     logos,
     colors,
+    // Snapshots store the whole brand_profile row, so gradients arrived here
+    // automatically — but nothing read them, and the published page showed the
+    // swatches without the gradients defined next to them in the app.
+    gradients: (Array.isArray(row.gradients) && row.gradients.length) ? row.gradients : null,
     typography: row.typography?.primary || (row.typography && !row.typography.primary ? row.typography : null),
     typographySecondary: row.typography?.secondary || null,
     pvm: (row.pvm && (row.pvm.purpose || row.pvm.vision || row.pvm.mission)) ? row.pvm : null,
@@ -588,6 +592,33 @@ export default function PublicBrandLanding({ token }) {
                       </div>
                       <div style={{ height: 8, display: "flex", alignItems: "center" }}>
                         {isBase && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#15151c" }} />}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {/* Gradients — same block the app shows under the palette. Only when
+              the brand actually defined some: an empty strip would read as a
+              broken section rather than an absent one. Hidden while a shade
+              ramp is open, matching how the palette itself behaves. */}
+          {!openShade && brand.gradients && (
+            <div style={{ flex: "1 1 100%", minWidth: 0, order: 3 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1.6, textTransform: "uppercase", color: "#8a8a94", marginBottom: 12 }}>
+                {de ? "Farbverläufe" : "Gradients"}
+              </div>
+              <div style={{ display: "flex", gap: 14, flexWrap: isMobile ? "wrap" : "nowrap" }}>
+                {brand.gradients.map((g, i) => {
+                  const stops = (g.stops || []).filter(Boolean);
+                  if (stops.length < 2) return null;
+                  return (
+                    <div key={g.id || i} style={{ flex: isMobile ? "1 1 45%" : 1, minWidth: 0 }}>
+                      <div style={{ height: isMobile ? 110 : 150, borderRadius: 14,
+                        background: `linear-gradient(180deg, ${stops.join(", ")})` }} />
+                      <div style={{ fontSize: 13, fontWeight: 600, marginTop: 8 }}>{g.name || `${de ? "Verlauf" : "Gradient"} ${i + 1}`}</div>
+                      <div style={{ fontSize: 11.5, color: "#8a8a94", marginTop: 2 }}>
+                        {stops.map(x => String(x).toUpperCase()).join(" → ")}
                       </div>
                     </div>
                   );
