@@ -16416,7 +16416,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             icon: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15h1.5a1.5 1.5 0 0 0 0-3H9v6"/><path d="M14 18v-6h1a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2z"/></>,
                             onClick: () => { setDocsAddOpen(false); docsUploadPdf.current?.(); } },
                           { key: "drive", label: appLanguage === "de" ? "Aus Google Drive importieren" : "Import from Google Drive",
-                            sub: appLanguage === "de" ? "Google-Doc als Dokument übernehmen" : "Bring a Google Doc in as a document",
+                            sub: appLanguage === "de" ? "Google-Docs und PDFs übernehmen" : "Bring in Google Docs and PDFs",
                             icon: <><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="8 17 12 21 16 17"/><line x1="12" y1="15" x2="12" y2="21"/></>,
                             onClick: () => { setDocsAddOpen(false); docsImport.current?.(); } },
                           { key: "skills", label: appLanguage === "de" ? "Dokument mit Skills erstellen" : "Create document with Skills",
@@ -19650,14 +19650,18 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
     if (!token) { alert(de ? "Kein Google-Drive-Zugriff. Bitte in den Einstellungen erneut mit Google verbinden." : "No Google Drive access. Reconnect Google in Settings."); return; }
     let picked = [];
     try {
-      picked = await openGooglePicker({ accessToken: token, locale: de ? "de" : "en", multi: true, mimeTypes: ["application/vnd.google-apps.document"] });
+      picked = await openGooglePicker({ accessToken: token, locale: de ? "de" : "en", multi: true, mimeTypes: ["application/vnd.google-apps.document", "application/pdf"] });
     } catch (e) {
       alert((de ? "Google-Picker konnte nicht geöffnet werden: " : "Could not open Google Picker: ") + (e?.message || e));
       return;
     }
+    // The two kinds take completely different routes: a Google Doc is exported
+    // as HTML and converted into an editable document, a PDF is copied byte for
+    // byte into storage. Same picker, same loop below, different handling.
     const gdocs = (picked || []).filter(p => p.mimeType === "application/vnd.google-apps.document");
-    if (!gdocs.length) {
-      if ((picked || []).length > 0) alert(de ? "Bitte ein Google-Doc auswählen." : "Please pick a Google Doc.");
+    const gpdfs = (picked || []).filter(p => p.mimeType === "application/pdf");
+    if (!gdocs.length && !gpdfs.length) {
+      if ((picked || []).length > 0) alert(de ? "Bitte ein Google-Doc oder eine PDF auswählen." : "Please pick a Google Doc or a PDF.");
       return;
     }
     onImportingChange?.(true);
@@ -19686,9 +19690,54 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
         if (data) { added.push(data); recordActivity("created", data.id); }
       } catch (e) { console.error("[doc-import]", label, e); failures.push(label); }
     }
+
+    // PDFs: download the bytes from Drive and copy them into our own storage.
+    // Not linked to Drive — a Drive link would break the moment the file is
+    // moved, renamed or unshared, and the whole point is to keep the document
+    // available inside the workspace.
+    for (const p of gpdfs) {
+      const label = p.name || "PDF";
+      try {
+        const dl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(p.id)}?alt=media`;
+        let r = await fetch(dl, { headers: { Authorization: `Bearer ${token}` } });
+        if (r.status === 401 && autoReLogin) { const nt = await autoReLogin(); if (nt) { token = nt; r = await fetch(dl, { headers: { Authorization: `Bearer ${token}` } }); } }
+        if (!r.ok) { console.error("[doc-import]", label, "download failed", r.status); failures.push(label); continue; }
+        const blob = await r.blob();
+
+        // Same quota gate as a local upload — an import must not be a way
+        // around the storage limit.
+        const room = await checkStorageRoom(userOrg.id, blob.size, { userId: session?.user?.id, email: session?.user?.email });
+        if (!room.ok) {
+          failures.push(`${label} (${de ? "Speicher voll" : "storage full"})`);
+          continue;
+        }
+        const path = `documents/${userOrg.id}/${crypto.randomUUID()}.pdf`;
+        const { error: upErr } = await supabase.storage.from("brand-assets")
+          .upload(path, blob, { contentType: "application/pdf" });
+        if (upErr) { console.error("[doc-import]", label, "upload failed", upErr); failures.push(label); continue; }
+        trackStorageUpload({ orgId: userOrg.id, userId: session?.user?.id, bucket: "brand-assets", path, sizeBytes: blob.size });
+        const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
+        const aspect = await pdfAspectRatio(blob);
+
+        const { data, error } = await supabase.from("brand_documents").insert({
+          org_id: userOrg.id, project_id: projectId || null, folder_id: currentFolder || null,
+          title: label.replace(/\.pdf$/i, ""), content: "",
+          kind: "pdf", file_url: pub.publicUrl, file_size: blob.size, file_aspect: aspect,
+          created_by: session?.user?.id, visibility: "workspace",
+        }).select().single();
+        if (error) { console.error("[doc-import]", label, "insert failed", error); failures.push(label); continue; }
+        if (data) { added.push(data); recordActivity("created", data.id); }
+      } catch (e) { console.error("[doc-import]", label, e); failures.push(label); }
+    }
+
     if (added.length) setDocs(prev => [...added, ...prev]);
     onImportingChange?.(false);
-    if (added.length === 1) { setOpenDoc(added[0]); setTitle(added[0].title || ""); } // open a single import right away
+    // Open a single import right away — a PDF in the viewer, a document in the editor.
+    if (added.length === 1) {
+      const one = added[0];
+      if (one.kind === "pdf") setPdfView({ url: one.file_url, title: one.title || "PDF", aspect: one.file_aspect || null });
+      else { setOpenDoc(one); setTitle(one.title || ""); }
+    }
     if (failures.length) {
       alert((de ? "Konnte nicht importieren:\n" : "Couldn't import:\n") + failures.map(f => "•  " + f).join("\n"));
     }
