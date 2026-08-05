@@ -1299,18 +1299,13 @@ function PdfLightbox({ url, title, aspect = null, onClose, appLanguage = "de" })
             {title}
           </span>
         </div>
-        <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-          <a href={url} target="_blank" rel="noopener noreferrer"
-            style={{ padding: "7px 13px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.16)", background: "transparent",
-              color: "#ffffffCC", fontSize: 12.5, fontFamily: FONT, textDecoration: "none" }}>
-            {de ? "In neuem Tab" : "New tab"}
-          </a>
-          <button onClick={onClose}
-            style={{ padding: "7px 13px", borderRadius: 9, border: "none", background: "rgba(255,255,255,0.95)",
-              color: "#15151c", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
-            {de ? "Schließen" : "Close"}
-          </button>
-        </div>
+        {/* Identical to the image lightbox's close control — same size, shape
+            and icon, so the two viewers don't feel like different products. */}
+        <motion.button onClick={onClose} whileTap={{ scale: 0.94 }}
+          style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#ffffffCC", background: "rgba(255,255,255,0.06)", border: `1px solid rgba(255,255,255,0.10)`, flexShrink: 0 }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </motion.button>
       </div>
 
       {/* onClick stops here so a click inside the document doesn't close the
