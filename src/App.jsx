@@ -5310,6 +5310,18 @@ const WB_PALETTE = [
 ];
 const WB_BORDER_COLORS = ["transparent", ...WB_STROKE_COLORS]; // shapes can also have no border
 const WB_SHAPE_DEFAULT_FILL = "#FFFFFF"; // new shapes start with a fill + outline
+// Default text colour for a shape: contrast against its FILL, not the theme.
+// A new shape is filled white, so theme-coloured text would be white-on-white in
+// dark mode — which is exactly what it was. Only a transparent fill falls back
+// to the theme, because then the canvas behind it decides readability.
+function wbTextOnFill(fill, themeInk) {
+  if (!fill || fill === "transparent") return themeInk;
+  try {
+    const h = String(fill).replace("#", "");
+    const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#15151c" : "#f4f4f7";
+  } catch { return themeInk; }
+}
 // Line/arrow stroke thickness options (thin · medium · thick) and arrowhead sizes.
 const WB_STROKE_WIDTHS = [2, 4, 7];
 const WB_ARROW_HEAD_SIZES = { s: 9, m: 15, l: 24 };
@@ -5426,7 +5438,8 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [emojiCat, setEmojiCat] = useState("smileys");
   const [imgMenuOpen, setImgMenuOpen] = useState(false); // shared image-insert modal
   const [commentOpenId, setCommentOpenId] = useState(null); // comment pin whose bubble is open
-  const [wbColorPop, setWbColorPop] = useState(null); // format-bar color overlay: null | "color" | "fill"
+  const [wbColorPop, setWbColorPop] = useState(null); // format-bar color overlay: null | "color" | "fill" | "textColor"
+  const [mmHandle, setMmHandle] = useState(null); // "<itemId>:<direction>" of the hovered connection handle
   const [wbLinkPop, setWbLinkPop] = useState(false); // format-bar URL editor for text hyperlinks
   const [linkDraft, setLinkDraft] = useState("");    // the URL being typed in that editor
   const [activeEmbed, setActiveEmbed] = useState(null); // the video embed in "play" mode (its iframe is interactive); double-click to enter, click away to leave
@@ -5779,9 +5792,41 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const ph = de ? "Text hinzufügen" : "Add text";
     const box = wbFitTextBox(ph, WB_MINDMAP_BRANCH_SIZE, sd.bold);
     const gap = 70;
-    const x = direction === "left" ? curX - gap - box.w : curX + curW + gap;
-    const y = curY + curH / 2 - box.h / 2;
-    const id = addItemLocal("text", { x, y, w: box.w, h: box.h, text: "", color: sd.color, size: WB_MINDMAP_BRANCH_SIZE, bold: sd.bold });
+    // A branch keeps the source's TYPE: a rectangle grows rectangles, a text
+    // node grows text nodes. Branching a shape into a bare text label would lose
+    // the visual language of the map the user is building.
+    const isShapeSrc = WB_SHAPE_TYPES.includes(src.type);
+    const bw = isShapeSrc ? Math.max(120, Math.round(curW * 0.85)) : box.w;
+    const bh = isShapeSrc ? Math.max(70, Math.round(curH * 0.85)) : box.h;
+
+    let x = curX, y = curY;
+    if (direction === "left")   { x = curX - gap - bw;  y = curY + curH / 2 - bh / 2; }
+    if (direction === "right")  { x = curX + curW + gap; y = curY + curH / 2 - bh / 2; }
+    if (direction === "up")     { y = curY - gap - bh;  x = curX + curW / 2 - bw / 2; }
+    if (direction === "down")   { y = curY + curH + gap; x = curX + curW / 2 - bw / 2; }
+
+    // Slide along the axis until the spot is free. Dropping a branch on top of
+    // an existing node is the fastest way to make a map unreadable, and it is
+    // exactly what happens when several branches leave the same side.
+    const step = (direction === "left" || direction === "right") ? bh + 18 : bw + 18;
+    const horizontal = direction === "up" || direction === "down";
+    for (let n = 0; n < 40; n++) {
+      const box2 = { x, y, w: bw, h: bh };
+      const clash = itemsRef.current.some(o => {
+        if (o.id === sourceId || o.type === "link" || o.type === "draw") return false;
+        const b = bboxOf(o);
+        return rectsIntersect({ x: box2.x - 12, y: box2.y - 12, w: box2.w + 24, h: box2.h + 24 }, b);
+      });
+      if (!clash) break;
+      // Alternate sides of the axis so the map grows evenly instead of drifting.
+      const offset = Math.ceil((n + 1) / 2) * step * ((n % 2) ? -1 : 1);
+      if (horizontal) x = (curX + curW / 2 - bw / 2) + offset;
+      else            y = (curY + curH / 2 - bh / 2) + offset;
+    }
+
+    const id = isShapeSrc
+      ? addItemLocal(src.type, { x, y, w: bw, h: bh, text: "", color: sd.color, fill: sd.fill, textColor: sd.textColor })
+      : addItemLocal("text", { x, y, w: bw, h: bh, text: "", color: sd.color, size: WB_MINDMAP_BRANCH_SIZE, bold: sd.bold });
     addItemLocal("link", { fromId: sourceId, toId: id });
     setSel(id); setEditing(id); setTool("select");
   };
@@ -6191,7 +6236,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     // d.color, so a white border made the label white on white. A text node has
     // no border, so there d.color IS the text colour and stays that way; a
     // sticky keeps its fixed dark ink, which suits every sticky background.
-    const textColor = it.type === "sticky" ? "#2c2c25" : (isShape ? inkOf(d.textColor) : stroke);
+    // NOT inkOf() here: that maps #15151c to the theme ink, which silently
+    // turned an explicit "black" back into white in dark mode. textColor has no
+    // legacy data to reinterpret, so an explicit pick is taken literally.
+    const textColor = it.type === "sticky" ? "#2c2c25"
+      : isShape ? (d.textColor || wbTextOnFill(d.fill, INK))
+      : stroke;
     const textStyle = {
       width: "100%", height: "100%", background: "transparent", border: "none", outline: "none", resize: "none",
       fontFamily: FONT, fontSize, fontWeight: d.bold ? 700 : (it.type === "sticky" ? 500 : 400), lineHeight: 1.4,
@@ -6312,24 +6362,49 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           <div onPointerDown={(e) => { e.stopPropagation(); dragRef.current = { mode: "resize", id: it.id, base: { x, y, w, h } }; }}
             style={{ position: "absolute", right: -7, bottom: -7, width: 13, height: 13, borderRadius: 3, background: "#fff", border: "1.5px solid #3B82F6", cursor: "nwse-resize" }} />
         )}
-        {/* Mind-map branch handles — a "+" on each side to grow a new linked node.
-            These only appear once the node is actually a mind map: either the user
-            switched it into mind-map mode via the toolbar (d.mindmap), or it is
-            already connected to other nodes. A plain, unconnected text node shows
-            NO handles and behaves purely as a text field. */}
-        {isOnly && !isEdit && it.type === "text" && (d.mindmap || linksTouching(it.id).length > 0) && (<>
-          <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); addMindmapBranch(it.id, "left"); }}
-            title={de ? "Zweig links" : "Branch left"}
-            style={{ position: "absolute", left: -32, top: "50%", transform: "translateY(-50%)", width: 22, height: 22, borderRadius: "50%",
-              background: "#fff", border: "1.5px solid #3B82F6", color: "#3B82F6", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 2px 6px rgba(0,0,0,0.18)" }}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </div>
-          <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); addMindmapBranch(it.id, "right"); }}
-            title={de ? "Zweig rechts" : "Branch right"}
-            style={{ position: "absolute", right: -32, top: "50%", transform: "translateY(-50%)", width: 22, height: 22, borderRadius: "50%",
-              background: "#fff", border: "1.5px solid #3B82F6", color: "#3B82F6", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 2px 6px rgba(0,0,0,0.18)" }}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </div>
+        {/* Connection handles on all four edges, like Miro: a small dot that
+            becomes an arrow on hover, and a click grows a linked node in that
+            direction. Shown for shapes AND text nodes whenever one is selected.
+            This replaces the earlier opt-in "+" handles that only appeared
+            after switching a node into mind-map mode — discoverable only if you
+            already knew the feature existed. */}
+        {isOnly && !isEdit && (it.type === "text" || isShape) && (<>
+          {[
+            { dir: "left",  style: { left: -30, top: "50%", transform: "translateY(-50%)" }, rot: 180 },
+            { dir: "right", style: { right: -30, top: "50%", transform: "translateY(-50%)" }, rot: 0 },
+            { dir: "up",    style: { top: -30, left: "50%", transform: "translateX(-50%)" }, rot: -90 },
+            { dir: "down",  style: { bottom: -30, left: "50%", transform: "translateX(-50%)" }, rot: 90 },
+          ].map(({ dir, style, rot }) => {
+            const hot = mmHandle === `${it.id}:${dir}`;
+            return (
+              <div key={dir}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); setMmHandle(null); addMindmapBranch(it.id, dir); }}
+                onMouseEnter={() => setMmHandle(`${it.id}:${dir}`)}
+                onMouseLeave={() => setMmHandle(h => h === `${it.id}:${dir}` ? null : h)}
+                title={de ? "Verbundenes Element" : "Connected node"}
+                style={{
+                  position: "absolute", ...style,
+                  width: hot ? 22 : 9, height: hot ? 22 : 9, borderRadius: "50%",
+                  background: hot ? "#3B82F6" : "#3B82F6",
+                  border: hot ? "2px solid #fff" : "none",
+                  boxShadow: hot ? "0 2px 8px rgba(0,0,0,0.28)" : "none",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "#fff", cursor: "pointer",
+                  // The dot sits quiet until pointed at, then grows into an arrow
+                  // showing which way the branch will go.
+                  opacity: hot ? 1 : 0.55,
+                  transition: "width .13s ease, height .13s ease, opacity .13s ease",
+                }}>
+                {hot && (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"
+                    style={{ transform: `rotate(${rot}deg)` }}>
+                    <line x1="5" y1="12" x2="18" y2="12" /><polyline points="12 6 18 12 12 18" />
+                  </svg>
+                )}
+              </div>
+            );
+          })}
         </>)}
       </div>
     );
@@ -6495,7 +6570,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       : selItem.type === "sticky" ? WB_STICKY_COLORS
       : isShape ? ["transparent", ...WB_PALETTE]
       : WB_PALETTE;
-    const popCurrent = wbColorPop === "fill" ? (dta.fill || "transparent") : wbColorPop === "textColor" ? inkOf(dta.textColor) : (selItem.type === "sticky" ? (dta.color || WB_STICKY_DEFAULT) : inkOf(dta.color));
+    const popCurrent = wbColorPop === "fill" ? (dta.fill || "transparent") : wbColorPop === "textColor" ? (dta.textColor || wbTextOnFill(dta.fill, INK)) : (selItem.type === "sticky" ? (dta.color || WB_STICKY_DEFAULT) : inkOf(dta.color));
     const applyPop = (c) => {
       setSelData(wbColorPop === "fill" ? { fill: c } : wbColorPop === "textColor" ? { textColor: c } : { color: c });
       setWbColorPop(null);
@@ -6534,7 +6609,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           {swatch("fill", dta.fill || "transparent")}
           {divider}
           <span style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.55)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{de ? "Text" : "Text"}</span>
-          {swatch("textColor", inkOf(dta.textColor))}
+          {swatch("textColor", dta.textColor || wbTextOnFill(dta.fill, INK))}
         </>)}
         {/* Text formatting */}
         {hasText && (<>
