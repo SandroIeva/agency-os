@@ -5777,7 +5777,11 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     // First branch off this node: bump it a size tier so the mind-map's origin is
     // unmistakable at a glance. Only fires once — a node already carrying a link
     // is already part of a map and keeps whatever size it has.
-    if (linksTouching(sourceId).length === 0) {
+    // Text nodes only. This bumps the root to a larger TEXT size and refits the
+    // box to its content — on a shape that meant resizing the user's drawn
+    // rectangle to fit its (empty) label, which silently shrank it the moment a
+    // connection was made. A shape's size is whatever it was drawn as.
+    if (src.type === "text" && linksTouching(sourceId).length === 0) {
       const rootIdx = Math.max(WB_TEXT_SIZE_ORDER.indexOf(sd.size || "m"), WB_TEXT_SIZE_ORDER.indexOf(WB_MINDMAP_ROOT_SIZE));
       const rootSize = WB_TEXT_SIZE_ORDER[rootIdx];
       if (rootSize !== sd.size) {
@@ -5796,8 +5800,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     // node grows text nodes. Branching a shape into a bare text label would lose
     // the visual language of the map the user is building.
     const isShapeSrc = WB_SHAPE_TYPES.includes(src.type);
-    const bw = isShapeSrc ? Math.max(120, Math.round(curW * 0.85)) : box.w;
-    const bh = isShapeSrc ? Math.max(70, Math.round(curH * 0.85)) : box.h;
+    // A shape branch is the SAME size as its source. Text branches step down one
+    // tier by design (root reads as the origin), but a shape has a size the user
+    // drew by hand — scaling each generation down compounded (0.85^n) and made
+    // every connection look like it shrank the diagram.
+    const bw = isShapeSrc ? curW : box.w;
+    const bh = isShapeSrc ? curH : box.h;
 
     let x = curX, y = curY;
     if (direction === "left")   { x = curX - gap - bw;  y = curY + curH / 2 - bh / 2; }
@@ -6190,12 +6198,26 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   // ── Rendering ──
   // Focus the edit textarea reliably (autoFocus alone can lose the race against
   // the click that created the element) and put the caret at the end.
+  // A shape centres its label vertically (the display div is a centred flexbox),
+  // but a textarea stretched to height:100% draws its text from the top — so the
+  // label sat at the top while typing and jumped to the middle on commit. Sizing
+  // the textarea to its own content instead lets the same centring apply during
+  // editing, so the text never moves.
+  const fitEditAreaHeight = (el) => {
+    if (!el) return;
+    // Collapse to 0 first, not "auto": at auto a textarea falls back to its
+    // `rows` height (2 by default), so a one-line label would measure two lines
+    // tall and sit above centre.
+    el.style.height = "0px";
+    el.style.height = Math.min(el.scrollHeight, el.parentElement?.clientHeight || el.scrollHeight) + "px";
+  };
   const focusEditArea = (el) => {
     editAreaRef.current = el; // null when React unmounts the textarea
     if (!el || el.dataset.wbFocused) return;
     el.dataset.wbFocused = "1";
     const doFocus = () => { try { el.focus({ preventScroll: true }); el.setSelectionRange(el.value.length, el.value.length); } catch (_) {} };
     doFocus();
+    if (el.dataset.wbAutoHeight) fitEditAreaHeight(el);
     requestAnimationFrame(doFocus);
   };
   // Save the in-progress text BEFORE the editor unmounts. Clicking the canvas or
@@ -6258,9 +6280,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         // makes line count 100% determined by real \n characters (Shift+Enter),
         // matching what wbFitTextBox actually measures.
         wrap={it.type === "text" ? "off" : "soft"}
+        data-wb-auto-height={isShape ? "1" : undefined}
         onPointerDown={e => e.stopPropagation()}
         onBlur={(e) => commitText(it.id, e.target.value)}
-        onInput={it.type === "text" ? (e) => {
+        onInput={isShape ? (e) => fitEditAreaHeight(e.target) : it.type === "text" ? (e) => {
           // Free-text nodes auto-fit their box to the typed content, live — this is
           // what keeps mind-map connector lines snug against the text as you type.
           const ta = e.target;
@@ -6286,7 +6309,15 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           // NOT by Enter, which used to commit and made the field feel unusable.
           if (e.key === "Escape") { e.preventDefault(); commitText(it.id, e.target.value); }
         }}
-        style={{ ...textStyle, cursor: "text", position: isSvgShape ? "absolute" : "static", width: isSvgShape ? "76%" : "100%", height: isSvgShape ? "60%" : "100%", top: isSvgShape ? "50%" : undefined, left: isSvgShape ? "12%" : undefined, transform: isSvgShape ? "translateY(-50%)" : undefined }} />
+        style={{ ...textStyle, cursor: "text", position: isSvgShape ? "absolute" : "static",
+          width: isSvgShape ? "76%" : "100%",
+          // Shapes: content height (centred by the wrapper / the -50% shift), so
+          // the caret sits where the finished label will. Text nodes keep the
+          // full box — their box is already fitted to the text.
+          height: isShape ? "auto" : "100%", maxHeight: "100%",
+          alignSelf: isShape && !isSvgShape ? "center" : undefined,
+          top: isSvgShape ? "50%" : undefined, left: isSvgShape ? "12%" : undefined,
+          transform: isSvgShape ? "translateY(-50%)" : undefined }} />
     ) : (
       // Free-text nodes render with `white-space: pre` (NOT pre-wrap) and visible
       // overflow: the box is auto-fitted to the text, and a wrapping display was
@@ -6479,18 +6510,39 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const to = items.find(i => i.id === d.toId);
     if (!from || !to) return null;
     const a = bboxOf(from), b = bboxOf(to);
-    const aCenterX = a.x + a.w / 2, bCenterX = b.x + b.w / 2;
-    const x1 = aCenterX <= bCenterX ? a.x + a.w : a.x;
-    const x2 = aCenterX <= bCenterX ? b.x : b.x + b.w;
-    const y1 = a.y + a.h / 2, y2 = b.y + b.h / 2;
-    const minX = Math.min(x1, x2) - 4, minY = Math.min(y1, y2) - 4;
-    const col = inkOf(d.color);
+    const acx = a.x + a.w / 2, acy = a.y + a.h / 2;
+    const bcx = b.x + b.w / 2, bcy = b.y + b.h / 2;
+    // Anchor on the edges that actually face each other. Previously this always
+    // used the left/right edges, so a branch placed above or below left its
+    // parent sideways and cut diagonally across the node.
+    let x1, y1, x2, y2;
+    if (Math.abs(bcx - acx) >= Math.abs(bcy - acy)) {
+      const rightward = bcx >= acx;
+      x1 = rightward ? a.x + a.w : a.x; x2 = rightward ? b.x : b.x + b.w;
+      y1 = acy; y2 = bcy;
+    } else {
+      const downward = bcy >= acy;
+      y1 = downward ? a.y + a.h : a.y; y2 = downward ? b.y : b.y + b.h;
+      x1 = acx; x2 = bcx;
+    }
+    const pad = 14; // room for the arrowhead so it isn't clipped by the svg box
+    const minX = Math.min(x1, x2) - pad, minY = Math.min(y1, y2) - pad;
+    // A connector is structure, not content: a neutral grey keeps it readable
+    // without competing with the nodes. Explicitly coloured links keep theirs.
+    const col = d.color || (darkMode ? "rgba(255,255,255,0.45)" : "rgba(21,21,28,0.42)");
+    // Arrowhead at the target end so the direction of the branch is visible.
+    const ang = Math.atan2(y2 - y1, x2 - x1);
+    const hl = 9;
+    const hx1 = x2 - hl * Math.cos(ang - 0.5), hy1 = y2 - hl * Math.sin(ang - 0.5);
+    const hx2 = x2 - hl * Math.cos(ang + 0.5), hy2 = y2 - hl * Math.sin(ang + 0.5);
     return (
-      <svg key={it.id} width={Math.abs(x2 - x1) + 8} height={Math.abs(y2 - y1) + 8}
+      <svg key={it.id} width={Math.abs(x2 - x1) + pad * 2} height={Math.abs(y2 - y1) + pad * 2}
         style={{ position: "absolute", left: minX, top: minY, overflow: "visible", pointerEvents: "none" }}>
-        <g transform={`translate(${-minX}, ${-minY})`} stroke={col} strokeWidth={selIds.includes(it.id) ? 2.3 : 1.5} strokeLinecap="round"
+        <g transform={`translate(${-minX}, ${-minY})`} stroke={col} strokeWidth={selIds.includes(it.id) ? 2.3 : 1.6} strokeLinecap="round" strokeLinejoin="round" fill="none"
           style={{ pointerEvents: tool === "select" ? "stroke" : "none", cursor: "pointer" }} onPointerDown={(e) => { if (tool !== "select") return; e.stopPropagation(); setSel(it.id); setSelIds([it.id]); }}>
           <line x1={x1} y1={y1} x2={x2} y2={y2} />
+          <line x1={x2} y1={y2} x2={hx1} y2={hy1} />
+          <line x1={x2} y1={y2} x2={hx2} y2={hy2} />
         </g>
       </svg>
     );
