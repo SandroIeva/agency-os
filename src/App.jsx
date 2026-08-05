@@ -1237,11 +1237,42 @@ function TabUnderline({ box, darkMode = false }) {
 // ImageLightbox — full-screen viewer for AI-generated images, with action toolbar:
 //   Download · Copy Image · Copy Link · Upload to Drive · Open in new tab
 // Pulls heavy actions (upload to Supabase / Drive) in from the parent via callbacks.
+// Page aspect ratio (width / height) of a PDF, read from its /MediaBox.
+//
+// Deliberately a small text scan rather than pdf.js: pulling in a full PDF
+// parser would add several hundred KB to an already 3 MB bundle to learn one
+// number. Only the first chunk is scanned — the page tree sits near the front in
+// practice, and reading the whole file to find a rectangle is wasteful.
+//
+// Returns null when it can't tell: a compressed PDF (1.5+ object streams) keeps
+// MediaBox out of the plain text. Callers must treat null as "unknown", not as
+// an error — most files parse, some won't, and that is fine.
+async function pdfAspectRatio(file) {
+  try {
+    const buf = await file.slice(0, 256 * 1024).arrayBuffer();
+    // latin1 so byte values survive as characters; the numbers we want are ASCII
+    // and this avoids UTF-8 decoding mangling the binary sections in between.
+    const text = new TextDecoder("latin1").decode(buf);
+    const box = text.match(/\/MediaBox\s*\[\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)/);
+    if (!box) return null;
+    const w = Math.abs(parseFloat(box[3]) - parseFloat(box[1]));
+    const h = Math.abs(parseFloat(box[4]) - parseFloat(box[2]));
+    if (!(w > 0 && h > 0)) return null;
+    // /Rotate turns the page for display, so it flips the effective orientation.
+    const rot = text.match(/\/Rotate\s+(-?\d+)/);
+    const deg = rot ? ((parseInt(rot[1], 10) % 360) + 360) % 360 : 0;
+    const swap = deg === 90 || deg === 270;
+    const ratio = swap ? h / w : w / h;
+    // Guard against a garbage match producing an unusable container.
+    return (ratio > 0.15 && ratio < 8) ? ratio : null;
+  } catch { return null; }
+}
+
 // Full-screen PDF viewer, matching ImageLightbox: same dark backdrop, same
 // top bar, closes on backdrop click or Escape. A PDF embedded in the document
 // column only ever got a fraction of the screen, which is the opposite of what
 // you want when reading one.
-function PdfLightbox({ url, title, onClose, appLanguage = "de" }) {
+function PdfLightbox({ url, title, aspect = null, onClose, appLanguage = "de" }) {
   const de = appLanguage === "de";
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -1284,7 +1315,18 @@ function PdfLightbox({ url, title, onClose, appLanguage = "de" }) {
 
       {/* onClick stops here so a click inside the document doesn't close the
           viewer — only the backdrop around it does. */}
-      <div onClick={(e) => e.stopPropagation()} style={{ flex: 1, minHeight: 0, borderRadius: 12, overflow: "hidden", background: "#fff" }}>
+      {/* With a known page ratio the container takes the PAGE's shape: a
+          portrait document becomes tall and narrow, a landscape one wide and
+          short, both centred. aspectRatio plus max-width/height lets the browser
+          pick whichever dimension runs out first, so it fills the height in
+          portrait and the width in landscape without measuring anything.
+          Unknown ratio (compressed PDF) falls back to filling the overlay. */}
+      <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        ...(aspect
+          ? { aspectRatio: String(aspect), maxWidth: "100%", maxHeight: "100%", width: "auto", height: "100%" }
+          : { width: "100%", height: "100%" }),
+        borderRadius: 12, overflow: "hidden", background: "#fff" }}>
         <object data={`${url}#toolbar=1&navpanes=0`} type="application/pdf" style={{ width: "100%", height: "100%", border: 0 }}>
           <div style={{ padding: 32, textAlign: "center", fontFamily: FONT, fontSize: 14, color: "#444" }}>
             {de ? "Dieses PDF kann hier nicht direkt angezeigt werden." : "This PDF can't be displayed inline here."}
@@ -1296,6 +1338,7 @@ function PdfLightbox({ url, title, onClose, appLanguage = "de" }) {
             </div>
           </div>
         </object>
+      </div>
       </div>
     </motion.div>,
     document.body,
@@ -19473,7 +19516,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   // A PDF has nothing to edit, so it opens in a viewer rather than the document
   // editor. Routing happens here so both list layouts stay identical.
   const openRow = (d) => {
-    if (d.kind === "pdf") { setPdfView({ url: d.file_url, title: d.title || "PDF" }); return; }
+    if (d.kind === "pdf") { setPdfView({ url: d.file_url, title: d.title || "PDF", aspect: d.file_aspect || null }); return; }
     setOpenDoc(d); setTitle(d.title || "");
   };
   const pdfInputRef = useRef(null);
@@ -19500,18 +19543,21 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
       if (upErr) { alert((de ? "Upload fehlgeschlagen: " : "Upload failed: ") + upErr.message); return; }
       trackStorageUpload({ orgId: userOrg.id, userId: session?.user?.id, bucket: "brand-assets", path, sizeBytes: file.size });
       const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
+      // Read once here rather than on every open: the file is already in memory,
+      // and the viewer then needs no extra fetch. Null is a valid outcome.
+      const aspect = await pdfAspectRatio(file);
 
       let pref = "workspace"; try { pref = localStorage.getItem("agencyos-doc-default-visibility") || "workspace"; } catch (_) {}
       const { data, error } = await supabase.from("brand_documents").insert({
         org_id: userOrg.id, project_id: projectId || null, folder_id: currentFolder || null,
         title: (file.name || "PDF").replace(/\.pdf$/i, ""), content: "",
-        kind: "pdf", file_url: pub.publicUrl, file_size: file.size,
+        kind: "pdf", file_url: pub.publicUrl, file_size: file.size, file_aspect: aspect,
         created_by: session?.user?.id,
         visibility: pref === "private" ? "restricted" : "workspace",
       }).select().single();
       if (error) { alert((de ? "PDF konnte nicht gespeichert werden: " : "Could not save the PDF: ") + error.message); return; }
       setDocs(prev => [data, ...prev]);
-      setPdfView({ url: data.file_url, title: data.title || "PDF" });
+      setPdfView({ url: data.file_url, title: data.title || "PDF", aspect });
       recordActivity("created", data.id);
     } finally { setPdfBusy(false); }
   };
@@ -19941,7 +19987,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
         onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; uploadPdf(f); }} />
       <AnimatePresence>
         {pdfView && (
-          <PdfLightbox url={pdfView.url} title={pdfView.title} appLanguage={appLanguage}
+          <PdfLightbox url={pdfView.url} title={pdfView.title} aspect={pdfView.aspect} appLanguage={appLanguage}
             onClose={() => setPdfView(null)} />
         )}
       </AnimatePresence>
