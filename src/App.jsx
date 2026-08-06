@@ -5577,6 +5577,45 @@ function wbTimerBtn(theme, darkMode) {
 // connector between two connectors has nothing to derive its endpoints from.
 const WB_LINKABLE = ["sticky", "rect", "ellipse", "diamond", "triangle", "text", "image", "sticker", "emoji", "embed"];
 
+// Connector routing. Two elements that line up get a straight line; two that
+// are offset get a right-angled elbow with rounded corners, leaving and
+// entering along the same axis the endpoints were chosen on. A diagonal stroke
+// between two boxes reads as a stray line — a routed one reads as a diagram,
+// which is why every tool of this kind draws them this way.
+//
+// Returns the path and the angle of the FINAL segment: the arrowhead has to
+// follow where the line arrives, not the straight line between the two ends.
+function wbLinkPath(x1, y1, x2, y2, horizontal, radius) {
+  const n = (v) => Math.round(v * 10) / 10;
+  const ALIGNED = 1.5; // closer than this and an elbow would be a wobble
+  const off = horizontal ? Math.abs(y2 - y1) : Math.abs(x2 - x1);
+  if (off <= ALIGNED) {
+    return { d: `M ${n(x1)} ${n(y1)} L ${n(x2)} ${n(y2)}`, angle: Math.atan2(y2 - y1, x2 - x1) };
+  }
+  if (horizontal) {
+    // Turn halfway across the gap, so two elements facing each other produce a
+    // symmetric S rather than a route that hugs one of them.
+    const mid = (x1 + x2) / 2;
+    const sx = Math.sign(x2 - x1) || 1, sy = Math.sign(y2 - y1) || 1;
+    // Corners can never eat more than the segments they join, or the path
+    // doubles back on itself when the two elements are close together.
+    const r = Math.min(radius, Math.abs(mid - x1), Math.abs(x2 - mid), Math.abs(y2 - y1) / 2);
+    return {
+      d: `M ${n(x1)} ${n(y1)} L ${n(mid - sx * r)} ${n(y1)} Q ${n(mid)} ${n(y1)} ${n(mid)} ${n(y1 + sy * r)}`
+        + ` L ${n(mid)} ${n(y2 - sy * r)} Q ${n(mid)} ${n(y2)} ${n(mid + sx * r)} ${n(y2)} L ${n(x2)} ${n(y2)}`,
+      angle: sx > 0 ? 0 : Math.PI,
+    };
+  }
+  const mid = (y1 + y2) / 2;
+  const sy = Math.sign(y2 - y1) || 1, sx = Math.sign(x2 - x1) || 1;
+  const r = Math.min(radius, Math.abs(mid - y1), Math.abs(y2 - mid), Math.abs(x2 - x1) / 2);
+  return {
+    d: `M ${n(x1)} ${n(y1)} L ${n(x1)} ${n(mid - sy * r)} Q ${n(x1)} ${n(mid)} ${n(x1 + sx * r)} ${n(mid)}`
+      + ` L ${n(x2 - sx * r)} ${n(mid)} Q ${n(x2)} ${n(mid)} ${n(x2)} ${n(mid + sy * r)} L ${n(x2)} ${n(y2)}`,
+    angle: sy > 0 ? Math.PI / 2 : -Math.PI / 2,
+  };
+}
+
 // Where a connection handle sits on a box — also the point a dragged connector
 // starts from, so the preview line leaves exactly where the dot is.
 function wbEdgePoint(b, dir) {
@@ -6893,7 +6932,8 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     // used the left/right edges, so a branch placed above or below left its
     // parent sideways and cut diagonally across the node.
     let x1, y1, x2, y2;
-    if (Math.abs(bcx - acx) >= Math.abs(bcy - acy)) {
+    const horizontal = Math.abs(bcx - acx) >= Math.abs(bcy - acy);
+    if (horizontal) {
       const rightward = bcx >= acx;
       x1 = rightward ? a.x + a.w : a.x; x2 = rightward ? b.x : b.x + b.w;
       y1 = acy; y2 = bcy;
@@ -6902,13 +6942,16 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       y1 = downward ? a.y + a.h : a.y; y2 = downward ? b.y : b.y + b.h;
       x1 = acx; x2 = bcx;
     }
+    const route = wbLinkPath(x1, y1, x2, y2, horizontal, 18);
     const pad = 14; // room for the arrowhead so it isn't clipped by the svg box
     const minX = Math.min(x1, x2) - pad, minY = Math.min(y1, y2) - pad;
     // A connector is structure, not content: a neutral grey keeps it readable
     // without competing with the nodes. Explicitly coloured links keep theirs.
     const col = d.color || (darkMode ? "rgba(255,255,255,0.45)" : "rgba(21,21,28,0.42)");
-    // Arrowhead at the target end so the direction of the branch is visible.
-    const ang = Math.atan2(y2 - y1, x2 - x1);
+    // Arrowhead at the target end so the direction of the branch is visible. It
+    // follows the angle the route ARRIVES at, which on an elbow is not the
+    // angle between the two endpoints.
+    const ang = route.angle;
     const hl = 9;
     const hx1 = x2 - hl * Math.cos(ang - 0.5), hy1 = y2 - hl * Math.sin(ang - 0.5);
     const hx2 = x2 - hl * Math.cos(ang + 0.5), hy2 = y2 - hl * Math.sin(ang + 0.5);
@@ -6917,7 +6960,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         style={{ position: "absolute", left: minX, top: minY, overflow: "visible", pointerEvents: "none" }}>
         <g transform={`translate(${-minX}, ${-minY})`} stroke={col} strokeWidth={selIds.includes(it.id) ? 2.3 : 1.6} strokeLinecap="round" strokeLinejoin="round" fill="none"
           style={{ pointerEvents: tool === "select" ? "stroke" : "none", cursor: "pointer" }} onPointerDown={(e) => { if (tool !== "select") return; e.stopPropagation(); setSel(it.id); setSelIds([it.id]); }}>
-          <line x1={x1} y1={y1} x2={x2} y2={y2} />
+          <path d={route.d} />
           <line x1={x2} y1={y2} x2={hx1} y2={hy1} />
           <line x1={x2} y1={y2} x2={hx2} y2={hy2} />
         </g>
