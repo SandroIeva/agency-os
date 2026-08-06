@@ -5448,7 +5448,15 @@ function WbColorPicker({ value, onPreview, onCommit, de }) {
 }
 
 const WB_BORDER_COLORS = ["transparent", ...WB_STROKE_COLORS]; // shapes can also have no border
-const WB_SHAPE_DEFAULT_FILL = "#FFFFFF"; // new shapes start with a fill + outline
+// New shapes start with a fill and an outline. Dark mode gets its own pair:
+// a white fill was a glaring slab on a dark board, and the border was left
+// unset, which meant it followed the theme ink and came out near-white.
+// These are stored as concrete values on the element, not resolved per viewer —
+// a colour someone chose has to look the same to everyone on the board, whatever
+// theme they happen to be in.
+const WB_SHAPE_DEFAULT_FILL = "#FFFFFF";
+const WB_SHAPE_DEFAULT_FILL_DARK = "#28282A";
+const WB_SHAPE_DEFAULT_BORDER_DARK = "#606060";
 // Default text colour for a shape: contrast against its FILL, not the theme.
 // A new shape is filled white, so theme-coloured text would be white-on-white in
 // dark mode — which is exactly what it was. Only a transparent fill falls back
@@ -6254,7 +6262,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         w = h = 300;
         x = d.sx - w / 2; y = d.sy - h / 2;
       }
-      const id = addItemLocal(tempItem.type, { x, y, w, h, text: "", fill: WB_SHAPE_DEFAULT_FILL });
+      // Light mode keeps leaving `color` unset, so its border goes on following
+      // the theme ink exactly as before.
+      const id = addItemLocal(tempItem.type, { x, y, w, h, text: "",
+        ...(darkMode
+          ? { fill: WB_SHAPE_DEFAULT_FILL_DARK, color: WB_SHAPE_DEFAULT_BORDER_DARK }
+          : { fill: WB_SHAPE_DEFAULT_FILL }) });
       setSel(id); setTool("select");
     }
     if (d?.mode === "arrow" && tempItem) {
