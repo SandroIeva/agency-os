@@ -1109,8 +1109,13 @@ function StockSearchPanel({ session, userOrg, theme, darkMode, appLanguage = "de
 // ── Reusable Dropdown ────────────────────────────────────────────────────────
 // Anthracite pill trigger + frosted popover with hover-row items and a modern
 // check on the active one. options: [{ value, label, icon?, sub? }].
+// `footer` is an optional render slot below the options — footer(close) — for a
+// menu that needs a control the option list cannot express, such as a free
+// numeric entry under a list of named presets. It is a prop on the shared
+// component rather than a one-off menu somewhere, so every dropdown in the app
+// keeps looking and behaving alike.
 function Dropdown({ value, onChange, options = [], placeholder = "Auswählen", theme, darkMode,
-  leadingIcon = null, minWidth = 200, align = "left", maxTriggerWidth, disabled = false, triggerStyle = {} }) {
+  leadingIcon = null, minWidth = 200, align = "left", maxTriggerWidth, disabled = false, triggerStyle = {}, footer = null }) {
   const [open, setOpen] = useState(false);
   const sel = options.find(o => String(o.value) === String(value));
   const check = (
@@ -1161,6 +1166,11 @@ function Dropdown({ value, onChange, options = [], placeholder = "Auswählen", t
                   </div>
                 );
               })}
+              {footer && (
+                <div style={{ marginTop: 6, paddingTop: 6, borderTop: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}` }}>
+                  {footer(() => setOpen(false))}
+                </div>
+              )}
             </motion.div>
           </>
         )}
@@ -5480,7 +5490,17 @@ const WB_STICKERS = {
   Shapes: ["1_circle.png","2_triangles.png","3_hearts.png","4_flower.png","5_vase.png","6_arches.png","7_zigzag.png","8_star.png","9_beans.png","10_leaves.png","11_seaweed.png","12_jug.png","13_stick.png","14_rhombus.png","15_wave.png","16_line.png","17_soap.png","18_crown.png","19_grass.png","20_bubbles.png"],
 };
 const wbStickerUrl = (cat, file) => encodeURI(`/Open Stickers/PNG/${cat}/${file}`);
-const WB_TEXT_SIZES = { s: 14, m: 18, l: 24, xl: 32 };
+const WB_TEXT_SIZES = { s: 14, m: 18, l: 24, xl: 32, xxl: 44, display: 64 };
+const WB_TEXT_SIZE_MIN = 6, WB_TEXT_SIZE_MAX = 400;
+// `size` on an element is either one of the named keys above or a plain number
+// typed into the size field. Everything that needs pixels goes through here, so
+// a custom size works in every place a named one does — including the box
+// measurement, which is what keeps an auto-fitted text node the right shape.
+function wbFontSize(size, fallback = WB_TEXT_SIZES.m) {
+  const n = typeof size === "number" ? size : (typeof size === "string" && /^\d+(\.\d+)?$/.test(size) ? parseFloat(size) : NaN);
+  if (Number.isFinite(n)) return Math.min(WB_TEXT_SIZE_MAX, Math.max(WB_TEXT_SIZE_MIN, n));
+  return WB_TEXT_SIZES[size] || fallback;
+}
 // Auto-fit sizing for free-text nodes ("text" type only) — the box hugs the
 // content instead of staying at a fixed placement width, so mind-map connector
 // lines land right next to the letters instead of a fixed-box-sized gap.
@@ -5531,9 +5551,9 @@ const wbMeasureLines = (text, fontSize, bold) => {
 // too cramped.
 const WB_TEXT_PAD = 6;
 const WB_TEXT_H_PAD = WB_TEXT_PAD * 2, WB_TEXT_V_PAD = WB_TEXT_PAD * 2, WB_TEXT_MIN_W = 28;
-const WB_TEXT_SIZE_ORDER = ["s", "m", "l", "xl"];
+const WB_TEXT_SIZE_ORDER = ["s", "m", "l", "xl", "xxl", "display"];
 const wbFitTextBox = (text, sizeKey, bold) => {
-  const fontSize = WB_TEXT_SIZES[sizeKey] || WB_TEXT_SIZES.m;
+  const fontSize = wbFontSize(sizeKey);
   const { width, lineCount } = wbMeasureLines(text, fontSize, bold);
   // Safety buffer (~a third of a character) on top of the measured width. The
   // mirror and the real textarea are the same engine, but caret width, subpixel
@@ -6086,7 +6106,11 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     // box to its content — on a shape that meant resizing the user's drawn
     // rectangle to fit its (empty) label, which silently shrank it the moment a
     // connection was made. A shape's size is whatever it was drawn as.
-    if (src.type === "text" && linksTouching(sourceId).length === 0) {
+    // A size typed into the size field is an explicit choice and is left alone;
+    // indexOf would not find it and the node would be silently reset to the
+    // root preset, shrinking a 64px heading to 24.
+    const namedSize = WB_TEXT_SIZE_ORDER.includes(sd.size || "m");
+    if (src.type === "text" && namedSize && linksTouching(sourceId).length === 0) {
       const rootIdx = Math.max(WB_TEXT_SIZE_ORDER.indexOf(sd.size || "m"), WB_TEXT_SIZE_ORDER.indexOf(WB_MINDMAP_ROOT_SIZE));
       const rootSize = WB_TEXT_SIZE_ORDER[rootIdx];
       if (rootSize !== sd.size) {
@@ -6656,8 +6680,8 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (it.type === "embed") wrap = { ...wrap, borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 22px rgba(0,0,0,0.16)", background: "#000" };
     if (it.type === "sticker") wrap = { ...wrap, padding: 0 };
     if (it.type === "emoji") wrap = { ...wrap, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" };
-    const sizeKey = d.size || (it.type === "text" ? "m" : "s");
-    const fontSize = WB_TEXT_SIZES[sizeKey] || 16;
+    const sizeKey = d.size || "m";
+    const fontSize = wbFontSize(sizeKey);
     // Shapes get their OWN text colour. Previously text and border shared
     // d.color, so a white border made the label white on white. A text node has
     // no border, so there d.color IS the text colour and stays that way; a
@@ -7008,10 +7032,48 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const divider = <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.16)", margin: "0 3px" }} />;
     // Free-text nodes auto-fit; when size/bold change, refit the box to the (unchanged) text.
     const refitIfText = (patch) => selItem.type === "text" ? { ...patch, ...wbFitTextBox(dta.text, patch.size ?? dta.size, patch.bold ?? dta.bold) } : patch;
-    const sizeBtn = (k) => (
-      <div key={k} onClick={() => setSelData(refitIfText({ size: k }))}
-        style={{ padding: "3px 7px", borderRadius: 7, cursor: "pointer", fontSize: 11, fontFamily: FONT, fontWeight: 600,
-          color: "#fff", background: (dta.size || (selItem.type === "text" ? "m" : "s")) === k ? "rgba(255,255,255,0.22)" : "transparent", textTransform: "uppercase" }}>{k}</div>
+    // Text size: a dropdown of named presets with a free numeric field under
+    // them, replacing four S/M/L/XL tabs. Tabs could not grow past XL without
+    // eating the bar, and had nowhere to put an exact value.
+    const curSize = dta.size || "m";
+    const curPx = wbFontSize(curSize);
+    const setSize = (v) => setSelData(refitIfText({ size: v }));
+    const sizeLabels = {
+      s: de ? "Klein" : "Small", m: de ? "Mittel" : "Medium", l: de ? "Groß" : "Large",
+      xl: de ? "Sehr groß" : "Extra large", xxl: de ? "Riesig" : "Huge", display: "Display",
+    };
+    // The format bar is a dark pill in both themes, so the menu is told it is in
+    // dark mode regardless of the board's theme.
+    const barTheme = { text: "#fff", textDim: "rgba(255,255,255,0.55)" };
+    const sizeDropdown = (
+      <Dropdown
+        value={curSize} onChange={setSize} theme={barTheme} darkMode minWidth={186}
+        // Named sizes match by key; a typed number matches nothing, so the
+        // placeholder is what shows the custom value — as the number itself.
+        placeholder={String(Math.round(curPx))}
+        options={WB_TEXT_SIZE_ORDER.map(k => ({
+          value: k,
+          // Each preset previews itself, capped so Display cannot stretch the menu.
+          label: <span style={{ fontSize: Math.min(wbFontSize(k), 26), lineHeight: 1.25 }}>{sizeLabels[k]}</span>,
+        }))}
+        triggerStyle={{ background: "rgba(255,255,255,0.09)", color: "#fff", padding: "5px 8px 5px 11px", fontSize: 12, fontWeight: 600, minWidth: 96 }}
+        footer={(close) => (
+          <input type="number" min={WB_TEXT_SIZE_MIN} max={WB_TEXT_SIZE_MAX} defaultValue={Math.round(curPx)}
+            // The format bar preventDefaults mousedown to hold the canvas
+            // selection, and that same default is what focuses an input.
+            onMouseDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              e.stopPropagation(); // digits and Backspace must not reach the canvas
+              if (e.key === "Enter") { const n = parseFloat(e.target.value); if (Number.isFinite(n)) setSize(wbFontSize(n)); close(); }
+              if (e.key === "Escape") close();
+            }}
+            onBlur={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n) && Math.round(n) !== Math.round(curPx)) setSize(wbFontSize(n)); }}
+            title={de ? "Eigene Größe in Pixel" : "Custom size in pixels"}
+            style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 9,
+              border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.06)", color: "#fff",
+              fontFamily: FONT, fontSize: 13, fontWeight: 600, outline: "none" }} />
+        )}
+      />
     );
     const iconBtnStyle = { width: 26, height: 26, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff" };
     const isShape = WB_SHAPE_TYPES.includes(selItem.type);
@@ -7093,7 +7155,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         {/* Text formatting */}
         {hasText && (<>
           {divider}
-          {sizeBtn("s")}{sizeBtn("m")}{sizeBtn("l")}{sizeBtn("xl")}
+          {sizeDropdown}
           <div onClick={() => setSelData(refitIfText({ bold: !dta.bold }))} title="Bold"
             style={{ ...iconBtnStyle, background: dta.bold ? "rgba(255,255,255,0.22)" : "transparent", fontFamily: FONT, fontWeight: 800, fontSize: 13 }}>B</div>
           {selItem.type === "text" && (
