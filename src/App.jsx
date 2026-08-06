@@ -5308,6 +5308,136 @@ const WB_PALETTE = [
   "#15151c", "#6B7280", "#EF4444", "#F59E0B", "#EAB308", "#22C55E", "#14B8A6", "#3B82F6", "#8B5CF6", "#EC4899", "#FFFFFF",
   "#9CA3AF", "#D1D5DB", "#FCA5A5", "#FDBA74", "#FDE68A", "#BBF7D0", "#99F6E4", "#BFDBFE", "#DDD6FE", "#FBCFE8",
 ];
+// ── Custom colour picker ────────────────────────────────────────────────────
+// Elements only ever store a plain hex string. HSV exists purely for the picker
+// UI: a hue strip and a saturation/brightness square are HSV controls, and
+// trying to drive them from RGB is what makes hand-rolled pickers feel wrong.
+function wbHexToHsv(hex) {
+  let m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(hex || "").trim());
+  if (!m) return null;
+  let h6 = m[1];
+  if (h6.length === 3) h6 = h6[0] + h6[0] + h6[1] + h6[1] + h6[2] + h6[2]; // #abc → #aabbcc
+  const n = parseInt(h6, 16);
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let hue = 0;
+  if (d) {
+    if (max === r) hue = ((g - b) / d) % 6;
+    else if (max === g) hue = (b - r) / d + 2;
+    else hue = (r - g) / d + 4;
+    hue *= 60;
+    if (hue < 0) hue += 360;
+  }
+  return { h: hue, s: max ? d / max : 0, v: max };
+}
+function wbHsvToHex(h, s, v) {
+  const c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) { r = c; g = x; } else if (h < 120) { r = x; g = c; }
+  else if (h < 180) { g = c; b = x; } else if (h < 240) { g = x; b = c; }
+  else if (h < 300) { r = x; b = c; } else { r = c; b = x; }
+  const hx = (u) => Math.round((u + m) * 255).toString(16).padStart(2, "0");
+  return `#${hx(r)}${hx(g)}${hx(b)}`.toUpperCase();
+}
+
+// Hue strip + saturation/brightness square + hex field, and the system colour
+// dropper where the browser has one.
+//
+// onPreview repaints the element on every pixel of a drag; onCommit is what
+// writes to the database, and fires once when the gesture ends. Wiring both to
+// the same call would put a row update behind every mouse move.
+function WbColorPicker({ value, onPreview, onCommit, de }) {
+  const start = wbHexToHsv(value) || { h: 0, s: 0.82, v: 0.95 };
+  const [hsv, setHsv] = useState(start);
+  const [hexText, setHexText] = useState(wbHsvToHex(start.h, start.s, start.v));
+  const svRef = useRef(null), hueRef = useRef(null);
+  // The live value during a drag. State alone is not enough: the pointermove
+  // listener closes over the state it was created with, and updating from
+  // inside a setState updater would run the side effect twice under StrictMode.
+  const hsvRef = useRef(start);
+
+  const apply = (next, commit) => {
+    hsvRef.current = next;
+    setHsv(next);
+    const hex = wbHsvToHex(next.h, next.s, next.v);
+    setHexText(hex);
+    (commit ? onCommit : onPreview)(hex);
+  };
+
+  const beginDrag = (ref, kind) => (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const at = (ev) => {
+      const r = ref.current?.getBoundingClientRect();
+      if (!r) return;
+      const fx = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+      if (kind === "hue") apply({ ...hsvRef.current, h: fx * 360 }, false);
+      else apply({ ...hsvRef.current, s: fx, v: 1 - Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height)) }, false);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", at);
+      window.removeEventListener("pointerup", up);
+      apply(hsvRef.current, true); // one write per gesture
+    };
+    at(e);
+    window.addEventListener("pointermove", at);
+    window.addEventListener("pointerup", up);
+  };
+
+  const onHexInput = (raw) => {
+    setHexText(raw);
+    const parsed = wbHexToHsv(raw);
+    if (parsed) apply(parsed, true);
+  };
+
+  // Chrome and Edge only — hiding the button beats offering one that does
+  // nothing in Safari and Firefox.
+  const hasDropper = typeof window !== "undefined" && "EyeDropper" in window;
+  const pickFromScreen = async () => {
+    try {
+      const r = await new window.EyeDropper().open();
+      const parsed = wbHexToHsv(r.sRGBHex);
+      if (parsed) apply(parsed, true);
+    } catch (_) { /* dismissed with Escape */ }
+  };
+
+  const hex = wbHsvToHex(hsv.h, hsv.s, hsv.v);
+  return (
+    <div style={{ width: 208, display: "flex", flexDirection: "column", gap: 9 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+        {hasDropper && (
+          <div onClick={pickFromScreen} title={de ? "Farbe vom Bildschirm aufnehmen" : "Pick a colour from the screen"}
+            style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+              background: "rgba(255,255,255,0.09)", cursor: "pointer" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15.5 3.5a2.1 2.1 0 0 1 3 3L9 16l-4 1 1-4z" /><path d="M13 6l5 5" />
+            </svg>
+          </div>
+        )}
+        <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, background: hex, border: "1px solid rgba(255,255,255,0.25)" }} />
+        <input value={hexText} spellCheck={false} onChange={(e) => onHexInput(e.target.value)}
+          onKeyDown={(e) => e.stopPropagation()} /* Delete/Backspace here must not reach the canvas */
+          style={{ flex: 1, minWidth: 0, padding: "6px 8px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.18)",
+            background: "rgba(255,255,255,0.06)", color: "#fff", fontFamily: FONT, fontSize: 12, fontWeight: 600, outline: "none" }} />
+      </div>
+      <div ref={svRef} onPointerDown={beginDrag(svRef, "sv")}
+        style={{ position: "relative", height: 116, borderRadius: 9, cursor: "crosshair", touchAction: "none",
+          background: `linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, hsl(${hsv.h} 100% 50%))` }}>
+        <div style={{ position: "absolute", left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%`,
+          width: 13, height: 13, marginLeft: -6.5, marginTop: -6.5, borderRadius: "50%", background: hex,
+          border: "2px solid #fff", boxShadow: "0 0 0 1px rgba(0,0,0,0.4)", pointerEvents: "none" }} />
+      </div>
+      <div ref={hueRef} onPointerDown={beginDrag(hueRef, "hue")}
+        style={{ position: "relative", height: 12, borderRadius: 999, cursor: "ew-resize", touchAction: "none",
+          background: "linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%)" }}>
+        <div style={{ position: "absolute", left: `${(hsv.h / 360) * 100}%`, top: "50%",
+          width: 15, height: 15, marginLeft: -7.5, marginTop: -7.5, borderRadius: "50%", background: `hsl(${hsv.h} 100% 50%)`,
+          border: "2px solid #fff", boxShadow: "0 1px 5px rgba(0,0,0,0.45)", pointerEvents: "none" }} />
+      </div>
+    </div>
+  );
+}
+
 const WB_BORDER_COLORS = ["transparent", ...WB_STROKE_COLORS]; // shapes can also have no border
 const WB_SHAPE_DEFAULT_FILL = "#FFFFFF"; // new shapes start with a fill + outline
 // Default text colour for a shape: contrast against its FILL, not the theme.
@@ -5523,6 +5653,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [imgMenuOpen, setImgMenuOpen] = useState(false); // shared image-insert modal
   const [commentOpenId, setCommentOpenId] = useState(null); // comment pin whose bubble is open
   const [wbColorPop, setWbColorPop] = useState(null); // format-bar color overlay: null | "color" | "fill" | "textColor"
+  const [wbCustomPop, setWbCustomPop] = useState(false); // custom picker expanded inside that overlay
   const [mmHandle, setMmHandle] = useState(null); // "<itemId>:<direction>" of the hovered connection handle
   // A connector being dragged out of a handle: { x1, y1, x2, y2, overId }, in
   // world coordinates. overId is the element the cursor is currently over, which
@@ -6815,7 +6946,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       : <><line x1="4" y1="6" x2="16" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="16" y2="18"/></>;
     // A single swatch button that opens the color grid overlay.
     const swatch = (kind, cur) => (
-      <div onClick={() => setWbColorPop(p => p === kind ? null : kind)} title={kind === "fill" ? (de ? "Füllung" : "Fill") : kind === "textColor" ? (de ? "Textfarbe" : "Text colour") : (de ? "Farbe" : "Color")}
+      <div onClick={() => { setWbCustomPop(false); setWbColorPop(p => p === kind ? null : kind); }} title={kind === "fill" ? (de ? "Füllung" : "Fill") : kind === "textColor" ? (de ? "Textfarbe" : "Text colour") : (de ? "Farbe" : "Color")}
         style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 6px 3px 4px", borderRadius: 8, cursor: "pointer",
           background: wbColorPop === kind ? "rgba(255,255,255,0.16)" : "transparent" }}>
         <div style={{ width: 20, height: 20, borderRadius: "50%", position: "relative", overflow: "hidden", flexShrink: 0,
@@ -6834,10 +6965,17 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       : isShape ? ["transparent", ...WB_PALETTE]
       : WB_PALETTE;
     const popCurrent = wbColorPop === "fill" ? (dta.fill || "transparent") : wbColorPop === "textColor" ? (dta.textColor || wbTextOnFill(dta.fill, INK)) : (selItem.type === "sticky" ? (dta.color || WB_STICKY_DEFAULT) : inkOf(dta.color));
+    const popPatch = (c) => wbColorPop === "fill" ? { fill: c } : wbColorPop === "textColor" ? { textColor: c } : { color: c };
     const applyPop = (c) => {
-      setSelData(wbColorPop === "fill" ? { fill: c } : wbColorPop === "textColor" ? { textColor: c } : { color: c });
+      setSelData(popPatch(c));
+      setWbCustomPop(false);
       setWbColorPop(null);
     };
+    // The custom picker repaints on every pixel of a drag but must not write a
+    // row per mouse move, so preview and commit are split: patchItem alone is
+    // local, persistById is the database.
+    const previewPop = (c) => patchItem(selItem.id, popPatch(c));
+    const commitPop = (c) => { patchItem(selItem.id, popPatch(c)); persistById(selItem.id); };
     return (
       <div onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.preventDefault()}
         style={{ position: "absolute", left: cx, top, transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 13, zIndex: 20,
@@ -6913,19 +7051,52 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
 
         {/* Color grid overlay (Figma-style) — opens above the bar; grid fills to the palette */}
         {wbColorPop && (() => {
-          const cols = Math.min(popPalette.length, 11);
+          // +1 for the custom-colour button, which is part of the grid rather
+          // than a separate row — with the 21-colour palette that lands on a
+          // clean 11 x 2.
+          const cols = Math.min(popPalette.length + 1, 11);
+          // A colour chosen in the picker matches no swatch, so the custom
+          // button carries the "selected" ring in that case.
+          const isCustom = !popPalette.includes(popCurrent);
+          const gridW = cols * 31 + 20;
           return (
           <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", [below ? "top" : "bottom"]: "calc(100% + 10px)", zIndex: 21,
             padding: 10, borderRadius: 14, background: "#15151c", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 16px 44px rgba(0,0,0,0.34)",
-            display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 9, width: cols * 31 + 20 }}>
-            {popPalette.map((c) => (
-              <div key={c} onClick={() => applyPop(c)} title={c === "transparent" ? (de ? "Ohne" : "None") : c}
-                style={{ width: 22, height: 22, borderRadius: "50%", cursor: "pointer", position: "relative", overflow: "hidden",
-                  background: c === "transparent" ? "#fff" : c,
-                  border: popCurrent === c ? "2.5px solid #4D9FFF" : (c === "#FFFFFF" ? "1.5px solid rgba(255,255,255,0.4)" : "1.5px solid rgba(255,255,255,0.14)"), boxSizing: "border-box" }}>
-                {c === "transparent" && <div style={{ position: "absolute", left: -3, top: "50%", width: "150%", height: 2, background: "#e5484d", transform: "rotate(-45deg)" }} />}
+            width: Math.max(gridW, wbCustomPop ? 228 : 0) }}>
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 9 }}>
+              {popPalette.map((c) => (
+                <div key={c} onClick={() => applyPop(c)} title={c === "transparent" ? (de ? "Ohne" : "None") : c}
+                  style={{ width: 22, height: 22, borderRadius: "50%", cursor: "pointer", position: "relative", overflow: "hidden",
+                    background: c === "transparent" ? "#fff" : c,
+                    border: popCurrent === c ? "2.5px solid #4D9FFF" : (c === "#FFFFFF" ? "1.5px solid rgba(255,255,255,0.4)" : "1.5px solid rgba(255,255,255,0.14)"), boxSizing: "border-box" }}>
+                  {c === "transparent" && <div style={{ position: "absolute", left: -3, top: "50%", width: "150%", height: 2, background: "#e5484d", transform: "rotate(-45deg)" }} />}
+                </div>
+              ))}
+              {/* Custom colour. The conic ring is the universal "any colour"
+                  affordance; when a custom colour is in use it shows that colour
+                  in the middle so the button reflects the current state. */}
+              <div onClick={() => setWbCustomPop(v => !v)} title={de ? "Eigene Farbe" : "Custom colour"}
+                style={{ width: 22, height: 22, borderRadius: "50%", cursor: "pointer", boxSizing: "border-box",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: "conic-gradient(#f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)",
+                  border: (isCustom || wbCustomPop) ? "2.5px solid #4D9FFF" : "1.5px solid rgba(255,255,255,0.14)" }}>
+                {isCustom && <div style={{ width: 11, height: 11, borderRadius: "50%", background: popCurrent, border: "1.5px solid rgba(255,255,255,0.85)", boxSizing: "border-box" }} />}
               </div>
-            ))}
+            </div>
+            {wbCustomPop && (
+              // The format bar preventDefaults mousedown to keep the canvas
+              // selection alive, and that same default is what gives an input
+              // focus — so the hex field would be unclickable without stopping
+              // the event here first. Same reason the link editor does it.
+              <div onMouseDown={e => e.stopPropagation()}
+                style={{ marginTop: 11, paddingTop: 11, borderTop: "1px solid rgba(255,255,255,0.1)", display: "flex", justifyContent: "center" }}>
+                {/* Keyed on the colour KIND, not the value: switching from
+                    border to fill must reload the picker from the new value,
+                    while dragging inside it must not remount on every frame. */}
+                <WbColorPicker key={wbColorPop} value={popCurrent === "transparent" ? "#FFFFFF" : popCurrent}
+                  onPreview={previewPop} onCommit={commitPop} de={de} />
+              </div>
+            )}
           </div>
           ); })()}
 
