@@ -5413,6 +5413,63 @@ const wbShapePoints = (type, w, h) =>
   type === "diamond" ? `${w / 2},1 ${w - 1},${h / 2} ${w / 2},${h - 1} 1,${h / 2}`
   : `${w / 2},1 ${w - 1},${h - 1} 1,${h - 1}`; // triangle
 
+// ── Alignment snapping ──────────────────────────────────────────────────────
+// Distance (in SCREEN px, not world units) at which a dragged element is pulled
+// into alignment. Screen px on purpose: the magnet has to feel the same whether
+// you are zoomed out over the whole board or in on two elements.
+const WB_SNAP_PX = 6;
+// Red-pink, the convention every canvas tool shares for alignment guides. It has
+// to be a colour used for nothing else here — the selection blue would blend
+// into the outline of the very element being dragged.
+const WB_GUIDE_COLOR = "#F43F5E";
+
+// Find the best alignment for `box` against the boxes that are standing still.
+// Nine candidates per axis: each of the moving box's left/centre/right edges
+// against each of a target's, and the same for top/middle/bottom. The closest
+// match inside `tol` wins per axis, so an element can snap horizontally and
+// vertically to two different neighbours at once — which is what makes a grid
+// fall into place.
+//
+// `tol` is in world units (screen px ÷ zoom), so the caller converts.
+function wbSnapBox(box, targets, tol) {
+  const ex = (b) => [b.x, b.x + b.w / 2, b.x + b.w];
+  const ey = (b) => [b.y, b.y + b.h / 2, b.y + b.h];
+  const pick = (mine, edgesOf) => {
+    let best = null;
+    for (const t of targets) {
+      for (const v of edgesOf(t)) {
+        for (const m of mine) {
+          const d = v - m;
+          // The 0.01 margin keeps the FIRST match on a tie, and the edges are
+          // listed near-side first — so a true edge-to-edge alignment is not
+          // displaced by a centre line that happens to sit the same distance away.
+          if (Math.abs(d) <= tol && (best === null || Math.abs(d) < Math.abs(best.d) - 0.01)) best = { d, pos: v };
+        }
+      }
+    }
+    return best;
+  };
+  const bx = pick(ex(box), ex);
+  const by = pick(ey(box), ey);
+  const dx = bx ? bx.d : 0, dy = by ? by.d : 0;
+  const moved = { x: box.x + dx, y: box.y + dy, w: box.w, h: box.h };
+  // The guide spans every element it actually describes, not just the pair that
+  // triggered it: line up four elements and one line runs through all four,
+  // which is the whole point of showing it.
+  const guides = [];
+  if (bx) {
+    const on = targets.filter(t => ex(t).some(v => Math.abs(v - bx.pos) < 0.5));
+    const vs = [moved.y, moved.y + moved.h, ...on.map(t => t.y), ...on.map(t => t.y + t.h)];
+    guides.push({ axis: "x", pos: bx.pos, a: Math.min(...vs), b: Math.max(...vs) });
+  }
+  if (by) {
+    const on = targets.filter(t => ey(t).some(v => Math.abs(v - by.pos) < 0.5));
+    const vs = [moved.x, moved.x + moved.w, ...on.map(t => t.x), ...on.map(t => t.x + t.w)];
+    guides.push({ axis: "y", pos: by.pos, a: Math.min(...vs), b: Math.max(...vs) });
+  }
+  return { dx, dy, guides };
+}
+
 function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage = "de", orgMembers = [], boardId = null, createNotification }) {
   const de = appLanguage === "de";
   const [boards, setBoards] = useState([]);
@@ -5470,6 +5527,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const inkOf = (c) => (!c || c === "#15151c") ? INK : c;
   const commentAreaRef = useRef(null); // the comment textarea while a comment bubble is open
   const camRef = useRef(cam); camRef.current = cam;
+  // Alignment guides currently on screen: [{ axis: "x"|"y", pos, a, b }] in world
+  // coordinates. Only ever non-empty mid-drag.
+  const [guides, setGuides] = useState([]);
+  const guidesKeyRef = useRef(""); // last rendered signature — see applySnap
   const itemsRef = useRef(items); itemsRef.current = items;
   const editingRef = useRef(editing); editingRef.current = editing;
   const selRef = useRef(sel); selRef.current = sel;
@@ -5869,6 +5930,24 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     dragRef.current = { mode: "marquee", sx: pt.x, sy: pt.y };
     setMarquee({ x: pt.x, y: pt.y, w: 0, h: 0 });
   };
+  // Pull a proposed drag offset into alignment with the elements standing still,
+  // and publish the guides that explain the pull. Holding Alt suspends it — the
+  // usual escape hatch for placing something deliberately out of line.
+  const applySnap = (d, dx, dy, altKey) => {
+    if (!d.baseBox || altKey) {
+      if (guidesKeyRef.current) { guidesKeyRef.current = ""; setGuides([]); }
+      return { dx, dy };
+    }
+    // Tolerance is a SCREEN distance, so divide by zoom to get world units.
+    const tol = WB_SNAP_PX / (camRef.current.s || 1);
+    const r = wbSnapBox({ ...d.baseBox, x: d.baseBox.x + dx, y: d.baseBox.y + dy }, d.targets, tol);
+    // A pointermove fires far more often than the guides actually change; only
+    // re-render when they do, otherwise every mouse pixel costs a render.
+    const key = r.guides.map(g => `${g.axis}${Math.round(g.pos)}:${Math.round(g.a)}:${Math.round(g.b)}`).join("|");
+    if (key !== guidesKeyRef.current) { guidesKeyRef.current = key; setGuides(r.guides); }
+    return { dx: dx + r.dx, dy: dy + r.dy };
+  };
+
   const onCanvasPointerMove = (e) => {
     const d = dragRef.current; if (!d) return;
     if (d.mode === "pan") { setCam(prev => ({ ...prev, x: d.cx + (e.clientX - d.sx), y: d.cy + (e.clientY - d.sy) })); return; }
@@ -5881,7 +5960,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       d.rect = rect; setMarquee(rect); return;
     }
     if (d.mode === "groupmove") {
-      const dx = pt.x - d.startX, dy = pt.y - d.startY;
+      const { dx, dy } = applySnap(d, pt.x - d.startX, pt.y - d.startY, e.altKey);
       setItems(prev => prev.map(i => {
         const base = d.bases[i.id]; if (!base) return i;
         let patch;
@@ -5893,7 +5972,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       d.moved = true; return;
     }
     if (d.mode === "move") {
-      const nx = pt.x - d.grabX, ny = pt.y - d.grabY;
+      const { dx, dy } = applySnap(d, pt.x - d.startX, pt.y - d.startY, e.altKey);
+      // The anchor is where the element sat when grabbed; the snapped delta moves
+      // it from there, so the cursor keeps its grip on the same spot.
+      const nx = (d.startX - d.grabX) + dx, ny = (d.startY - d.grabY) + dy;
       let patch;
       if (d.type === "arrow" || d.type === "line") patch = { x1: nx, y1: ny, x2: nx + (d.base.x2 - d.base.x1), y2: ny + (d.base.y2 - d.base.y1) };
       else if (d.type === "draw") patch = { ox: nx, oy: ny };
@@ -5923,6 +6005,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   };
   const onCanvasPointerUp = () => {
     const d = dragRef.current;
+    if (guidesKeyRef.current) { guidesKeyRef.current = ""; setGuides([]); }
     if (d?.mode === "draw" && tempStroke && tempStroke.points.length > 1) {
       addItemLocal("draw", { points: tempStroke.points, ox: 0, oy: 0, color: tempStroke.color, sw: 2.5 });
     }
@@ -5993,6 +6076,30 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   // bubbling (it's a fullscreen ancestor). Double-click is also detected manually
   // (two pointerdowns on the same item within 400ms) so editing always works.
   const lastClickRef = useRef({ id: null, t: 0 });
+  // Everything a drag needs for snapping, gathered once at pointerdown: the
+  // boxes that stay put, and the union box of what is moving. Nothing else on
+  // the board moves during a drag, so recomputing this per pointermove would be
+  // wasted work on a busy canvas.
+  const snapContext = (movingIds) => {
+    const moving = new Set(movingIds);
+    const targets = [], boxes = [];
+    for (const o of itemsRef.current) {
+      // Connectors have no position of their own (they are derived from the two
+      // nodes they join), so aligning to one would be aligning to nothing.
+      if (o.type === "link") continue;
+      const b = bboxOf(o);
+      if (moving.has(o.id)) boxes.push(b); else targets.push(b);
+    }
+    if (!boxes.length) return { targets, baseBox: null };
+    const baseBox = {
+      x: Math.min(...boxes.map(b => b.x)), y: Math.min(...boxes.map(b => b.y)),
+      w: 0, h: 0,
+    };
+    baseBox.w = Math.max(...boxes.map(b => b.x + b.w)) - baseBox.x;
+    baseBox.h = Math.max(...boxes.map(b => b.y + b.h)) - baseBox.y;
+    return { targets, baseBox };
+  };
+
   const onItemPointerDown = (e, it) => {
     if (tool !== "select" || e.button !== 0) return;
     e.stopPropagation();
@@ -6003,7 +6110,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       const pt = toWorld(e);
       const bases = {};
       selIdsRef.current.forEach(id => { const t = itemsRef.current.find(i => i.id === id); if (t) bases[id] = { ...t.data }; });
-      dragRef.current = { mode: "groupmove", startX: pt.x, startY: pt.y, bases };
+      dragRef.current = { mode: "groupmove", startX: pt.x, startY: pt.y, bases, ...snapContext(Object.keys(bases)) };
       return;
     }
     const now = Date.now();
@@ -6039,7 +6146,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         const pt = toWorld(e);
         const bases = {};
         group.forEach(id => { const t = itemsRef.current.find(i => i.id === id); if (t) bases[id] = { ...t.data }; });
-        dragRef.current = { mode: "groupmove", startX: pt.x, startY: pt.y, bases };
+        dragRef.current = { mode: "groupmove", startX: pt.x, startY: pt.y, bases, ...snapContext(Object.keys(bases)) };
         return;
       }
     }
@@ -6047,9 +6154,11 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (editingRef.current && editingRef.current !== it.id) flushEdit(); // save the other element's text first
     const pt = toWorld(e);
     const d = it.data || {};
-    if (it.type === "arrow" || it.type === "line") dragRef.current = { mode: "move", id: it.id, type: it.type, grabX: pt.x - d.x1, grabY: pt.y - d.y1, base: { ...d } };
-    else if (it.type === "draw") dragRef.current = { mode: "move", id: it.id, type: "draw", grabX: pt.x - (d.ox || 0), grabY: pt.y - (d.oy || 0), base: { ...d } };
-    else dragRef.current = { mode: "move", id: it.id, type: it.type, grabX: pt.x - (d.x || 0), grabY: pt.y - (d.y || 0), base: { ...d } };
+    const snap = snapContext([it.id]);
+    const common = { mode: "move", id: it.id, startX: pt.x, startY: pt.y, base: { ...d }, ...snap };
+    if (it.type === "arrow" || it.type === "line") dragRef.current = { ...common, type: it.type, grabX: pt.x - d.x1, grabY: pt.y - d.y1 };
+    else if (it.type === "draw") dragRef.current = { ...common, type: "draw", grabX: pt.x - (d.ox || 0), grabY: pt.y - (d.oy || 0) };
+    else dragRef.current = { ...common, type: it.type, grabX: pt.x - (d.x || 0), grabY: pt.y - (d.y || 0) };
   };
 
   // ── Wheel: pan; ctrl/cmd+wheel or pinch: zoom around the cursor ──
@@ -6805,6 +6914,23 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           WebkitMaskImage: "linear-gradient(to bottom, #000 0%, #000 calc(100% - 260px), transparent calc(100% - 90px))",
           maskImage: "linear-gradient(to bottom, #000 0%, #000 calc(100% - 260px), transparent calc(100% - 90px))" }} />
         <div style={{ position: "absolute", left: 0, top: 0, transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`, transformOrigin: "0 0", pointerEvents: tool === "select" ? "auto" : "none" }}>
+          {/* Alignment guides. Drawn in world coordinates alongside the elements,
+              but scaled back by the zoom so the line stays hairline-thin and the
+              dashes keep their rhythm at any magnification. The z-index is what
+              puts them ON TOP of the elements — they are rendered before
+              items.map() and would otherwise be painted underneath, which is
+              exactly where a guide is useless. */}
+          {guides.map((g, i) => {
+            const px = 1.25 / (cam.s || 1); // constant hairline width, in world units
+            const dash = `repeating-linear-gradient(${g.axis === "x" ? "to bottom" : "to right"}, ${WB_GUIDE_COLOR} 0 ${4 * px}px, transparent ${4 * px}px ${8 * px}px)`;
+            return <div key={`g${i}`} style={{
+              position: "absolute", pointerEvents: "none", backgroundImage: dash, zIndex: 6,
+              left: g.axis === "x" ? g.pos : g.a,
+              top: g.axis === "x" ? g.a : g.pos,
+              width: g.axis === "x" ? px : g.b - g.a,
+              height: g.axis === "x" ? g.b - g.a : px,
+            }} />;
+          })}
           {/* Mind-map group frame — hovering a connected text node outlines the
               whole connected group (Figma/FigJam convention), rendered behind
               the nodes so it never tints their fill. */}
