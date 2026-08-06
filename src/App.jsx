@@ -7010,8 +7010,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
             match. It's the first child (behind the transformed item layer) and
             pointer-events:none, so items, the toolbar and the zoom controls (all
             painted later / outside the canvas) are completely unaffected. */}
+        {/* The two alphas are deliberately NOT the same number. Light-on-dark
+            reads much fainter than dark-on-light at equal opacity — the old
+            symmetric 0.09/0.10 looked balanced in the code and left the dark
+            board almost blank. */}
         <div style={{ position: "absolute", inset: 0, pointerEvents: "none",
-          backgroundImage: `radial-gradient(circle, ${darkMode ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.10)"} 1px, transparent 1px)`,
+          backgroundImage: `radial-gradient(circle, ${darkMode ? "rgba(255,255,255,0.20)" : "rgba(0,0,0,0.10)"} 1px, transparent 1px)`,
           backgroundSize: `${24 * cam.s}px ${24 * cam.s}px`, backgroundPosition: `${cam.x}px ${cam.y}px`,
           WebkitMaskImage: "linear-gradient(to bottom, #000 0%, #000 calc(100% - 260px), transparent calc(100% - 90px))",
           maskImage: "linear-gradient(to bottom, #000 0%, #000 calc(100% - 260px), transparent calc(100% - 90px))" }} />
