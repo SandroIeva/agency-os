@@ -5413,6 +5413,18 @@ const wbShapePoints = (type, w, h) =>
   type === "diamond" ? `${w / 2},1 ${w - 1},${h / 2} ${w / 2},${h - 1} 1,${h / 2}`
   : `${w / 2},1 ${w - 1},${h - 1} 1,${h - 1}`; // triangle
 
+// The stopwatch's two icon buttons. Quiet circles that sit inside the pill —
+// never flush against its edge, which is why the pill's right padding is small
+// but not zero.
+function wbTimerBtn(theme, darkMode) {
+  return {
+    width: 26, height: 26, borderRadius: "50%", flexShrink: 0, padding: 0,
+    display: "flex", alignItems: "center", justifyContent: "center",
+    background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(21,21,28,0.06)",
+    border: "none", color: theme.text, cursor: "pointer",
+  };
+}
+
 // Types a connector may attach to. Excludes the connectors themselves, free-hand
 // strokes and loose arrows — none of them has a body you could point at, and a
 // connector between two connectors has nothing to derive its endpoints from.
@@ -7233,17 +7245,36 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               })}
             </div>
           )}
-          {/* Stopwatch */}
-          <motion.div whileTap={{ scale: 0.96 }} onClick={() => setTimerOn(v => !v)} onDoubleClick={() => { setTimerOn(false); setTimerSec(0); }}
-            title={de ? "Klick: Start/Pause · Doppelklick: Zurücksetzen" : "Click: start/pause · double-click: reset"}
-            style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, cursor: "pointer",
-              background: darkMode ? "rgba(22,22,30,0.8)" : "rgba(255,255,255,0.85)", border: `1px solid ${theme.borderFaint}`,
-              backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", fontFamily: FONT, fontSize: 13, fontWeight: 600, color: theme.text, fontVariantNumeric: "tabular-nums" }}>
+          {/* Stopwatch. Pause and reset are separate, explicit buttons. They used
+              to share one pill — a click toggled, a double-click reset — which
+              made the reset undiscoverable, and a second click arriving a shade
+              too fast wiped a running session's time by accident. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 6px 5px 13px", borderRadius: 999,
+            background: darkMode ? "rgba(22,22,30,0.8)" : "rgba(255,255,255,0.85)", border: `1px solid ${theme.borderFaint}`,
+            backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", fontFamily: FONT, fontSize: 13, fontWeight: 600, color: theme.text }}>
             {timerOn
               ? <span style={{ width: 8, height: 8, borderRadius: 2, background: "#EF4444", flexShrink: 0 }} />
               : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>}
-            {fmtTimer}
-          </motion.div>
+            {/* Fixed width: the digits must not shove the buttons sideways as
+                the time ticks past 9:59. */}
+            <span style={{ fontVariantNumeric: "tabular-nums", minWidth: 40, textAlign: "center" }}>{fmtTimer}</span>
+            <motion.button whileTap={{ scale: 0.9 }} onClick={() => setTimerOn(v => !v)}
+              title={timerOn ? "Pause" /* same word in both languages */ : timerSec ? (de ? "Fortsetzen" : "Resume") : (de ? "Starten" : "Start")}
+              style={wbTimerBtn(theme, darkMode)}>
+              {timerOn
+                ? <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>
+                : <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.54.84l11.2-7.5a1 1 0 0 0 0-1.68L8.54 3.66A1 1 0 0 0 7 4.5z"/></svg>}
+            </motion.button>
+            {/* Nothing to stop or reset at a clean 00:00, so the button stays out
+                of the way until there is. */}
+            {(timerOn || timerSec > 0) && (
+              <motion.button whileTap={{ scale: 0.9 }} onClick={() => { setTimerOn(false); setTimerSec(0); }}
+                title={de ? "Stopp — auf 00:00 zurücksetzen" : "Stop — reset to 00:00"}
+                style={wbTimerBtn(theme, darkMode)}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="5.5" y="5.5" width="13" height="13" rx="2"/></svg>
+              </motion.button>
+            )}
+          </div>
           {/* Share (workspace / specific members / project — same principle as Docs) */}
           <div style={{ position: "relative" }}>
             <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setShareOpen(o => !o)}
