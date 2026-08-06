@@ -5413,6 +5413,20 @@ const wbShapePoints = (type, w, h) =>
   type === "diamond" ? `${w / 2},1 ${w - 1},${h / 2} ${w / 2},${h - 1} 1,${h / 2}`
   : `${w / 2},1 ${w - 1},${h - 1} 1,${h - 1}`; // triangle
 
+// Types a connector may attach to. Excludes the connectors themselves, free-hand
+// strokes and loose arrows — none of them has a body you could point at, and a
+// connector between two connectors has nothing to derive its endpoints from.
+const WB_LINKABLE = ["sticky", "rect", "ellipse", "diamond", "triangle", "text", "image", "sticker", "emoji", "embed"];
+
+// Where a connection handle sits on a box — also the point a dragged connector
+// starts from, so the preview line leaves exactly where the dot is.
+function wbEdgePoint(b, dir) {
+  if (dir === "left")  return { x: b.x, y: b.y + b.h / 2 };
+  if (dir === "right") return { x: b.x + b.w, y: b.y + b.h / 2 };
+  if (dir === "up")    return { x: b.x + b.w / 2, y: b.y };
+  return { x: b.x + b.w / 2, y: b.y + b.h };
+}
+
 // ── Alignment snapping ──────────────────────────────────────────────────────
 // Distance (in SCREEN px, not world units) at which a dragged element is pulled
 // into alignment. Screen px on purpose: the magnet has to feel the same whether
@@ -5498,6 +5512,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [commentOpenId, setCommentOpenId] = useState(null); // comment pin whose bubble is open
   const [wbColorPop, setWbColorPop] = useState(null); // format-bar color overlay: null | "color" | "fill" | "textColor"
   const [mmHandle, setMmHandle] = useState(null); // "<itemId>:<direction>" of the hovered connection handle
+  // A connector being dragged out of a handle: { x1, y1, x2, y2, overId }, in
+  // world coordinates. overId is the element the cursor is currently over, which
+  // is the one that gets connected on release.
+  const [connect, setConnect] = useState(null);
   const [wbLinkPop, setWbLinkPop] = useState(false); // format-bar URL editor for text hyperlinks
   const [linkDraft, setLinkDraft] = useState("");    // the URL being typed in that editor
   const [activeEmbed, setActiveEmbed] = useState(null); // the video embed in "play" mode (its iframe is interactive); double-click to enter, click away to leave
@@ -5814,6 +5832,28 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
 
   // All link items touching a node, either end.
   const linksTouching = (nodeId) => itemsRef.current.filter(i => i.type === "link" && (i.data?.fromId === nodeId || i.data?.toId === nodeId));
+  // Topmost linkable element under a world point. Reverse order: later elements
+  // paint on top, so the last match is the one the user sees under the cursor.
+  const nodeAt = (pt, exceptId) => {
+    const list = itemsRef.current;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const o = list[i];
+      if (o.id === exceptId || !WB_LINKABLE.includes(o.type)) continue;
+      const b = bboxOf(o);
+      if (pt.x >= b.x && pt.x <= b.x + b.w && pt.y >= b.y && pt.y <= b.y + b.h) return o;
+    }
+    return null;
+  };
+  // Join two elements, unless they are already joined. Direction is not part of
+  // the identity here: a second connector drawn back the other way would just
+  // stack a duplicate line on top of the first.
+  const linkNodes = (fromId, toId) => {
+    if (!fromId || !toId || fromId === toId) return;
+    const exists = itemsRef.current.some(i => i.type === "link" &&
+      ((i.data?.fromId === fromId && i.data?.toId === toId) || (i.data?.fromId === toId && i.data?.toId === fromId)));
+    if (exists) return;
+    addItemLocal("link", { fromId, toId });
+  };
   // Every node id reachable from nodeId via any chain of links (undirected) — the
   // whole connected mind-map "group" that node belongs to. Includes nodeId itself.
   const mindmapGroup = (nodeId) => {
@@ -5832,7 +5872,11 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   // ── Mind map: a text node grows a new linked text node to its left/right.
   // The connecting "link" item stores fromId/toId (not coordinates) so the line
   // stays attached and re-routes live as either node moves — see renderLink.
-  const addMindmapBranch = (sourceId, direction) => {
+  // `at` (optional) is a world point to centre the new element on — used when a
+  // connector is dragged out and released on empty canvas, where the user has
+  // already said where they want it and the automatic placement would override
+  // that choice.
+  const addMindmapBranch = (sourceId, direction, at) => {
     const src = itemsRef.current.find(i => i.id === sourceId); if (!src) return;
     const sd = src.data || {};
     let curX = sd.x || 0, curY = sd.y || 0, curW = sd.w || 160, curH = sd.h || 44;
@@ -5858,10 +5902,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const ph = de ? "Text hinzufügen" : "Add text";
     const box = wbFitTextBox(ph, WB_MINDMAP_BRANCH_SIZE, sd.bold);
     const gap = 70;
-    // A branch keeps the source's TYPE: a rectangle grows rectangles, a text
-    // node grows text nodes. Branching a shape into a bare text label would lose
-    // the visual language of the map the user is building.
-    const isShapeSrc = WB_SHAPE_TYPES.includes(src.type);
+    // A branch keeps the source's TYPE: a rectangle grows rectangles, a sticky
+    // grows stickies, a text node grows text nodes. Branching a shape into a
+    // bare text label would lose the visual language of the map being built.
+    // Pictures are the exception — an image, sticker or emoji branches into a
+    // text label, because duplicating the picture is never what was meant.
+    const isShapeSrc = WB_SHAPE_TYPES.includes(src.type) || src.type === "sticky";
     // A shape branch is the SAME size as its source. Text branches step down one
     // tier by design (root reads as the origin), but a shape has a size the user
     // drew by hand — scaling each generation down compounded (0.85^n) and made
@@ -5870,17 +5916,18 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const bh = isShapeSrc ? curH : box.h;
 
     let x = curX, y = curY;
-    if (direction === "left")   { x = curX - gap - bw;  y = curY + curH / 2 - bh / 2; }
-    if (direction === "right")  { x = curX + curW + gap; y = curY + curH / 2 - bh / 2; }
-    if (direction === "up")     { y = curY - gap - bh;  x = curX + curW / 2 - bw / 2; }
-    if (direction === "down")   { y = curY + curH + gap; x = curX + curW / 2 - bw / 2; }
+    if (at) { x = at.x - bw / 2; y = at.y - bh / 2; }
+    else if (direction === "left")   { x = curX - gap - bw;  y = curY + curH / 2 - bh / 2; }
+    else if (direction === "right")  { x = curX + curW + gap; y = curY + curH / 2 - bh / 2; }
+    else if (direction === "up")     { y = curY - gap - bh;  x = curX + curW / 2 - bw / 2; }
+    else if (direction === "down")   { y = curY + curH + gap; x = curX + curW / 2 - bw / 2; }
 
     // Slide along the axis until the spot is free. Dropping a branch on top of
     // an existing node is the fastest way to make a map unreadable, and it is
     // exactly what happens when several branches leave the same side.
     const step = (direction === "left" || direction === "right") ? bh + 18 : bw + 18;
     const horizontal = direction === "up" || direction === "down";
-    for (let n = 0; n < 40; n++) {
+    for (let n = 0; !at && n < 40; n++) {
       const box2 = { x, y, w: bw, h: bh };
       const clash = itemsRef.current.some(o => {
         if (o.id === sourceId || o.type === "link" || o.type === "draw") return false;
@@ -5956,6 +6003,16 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (d.mode === "draw") { setTempStroke(s => s ? { ...s, points: [...s.points, [pt.x, pt.y]] } : s); return; }
     if (d.mode === "create") { setTempItem({ type: d.type, x: Math.min(d.sx, pt.x), y: Math.min(d.sy, pt.y), w: Math.abs(pt.x - d.sx), h: Math.abs(pt.y - d.sy) }); return; }
     if (d.mode === "arrow") { setTempItem(t => t ? { ...t, x2: pt.x, y2: pt.y } : t); return; }
+    if (d.mode === "connect") {
+      // A few pixels of slop before this counts as a drag, so a slightly shaky
+      // click still reads as a click.
+      if (Math.abs(pt.x - d.ax) > 4 || Math.abs(pt.y - d.ay) > 4) d.moved = true;
+      const over = nodeAt(pt, d.fromId);
+      d.overId = over ? over.id : null;
+      d.dropX = pt.x; d.dropY = pt.y;
+      setConnect({ x1: d.ax, y1: d.ay, x2: pt.x, y2: pt.y, overId: d.overId });
+      return;
+    }
     if (d.mode === "marquee") {
       const rect = { x: Math.min(d.sx, pt.x), y: Math.min(d.sy, pt.y), w: Math.abs(pt.x - d.sx), h: Math.abs(pt.y - d.sy) };
       d.rect = rect; setMarquee(rect); return;
@@ -6007,6 +6064,26 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const onCanvasPointerUp = () => {
     const d = dragRef.current;
     if (guidesKeyRef.current) { guidesKeyRef.current = ""; setGuides([]); }
+    if (d?.mode === "connect") {
+      setConnect(null); setMmHandle(null); dragRef.current = null;
+      // Released without really moving → the old click behaviour: grow a new
+      // connected element in that direction.
+      if (!d.moved) { addMindmapBranch(d.fromId, d.dir); return; }
+      // Dropped on another element → connect the two.
+      if (d.overId) { linkNodes(d.fromId, d.overId); return; }
+      // Dropped back onto the element it came from → cancelled. nodeAt() skips
+      // the source, so without this the drop would look like empty canvas and
+      // spawn a new element directly on top of it.
+      const from = itemsRef.current.find(i => i.id === d.fromId);
+      if (from) {
+        const b = bboxOf(from);
+        if (d.dropX >= b.x && d.dropX <= b.x + b.w && d.dropY >= b.y && d.dropY <= b.y + b.h) return;
+      }
+      // Dropped on empty canvas → a new connected element right where it was
+      // let go, rather than wherever the automatic layout would have put it.
+      addMindmapBranch(d.fromId, d.dir, { x: d.dropX, y: d.dropY });
+      return;
+    }
     if (d?.mode === "draw" && tempStroke && tempStroke.points.length > 1) {
       addItemLocal("draw", { points: tempStroke.points, ox: 0, oy: 0, color: tempStroke.color, sw: 2.5 });
     }
@@ -6505,11 +6582,14 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         )}
         {/* Connection handles on all four edges, like Miro: a small dot that
             becomes an arrow on hover, and a click grows a linked node in that
-            direction. Shown for shapes AND text nodes whenever one is selected.
+            direction, while dragging from it pulls a connector to another
+            element. Shown on every element a connector can attach to — being
+            able to drop ONTO a sticky but not drag FROM one would be an odd
+            half of the feature.
             This replaces the earlier opt-in "+" handles that only appeared
             after switching a node into mind-map mode — discoverable only if you
             already knew the feature existed. */}
-        {isOnly && !isEdit && (it.type === "text" || isShape) && (<>
+        {isOnly && !isEdit && WB_LINKABLE.includes(it.type) && (<>
           {[
             { dir: "left",  style: { left: -30, top: "50%", transform: "translateY(-50%)" }, rot: 180 },
             { dir: "right", style: { right: -30, top: "50%", transform: "translateY(-50%)" }, rot: 0 },
@@ -6519,8 +6599,17 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
             const hot = mmHandle === `${it.id}:${dir}`;
             return (
               <div key={dir}
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); setMmHandle(null); addMindmapBranch(it.id, dir); }}
+                // Press-and-drag pulls a connector towards another element;
+                // press-and-release without moving still grows a new branch.
+                // Both live in the pointerup handler so there is ONE decision
+                // point — an onClick here would fire on top of the drag whenever
+                // the release happened to land back on the dot.
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  const a = wbEdgePoint(bboxOf(it), dir);
+                  dragRef.current = { mode: "connect", fromId: it.id, dir, ax: a.x, ay: a.y, moved: false };
+                  setConnect({ x1: a.x, y1: a.y, x2: a.x, y2: a.y, overId: null });
+                }}
                 onMouseEnter={() => setMmHandle(`${it.id}:${dir}`)}
                 onMouseLeave={() => setMmHandle(h => h === `${it.id}:${dir}` ? null : h)}
                 title={de ? "Verbundenes Element" : "Connected node"}
@@ -6932,6 +7021,28 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               height: g.axis === "x" ? g.b - g.a : px,
             }} />;
           })}
+          {/* A connector being pulled out of a handle: the line follows the
+              cursor, and whatever it is over gets a ring so it is unambiguous
+              which element will be joined on release. */}
+          {connect && (() => {
+            const px = 1.6 / (cam.s || 1);
+            const target = connect.overId ? itemsRef.current.find(i => i.id === connect.overId) : null;
+            const tb = target ? bboxOf(target) : null;
+            const minX = Math.min(connect.x1, connect.x2), minY = Math.min(connect.y1, connect.y2);
+            const w = Math.abs(connect.x2 - connect.x1), h = Math.abs(connect.y2 - connect.y1);
+            return (
+              <>
+                <svg width={w + 2} height={h + 2} style={{ position: "absolute", left: minX, top: minY, overflow: "visible", pointerEvents: "none", zIndex: 6 }}>
+                  <line x1={connect.x1 - minX} y1={connect.y1 - minY} x2={connect.x2 - minX} y2={connect.y2 - minY}
+                    stroke="#3B82F6" strokeWidth={px} strokeLinecap="round" strokeDasharray={`${6 * px} ${5 * px}`} />
+                  <circle cx={connect.x2 - minX} cy={connect.y2 - minY} r={3.5 * px} fill="#3B82F6" />
+                </svg>
+                {tb && <div style={{ position: "absolute", left: tb.x - 4, top: tb.y - 4, width: tb.w + 8, height: tb.h + 8,
+                  border: `${px}px solid #3B82F6`, borderRadius: 10, pointerEvents: "none", zIndex: 6,
+                  background: "rgba(59,130,246,0.08)" }} />}
+              </>
+            );
+          })()}
           {/* Mind-map group frame — hovering a connected text node outlines the
               whole connected group (Figma/FigJam convention), rendered behind
               the nodes so it never tints their fill. */}
