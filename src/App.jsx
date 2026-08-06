@@ -5306,7 +5306,11 @@ const WB_FILL_COLORS = ["transparent", "#FFFFFF", "#FFE066", "#F4A79D", "#B5E2B0
 // Figma-style color grid opened from a swatch button (2 rows).
 const WB_PALETTE = [
   "#15151c", "#6B7280", "#EF4444", "#F59E0B", "#EAB308", "#22C55E", "#14B8A6", "#3B82F6", "#8B5CF6", "#EC4899", "#FFFFFF",
-  "#9CA3AF", "#D1D5DB", "#FCA5A5", "#FDBA74", "#FDE68A", "#BBF7D0", "#99F6E4", "#BFDBFE", "#DDD6FE", "#FBCFE8",
+  // #D1D5DB used to sit here between #9CA3AF and #FCA5A5. It read as the same
+  // light grey as its neighbour, and its slot is what keeps the grid at two
+  // rows of 11 once "transparent" and the custom-colour button are counted —
+  // with it, fill and border palettes spilled onto a third row.
+  "#9CA3AF", "#FCA5A5", "#FDBA74", "#FDE68A", "#BBF7D0", "#99F6E4", "#BFDBFE", "#DDD6FE", "#FBCFE8",
 ];
 // ── Custom colour picker ────────────────────────────────────────────────────
 // Elements only ever store a plain hex string. HSV exists purely for the picker
@@ -5403,36 +5407,41 @@ function WbColorPicker({ value, onPreview, onCommit, de }) {
 
   const hex = wbHsvToHex(hsv.h, hsv.s, hsv.v);
   return (
-    <div style={{ width: 208, display: "flex", flexDirection: "column", gap: 9 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+    <div style={{ width: 214, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         {hasDropper && (
           <div onClick={pickFromScreen} title={de ? "Farbe vom Bildschirm aufnehmen" : "Pick a colour from the screen"}
-            style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+            style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
               background: "rgba(255,255,255,0.09)", cursor: "pointer" }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
               <path d="M15.5 3.5a2.1 2.1 0 0 1 3 3L9 16l-4 1 1-4z" /><path d="M13 6l5 5" />
             </svg>
           </div>
         )}
-        <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, background: hex, border: "1px solid rgba(255,255,255,0.25)" }} />
         <input value={hexText} spellCheck={false} onChange={(e) => onHexInput(e.target.value)}
           onKeyDown={(e) => e.stopPropagation()} /* Delete/Backspace here must not reach the canvas */
-          style={{ flex: 1, minWidth: 0, padding: "6px 8px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.18)",
-            background: "rgba(255,255,255,0.06)", color: "#fff", fontFamily: FONT, fontSize: 12, fontWeight: 600, outline: "none" }} />
-      </div>
-      <div ref={svRef} onPointerDown={beginDrag(svRef, "sv")}
-        style={{ position: "relative", height: 116, borderRadius: 9, cursor: "crosshair", touchAction: "none",
-          background: `linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, hsl(${hsv.h} 100% 50%))` }}>
-        <div style={{ position: "absolute", left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%`,
-          width: 13, height: 13, marginLeft: -6.5, marginTop: -6.5, borderRadius: "50%", background: hex,
-          border: "2px solid #fff", boxShadow: "0 0 0 1px rgba(0,0,0,0.4)", pointerEvents: "none" }} />
+          style={{ flex: 1, minWidth: 0, height: 30, boxSizing: "border-box", padding: "0 10px", borderRadius: 9,
+            border: "1px solid rgba(255,255,255,0.22)", background: "rgba(255,255,255,0.07)", color: "#fff",
+            fontFamily: FONT, fontSize: 12.5, fontWeight: 600, letterSpacing: 0.3, outline: "none" }} />
       </div>
       <div ref={hueRef} onPointerDown={beginDrag(hueRef, "hue")}
-        style={{ position: "relative", height: 12, borderRadius: 999, cursor: "ew-resize", touchAction: "none",
+        style={{ position: "relative", height: 14, borderRadius: 999, cursor: "ew-resize", touchAction: "none",
           background: "linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%)" }}>
         <div style={{ position: "absolute", left: `${(hsv.h / 360) * 100}%`, top: "50%",
-          width: 15, height: 15, marginLeft: -7.5, marginTop: -7.5, borderRadius: "50%", background: `hsl(${hsv.h} 100% 50%)`,
-          border: "2px solid #fff", boxShadow: "0 1px 5px rgba(0,0,0,0.45)", pointerEvents: "none" }} />
+          width: 16, height: 16, marginLeft: -8, marginTop: -8, borderRadius: "50%", background: `hsl(${hsv.h} 100% 50%)`,
+          border: "2.5px solid #fff", boxShadow: "0 1px 5px rgba(0,0,0,0.45)", pointerEvents: "none", boxSizing: "border-box" }} />
+      </div>
+      {/* The two gradients sit on their own layers inside an overflow-hidden
+          box rather than being stacked in one background shorthand: stacked
+          backgrounds were not clipping cleanly to the radius and left bright
+          slivers in the corners. */}
+      <div ref={svRef} onPointerDown={beginDrag(svRef, "sv")}
+        style={{ position: "relative", height: 138, borderRadius: 11, overflow: "hidden", cursor: "crosshair", touchAction: "none" }}>
+        <div style={{ position: "absolute", inset: 0, background: `linear-gradient(to right, #fff, hsl(${hsv.h} 100% 50%))` }} />
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, #000, rgba(0,0,0,0))" }} />
+        <div style={{ position: "absolute", left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%`,
+          width: 15, height: 15, marginLeft: -7.5, marginTop: -7.5, borderRadius: "50%", background: hex,
+          border: "2.5px solid #fff", boxShadow: "0 0 0 1px rgba(0,0,0,0.45)", pointerEvents: "none", boxSizing: "border-box" }} />
       </div>
     </div>
   );
@@ -7062,7 +7071,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           return (
           <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", [below ? "top" : "bottom"]: "calc(100% + 10px)", zIndex: 21,
             padding: 10, borderRadius: 14, background: "#15151c", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 16px 44px rgba(0,0,0,0.34)",
-            width: Math.max(gridW, wbCustomPop ? 228 : 0) }}>
+            width: gridW }}>
             <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 9 }}>
               {popPalette.map((c) => (
                 <div key={c} onClick={() => applyPop(c)} title={c === "transparent" ? (de ? "Ohne" : "None") : c}
@@ -7083,13 +7092,21 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
                 {isCustom && <div style={{ width: 11, height: 11, borderRadius: "50%", background: popCurrent, border: "1.5px solid rgba(255,255,255,0.85)", boxSizing: "border-box" }} />}
               </div>
             </div>
+            {/* Its OWN panel, stacked past the palette rather than growing
+                inside it: as a section of the palette panel it forced a third
+                row of swatches and had to be padded out to the palette's much
+                greater width, leaving empty gutters either side. It also
+                repeated the swatches the user had just chosen to move past.
+                It stacks in whichever direction the palette itself opened.
+                onMouseDown is stopped because the format bar preventDefaults
+                it to hold the canvas selection — and that same default is what
+                gives an input focus, so the hex field would otherwise be
+                unclickable. Same reason the link editor does it. */}
             {wbCustomPop && (
-              // The format bar preventDefaults mousedown to keep the canvas
-              // selection alive, and that same default is what gives an input
-              // focus — so the hex field would be unclickable without stopping
-              // the event here first. Same reason the link editor does it.
               <div onMouseDown={e => e.stopPropagation()}
-                style={{ marginTop: 11, paddingTop: 11, borderTop: "1px solid rgba(255,255,255,0.1)", display: "flex", justifyContent: "center" }}>
+                style={{ position: "absolute", right: 0, [below ? "top" : "bottom"]: "calc(100% + 8px)",
+                  padding: 12, borderRadius: 14, background: "#15151c", border: "1px solid rgba(255,255,255,0.1)",
+                  boxShadow: "0 16px 44px rgba(0,0,0,0.34)" }}>
                 {/* Keyed on the colour KIND, not the value: switching from
                     border to fill must reload the picker from the new value,
                     while dragging inside it must not remount on every frame. */}
