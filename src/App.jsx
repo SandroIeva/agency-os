@@ -5418,10 +5418,11 @@ const wbShapePoints = (type, w, h) =>
 // into alignment. Screen px on purpose: the magnet has to feel the same whether
 // you are zoomed out over the whole board or in on two elements.
 const WB_SNAP_PX = 6;
-// Red-pink, the convention every canvas tool shares for alignment guides. It has
-// to be a colour used for nothing else here — the selection blue would blend
-// into the outline of the very element being dragged.
-const WB_GUIDE_COLOR = "#F43F5E";
+// The same blue as the selection outline and the mind-map group frame, so the
+// canvas speaks with one accent colour instead of importing the red-pink other
+// tools use. The two never read as the same thing anyway: a guide is a thin
+// dashed line running past the element, a selection is a solid box around it.
+const WB_GUIDE_COLOR = "#3B82F6";
 
 // Find the best alignment for `box` against the boxes that are standing still.
 // Nine candidates per axis: each of the moving box's left/centre/right edges
