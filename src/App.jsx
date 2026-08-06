@@ -6161,7 +6161,20 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (d.mode === "pan") { setCam(prev => ({ ...prev, x: d.cx + (e.clientX - d.sx), y: d.cy + (e.clientY - d.sy) })); return; }
     const pt = toWorld(e);
     if (d.mode === "draw") { setTempStroke(s => s ? { ...s, points: [...s.points, [pt.x, pt.y]] } : s); return; }
-    if (d.mode === "create") { setTempItem({ type: d.type, x: Math.min(d.sx, pt.x), y: Math.min(d.sy, pt.y), w: Math.abs(pt.x - d.sx), h: Math.abs(pt.y - d.sy) }); return; }
+    if (d.mode === "create") {
+      // Proportional by default, Shift to deform — the same contract as the
+      // resize handle, so dragging a shape out and resizing it later behave
+      // alike. A new shape has no original ratio to preserve, so proportional
+      // means 1:1: an ellipse drags out as a real circle, a rect as a square.
+      // That also matches what a plain click already produced.
+      const dx = pt.x - d.sx, dy = pt.y - d.sy;
+      let w = Math.abs(dx), h = Math.abs(dy);
+      if (!e.shiftKey) w = h = Math.max(w, h);
+      // Anchored at the point the drag started, so dragging up or left grows
+      // away from it instead of sliding the shape around.
+      setTempItem({ type: d.type, w, h, x: dx >= 0 ? d.sx : d.sx - w, y: dy >= 0 ? d.sy : d.sy - h });
+      return;
+    }
     if (d.mode === "arrow") { setTempItem(t => t ? { ...t, x2: pt.x, y2: pt.y } : t); return; }
     if (d.mode === "connect") {
       // A few pixels of slop before this counts as a drag, so a slightly shaky
