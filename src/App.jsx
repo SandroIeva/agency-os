@@ -7087,7 +7087,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           {/* Live create-drag preview */}
           {tempItem && WB_SHAPE_TYPES.includes(tempItem.type) && (
             (tempItem.type === "rect" || tempItem.type === "ellipse") ? (
-              <div style={{ position: "absolute", left: tempItem.x, top: tempItem.y, width: tempItem.w, height: tempItem.h, border: "2px dashed #15151c", borderRadius: tempItem.type === "ellipse" ? "50%" : 12, pointerEvents: "none" }} />
+              // INK, not a fixed colour: the outline has to be legible against
+              // the canvas, and a hardcoded #15151c was invisible on the dark
+              // one — so dragging out a rectangle or an ellipse showed nothing
+              // at all, while the diamond and triangle (drawn as SVG below, with
+              // INK) were fine. All four now behave the same.
+              <div style={{ position: "absolute", left: tempItem.x, top: tempItem.y, width: tempItem.w, height: tempItem.h, border: `2px dashed ${INK}`, borderRadius: tempItem.type === "ellipse" ? "50%" : 12, pointerEvents: "none" }} />
             ) : (
               <svg width={Math.max(2, tempItem.w)} height={Math.max(2, tempItem.h)} style={{ position: "absolute", left: tempItem.x, top: tempItem.y, pointerEvents: "none", overflow: "visible" }}>
                 <polygon points={wbShapePoints(tempItem.type, Math.max(2, tempItem.w), Math.max(2, tempItem.h))} fill="none" stroke={INK} strokeWidth={2} strokeDasharray="6 5" strokeLinejoin="round" />
