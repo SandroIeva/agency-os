@@ -1135,7 +1135,11 @@ function Dropdown({ value, onChange, options = [], placeholder = "Auswählen", t
           maxWidth: maxTriggerWidth, minWidth: 0, transition: "border-color 0.18s ease", ...triggerStyle,
         }}>
         {(sel?.icon ?? leadingIcon) && <span style={{ display: "flex", flexShrink: 0 }}>{sel?.icon ?? leadingIcon}</span>}
-        <span style={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sel ? sel.label : placeholder}</span>
+        {/* `triggerLabel` lets an option look different in the closed trigger
+            than in the open list. Without it the trigger inherits whatever
+            styling the list item carries — a menu that previews each option at
+            its own font size ended up with a 26px trigger. */}
+        <span style={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sel ? (sel.triggerLabel ?? sel.label) : placeholder}</span>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </motion.div>
       <AnimatePresence>
@@ -7053,8 +7057,11 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         placeholder={String(Math.round(curPx))}
         options={WB_TEXT_SIZE_ORDER.map(k => ({
           value: k,
-          // Each preset previews itself, capped so Display cannot stretch the menu.
+          // Each preset previews itself in the list, capped so Display cannot
+          // stretch the menu. The trigger takes the plain name — it has to fit
+          // the format bar, not demonstrate the size.
           label: <span style={{ fontSize: Math.min(wbFontSize(k), 26), lineHeight: 1.25 }}>{sizeLabels[k]}</span>,
+          triggerLabel: sizeLabels[k],
         }))}
         triggerStyle={{ background: "rgba(255,255,255,0.09)", color: "#fff", padding: "5px 8px 5px 11px", fontSize: 12, fontWeight: 600, minWidth: 96 }}
         footer={(close) => (
