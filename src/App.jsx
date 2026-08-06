@@ -1115,7 +1115,7 @@ function StockSearchPanel({ session, userOrg, theme, darkMode, appLanguage = "de
 // component rather than a one-off menu somewhere, so every dropdown in the app
 // keeps looking and behaving alike.
 function Dropdown({ value, onChange, options = [], placeholder = "Auswählen", theme, darkMode,
-  leadingIcon = null, minWidth = 200, align = "left", maxTriggerWidth, disabled = false, triggerStyle = {}, footer = null }) {
+  leadingIcon = null, minWidth = 200, align = "left", maxTriggerWidth, disabled = false, triggerStyle = {}, footer = null, maxHeight = 280 }) {
   const [open, setOpen] = useState(false);
   const sel = options.find(o => String(o.value) === String(value));
   const check = (
@@ -1139,7 +1139,7 @@ function Dropdown({ value, onChange, options = [], placeholder = "Auswählen", t
             than in the open list. Without it the trigger inherits whatever
             styling the list item carries — a menu that previews each option at
             its own font size ended up with a 26px trigger. */}
-        <span style={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sel ? (sel.triggerLabel ?? sel.label) : placeholder}</span>
+        <span style={{ minWidth: 0, marginRight: "auto", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sel ? (sel.triggerLabel ?? sel.label) : placeholder}</span>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </motion.div>
       <AnimatePresence>
@@ -1149,7 +1149,7 @@ function Dropdown({ value, onChange, options = [], placeholder = "Auswählen", t
             <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
               style={{
                 position: "absolute", top: "calc(100% + 8px)", [align]: 0, zIndex: 5001,
-                minWidth, maxHeight: 280, overflowY: "auto", padding: 6, borderRadius: 14,
+                minWidth, maxHeight, overflowY: "auto", padding: 6, borderRadius: 14,
                 background: darkMode ? "rgba(28,28,38,0.92)" : "rgba(255,255,255,0.94)",
                 backdropFilter: "blur(20px) saturate(1.3)", WebkitBackdropFilter: "blur(20px) saturate(1.3)",
                 border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.6)"}`,
@@ -6488,6 +6488,18 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   useEffect(() => {
     const el = canvasRef.current; if (!el) return;
     const h = (e) => {
+      // A wheel that starts inside a scrollable overlay — a dropdown menu, a
+      // picker list — belongs to that overlay, not to the camera. This handler
+      // preventDefaults unconditionally, which meant such a list could only be
+      // scrolled by dragging its scrollbar. Detected by looking for a real
+      // scrollable ancestor rather than by tagging each overlay, so anything
+      // added later is covered without having to remember.
+      for (let n = e.target; n && n !== el; n = n.parentElement) {
+        if (n.scrollHeight > n.clientHeight + 1) {
+          const ov = getComputedStyle(n).overflowY;
+          if (ov === "auto" || ov === "scroll") return;
+        }
+      }
       e.preventDefault();
       if (e.ctrlKey || e.metaKey) {
         const r = el.getBoundingClientRect();
@@ -7052,6 +7064,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const sizeDropdown = (
       <Dropdown
         value={curSize} onChange={setSize} theme={barTheme} darkMode minWidth={186}
+        // Six presets previewed at their own size plus the custom field do not
+        // fit the default 280 — and a list this short should not need scrolling
+        // to reach its last item.
+        maxHeight={400}
         // Named sizes match by key; a typed number matches nothing, so the
         // placeholder is what shows the custom value — as the number itself.
         placeholder={String(Math.round(curPx))}
@@ -7063,9 +7079,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           label: <span style={{ fontSize: Math.min(wbFontSize(k), 26), lineHeight: 1.25 }}>{sizeLabels[k]}</span>,
           triggerLabel: sizeLabels[k],
         }))}
-        triggerStyle={{ background: "rgba(255,255,255,0.09)", color: "#fff", padding: "5px 8px 5px 11px", fontSize: 12, fontWeight: 600, minWidth: 96 }}
+        triggerStyle={{ background: "rgba(255,255,255,0.09)", color: "#fff", padding: "5px 8px 5px 11px", fontSize: 12, fontWeight: 600,
+          // Fixed, not minimum: the chevron has to stay put whether the label
+          // reads "Huge" or "Extra large".
+          width: 132, boxSizing: "border-box" }}
         footer={(close) => (
-          <input type="number" min={WB_TEXT_SIZE_MIN} max={WB_TEXT_SIZE_MAX} defaultValue={Math.round(curPx)}
+          <input type="text" inputMode="decimal" defaultValue={Math.round(curPx)}
             // The format bar preventDefaults mousedown to hold the canvas
             // selection, and that same default is what focuses an input.
             onMouseDown={(e) => e.stopPropagation()}
