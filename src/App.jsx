@@ -6899,7 +6899,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       // applied to part of the text are visible while typing. Same white-space
       // and overflow rules as the display below — a `pre-wrap` here would bring
       // back the reflow that used to hide the last word.
-      <div ref={focusEditArea} contentEditable suppressContentEditableWarning
+      // Distinct key from the display node below. Both are <div>s in the same
+      // slot, so without it React reuses the display's DOM node, keeps the text
+      // nodes already in it, and the runs written in here land on top — which
+      // showed the whole text twice. Shapes never hit this because their editor
+      // is a <textarea>: a different type, so React always builds a fresh node.
+      <div key="wb-edit" ref={focusEditArea} contentEditable suppressContentEditableWarning
         data-wb-init={wbRunsHtml(runs)}
         onPointerDown={e => e.stopPropagation()}
         onInput={(e) => {
@@ -6982,7 +6987,8 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       // tall box then hid. `pre` never reflows (lines are exactly what was typed,
       // Enter = newline) and visible overflow means text can never be clipped even
       // if the fit is a hair off. Sticky notes / shapes keep wrapping (fixed width).
-      <div style={{ ...textStyle,
+      // Keyed against the editor above — see the note there.
+      <div key="wb-view" style={{ ...textStyle,
         whiteSpace: it.type === "text" ? "pre" : "pre-wrap",
         wordBreak: it.type === "text" ? "normal" : "break-word",
         overflow: it.type === "text" ? "visible" : "hidden",
