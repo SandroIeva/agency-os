@@ -21,6 +21,10 @@ const PLAN_OPTIONS = ["starter", "pro", "agency"].map(id => ({
 
 const MANAGEABLE_STATUSES = new Set(["active", "trialing", "incomplete", "past_due", "unpaid", "paused"]);
 const CHECKOUT_POLL_INTERVAL_MS = 1500;
+// Returning from the Customer Portal: refresh over roughly the first eight
+// seconds, which is the window Stripe's webhook for the change lands in.
+const PORTAL_REFRESH_ATTEMPTS = 6;
+const PORTAL_REFRESH_INTERVAL_MS = 1400;
 const CHECKOUT_POLL_ATTEMPTS = 8;
 
 function readPendingSelection() {
@@ -157,8 +161,25 @@ export default function BillingSettings({ session, org, isAdmin, entitlements, o
 
     if (checkout === "portal-return") {
       window.history.replaceState({}, "", window.location.pathname);
-      const timer = window.setTimeout(loadBilling, 450);
-      return () => window.clearTimeout(timer);
+      // Re-read a few times, not once. Coming back from the portal beats the
+      // webhook that carries what was changed there — a single read 450ms later
+      // usually lands before Stripe has told us anything, and then the screen
+      // sits on stale text (a cancelled plan still showing a renewal date)
+      // until the page is reloaded. Unlike checkout there is no status to wait
+      // for: a cancellation leaves the subscription active, so this simply
+      // refreshes over the window in which the webhook arrives.
+      let cancelled = false;
+      let timer = null;
+      let attempts = 0;
+      const refresh = async () => {
+        await loadBilling({ silent: true });
+        if (cancelled) return;
+        attempts += 1;
+        if (attempts < PORTAL_REFRESH_ATTEMPTS) timer = window.setTimeout(refresh, PORTAL_REFRESH_INTERVAL_MS);
+        else onBillingChangeRef.current?.(); // limits may have changed with the plan
+      };
+      timer = window.setTimeout(refresh, 450);
+      return () => { cancelled = true; window.clearTimeout(timer); };
     }
     return undefined;
   }, [loadBilling]);

@@ -321,8 +321,21 @@ export async function syncStripeSubscription(subscription) {
   // 2025-03-31.basil. Webhook endpoints can still deliver older API shapes,
   // so support both locations while preferring the current one.
   const currentPeriodEnd = item?.current_period_end ?? subscription.current_period_end;
-  const periodEnd = currentPeriodEnd
-    ? new Date(currentPeriodEnd * 1000).toISOString()
+  // Stripe is moving cancellation off the `cancel_at_period_end` flag onto a
+  // `cancel_at` timestamp — the same migration that moved billing periods from
+  // the subscription onto its items, handled just above. A subscription
+  // cancelled through the Customer Portal can arrive carrying only `cancel_at`,
+  // and reading the flag alone recorded it as renewing: the customer was shown
+  // a renewal date for a subscription they had just cancelled. Either signal
+  // means it is ending.
+  const cancelAt = subscription.cancel_at ?? null;
+  const cancelling = Boolean(subscription.cancel_at_period_end) || Boolean(cancelAt);
+  // The date the service actually ends. For the usual "cancel at period end"
+  // that is the period end anyway; for a cancellation scheduled at some other
+  // date it is not, and the customer must see the date they were promised.
+  const endsAt = cancelling && cancelAt ? cancelAt : currentPeriodEnd;
+  const periodEnd = endsAt
+    ? new Date(endsAt * 1000).toISOString()
     : null;
 
   const shared = {
@@ -333,7 +346,7 @@ export async function syncStripeSubscription(subscription) {
     plan: plan || null,
     billing_interval: billing || null,
     status: subscription.status,
-    cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
+    cancel_at_period_end: cancelling,
     current_period_end: periodEnd,
     updated_at: new Date().toISOString(),
   };
