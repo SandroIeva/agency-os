@@ -5753,6 +5753,14 @@ function wbTimerBtn(theme, darkMode) {
   };
 }
 
+// ── Stacking order ──────────────────────────────────────────────────────────
+// Elements had no z at all: they were drawn in the order they were inserted.
+// `z` is optional and defaults to 0, so every board keeps exactly the stacking
+// it has today until something is explicitly raised or lowered. Array.sort is
+// stable, so equal z still falls back to insertion order.
+const wbZ = (it) => (it?.data?.z ?? 0);
+const wbZSorted = (list) => [...(list || [])].sort((a, b) => wbZ(a) - wbZ(b));
+
 // Types a connector may attach to. Excludes the connectors themselves, free-hand
 // strokes and loose arrows — none of them has a body you could point at, and a
 // connector between two connectors has nothing to derive its endpoints from.
@@ -5896,6 +5904,14 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   // world coordinates. overId is the element the cursor is currently over, which
   // is the one that gets connected on release.
   const [connect, setConnect] = useState(null);
+  // Right-click menu: { x, y } in screen pixels plus the world point it was
+  // opened at, and the element under it (null on empty canvas).
+  const [ctxMenu, setCtxMenu] = useState(null);
+  const [ctxHover, setCtxHover] = useState(null); // highlighted menu row
+  // Copied elements live here rather than on the system clipboard: a whiteboard
+  // element is a row, not text, and the system clipboard would flatten it.
+  const clipRef = useRef([]);
+  const focusedRef = useRef(false); // ?i=<id> has been honoured for this board
   const [wbLinkPop, setWbLinkPop] = useState(false); // format-bar URL editor for text hyperlinks
   // What the link button had in front of it when it was pressed: the element,
   // the selected character range, AND the runs as they stood. All three,
@@ -6040,7 +6056,25 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     let alive = true;
     (async () => {
       const { data } = await supabase.from("whiteboard_items").select("id,type,data").eq("board_id", board.id).order("created_at", { ascending: true });
-      if (alive) setItems(data || []);
+      if (!alive) return;
+      setItems(data || []);
+      // Opened through "copy link to element" (?wb=<board>&i=<id>): select that
+      // element and bring the camera to it. Guarded so it only ever fires for
+      // the first load of the board named in the URL — the parameter stays in
+      // the address bar afterwards and would otherwise yank the view back on
+      // every later change.
+      const want = new URLSearchParams(window.location.search).get("i");
+      if (want && !focusedRef.current) {
+        const hit = (data || []).find(i => i.id === want);
+        if (hit) {
+          focusedRef.current = true;
+          const b = bboxOf(hit);
+          const el = canvasRef.current;
+          const vw = el?.clientWidth || window.innerWidth, vh = el?.clientHeight || window.innerHeight;
+          setCam({ s: 1, x: vw / 2 - (b.x + b.w / 2), y: vh / 2 - (b.y + b.h / 2) });
+          setSel(hit.id); setSelIds([hit.id]);
+        }
+      }
     })();
     const ch = supabase.channel(`wb-${board.id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "whiteboard_items", filter: `board_id=eq.${board.id}` }, (payload) => {
@@ -6224,11 +6258,14 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   };
 
   // All link items touching a node, either end.
+  // Painting order. Hit-testing has to agree with it, or the element you click
+  // is not the one you see on top.
+  const ordered = useMemo(() => wbZSorted(items), [items]);
   const linksTouching = (nodeId) => itemsRef.current.filter(i => i.type === "link" && (i.data?.fromId === nodeId || i.data?.toId === nodeId));
   // Topmost linkable element under a world point. Reverse order: later elements
   // paint on top, so the last match is the one the user sees under the cursor.
   const nodeAt = (pt, exceptId) => {
-    const list = itemsRef.current;
+    const list = wbZSorted(itemsRef.current);
     for (let i = list.length - 1; i >= 0; i--) {
       const o = list[i];
       if (o.id === exceptId || !WB_LINKABLE.includes(o.type)) continue;
@@ -6714,7 +6751,14 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         const ids = selIdsRef.current.length ? [...selIdsRef.current] : (selRef.current ? [selRef.current] : []);
         if (ids.length) { e.preventDefault(); ids.forEach(id => deleteItem(id)); setSelIds([]); }
       }
-      if (e.key === "Escape") { setSel(null); setSelIds([]); setEditing(null); setActiveEmbed(null); }
+      if (e.key === "Escape") { setSel(null); setSelIds([]); setEditing(null); setActiveEmbed(null); setCtxMenu(null); }
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && !e.shiftKey && e.key.toLowerCase() === "c") { if (copySel()) e.preventDefault(); }
+      if (mod && !e.shiftKey && e.key.toLowerCase() === "v") { if (clipRef.current.length) { e.preventDefault(); pasteClip(null); } }
+      if (mod && !e.shiftKey && e.key.toLowerCase() === "d") { e.preventDefault(); duplicateSel(); }
+      // ⌘] / ⌘[ — the shortcut every layer-ordered editor uses.
+      if (mod && e.key === "]") { e.preventDefault(); restack("front"); }
+      if (mod && e.key === "[") { e.preventDefault(); restack("back"); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -6813,6 +6857,75 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     if (!file || !board) return;
     const url = await uploadBoardImage(file);
     if (url) addImageFromUrl(url, at);
+  };
+
+  // ── Context-menu actions ────────────────────────────────────────────────────
+  const selectedIds = () => (selIdsRef.current.length ? [...selIdsRef.current] : (selRef.current ? [selRef.current] : []));
+
+  // Raise or lower the selection. Everything selected keeps its order relative
+  // to the rest of the selection — sending three overlapping cards to the back
+  // must not shuffle them among themselves.
+  const restack = (dir) => {
+    const ids = selectedIds();
+    if (!ids.length) return;
+    const zs = itemsRef.current.map(wbZ);
+    const base = dir === "front" ? Math.max(0, ...zs) + 1 : Math.min(0, ...zs) - ids.length;
+    ids.map(id => itemsRef.current.find(i => i.id === id)).filter(Boolean).sort((a, b) => wbZ(a) - wbZ(b))
+      .forEach((it, i) => { patchItem(it.id, { z: base + i }); persistById(it.id); });
+  };
+
+  // Copy keeps the connectors WHOSE BOTH ENDS are copied too — pasting a mind
+  // map that came back as loose boxes would be a poor copy of it.
+  const copySel = () => {
+    const ids = new Set(selectedIds());
+    if (!ids.size) return false;
+    const nodes = itemsRef.current.filter(i => ids.has(i.id) && i.type !== "link");
+    if (!nodes.length) return false;
+    const nodeIds = new Set(nodes.map(n => n.id));
+    const links = itemsRef.current.filter(i => i.type === "link" && nodeIds.has(i.data?.fromId) && nodeIds.has(i.data?.toId));
+    clipRef.current = [...nodes, ...links].map(i => ({ id: i.id, type: i.type, data: { ...i.data } }));
+    return true;
+  };
+
+  // `at` is a world point to drop the copy on (the right-click position);
+  // without one the copy lands slightly off the original, the way every editor
+  // does it, so it is visibly a second object and not a perfect overlap.
+  const pasteClip = (at) => {
+    const src = clipRef.current;
+    if (!src.length) return;
+    const nodes = src.filter(i => i.type !== "link");
+    if (!nodes.length) return;
+    const xs = nodes.map(n => n.data?.x ?? n.data?.x1 ?? n.data?.ox ?? 0);
+    const ys = nodes.map(n => n.data?.y ?? n.data?.y1 ?? n.data?.oy ?? 0);
+    const minX = Math.min(...xs), minY = Math.min(...ys);
+    const dx = at ? at.x - minX : 26, dy = at ? at.y - minY : 26;
+    const idMap = {};
+    const fresh = [];
+    for (const n of nodes) {
+      const d = { ...n.data };
+      if (n.type === "arrow" || n.type === "line") { d.x1 += dx; d.y1 += dy; d.x2 += dx; d.y2 += dy; }
+      else if (n.type === "draw") { d.ox = (d.ox || 0) + dx; d.oy = (d.oy || 0) + dy; }
+      else { d.x = (d.x || 0) + dx; d.y = (d.y || 0) + dy; }
+      const id = addItemLocal(n.type, d);
+      idMap[n.id] = id;
+      fresh.push(id);
+    }
+    for (const l of src.filter(i => i.type === "link")) {
+      const from = idMap[l.data?.fromId], to = idMap[l.data?.toId];
+      if (from && to) addItemLocal("link", { fromId: from, toId: to });
+    }
+    setSel(fresh.length === 1 ? fresh[0] : null);
+    setSelIds(fresh);
+  };
+
+  const duplicateSel = () => { if (copySel()) pasteClip(null); };
+  const deleteSel = () => { const ids = selectedIds(); ids.forEach(id => deleteItem(id)); setSel(null); setSelIds([]); };
+
+  // A link straight to one element: the board deep link plus the element id, so
+  // opening it selects that element and brings the camera to it.
+  const copyItemLink = (id) => {
+    const url = `${window.location.origin}/?wb=${board?.id}&i=${id}`;
+    navigator.clipboard?.writeText(url).catch(() => {});
   };
 
   // ── Rendering ──
@@ -7655,6 +7768,22 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       {/* Canvas */}
       <div ref={canvasRef}
         onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp}
+        onContextMenu={(e) => {
+          if (editingRef.current) return; // let the browser's own menu handle text
+          e.preventDefault();
+          const pt = toWorld(e);
+          const hit = nodeAt(pt, null) || wbZSorted(itemsRef.current).reverse().find(o => {
+            if (o.type === "link") return false;
+            const b = bboxOf(o);
+            return pt.x >= b.x && pt.x <= b.x + b.w && pt.y >= b.y && pt.y <= b.y + b.h;
+          }) || null;
+          // Right-clicking an element that is not part of the current selection
+          // selects it first, so the menu always acts on what was clicked.
+          if (hit && !selIdsRef.current.includes(hit.id)) { setSel(hit.id); setSelIds([hit.id]); }
+          if (!hit) { setSel(null); setSelIds([]); }
+          setCtxHover(null);
+          setCtxMenu({ x: e.clientX, y: e.clientY, at: pt, id: hit?.id || null });
+        }}
         onPointerLeave={() => setHoverId(null)}
         onDrop={(e) => { e.preventDefault(); handleImageFiles(e.dataTransfer.files, toWorld(e)); }}
         onDragOver={(e) => e.preventDefault()}
@@ -7728,7 +7857,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
             const x2 = Math.max(...boxes.map(b => b.x + b.w)) + pad, y2 = Math.max(...boxes.map(b => b.y + b.h)) + pad;
             return <div style={{ position: "absolute", left: x, top: y, width: x2 - x, height: y2 - y, border: `1.5px dashed ${darkMode ? "rgba(59,130,246,0.55)" : "rgba(59,130,246,0.5)"}`, borderRadius: 14, pointerEvents: "none" }} />;
           })()}
-          {items.map(renderItem)}
+          {ordered.map(renderItem)}
           {/* Live pen stroke */}
           {tempStroke && tempStroke.points.length > 1 && (() => {
             const xs = tempStroke.points.map(p => p[0]), ys = tempStroke.points.map(p => p[1]);
@@ -7778,6 +7907,59 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           )}
         </div>
         {selToolbar}
+        {/* Right-click menu. Fixed to the viewport, not the canvas, so it is
+            never cut off by the board's own bounds or dragged around by the
+            camera. Entries that need a selection are simply absent when there
+            is none — a greyed-out row is a worse answer than no row. */}
+        {ctxMenu && (() => {
+          const has = !!ctxMenu.id;
+          const many = selIdsRef.current.length > 1;
+          // Hover is done here rather than with the app's "hover-row" class:
+          // that class has no rule behind it anywhere in the project, so it
+          // highlights nothing.
+          const row = (label, shortcut, fn, danger) => (
+            <div key={label} onClick={() => { setCtxMenu(null); fn(); }}
+              onMouseEnter={() => setCtxHover(label)} onMouseLeave={() => setCtxHover(h => h === label ? null : h)}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24,
+                padding: "8px 12px", borderRadius: 8, cursor: "pointer", whiteSpace: "nowrap",
+                background: ctxHover === label ? (danger ? "rgba(248,113,113,0.14)" : "rgba(255,255,255,0.09)") : "transparent",
+                color: danger ? "#F87171" : "#fff", fontSize: 13, fontFamily: FONT }}>
+              <span>{label}</span>
+              {shortcut && <span style={{ color: "rgba(255,255,255,0.38)", fontSize: 12 }}>{shortcut}</span>}
+            </div>
+          );
+          const sep = (k) => <div key={k} style={{ height: 1, background: "rgba(255,255,255,0.1)", margin: "5px 0" }} />;
+          const mod = navigator.platform?.toLowerCase().includes("mac") ? "⌘" : "Ctrl+";
+          const rows = [];
+          if (has) {
+            rows.push(row(de ? "Kopieren" : "Copy", `${mod}C`, () => copySel()));
+            rows.push(row(de ? "Duplizieren" : "Duplicate", `${mod}D`, () => duplicateSel()));
+          }
+          if (clipRef.current.length) rows.push(row(de ? "Einfügen" : "Paste", `${mod}V`, () => pasteClip(ctxMenu.at)));
+          if (has) {
+            rows.push(sep("s1"));
+            rows.push(row(de ? "Nach vorn" : "Bring to front", `${mod}]`, () => restack("front")));
+            rows.push(row(de ? "Nach hinten" : "Send to back", `${mod}[`, () => restack("back")));
+            if (!many) { rows.push(sep("s2")); rows.push(row(de ? "Link zum Element kopieren" : "Copy link to element", null, () => copyItemLink(ctxMenu.id))); }
+            rows.push(sep("s3"));
+            rows.push(row(de ? "Löschen" : "Delete", "⌫", () => deleteSel(), true));
+          }
+          if (!rows.length) return null;
+          // Flip the menu when it would run off the right or bottom edge.
+          const W = 246, H = rows.length * 34 + 16;
+          const left = Math.min(ctxMenu.x, window.innerWidth - W - 8);
+          const top = Math.min(ctxMenu.y, window.innerHeight - H - 8);
+          return createPortal(
+            <>
+              <div onPointerDown={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }}
+                style={{ position: "fixed", inset: 0, zIndex: 100004 }} />
+              <div onContextMenu={(e) => e.preventDefault()}
+                style={{ position: "fixed", left, top, width: W, zIndex: 100005, padding: 8, borderRadius: 13,
+                  background: "#1c1c24", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 18px 48px rgba(0,0,0,0.45)" }}>
+                {rows}
+              </div>
+            </>, document.body);
+        })()}
         {/* Comment bubble popup */}
         {(() => {
           const c = items.find(i => i.id === commentOpenId && i.type === "comment");
