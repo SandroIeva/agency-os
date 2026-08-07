@@ -5518,6 +5518,153 @@ function wbFontSize(size, fallback = WB_TEXT_SIZES.m) {
 // element uses the exact same layout engine as the real textarea/div, so it
 // can never drift out of sync with what's actually on screen.
 let __wbMirror = null;
+// ── Inline formatting for free-text nodes ───────────────────────────────────
+// A text element stores `text` (a plain string, still the source of truth for
+// everything that only needs the words) and OPTIONALLY `rich`: the same text cut
+// into runs, each of which may carry its own bold or link.
+//
+//   rich: [{ t: "see ", b: false }, { t: "the docs", b: true, u: "https://…" }]
+//
+// When `rich` is absent the element is uniform and the existing element-level
+// `bold`/`url` apply — so every text written before this exists keeps rendering
+// exactly as it did, with no migration.
+const wbRunsText = (runs) => (runs || []).map(r => r.t).join("");
+// Runs are rebuilt from the editor on every keystroke, so they accumulate
+// fragments that differ in nothing. Merging them keeps the array from growing
+// without bound and makes two equal texts compare equal.
+function wbNormalizeRuns(runs) {
+  const out = [];
+  for (const r of runs || []) {
+    if (!r || !r.t) continue;
+    const b = !!r.b, u = r.u || undefined;
+    const last = out[out.length - 1];
+    if (last && !!last.b === b && (last.u || undefined) === u) last.t += r.t;
+    else out.push({ t: r.t, ...(b ? { b: true } : null), ...(u ? { u } : null) });
+  }
+  return out;
+}
+// Apply a formatting patch to the character range [from, to), splitting runs at
+// the boundaries. `patch` values of undefined clear the mark.
+function wbApplyMark(runs, from, to, patch) {
+  if (to <= from) return wbNormalizeRuns(runs);
+  const out = [];
+  let pos = 0;
+  for (const r of runs || []) {
+    const start = pos, end = pos + r.t.length;
+    pos = end;
+    if (end <= from || start >= to) { out.push(r); continue; }
+    // The part before the selection keeps what it had.
+    if (start < from) out.push({ ...r, t: r.t.slice(0, from - start) });
+    const inFrom = Math.max(start, from), inTo = Math.min(end, to);
+    const marked = { ...r, t: r.t.slice(inFrom - start, inTo - start) };
+    for (const k of Object.keys(patch)) {
+      if (patch[k] === undefined || patch[k] === false || patch[k] === "") delete marked[k];
+      else marked[k] = patch[k];
+    }
+    out.push(marked);
+    if (end > to) out.push({ ...r, t: r.t.slice(to - start) });
+  }
+  return wbNormalizeRuns(out);
+}
+// True when EVERY character in the range already carries the mark — that is what
+// makes the toolbar button a toggle: a selection that is entirely bold un-bolds.
+function wbRangeHasMark(runs, from, to, key) {
+  if (to <= from) return false;
+  let pos = 0;
+  for (const r of runs || []) {
+    const start = pos, end = pos + r.t.length;
+    pos = end;
+    if (end <= from || start >= to) continue;
+    if (!r[key]) return false;
+  }
+  return true;
+}
+// The runs an element renders with: its own if it has them, otherwise one run
+// carrying the element-level formatting.
+const wbRunsOf = (d) => (d.rich && d.rich.length ? d.rich : [{ t: d.text || "", ...(d.bold ? { b: true } : null), ...(d.url ? { u: d.url } : null) }]);
+
+// The run covering a character offset — used to prefill the URL field with the
+// link already on the selection.
+function wbRunsAt(runs, at) {
+  let pos = 0;
+  const list = runs || [];
+  for (const r of list) { pos += r.t.length; if (at < pos) return r; }
+  return list[list.length - 1] || null;
+}
+const wbEscapeHtml = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+// Runs → the markup used by BOTH the editor and the measuring mirror, so what is
+// measured is exactly what is drawn.
+const wbRunsHtml = (runs) => (runs || []).map(r =>
+  `<span${r.b ? ' data-b="1"' : ""}${r.u ? ` data-u="${wbEscapeHtml(r.u)}"` : ""} style="font-weight:${r.b ? 700 : "inherit"}">${wbEscapeHtml(r.t) || ""}</span>`
+).join("");
+
+// ── The editor's DOM, in both directions ────────────────────────────────────
+// Read the editable element back into runs. Formatting is carried on data-b /
+// data-u attributes we put there ourselves, but <b>/<strong> and browser-made
+// blocks are recognised too, because a paste brings whatever it likes.
+function wbDomToRuns(root) {
+  const out = [];
+  const walk = (node, inherited) => {
+    for (const n of node.childNodes) {
+      if (n.nodeType === 3) { out.push({ t: n.nodeValue, ...inherited }); continue; }
+      if (n.nodeName === "BR") { out.push({ t: "\n", ...inherited }); continue; }
+      const next = { ...inherited };
+      if (n.dataset?.b === "1" || n.nodeName === "B" || n.nodeName === "STRONG") next.b = true;
+      if (n.dataset?.u) next.u = n.dataset.u;
+      // A block element inserted by the browser or a paste is a line break.
+      if (/^(DIV|P)$/.test(n.nodeName) && out.length) out.push({ t: "\n", ...inherited });
+      walk(n, next);
+    }
+  };
+  walk(root, {});
+  return wbNormalizeRuns(out);
+}
+// Character offsets of the current selection within `root`, or null when the
+// selection is somewhere else entirely. Offsets rather than DOM positions,
+// because re-rendering the runs replaces every node the selection pointed at.
+function wbSelOffsets(root) {
+  const sel = typeof window !== "undefined" ? window.getSelection() : null;
+  if (!sel || !sel.rangeCount) return null;
+  const range = sel.getRangeAt(0);
+  if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
+  const upTo = (container, offset) => {
+    const r = document.createRange();
+    r.selectNodeContents(root);
+    r.setEnd(container, offset);
+    return r.toString().length;
+  };
+  const a = upTo(range.startContainer, range.startOffset);
+  const b = upTo(range.endContainer, range.endOffset);
+  return { from: Math.min(a, b), to: Math.max(a, b) };
+}
+// Put the selection back on the same characters after the runs were re-rendered.
+function wbSetSelOffsets(root, from, to) {
+  const locate = (target) => {
+    let acc = 0, found = null;
+    const walk = (node) => {
+      for (const n of node.childNodes) {
+        if (found) return;
+        if (n.nodeType === 3) {
+          const len = n.nodeValue.length;
+          if (acc + len >= target) { found = { node: n, offset: target - acc }; return; }
+          acc += len;
+        } else walk(n);
+      }
+    };
+    walk(root);
+    return found || { node: root, offset: root.childNodes.length };
+  };
+  try {
+    const a = locate(from), b = locate(to);
+    const range = document.createRange();
+    range.setStart(a.node, a.offset);
+    range.setEnd(b.node, b.offset);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } catch (_) { /* the text changed under us; leave the caret where it landed */ }
+}
+
 const wbGetMirror = () => {
   if (__wbMirror) return __wbMirror;
   const el = document.createElement("div");
@@ -5531,14 +5678,19 @@ const wbGetMirror = () => {
   __wbMirror = el;
   return el;
 };
-const wbMeasureLines = (text, fontSize, bold) => {
+// `runs`, when given, is measured instead of `text` — a line that is half bold
+// is wider than the same line in one weight, and a box fitted to the wrong one
+// clips. The mirror is filled with the SAME markup the editor renders, so what
+// is measured is exactly what is drawn.
+const wbMeasureLines = (text, fontSize, bold, runs) => {
   const el = wbGetMirror();
   el.style.fontFamily = FONT;
   el.style.fontSize = fontSize + "px";
   el.style.fontWeight = bold ? "700" : "400";
   el.style.lineHeight = "1.4";
   const lines = (text || "").split("\n");
-  el.textContent = text && text.length ? text : " ";
+  if (runs && runs.length) el.innerHTML = wbRunsHtml(runs.length === 1 && !runs[0].t ? [{ ...runs[0], t: " " }] : runs);
+  else el.textContent = text && text.length ? text : " ";
   // getBoundingClientRect gives the *fractional* width; scrollWidth is floored to
   // an integer and can therefore land up to ~1px short — with the box hugging the
   // text that was enough to clip. Take the fractional width and round UP so the
@@ -5556,9 +5708,9 @@ const wbMeasureLines = (text, fontSize, bold) => {
 const WB_TEXT_PAD = 6;
 const WB_TEXT_H_PAD = WB_TEXT_PAD * 2, WB_TEXT_V_PAD = WB_TEXT_PAD * 2, WB_TEXT_MIN_W = 28;
 const WB_TEXT_SIZE_ORDER = ["s", "m", "l", "xl", "xxl", "display"];
-const wbFitTextBox = (text, sizeKey, bold) => {
+const wbFitTextBox = (text, sizeKey, bold, runs) => {
   const fontSize = wbFontSize(sizeKey);
-  const { width, lineCount } = wbMeasureLines(text, fontSize, bold);
+  const { width, lineCount } = wbMeasureLines(text, fontSize, bold, runs);
   // Safety buffer (~a third of a character) on top of the measured width. The
   // mirror and the real textarea are the same engine, but caret width, subpixel
   // hinting and font-loading timing can still differ by a hair — a small buffer
@@ -5740,6 +5892,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   // is the one that gets connected on release.
   const [connect, setConnect] = useState(null);
   const [wbLinkPop, setWbLinkPop] = useState(false); // format-bar URL editor for text hyperlinks
+  // Character range selected in the editor at the moment the link button was
+  // pressed. The URL field takes focus straight after, which destroys the
+  // selection — so the range a typed link applies to has to be captured first.
+  const linkRangeRef = useRef(null);
   const [linkDraft, setLinkDraft] = useState("");    // the URL being typed in that editor
   const [activeEmbed, setActiveEmbed] = useState(null); // the video embed in "play" mode (its iframe is interactive); double-click to enter, click away to leave
   const linkOpenTimerRef = useRef(null);             // pending "open link" after a single click (cancelled by a double-click)
@@ -5920,10 +6076,16 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     setSelIds(ids => ids.filter(x => !doomed.includes(x)));
     doomed.forEach(did => supabase.from("whiteboard_items").delete().eq("id", did).then(() => {}));
   };
-  const commitText = (id, text) => {
+  const commitText = (id, text, runs) => {
     setEditing(null);
     const it = itemsRef.current.find(i => i.id === id); if (!it) return;
-    let data = { ...it.data, text };
+    // `rich` is only stored once something in the text is actually formatted
+    // differently from the rest. A uniform text stays a plain string, so nothing
+    // written before inline formatting existed gains a second representation.
+    const norm = runs ? wbNormalizeRuns(runs) : null;
+    const isRich = !!norm && (norm.length > 1 || (norm[0] && (norm[0].b || norm[0].u)));
+    let data = { ...it.data, text, ...(runs ? { rich: isRich ? norm : undefined } : null) };
+    if (data.rich === undefined) delete data.rich;
     // Recompute the box size from the FINAL text right here, rather than trusting
     // whatever w/h the last onInput happened to patch — onInput and this commit
     // (from a mouse click elsewhere) can race, and itemsRef.current occasionally
@@ -5936,7 +6098,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     // field vanish the instant it appears.
     if (it.type === "text") {
       const ph = de ? "Text hinzufügen" : "Add text";
-      data = { ...data, ...wbFitTextBox((text || "").trim() ? text : ph, data.size, data.bold) };
+      data = { ...data, ...wbFitTextBox((text || "").trim() ? text : ph, data.size, data.bold, (text || "").trim() ? data.rich : null) };
     }
     setItems(prev => prev.map(i => i.id === id ? { ...i, data } : i));
     supabase.from("whiteboard_items").update({ data }).eq("id", id).then(() => {});
@@ -6384,7 +6546,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     // instead) can cancel it first — see the double-click branch in onItemPointerDown.
     if (d?.mode === "move" && !d.final && editingRef.current !== d.id) {
       const it = itemsRef.current.find(i => i.id === d.id);
-      const url = it?.type === "text" ? it.data?.url : null;
+      // With links on individual runs, the url is whichever run was clicked —
+      // falling back to the element-level one for text written before that was
+      // possible. d.hitSpan is the span under the pointer at mousedown.
+      const url = it?.type === "text" ? (d.hitUrl || it.data?.url) : null;
       if (url) {
         clearTimeout(linkOpenTimerRef.current);
         linkOpenTimerRef.current = setTimeout(() => { window.open(wbNormalizeUrl(url), "_blank", "noopener,noreferrer"); }, 420);
@@ -6478,7 +6643,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const pt = toWorld(e);
     const d = it.data || {};
     const snap = snapContext([it.id]);
-    const common = { mode: "move", id: it.id, startX: pt.x, startY: pt.y, base: { ...d }, ...snap };
+    // Which linked run (if any) is under the pointer — read now, because the
+    // click that opens it is decided later, in pointerup.
+    const hitUrl = e.target?.closest?.("[data-u]")?.dataset?.u || null;
+    const common = { mode: "move", id: it.id, startX: pt.x, startY: pt.y, base: { ...d }, hitUrl, ...snap };
     if (it.type === "arrow" || it.type === "line") dragRef.current = { ...common, type: it.type, grabX: pt.x - d.x1, grabY: pt.y - d.y1 };
     else if (it.type === "draw") dragRef.current = { ...common, type: "draw", grabX: pt.x - (d.ox || 0), grabY: pt.y - (d.oy || 0) };
     else dragRef.current = { ...common, type: it.type, grabX: pt.x - (d.x || 0), grabY: pt.y - (d.y || 0) };
@@ -6656,10 +6824,22 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     el.style.height = Math.min(el.scrollHeight, el.parentElement?.clientHeight || el.scrollHeight) + "px";
   };
   const focusEditArea = (el) => {
-    editAreaRef.current = el; // null when React unmounts the textarea
+    editAreaRef.current = el; // null when React unmounts the editor
     if (!el || el.dataset.wbFocused) return;
     el.dataset.wbFocused = "1";
-    const doFocus = () => { try { el.focus({ preventScroll: true }); el.setSelectionRange(el.value.length, el.value.length); } catch (_) {} };
+    // A text node edits in a contentEditable (a textarea cannot show bold or a
+    // link on part of its content); everything else keeps the textarea. React
+    // must not own a contentEditable's children, so the initial markup is put
+    // in here, once, from the runs.
+    const rich = el.isContentEditable;
+    if (rich) { el.innerHTML = el.dataset.wbInit || ""; delete el.dataset.wbInit; }
+    const doFocus = () => {
+      try {
+        el.focus({ preventScroll: true });
+        if (rich) { const n = (el.textContent || "").length; wbSetSelOffsets(el, n, n); }
+        else el.setSelectionRange(el.value.length, el.value.length);
+      } catch (_) {}
+    };
     doFocus();
     if (el.dataset.wbAutoHeight) fitEditAreaHeight(el);
     requestAnimationFrame(doFocus);
@@ -6670,7 +6850,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const flushEdit = () => {
     const id = editingRef.current;
     const el = editAreaRef.current;
-    if (id && el) { commitText(id, el.value); }
+    if (id && el) { commitText(id, el.isContentEditable ? wbRunsText(wbDomToRuns(el)) : el.value, el.isContentEditable ? wbDomToRuns(el) : null); }
     else if (id) { setEditing(null); }
     editAreaRef.current = null;
   };
@@ -6713,7 +6893,39 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       fontFamily: FONT, fontSize, fontWeight: d.bold ? 700 : (it.type === "sticky" ? 500 : 400), lineHeight: 1.4,
       color: textColor, textAlign: isShape ? "center" : (d.align || "left"), padding: 0, overflow: "hidden",
     };
-    const textContent = isEdit ? (
+    const runs = it.type === "text" ? wbRunsOf(d) : null;
+    const textContent = isEdit && it.type === "text" ? (
+      // Free-text nodes edit in place in a contentEditable, so bold and links
+      // applied to part of the text are visible while typing. Same white-space
+      // and overflow rules as the display below — a `pre-wrap` here would bring
+      // back the reflow that used to hide the last word.
+      <div ref={focusEditArea} contentEditable suppressContentEditableWarning
+        data-wb-init={wbRunsHtml(runs)}
+        onPointerDown={e => e.stopPropagation()}
+        onInput={(e) => {
+          const next = wbDomToRuns(e.currentTarget);
+          const text = wbRunsText(next);
+          const ph = de ? "Text hinzufügen" : "Add text";
+          // Same live refit as before, now measured from the runs so a bolded
+          // word widens the box as you type it.
+          const box = wbFitTextBox(text.length ? text : ph, d.size, d.bold, text.length ? next : null);
+          patchItem(it.id, { w: box.w, h: box.h });
+        }}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Escape") { e.preventDefault(); commitText(it.id, wbRunsText(wbDomToRuns(e.currentTarget)), wbDomToRuns(e.currentTarget)); return; }
+          // Enter inserts a real newline character rather than letting the
+          // browser build a <div> or <br>: with white-space:pre a "\n" renders
+          // as a break, and it keeps the DOM flat so character offsets stay
+          // exactly the offsets in `text`.
+          if (e.key === "Enter") { e.preventDefault(); document.execCommand("insertText", false, "\n"); }
+        }}
+        // Formatting must never arrive from outside — a pasted <span> with its
+        // own font would not survive the round trip through runs anyway.
+        onPaste={(e) => { e.preventDefault(); document.execCommand("insertText", false, e.clipboardData.getData("text/plain")); }}
+        onBlur={(e) => commitText(it.id, wbRunsText(wbDomToRuns(e.currentTarget)), wbDomToRuns(e.currentTarget))}
+        style={{ ...textStyle, whiteSpace: "pre", wordBreak: "normal", overflow: "visible", cursor: "text", outline: "none", minWidth: 1 }} />
+    ) : isEdit ? (
       <textarea ref={focusEditArea} defaultValue={d.text || ""}
         placeholder={it.type === "text" ? (de ? "Text hinzufügen" : "Add text") : undefined}
         // Free-text nodes size the box to exactly fit the measured (unwrapped)
@@ -6776,11 +6988,23 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         overflow: it.type === "text" ? "visible" : "hidden",
         display: isShape ? "flex" : "block", alignItems: "center", justifyContent: "center",
         userSelect: "none", pointerEvents: "none",
-        // A linked text node reads as a hyperlink: link-blue + underline.
-        ...(it.type === "text" && d.url ? { color: "#2563eb", textDecoration: "underline", textDecorationThickness: "1.5px", textUnderlineOffset: 2 } : null),
         position: isSvgShape ? "absolute" : "static", left: isSvgShape ? "12%" : undefined, top: isSvgShape ? "50%" : undefined, width: isSvgShape ? "76%" : "100%", height: isSvgShape ? "auto" : "100%", transform: isSvgShape ? "translateY(-50%)" : undefined,
       }}>
-        {d.text || (!isEdit ? (
+        {/* A text node draws its runs, so bold and links can apply to part of
+            the text. Legacy elements come through wbRunsOf as a single run
+            carrying the old element-level bold/url, so they render unchanged. */}
+        {it.type === "text" && d.text
+          ? runs.map((r, i) => (
+            <span key={i} data-u={r.u || undefined}
+              style={{ fontWeight: r.b ? 700 : undefined,
+                // A linked run reads as a hyperlink: link-blue + underline. It
+                // also takes pointer events back — the display layer as a whole
+                // is pointer-events:none, so without this the click that opens
+                // the link could never identify WHICH run was hit. The event
+                // still bubbles to the element, so dragging from a link works.
+                ...(r.u ? { color: "#2563eb", textDecoration: "underline", textDecorationThickness: "1.5px", textUnderlineOffset: 2, pointerEvents: "auto", cursor: "pointer" } : null) }}>{r.t}</span>
+          ))
+          : d.text || (!isEdit ? (
           it.type === "text"
             ? <span style={{ opacity: 0.4 }}>{de ? "Text hinzufügen" : "Add text"}</span>
             : it.type === "sticky"
@@ -7026,11 +7250,46 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     // Apply the typed URL as the node's hyperlink. If it's a YouTube link, also
     // drop a playable video embed just below the text (once — `ytEmbedded` guards
     // against a second embed on re-apply).
+    // Formatting the SELECTION rather than the whole element. Returns false when
+    // there is nothing selected, so each caller falls back to its element-level
+    // behaviour. This works at all because the format bar preventDefaults
+    // mousedown — the editor keeps focus and its selection while the button is
+    // clicked.
+    const inlineTarget = () => {
+      if (selItem.type !== "text") return null;
+      const el = editAreaRef.current;
+      if (!el || !el.isContentEditable) return null;
+      const off = wbSelOffsets(el);
+      if (!off || off.to <= off.from) return null;
+      return { el, off, runs: wbDomToRuns(el) };
+    };
+    const applyInline = (patch, range) => {
+      const el = editAreaRef.current;
+      // `range` is a previously captured selection (the link flow); otherwise
+      // read the live one.
+      const t = range && el?.isContentEditable && selItem.type === "text"
+        ? { el, off: range, runs: wbDomToRuns(el) }
+        : inlineTarget();
+      if (!t) return false;
+      const next = wbApplyMark(t.runs, t.off.from, t.off.to, patch);
+      const text = wbRunsText(next);
+      // Re-render the editor from the runs and put the selection back on the
+      // same characters — every node it pointed at was just replaced.
+      t.el.innerHTML = wbRunsHtml(next);
+      wbSetSelOffsets(t.el, t.off.from, t.off.to);
+      patchItem(selItem.id, { rich: next, text, ...wbFitTextBox(text, dta.size, dta.bold, next) });
+      persistById(selItem.id);
+      return true;
+    };
     const applyLink = () => {
       const url = wbNormalizeUrl(linkDraft);
-      setSelData({ url });
+      // A selection gets the link on just those characters; otherwise the whole
+      // element is the link, as before.
+      const scoped = applyInline({ u: url || undefined }, linkRangeRef.current);
+      linkRangeRef.current = null;
+      if (!scoped) setSelData({ url });
       const vid = ytVideoId(url);
-      if (vid && !dta.ytEmbedded) {
+      if (vid && !scoped && !dta.ytEmbedded) {
         setSelData({ ytEmbedded: true });
         const embedH = Math.round((420 * 9) / 16);
         addYoutubeEmbed(vid, {
@@ -7047,7 +7306,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const cx = (b.x + b.w / 2) * cam.s + cam.x; // centre on the object
     const divider = <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.16)", margin: "0 3px" }} />;
     // Free-text nodes auto-fit; when size/bold change, refit the box to the (unchanged) text.
-    const refitIfText = (patch) => selItem.type === "text" ? { ...patch, ...wbFitTextBox(dta.text, patch.size ?? dta.size, patch.bold ?? dta.bold) } : patch;
+    const refitIfText = (patch) => selItem.type === "text" ? { ...patch, ...wbFitTextBox(dta.text, patch.size ?? dta.size, patch.bold ?? dta.bold, dta.rich) } : patch;
     // Text size: a dropdown of named presets with a free numeric field under
     // them, replacing four S/M/L/XL tabs. Tabs could not grow past XL without
     // eating the bar, and had nowhere to put an exact value.
@@ -7182,7 +7441,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         {hasText && (<>
           {divider}
           {sizeDropdown}
-          <div onClick={() => setSelData(refitIfText({ bold: !dta.bold }))} title="Bold"
+          <div onClick={() => {
+              // Toggle: a selection that is already bold throughout un-bolds.
+              const t = inlineTarget();
+              if (t) { applyInline({ b: wbRangeHasMark(t.runs, t.off.from, t.off.to, "b") ? undefined : true }); return; }
+              setSelData(refitIfText({ bold: !dta.bold }));
+            }} title="Bold"
             style={{ ...iconBtnStyle, background: dta.bold ? "rgba(255,255,255,0.22)" : "transparent", fontFamily: FONT, fontWeight: 800, fontSize: 13 }}>B</div>
           {selItem.type === "text" && (
             <div onClick={() => setSelData({ align: alignNext[dta.align || "left"] })} title={de ? "Ausrichtung" : "Alignment"} style={iconBtnStyle}>
@@ -7190,7 +7454,13 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
             </div>
           )}
           {selItem.type === "text" && (
-            <div onClick={() => { setLinkDraft(dta.url || ""); setWbColorPop(null); setWbLinkPop(v => !v); }} title={de ? "Link" : "Link"}
+            <div onClick={() => {
+                const t = inlineTarget();
+                linkRangeRef.current = t ? t.off : null;
+                // Prefill with the link already on the selection, if it has one.
+                const cur = t ? (wbRunsAt(t.runs, t.off.from)?.u || "") : (dta.url || "");
+                setLinkDraft(cur); setWbColorPop(null); setWbLinkPop(v => !v);
+              }} title={de ? "Link" : "Link"}
               style={{ ...iconBtnStyle, background: (wbLinkPop || dta.url) ? "rgba(255,255,255,0.22)" : "transparent" }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
             </div>
@@ -7295,7 +7565,11 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </div>
             {dta.url && (
-              <div onClick={() => { setSelData({ url: "" }); setLinkDraft(""); setWbLinkPop(false); }} title={de ? "Link entfernen" : "Remove link"}
+              <div onClick={() => {
+                  if (!applyInline({ u: undefined }, linkRangeRef.current)) setSelData({ url: "" });
+                  linkRangeRef.current = null;
+                  setLinkDraft(""); setWbLinkPop(false);
+                }} title={de ? "Link entfernen" : "Remove link"}
                 style={{ ...iconBtnStyle, width: 30, height: 30, color: "#ff8589" }}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
               </div>
