@@ -6870,7 +6870,13 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const isShape = WB_SHAPE_TYPES.includes(it.type);
     const isSvgShape = it.type === "diamond" || it.type === "triangle";
     const { x = 0, y = 0, w = 160, h = 120 } = d;
-    const stroke = inkOf(d.color);
+    // A colour someone picked is taken literally. inkOf() re-maps #15151c to the
+    // theme ink so elements that never had a colour set stay readable when the
+    // theme flips — but #15151c is also the palette's first swatch, so choosing
+    // black in dark mode came straight back out as white and the click looked
+    // like it did nothing. `colorSet` is written by the picker and marks the
+    // difference between "never chosen" and "chosen, and it happens to be that".
+    const stroke = d.colorSet ? (d.color || INK) : inkOf(d.color);
     const noBorder = stroke === "transparent";
     const fill = d.fill && d.fill !== "transparent" ? d.fill : "transparent";
     let wrap = { position: "absolute", left: x, top: y, width: w, height: h, boxSizing: "border-box", cursor: isEdit ? "auto" : "move", outline: isSel ? "1.5px solid #3B82F6" : "none", outlineOffset: 2 };
@@ -7412,7 +7418,9 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       : isShape ? ["transparent", ...WB_PALETTE]
       : WB_PALETTE;
     const popCurrent = wbColorPop === "fill" ? (dta.fill || "transparent") : wbColorPop === "textColor" ? (dta.textColor || wbTextOnFill(dta.fill, INK)) : (selItem.type === "sticky" ? (dta.color || WB_STICKY_DEFAULT) : inkOf(dta.color));
-    const popPatch = (c) => wbColorPop === "fill" ? { fill: c } : wbColorPop === "textColor" ? { textColor: c } : { color: c };
+    // colorSet records that this colour was chosen rather than defaulted — see
+    // the note on `stroke` in renderItem.
+    const popPatch = (c) => wbColorPop === "fill" ? { fill: c } : wbColorPop === "textColor" ? { textColor: c } : { color: c, colorSet: true };
     const applyPop = (c) => {
       setSelData(popPatch(c));
       setWbCustomPop(false);
@@ -7536,7 +7544,9 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               <div onClick={() => setWbCustomPop(v => !v)} title={de ? "Eigene Farbe" : "Custom colour"}
                 style={{ width: 22, height: 22, borderRadius: "50%", cursor: "pointer", boxSizing: "border-box",
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  background: "conic-gradient(#f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)",
+                  // The artwork in /public replaces the CSS conic gradient this
+                  // used to draw.
+                  backgroundImage: "url(/color-wheel.png)", backgroundSize: "cover", backgroundPosition: "center",
                   border: (isCustom || wbCustomPop) ? "2.5px solid #4D9FFF" : "1.5px solid rgba(255,255,255,0.14)" }}>
                 {isCustom && <div style={{ width: 11, height: 11, borderRadius: "50%", background: popCurrent, border: "1.5px solid rgba(255,255,255,0.85)", boxSizing: "border-box" }} />}
               </div>
