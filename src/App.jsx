@@ -5761,6 +5761,21 @@ function wbTimerBtn(theme, darkMode) {
 const wbZ = (it) => (it?.data?.z ?? 0);
 const wbZSorted = (list) => [...(list || [])].sort((a, b) => wbZ(a) - wbZ(b));
 
+// Folder name for a website import: the domain, and nothing else. No scheme, no
+// path, no leading "www." — but the TLD stays, so it still reads as a domain.
+// Other subdomains are kept: only "www" is noise, "shop." or "blog." is not.
+function siteFolderName(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return "";
+  let host;
+  try {
+    host = new URL(/^https?:\/\//i.test(raw) ? raw : "https://" + raw).hostname;
+  } catch {
+    return raw.slice(0, 60);
+  }
+  return host.toLowerCase().replace(/^www\./, "") || raw.slice(0, 60);
+}
+
 // Moodboard canvas stacking. Kept in the item's `metadata` jsonb rather than a
 // new column, and defaulting to 0, so existing boards keep the order they have.
 const mbZ = (it) => Number(it?.metadata?.z ?? 0);
@@ -18273,7 +18288,29 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
         files.push(new File([blob], name, { type: blob.type }));
       } catch { /* one bad image must not abort the rest */ }
     }
-    if (files.length) await upload(files);
+    if (files.length) {
+      // Everything from one site goes into one folder named after its domain.
+      // An existing folder of that name is reused rather than duplicated, so
+      // importing from the same site twice does not leave two of them.
+      const wanted = siteFolderName(webUrl);
+      let folderId = null;
+      if (wanted) {
+        const existing = (folders || []).find(f => (f.name || "").toLowerCase() === wanted);
+        if (existing) folderId = existing.id;
+        else {
+          const { data, error } = await supabase.from("user_folders")
+            .insert({ name: wanted, org_id: userOrg.id, project_id: projectId || null, user_id: session.user.id })
+            .select("id,name,created_at").single();
+          // A folder that cannot be created must not cost the import: the files
+          // still go in, just without one.
+          if (!error && data) {
+            folderId = data.id;
+            setFolders(prev => [...prev, data].sort((a, b) => (a.name || "").localeCompare(b.name || "")));
+          }
+        }
+      }
+      await upload(files, folderId);
+    }
     setWebImporting(false);
     setWebOpen(false);
     setWebFound(null); setWebPicked(new Set()); setWebUrl("");
@@ -18332,7 +18369,9 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   createFolderRef.current = createFolder;
   useEffect(() => { if (newFolderRef) newFolderRef.current = () => createFolderRef.current?.(); }, [newFolderRef]);
 
-  const upload = async (fileList) => {
+  // `folderId` is optional: the file picker and Drive import pass nothing and
+  // keep landing outside any folder, exactly as before.
+  const upload = async (fileList, folderId = null) => {
     const arr = Array.from(fileList || []).filter(f => f.type.startsWith("image/") || f.type.startsWith("video/"));
     if (!arr.length || !userOrg?.id || !session?.user?.id) return;
     setUploading(true);
@@ -18350,6 +18389,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
         user_id: session.user.id, org_id: userOrg.id, project_id: projectId || null, name: file.name,
         mime_type: file.type, size_bytes: file.size, storage_path: path,
         storage_provider: "supabase", public_url: signed?.signedUrl || null,
+        folder_id: folderId || null,
       }).select(FILE_COLS).single();
       if (!error && data) added.push(data);
     }
