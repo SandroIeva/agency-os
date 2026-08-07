@@ -268,6 +268,63 @@ export default async function handler(req, res) {
       try { return new URL(u, finalUrl).toString(); } catch { return null; }
     };
 
+    // ── Assets mode — every image the page references ────────────────────
+    // Sits here, after the shared fetch and helpers, because it is another view
+    // of the same page rather than another endpoint: the Hobby plan allows 12
+    // Node functions and this file already multiplexes modes for that reason.
+    if (req.method === "POST" && req.body?.mode === "assets") {
+      const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|svg|bmp|ico)(\?|$)/i;
+      const NON_IMAGE_EXT = /\.(js|css|json|xml|txt|pdf|mp4|webm|woff2?|ttf|eot|html?)(\?|$)/i;
+      const seen = new Set();
+      const out = [];
+      const add = (raw, kind) => {
+        if (!raw || out.length >= 150) return;
+        const abs = absolutize(String(raw).trim());
+        if (!abs) return;
+        let u;
+        try { u = new URL(abs); } catch { return; }
+        // data: and blob: cannot be re-fetched server-side or by the proxy.
+        if (u.protocol !== "http:" && u.protocol !== "https:") return;
+        // Keep anything that looks like an image, and anything with no
+        // extension at all — CDN and image-resizer URLs routinely have none.
+        if (NON_IMAGE_EXT.test(u.pathname) && !IMAGE_EXT.test(u.pathname)) return;
+        const key = u.toString().split("#")[0];
+        if (seen.has(key)) return;
+        seen.add(key);
+        const file = decodeURIComponent((u.pathname.split("/").pop() || "").slice(0, 80)) || u.hostname;
+        out.push({ url: key, name: file, kind });
+      };
+      // The images a site chose to represent itself come first.
+      add(meta("og:image") || meta("twitter:image") || meta("twitter:image:src"), "preview");
+      add(linkHref("apple-touch-icon"), "icon");
+      // NOT linkHref("icon"): that helper matches rel substrings, which is what
+      // the logo lookup wants but means it returns the apple-touch-icon here and
+      // the real favicon is never collected. This needs an exact rel.
+      const favRe = [/<link[^>]+rel=["'](?:shortcut )?icon["'][^>]*href=["']([^"']+)["']/i,
+                     /<link[^>]+href=["']([^"']+)["'][^>]*rel=["'](?:shortcut )?icon["']/i];
+      for (const re of favRe) { const m = head.match(re); if (m) { add(m[1], "icon"); break; } }
+      // The largest candidate of a srcset, by the convention that it is listed last.
+      const widest = (ss) => (ss || "").split(",").map(x => x.trim().split(/\s+/)[0]).filter(Boolean).pop();
+      for (const tag of html.match(/<img\b[^>]*>/gi) || []) {
+        const ss = tag.match(/\bsrcset=["']([^"']+)["']/i);
+        if (ss) add(widest(ss[1]), "image");
+        // data-src covers the lazy-loading pattern where src is a placeholder.
+        const src = tag.match(/\bsrc=["']([^"']+)["']/i);
+        const dataSrc = tag.match(/\bdata-(?:src|original|lazy-src)=["']([^"']+)["']/i);
+        if (dataSrc) add(dataSrc[1], "image");
+        if (src) add(src[1], "image");
+      }
+      for (const tag of html.match(/<source\b[^>]*>/gi) || []) {
+        const ss = tag.match(/\bsrcset=["']([^"']+)["']/i);
+        if (ss) add(widest(ss[1]), "image");
+      }
+      for (const m of html.matchAll(/background(?:-image)?\s*:\s*[^;"']*url\((["']?)([^"')]+)\1\)/gi)) add(m[2], "background");
+      // NOT `name`: the brand-name guess is computed further down, and reading
+      // it from here would hit its temporal dead zone at runtime — something a
+      // syntax check does not catch.
+      return res.status(200).json({ site: meta("og:site_name") || origin, origin, images: out });
+    }
+
     // ── Name + claim + description ───────────────────────────────────────
     const titleMatch = head.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
     const rawTitle = titleMatch ? decodeEntities(titleMatch[1].trim()) : null;

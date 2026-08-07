@@ -17181,6 +17181,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const creationsPick = useRef(null);
   const creationsDrivePick = useRef(null); // CreationsTab registers its "import from Drive" fn here
   const creationsNewFolder = useRef(null); // CreationsTab registers its "create folder" fn here
+  const creationsWebImport = useRef(null); // CreationsTab registers its "import from a website" fn here
   const [creationsUploading, setCreationsUploading] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false); // "Hinzufügen" dropdown (creations tab)
   const [docsAddOpen, setDocsAddOpen] = useState(false); // "Hinzufügen" dropdown (docs tab)
@@ -17640,6 +17641,10 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             sub: appLanguage === "de" ? "Datei aus Drive wählen" : "Pick a file from Drive",
                             icon: <><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="8 17 12 21 16 17"/><line x1="12" y1="15" x2="12" y2="21"/></>,
                             onClick: () => { setAddMenuOpen(false); creationsDrivePick.current?.(); } },
+                          { key: "web", label: appLanguage === "de" ? "Von Website importieren" : "Import from a website",
+                            sub: appLanguage === "de" ? "Bilder einer URL übernehmen" : "Pull the images off a URL",
+                            icon: <><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18"/></>,
+                            onClick: () => { setAddMenuOpen(false); creationsWebImport.current?.(); } },
                           { key: "folder", label: appLanguage === "de" ? "Ordner erstellen" : "Create folder",
                             sub: appLanguage === "de" ? "Assets gruppieren" : "Group your assets",
                             icon: <><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></>,
@@ -17847,7 +17852,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           {tab === "creations" && (
             <CreationsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} grad={grad} glow={glow} t={t}
               appLanguage={appLanguage} onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive} orgMembers={orgMembers} projectId={projectId}
-              pickRef={creationsPick} drivePickRef={creationsDrivePick} newFolderRef={creationsNewFolder} onUploadingChange={setCreationsUploading}
+              pickRef={creationsPick} drivePickRef={creationsDrivePick} newFolderRef={creationsNewFolder} webImportRef={creationsWebImport} onUploadingChange={setCreationsUploading}
               getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin}
               llmProvider={llmProvider} llmKeys={llmKeys} />
           )}
@@ -18188,7 +18193,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 // Top-level component (not inline) so framer-motion never re-mounts it per render.
 // Creations tab — gallery of the workspace's images AND videos (AI-generated +
 // user uploads). Filter by media type; upload your own via the button.
-function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, drivePickRef, newFolderRef, onUploadingChange, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null }) {
+function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, drivePickRef, newFolderRef, webImportRef, onUploadingChange, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null }) {
   const memberById = useMemo(() => {
     const m = {}; (orgMembers || []).forEach(om => { if (om.user_id) m[om.user_id] = { ...(om.profiles || {}) }; }); return m;
   }, [orgMembers]);
@@ -18216,6 +18221,63 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   // Register the file-picker trigger so the header Upload button can call it,
   // and surface uploading state upward.
   useEffect(() => { if (pickRef) pickRef.current = () => inputRef.current?.click(); }, [pickRef]);
+
+  // ── Import from a website ───────────────────────────────────────────────────
+  const [webOpen, setWebOpen] = useState(false);
+  const [webUrl, setWebUrl] = useState("");
+  const [webBusy, setWebBusy] = useState(false);
+  const [webError, setWebError] = useState("");
+  const [webFound, setWebFound] = useState(null);   // null = nothing scanned yet
+  const [webPicked, setWebPicked] = useState(() => new Set());
+  const [webImporting, setWebImporting] = useState(false);
+  const [webBroken, setWebBroken] = useState(() => new Set()); // would not load → hidden
+  useEffect(() => { if (webImportRef) webImportRef.current = () => { setWebOpen(true); setWebError(""); }; }, [webImportRef]);
+
+  const scanSite = async () => {
+    const u = webUrl.trim();
+    if (!u || webBusy) return;
+    setWebBusy(true); setWebError(""); setWebFound(null); setWebPicked(new Set()); setWebBroken(new Set());
+    try {
+      const r = await fetch("/api/fetch-brand", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: u, mode: "assets" }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { setWebError(j.error || `HTTP ${r.status}`); setWebFound([]); }
+      else setWebFound(j.images || []);
+    } catch (e) {
+      setWebError(e?.message || (appLanguage === "de" ? "Seite nicht erreichbar" : "Could not reach the site"));
+      setWebFound([]);
+    }
+    setWebBusy(false);
+  };
+
+  // Picked images go through the existing image proxy — the sites they come from
+  // send no CORS headers — become real Files and are handed to the normal upload
+  // path. They therefore get the same quota check, the same storage-ledger entry
+  // and the same row as anything dragged in from the desktop.
+  const importPicked = async () => {
+    if (!webPicked.size || webImporting) return;
+    setWebImporting(true);
+    const files = [];
+    for (const url of webPicked) {
+      try {
+        const r = await fetch(`/api/img-proxy?url=${encodeURIComponent(url)}`);
+        if (!r.ok) continue;
+        const blob = await r.blob();
+        if (!blob.type.startsWith("image/")) continue;
+        let name = (webFound || []).find(i => i.url === url)?.name || "bild";
+        if (!/\.[a-z0-9]{2,5}$/i.test(name)) {
+          name += "." + (blob.type.split("/")[1] || "jpg").replace("jpeg", "jpg").split("+")[0];
+        }
+        files.push(new File([blob], name, { type: blob.type }));
+      } catch { /* one bad image must not abort the rest */ }
+    }
+    if (files.length) await upload(files);
+    setWebImporting(false);
+    setWebOpen(false);
+    setWebFound(null); setWebPicked(new Set()); setWebUrl("");
+  };
   useEffect(() => { onUploadingChange?.(uploading); }, [uploading, onUploadingChange]);
 
   const load = useCallback(async () => {
@@ -18497,6 +18559,120 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <input ref={inputRef} type="file" accept="image/*,video/*" multiple style={{ display: "none" }} onChange={e => { upload(e.target.files); e.target.value = ""; }} />
+
+      {/* Import from a website: paste a URL, pick from what the page references. */}
+      {webOpen && createPortal(
+        <div onClick={() => !webImporting && setWebOpen(false)}
+          style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width: "min(860px, 100%)", maxHeight: "84vh", display: "flex", flexDirection: "column",
+              background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 18,
+              boxShadow: "0 30px 80px rgba(0,0,0,0.35)", overflow: "hidden" }}>
+            <div style={{ padding: "18px 20px 14px", borderBottom: `1px solid ${theme.borderFaint}` }}>
+              <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                {appLanguage === "de" ? "Von Website importieren" : "Import from a website"}
+              </div>
+              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>
+                {appLanguage === "de"
+                  ? "URL einfügen — wir zeigen die Bilder der Seite, du wählst aus."
+                  : "Paste a URL — we show the images on the page and you pick."}
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 13 }}>
+                <input value={webUrl} autoFocus placeholder="https://…"
+                  onChange={e => setWebUrl(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") scanSite(); }}
+                  style={{ flex: 1, minWidth: 0, padding: "10px 12px", borderRadius: 11, outline: "none",
+                    border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
+                    color: theme.text, fontFamily: FONT, fontSize: 13 }} />
+                <motion.button whileTap={{ scale: 0.97 }} onClick={scanSite} disabled={webBusy || !webUrl.trim()}
+                  style={{ padding: "10px 18px", borderRadius: 11, border: "none", background: "#15151c", color: "#fff",
+                    fontFamily: FONT, fontSize: 13, fontWeight: 600, cursor: webBusy || !webUrl.trim() ? "default" : "pointer",
+                    opacity: webBusy || !webUrl.trim() ? 0.55 : 1 }}>
+                  {webBusy ? (appLanguage === "de" ? "Lädt…" : "Loading…") : (appLanguage === "de" ? "Suchen" : "Scan")}
+                </motion.button>
+              </div>
+              {webError && <div style={{ marginTop: 9, fontSize: 12, fontFamily: FONT, color: "#E5484D" }}>{webError}</div>}
+            </div>
+
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 16 }}>
+              {webFound === null ? (
+                <div style={{ padding: "40px 0", textAlign: "center", fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>
+                  {appLanguage === "de" ? "Noch keine Seite geladen." : "No page loaded yet."}
+                </div>
+              ) : webFound.filter(i => !webBroken.has(i.url)).length === 0 ? (
+                <div style={{ padding: "40px 0", textAlign: "center", fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>
+                  {appLanguage === "de" ? "Auf dieser Seite wurden keine Bilder gefunden." : "No images found on that page."}
+                </div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(132px, 1fr))", gap: 10 }}>
+                  {webFound.filter(i => !webBroken.has(i.url)).map(img => {
+                    const on = webPicked.has(img.url);
+                    return (
+                      <div key={img.url} onClick={() => setWebPicked(prev => {
+                          const n = new Set(prev);
+                          if (n.has(img.url)) n.delete(img.url); else n.add(img.url);
+                          return n;
+                        })}
+                        title={img.name}
+                        style={{ position: "relative", borderRadius: 12, overflow: "hidden", cursor: "pointer", aspectRatio: "1 / 1",
+                          border: `2px solid ${on ? "#3B82F6" : theme.borderFaint}`,
+                          background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+                        {/* An image that will not render here would not import
+                            either, so it is dropped from the grid rather than
+                            offered as a broken tile. */}
+                        <img src={img.url} alt="" loading="lazy"
+                          onError={() => setWebBroken(prev => new Set(prev).add(img.url))}
+                          style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
+                        {on && (
+                          <div style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%",
+                            background: "#3B82F6", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+              padding: "13px 20px", borderTop: `1px solid ${theme.borderFaint}` }}>
+              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
+                {webFound?.length
+                  ? (() => {
+                      const usable = webFound.filter(i => !webBroken.has(i.url));
+                      const all = usable.length > 0 && usable.every(i => webPicked.has(i.url));
+                      return (
+                        <span onClick={() => setWebPicked(all ? new Set() : new Set(usable.map(i => i.url)))}
+                          style={{ cursor: "pointer", textDecoration: "underline" }}>
+                          {all ? (appLanguage === "de" ? "Auswahl aufheben" : "Clear selection")
+                               : (appLanguage === "de" ? `Alle ${usable.length} auswählen` : `Select all ${usable.length}`)}
+                        </span>
+                      );
+                    })()
+                  : null}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <motion.button whileTap={{ scale: 0.97 }} onClick={() => !webImporting && setWebOpen(false)}
+                  style={{ padding: "9px 16px", borderRadius: 11, border: `1px solid ${theme.borderFaint}`, background: "transparent",
+                    color: theme.text, fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                  {appLanguage === "de" ? "Abbrechen" : "Cancel"}
+                </motion.button>
+                <motion.button whileTap={{ scale: 0.97 }} onClick={importPicked} disabled={!webPicked.size || webImporting}
+                  style={{ padding: "9px 18px", borderRadius: 11, border: "none", background: "#15151c", color: "#fff",
+                    fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
+                    cursor: !webPicked.size || webImporting ? "default" : "pointer",
+                    opacity: !webPicked.size || webImporting ? 0.55 : 1 }}>
+                  {webImporting
+                    ? (appLanguage === "de" ? "Importiert…" : "Importing…")
+                    : (appLanguage === "de" ? `Importieren${webPicked.size ? ` (${webPicked.size})` : ""}` : `Import${webPicked.size ? ` (${webPicked.size})` : ""}`)}
+                </motion.button>
+              </div>
+            </div>
+          </div>
+        </div>, document.body)}
 
       {files === null ? (
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
