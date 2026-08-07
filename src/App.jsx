@@ -7545,8 +7545,13 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
                 style={{ width: 22, height: 22, borderRadius: "50%", cursor: "pointer", boxSizing: "border-box",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   // The artwork in /public replaces the CSS conic gradient this
-                  // used to draw.
-                  backgroundImage: "url(/color-wheel.png)", backgroundSize: "cover", backgroundPosition: "center",
+                  // used to draw. origin + no-repeat are not optional here: by
+                  // default a background is SIZED to the padding box but PAINTED
+                  // across the border box, and the 1.5px ring left over is filled
+                  // by repeating the image. The wheel's corners are transparent,
+                  // so those tiles let the dark panel through as a ragged rim.
+                  backgroundImage: "url(/color-wheel.png)", backgroundSize: "cover",
+                  backgroundPosition: "center", backgroundRepeat: "no-repeat", backgroundOrigin: "border-box",
                   border: (isCustom || wbCustomPop) ? "2.5px solid #4D9FFF" : "1.5px solid rgba(255,255,255,0.14)" }}>
                 {isCustom && <div style={{ width: 11, height: 11, borderRadius: "50%", background: popCurrent, border: "1.5px solid rgba(255,255,255,0.85)", boxSizing: "border-box" }} />}
               </div>
