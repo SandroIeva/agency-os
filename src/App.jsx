@@ -5761,6 +5761,11 @@ function wbTimerBtn(theme, darkMode) {
 const wbZ = (it) => (it?.data?.z ?? 0);
 const wbZSorted = (list) => [...(list || [])].sort((a, b) => wbZ(a) - wbZ(b));
 
+// Moodboard canvas stacking. Kept in the item's `metadata` jsonb rather than a
+// new column, and defaulting to 0, so existing boards keep the order they have.
+const mbZ = (it) => Number(it?.metadata?.z ?? 0);
+const mbZSorted = (list) => [...(list || [])].sort((a, b) => mbZ(a) - mbZ(b));
+
 // Types a connector may attach to. Excludes the connectors themselves, free-hand
 // strokes and loose arrows — none of them has a body you could point at, and a
 // connector between two connectors has nothing to derive its endpoints from.
@@ -17344,9 +17349,41 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     await supabase.from("moodboard_items").update(patch).eq("id", id);
   };
 
+  // ── Canvas stacking ─────────────────────────────────────────────────────────
+  // Previously ONE tile could be in front (a single `frontTileId` at z-index 30)
+  // and every other tile sat at z-index 1. Clicking a tile therefore also
+  // dropped the previously-raised one back into the flat pile, where it fell
+  // behind whatever came after it in document order — which looked exactly like
+  // some other tile jumping forward on its own. Each tile now carries its own
+  // order, so clicking one moves that one and nothing else.
+  const restackTile = (item, dir) => {
+    const zs = items.map(mbZ);
+    const alreadyTop = dir === "front" && mbZ(item) === Math.max(...zs) && zs.filter(z => z === mbZ(item)).length === 1;
+    const alreadyBottom = dir === "back" && mbZ(item) === Math.min(...zs) && zs.filter(z => z === mbZ(item)).length === 1;
+    if (alreadyTop || alreadyBottom) return; // nothing to write
+    const z = dir === "front" ? Math.max(0, ...zs) + 1 : Math.min(0, ...zs) - 1;
+    updateItem(item.id, { metadata: { ...(item.metadata || {}), z } });
+  };
+
+  const duplicateItem = async (item) => {
+    if (!activeBoard) return;
+    const zs = items.map(mbZ);
+    const { data, error } = await supabase.from("moodboard_items").insert({
+      board_id: activeBoard.id, org_id: userOrg.id, created_by: session?.user?.id,
+      type: item.type, url: item.url, source: item.source, colors: item.colors,
+      position: items.length,
+      // Offset so the copy is visibly a second tile rather than a perfect overlap.
+      x: (item.x || 0) + 28, y: (item.y || 0) + 28, w: item.w || 240,
+      metadata: { ...(item.metadata || {}), z: Math.max(0, ...zs) + 1 },
+    }).select().single();
+    if (!error && data) setItems(prev => [...prev, data]);
+  };
+
   // ── Canvas drag ──
   const dragState = useRef(null);
-  const [frontTileId, setFrontTileId] = useState(null); // last-clicked canvas tile → stacked on top
+  // Right-click menu on a canvas tile: { x, y, item }.
+  const [tileMenu, setTileMenu] = useState(null);
+  const [tileMenuHover, setTileMenuHover] = useState(null);
   const [zoom, setZoom] = useState(1); // canvas zoom (freemode)
   const [pan, setPan] = useState({ x: 0, y: 0 }); // canvas pan offset (px, screen space) — infinite canvas
   const [spaceHeld, setSpaceHeld] = useState(false); // Space held → pan the whole canvas (Figma-style)
@@ -17462,7 +17499,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     const rect = el?.getBoundingClientRect();
     if (!rect) return;
     e.preventDefault();
-    setFrontTileId(item.id); // bring the clicked tile to the front
+    restackTile(item, "front"); // the clicked tile comes forward; nothing else moves
     // Convert pointer → world coords (account for pan + zoom).
     const cx = (e.clientX - rect.left - pan.x) / zoom;
     const cy = (e.clientY - rect.top - pan.y) / zoom;
@@ -17517,7 +17554,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     if (spaceHeld) return; // Space held → pan, don't resize
     e.preventDefault();
     e.stopPropagation(); // don't start a move-drag
-    setFrontTileId(item.id);
+    restackTile(item, "front");
     resizeState.current = { id: item.id, startX: e.clientX, startW: item.w || 240 };
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
   };
@@ -18045,12 +18082,15 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
               backgroundSize: `${22 * zoom}px ${22 * zoom}px`, backgroundPosition: `${pan.x}px ${pan.y}px` }}>
               {/* infinite world layer — translated + scaled (transformOrigin 0 0) */}
               <div style={{ position: "absolute", left: 0, top: 0, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0" }}>
-                {visibleItems.map(item => (
+                {mbZSorted(visibleItems).map(item => (
                     <div key={item.id} className="mb-canvas-tile"
                       onPointerDown={e => onTilePointerDown(e, item)} onPointerMove={onTilePointerMove} onPointerUp={onTilePointerUp}
                       onDoubleClick={() => setSelectedItem(item)}
+                      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setTileMenuHover(null); setTileMenu({ x: e.clientX, y: e.clientY, item }); }}
                       style={{ position: "absolute", left: item.x, top: item.y, width: item.w || 240, touchAction: "none", cursor: spaceHeld ? "inherit" : "default",
-                        zIndex: item.id === frontTileId ? 30 : 1 }}>
+                        // Order is the DOM order above; a z-index would only
+                        // re-introduce the single-front-slot problem.
+                        zIndex: 1 }}>
                       {/* clipped content (rounded corners on the image) */}
                       <div style={{ borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.18)", border: `1px solid ${theme.borderFaint}`, background: theme.cardBg }}>
                         {item.type === "image" ? (
@@ -18067,6 +18107,41 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                 ))}
               </div>
             </div>
+            {/* Right-click menu for a canvas tile — the same actions as the
+                whiteboard's. Portalled to the body, and every pointer event is
+                stopped: React events from a portal still travel the REACT tree,
+                so without this they reach the canvas handlers underneath, which
+                start a pan and swallow the click. */}
+            {tileMenu && createPortal(
+              <>
+                <div onPointerDown={(e) => { e.stopPropagation(); setTileMenu(null); }}
+                  onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setTileMenu(null); }}
+                  style={{ position: "fixed", inset: 0, zIndex: 100004 }} />
+                <div onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  style={{ position: "fixed", width: 226, zIndex: 100005, padding: 8, borderRadius: 13,
+                    left: Math.min(tileMenu.x, window.innerWidth - 234), top: Math.min(tileMenu.y, window.innerHeight - 190),
+                    background: darkMode ? "#1c1c24" : "#fff", border: `1px solid ${theme.borderFaint}`,
+                    boxShadow: "0 18px 48px rgba(0,0,0,0.28)" }}>
+                  {[
+                    [appLanguage === "de" ? "Duplizieren" : "Duplicate", () => duplicateItem(tileMenu.item), false],
+                    [appLanguage === "de" ? "Nach vorn" : "Bring to front", () => restackTile(tileMenu.item, "front"), false],
+                    [appLanguage === "de" ? "Nach hinten" : "Send to back", () => restackTile(tileMenu.item, "back"), false],
+                    ["sep", null, false],
+                    [appLanguage === "de" ? "Löschen" : "Delete", () => deleteItem(tileMenu.item), true],
+                  ].map(([label, fn, danger], i) => label === "sep"
+                    ? <div key={i} style={{ height: 1, background: theme.borderFaint, margin: "5px 0" }} />
+                    : (
+                      <div key={label} onClick={() => { setTileMenu(null); fn(); }}
+                        onMouseEnter={() => setTileMenuHover(label)} onMouseLeave={() => setTileMenuHover(h => h === label ? null : h)}
+                        style={{ padding: "8px 12px", borderRadius: 8, cursor: "pointer", whiteSpace: "nowrap",
+                          fontSize: 13, fontFamily: FONT, color: danger ? "#E5484D" : theme.text,
+                          background: tileMenuHover === label
+                            ? (danger ? "rgba(229,72,77,0.12)" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)"))
+                            : "transparent" }}>{label}</div>
+                    ))}
+                </div>
+              </>, document.body)}
             {/* Zoom to fit — bottom left */}
             <motion.div whileTap={{ scale: 0.95 }} onClick={zoomToFit}
               title={appLanguage === "de" ? "Alles einpassen" : "Zoom to fit"}
