@@ -31625,9 +31625,33 @@ export default function CircularMenu() {
 
   const currentItem = activeItems[activeIndex];
 
+  // ── Read-only banner geometry ──
+  // The height is measured rather than assumed: the message wraps onto a second
+  // line in a narrow window, and a hardcoded offset would then either leave a
+  // gap or go back to covering the content.
+  const showReadOnlyBanner = Boolean(entitlements?.limits?.readOnly && entitlements?.loaded);
+  const bannerRef = useRef(null);
+  const [bannerH, setBannerH] = useState(0);
+  useLayoutEffect(() => {
+    if (!showReadOnlyBanner) { setBannerH(0); return undefined; }
+    const measure = () => setBannerH(bannerRef.current?.offsetHeight || 0);
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (bannerRef.current) ro.observe(bannerRef.current);
+    return () => ro.disconnect();
+  }, [showReadOnlyBanner, appLanguage]);
+
   return (
     <div ref={containerRef} style={{
-      width: "100%", height: "100vh", background: theme.bg, position: "relative",
+      width: "100%", background: theme.bg, position: "relative",
+      // The read-only banner is fixed to the top of the viewport. Rather than
+      // let it cover whatever a view happens to put up there — back buttons,
+      // headers — the whole app moves down by its height and is shortened by
+      // the same amount. Every view positions itself inside this container, so
+      // one adjustment here covers all of them instead of each page having to
+      // know the banner exists.
+      marginTop: bannerH,
+      height: bannerH ? `calc(100vh - ${bannerH}px)` : "100vh",
       overflow: "hidden", display: "flex", flexDirection: "column",
       userSelect: "none", transition: "background-color 0.4s ease",
     }}>
@@ -32225,10 +32249,11 @@ export default function CircularMenu() {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, filter: "blur(4px)" }}
             transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
             style={{
-              // Pushed below the read-only banner when it is showing — that bar
-              // is fixed at top: 0 and would otherwise cover the bell.
+              // No banner offset here any more: the whole app now sits below the
+              // read-only banner, so adding to this as well would double-count
+              // and leave the bell floating.
               position: "absolute",
-              top: (entitlements?.limits?.readOnly && entitlements?.loaded) ? 52 : 16,
+              top: 16,
               right: 24, display: "flex", alignItems: "center",
               fontSize: 20, color: "#79787D", zIndex: 50, fontFamily: FONT, fontWeight: 400, gap: 10,
               transition: "top .25s ease",
@@ -35672,8 +35697,8 @@ export default function CircularMenu() {
       {/* Read-only banner. Persistent and not dismissible on purpose: every
           write in the workspace is failing, and a banner the user can close
           would just turn that into a series of unexplained errors. */}
-      {entitlements?.limits?.readOnly && entitlements?.loaded && (
-        <div style={{
+      {showReadOnlyBanner && (
+        <div ref={bannerRef} style={{
           position: "fixed", top: 0, left: 0, right: 0, zIndex: 100001,
           display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
           padding: "9px 20px", fontFamily: FONT, fontSize: 12.5, fontWeight: 500,
