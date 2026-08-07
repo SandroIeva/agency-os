@@ -5594,9 +5594,14 @@ function wbRunsAt(runs, at) {
 const wbEscapeHtml = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 // Runs → the markup used by BOTH the editor and the measuring mirror, so what is
 // measured is exactly what is drawn.
-const wbRunsHtml = (runs) => (runs || []).map(r =>
-  `<span${r.b ? ' data-b="1"' : ""}${r.u ? ` data-u="${wbEscapeHtml(r.u)}"` : ""} style="font-weight:${r.b ? 700 : "inherit"}">${wbEscapeHtml(r.t) || ""}</span>`
-).join("");
+const wbRunsHtml = (runs) => (runs || []).map(r => {
+  // A linked run carries its hyperlink look here too, not only in the display
+  // element — otherwise the text you just linked looks unchanged until you
+  // click away. Colour and underline do not affect width, so the measuring
+  // mirror is unaffected by it.
+  const link = r.u ? ";color:#2563eb;text-decoration:underline;text-underline-offset:2px" : "";
+  return `<span${r.b ? ' data-b="1"' : ""}${r.u ? ` data-u="${wbEscapeHtml(r.u)}"` : ""} style="font-weight:${r.b ? 700 : "inherit"}${link}">${wbEscapeHtml(r.t) || ""}</span>`;
+}).join("");
 
 // ── The editor's DOM, in both directions ────────────────────────────────────
 // Read the editable element back into runs. Formatting is carried on data-b /
@@ -5892,9 +5897,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   // is the one that gets connected on release.
   const [connect, setConnect] = useState(null);
   const [wbLinkPop, setWbLinkPop] = useState(false); // format-bar URL editor for text hyperlinks
-  // Character range selected in the editor at the moment the link button was
-  // pressed. The URL field takes focus straight after, which destroys the
-  // selection — so the range a typed link applies to has to be captured first.
+  // What the link button had in front of it when it was pressed: the element,
+  // the selected character range, AND the runs as they stood. All three,
+  // because opening the URL field focuses it, which blurs the editor, which
+  // commits and unmounts it — by the time a URL is confirmed there is no editor
+  // left to read a selection or its content from. Snapshotting makes the link
+  // independent of whether the editor still exists.
   const linkRangeRef = useRef(null);
   const [linkDraft, setLinkDraft] = useState("");    // the URL being typed in that editor
   const [activeEmbed, setActiveEmbed] = useState(null); // the video embed in "play" mode (its iframe is interactive); double-click to enter, click away to leave
@@ -7269,22 +7277,30 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       if (!off || off.to <= off.from) return null;
       return { el, off, runs: wbDomToRuns(el) };
     };
-    const applyInline = (patch, range) => {
-      const el = editAreaRef.current;
-      // `range` is a previously captured selection (the link flow); otherwise
-      // read the live one.
-      const t = range && el?.isContentEditable && selItem.type === "text"
-        ? { el, off: range, runs: wbDomToRuns(el) }
-        : inlineTarget();
+    // `snap` is a snapshot taken earlier (the link flow, where the editor is
+    // gone by now); without one the live selection in the open editor is used.
+    const applyInline = (patch, snap) => {
+      const live = snap ? null : inlineTarget();
+      const t = snap || live;
       if (!t) return false;
+      const id = snap ? snap.id : selItem.id;
+      const item = itemsRef.current.find(i => i.id === id);
+      if (!item) return false;
       const next = wbApplyMark(t.runs, t.off.from, t.off.to, patch);
       const text = wbRunsText(next);
-      // Re-render the editor from the runs and put the selection back on the
-      // same characters — every node it pointed at was just replaced.
-      t.el.innerHTML = wbRunsHtml(next);
-      wbSetSelOffsets(t.el, t.off.from, t.off.to);
-      patchItem(selItem.id, { rich: next, text, ...wbFitTextBox(text, dta.size, dta.bold, next) });
-      persistById(selItem.id);
+      const dd = item.data || {};
+      // An element-level url would fight the per-run ones — the runs are the
+      // whole truth once any of them carries a link.
+      patchItem(id, { rich: next, text, url: undefined, ...wbFitTextBox(text, dd.size, dd.bold, next) });
+      persistById(id);
+      // If the editor is still open on this element, re-render it from the runs
+      // and put the selection back on the same characters — every node it
+      // pointed at was just replaced.
+      const el = editAreaRef.current;
+      if (el && el.isContentEditable && editingRef.current === id) {
+        el.innerHTML = wbRunsHtml(next);
+        wbSetSelOffsets(el, t.off.from, t.off.to);
+      }
       return true;
     };
     const applyLink = () => {
@@ -7462,7 +7478,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           {selItem.type === "text" && (
             <div onClick={() => {
                 const t = inlineTarget();
-                linkRangeRef.current = t ? t.off : null;
+                linkRangeRef.current = t ? { id: selItem.id, off: t.off, runs: t.runs } : null;
                 // Prefill with the link already on the selection, if it has one.
                 const cur = t ? (wbRunsAt(t.runs, t.off.from)?.u || "") : (dta.url || "");
                 setLinkDraft(cur); setWbColorPop(null); setWbLinkPop(v => !v);
