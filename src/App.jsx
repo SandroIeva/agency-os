@@ -5911,7 +5911,6 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   // Copied elements live here rather than on the system clipboard: a whiteboard
   // element is a row, not text, and the system clipboard would flatten it.
   const clipRef = useRef([]);
-  const focusedRef = useRef(false); // ?i=<id> has been honoured for this board
   const [wbLinkPop, setWbLinkPop] = useState(false); // format-bar URL editor for text hyperlinks
   // What the link button had in front of it when it was pressed: the element,
   // the selected character range, AND the runs as they stood. All three,
@@ -6056,25 +6055,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     let alive = true;
     (async () => {
       const { data } = await supabase.from("whiteboard_items").select("id,type,data").eq("board_id", board.id).order("created_at", { ascending: true });
-      if (!alive) return;
-      setItems(data || []);
-      // Opened through "copy link to element" (?wb=<board>&i=<id>): select that
-      // element and bring the camera to it. Guarded so it only ever fires for
-      // the first load of the board named in the URL — the parameter stays in
-      // the address bar afterwards and would otherwise yank the view back on
-      // every later change.
-      const want = new URLSearchParams(window.location.search).get("i");
-      if (want && !focusedRef.current) {
-        const hit = (data || []).find(i => i.id === want);
-        if (hit) {
-          focusedRef.current = true;
-          const b = bboxOf(hit);
-          const el = canvasRef.current;
-          const vw = el?.clientWidth || window.innerWidth, vh = el?.clientHeight || window.innerHeight;
-          setCam({ s: 1, x: vw / 2 - (b.x + b.w / 2), y: vh / 2 - (b.y + b.h / 2) });
-          setSel(hit.id); setSelIds([hit.id]);
-        }
-      }
+      if (alive) setItems(data || []);
     })();
     const ch = supabase.channel(`wb-${board.id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "whiteboard_items", filter: `board_id=eq.${board.id}` }, (payload) => {
@@ -6635,6 +6616,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
 
   const onItemPointerDown = (e, it) => {
     if (tool !== "select" || e.button !== 0) return;
+    // Right-click is for the context menu only. Without this it started a move
+    // drag and recorded a click for the double-click detector, so a right-click
+    // could nudge the element and the next left-click read as a double-click.
+    if (e.button !== 0) return;
     e.stopPropagation();
     if (editing === it.id) return; // active editor: let the textarea handle it
     // Grabbing an element that's part of a multi-selection moves the whole group.
@@ -6920,13 +6905,6 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
 
   const duplicateSel = () => { if (copySel()) pasteClip(null); };
   const deleteSel = () => { const ids = selectedIds(); ids.forEach(id => deleteItem(id)); setSel(null); setSelIds([]); };
-
-  // A link straight to one element: the board deep link plus the element id, so
-  // opening it selects that element and brings the camera to it.
-  const copyItemLink = (id) => {
-    const url = `${window.location.origin}/?wb=${board?.id}&i=${id}`;
-    navigator.clipboard?.writeText(url).catch(() => {});
-  };
 
   // ── Rendering ──
   // Focus the edit textarea reliably (autoFocus alone can lose the race against
@@ -7913,7 +7891,6 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
             is none — a greyed-out row is a worse answer than no row. */}
         {ctxMenu && (() => {
           const has = !!ctxMenu.id;
-          const many = selIdsRef.current.length > 1;
           // Hover is done here rather than with the app's "hover-row" class:
           // that class has no rule behind it anywhere in the project, so it
           // highlights nothing.
@@ -7940,7 +7917,6 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
             rows.push(sep("s1"));
             rows.push(row(de ? "Nach vorn" : "Bring to front", `${mod}]`, () => restack("front")));
             rows.push(row(de ? "Nach hinten" : "Send to back", `${mod}[`, () => restack("back")));
-            if (!many) { rows.push(sep("s2")); rows.push(row(de ? "Link zum Element kopieren" : "Copy link to element", null, () => copyItemLink(ctxMenu.id))); }
             rows.push(sep("s3"));
             rows.push(row(de ? "Löschen" : "Delete", "⌫", () => deleteSel(), true));
           }
@@ -7951,9 +7927,20 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           const top = Math.min(ctxMenu.y, window.innerHeight - H - 8);
           return createPortal(
             <>
-              <div onPointerDown={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }}
+              {/* Both of these MUST stop their pointer events. A portal renders
+                  into document.body but its React events still bubble along the
+                  React tree — straight into onCanvasPointerDown, which clears
+                  the selection and calls setPointerCapture on the canvas. That
+                  is why every entry in this menu did nothing: by the time the
+                  click handler ran there was no selection left to act on, and
+                  the capture had retargeted the click besides. */}
+              <div onPointerDown={(e) => { e.stopPropagation(); setCtxMenu(null); }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setCtxMenu(null); }}
                 style={{ position: "fixed", inset: 0, zIndex: 100004 }} />
-              <div onContextMenu={(e) => e.preventDefault()}
+              <div onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}
+                onPointerUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
+                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
                 style={{ position: "fixed", left, top, width: W, zIndex: 100005, padding: 8, borderRadius: 13,
                   background: "#1c1c24", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 18px 48px rgba(0,0,0,0.45)" }}>
                 {rows}
