@@ -31629,7 +31629,10 @@ export default function CircularMenu() {
   // The height is measured rather than assumed: the message wraps onto a second
   // line in a narrow window, and a hardcoded offset would then either leave a
   // gap or go back to covering the content.
-  const showReadOnlyBanner = Boolean(entitlements?.limits?.readOnly && entitlements?.loaded);
+  // Hidden in Settings, shown everywhere else. Settings is where the plan is
+  // chosen, so the banner there is telling someone what they are already in the
+  // middle of doing — and it was covering the back button while it did.
+  const showReadOnlyBanner = Boolean(entitlements?.limits?.readOnly && entitlements?.loaded && currentView !== "settings");
   const bannerRef = useRef(null);
   const [bannerH, setBannerH] = useState(0);
   useLayoutEffect(() => {
