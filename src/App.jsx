@@ -18407,6 +18407,13 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   const actBtnStyle = { width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: darkMode ? "#e8e8ee" : "#23232b", cursor: "pointer", flexShrink: 0 };
   // Register the file-picker trigger so the header Upload button can call it,
   // and surface uploading state upward.
+  // Declared at component level on purpose. Three nested functions below each
+  // declare their own `de`, which is invisible from any sibling — new code that
+  // reaches for it compiles fine and throws "de is not defined" at runtime. This
+  // has now happened twice in this file; one binding the whole component can see
+  // is the fix.
+  const de = appLanguage === "de";
+
   useEffect(() => { if (pickRef) pickRef.current = () => inputRef.current?.click(); }, [pickRef]);
 
   // ── Generate with AI ────────────────────────────────────────────────────────

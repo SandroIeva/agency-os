@@ -16,8 +16,9 @@ Multi-tenant workspace OS for creative agencies. React 19 + Vite SPA, Supabase (
    - Controls must never sit flush against a container edge — keep inner padding (esp. select chevrons).
    - Speech-to-text UI: a "Diktieren" link (mic icon + label) ABOVE the field, right-aligned; turns into red "Stopp" while recording.
    - Fonts: `FONT` constant (`'Geist', -apple-system, sans-serif`). Framer Motion for animation, `createPortal` for overlays.
-7. **React StrictMode is ON** (`main.jsx`). One-shot effects must tolerate double-invocation; do NOT pair a cancel-on-cleanup guard with an "already tried" ref — in dev that combination silently drops the result.
-8. **Framer Motion transform trap:** never put positioning transforms (`translateX(-50%)`) on a `motion.div` that also animates `x/y/scale` — Framer overwrites the whole `transform`. Put positioning on a plain wrapper div (see the sticker/emoji/asset pickers for the pattern).
+7. **`de is not defined` — it will happen again.** In a 32k-line file, `const de = appLanguage === "de"` is declared ~44 times, mostly INSIDE nested functions. A sibling function cannot see them. New code that reaches for `de` compiles, builds green, and throws at runtime. This has now shipped **twice** (DocsTab, then CreationsTab). Two things do NOT catch it: the build, and any check that asks "is `de` declared in this component" — it resolves per FUNCTION, and two functions in one component share nothing. Before using `de` in a new function, either declare it at the component level or write `appLanguage === "de"` inline. A regex/indentation scope checker was tried and deleted: it passed its own negative control by mistaking the `"de"` in `appLanguage = "de"` for a parameter. Doing this properly needs a real JS parser.
+8. **React StrictMode is ON** (`main.jsx`). One-shot effects must tolerate double-invocation; do NOT pair a cancel-on-cleanup guard with an "already tried" ref — in dev that combination silently drops the result.
+9. **Framer Motion transform trap:** never put positioning transforms (`translateX(-50%)`) on a `motion.div` that also animates `x/y/scale` — Framer overwrites the whole `transform`. Put positioning on a plain wrapper div (see the sticker/emoji/asset pickers for the pattern).
 
 ## Repo map
 
