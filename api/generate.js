@@ -62,11 +62,13 @@ const MODELS = {
     body: (prompt) => ({ prompt }),
   },
   "nano-banana-2": {
-    // Priced per resolution — $0.047 at 0.5K, $0.070 at 1K. The default is not
-    // documented, so the higher one is charged: guessing low would mean paying
-    // the difference ourselves on every image.
+    // Priced per resolution — $0.047 at 0.5K, $0.070 at 1K, more above. The
+    // documented default is 1K, but it is pinned anyway: a price that depends on
+    // someone else's default is a price that can change without us touching
+    // anything. num_images is pinned for the same reason — it bills per image,
+    // and defaults are not promises.
     path: "/nano-banana-2/v1/text-to-image", microUsd: 70350, label: "Nano Banana 2",
-    body: (prompt) => ({ prompt }),
+    body: (prompt) => ({ prompt, resolution: "1K", num_images: 1, output_format: "png" }),
   },
 };
 const DEFAULT_MODEL = "flux-1-schnell";
