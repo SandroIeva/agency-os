@@ -8,6 +8,17 @@
 const VITE_GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || "";
 const VITE_GOOGLE_APP_ID  = import.meta.env.VITE_GOOGLE_APP_ID  || "";
 
+// The origin the Picker is embedded in. Google validates this, and without an
+// explicit value the Picker infers it from the embedding window — which browsers
+// expose differently, and when it comes out wrong the Picker reports "the API
+// developer key is invalid" even though the key is fine. Setting it removes the
+// guesswork. window.location.origin includes protocol, host and port; the Picker
+// wants exactly that form.
+const pickerOrigin = () =>
+  (typeof window !== "undefined" && window.location)
+    ? `${window.location.protocol}//${window.location.host}`
+    : undefined;
+
 let pickerLoaded = false;
 let pickerLoading = null;
 
@@ -56,6 +67,7 @@ export async function openGooglePicker({ accessToken, locale = "en", multi = fal
       const builder = new google.picker.PickerBuilder()
         .setOAuthToken(accessToken)
         .setDeveloperKey(VITE_GOOGLE_API_KEY)
+        .setOrigin(pickerOrigin())
         .setLocale(locale)
         .addView(view)
         .addView(new google.picker.DocsUploadView())
@@ -125,6 +137,7 @@ export async function openGoogleFolderPicker({ accessToken, locale = "en" } = {}
       const builder = new google.picker.PickerBuilder()
         .setOAuthToken(accessToken)
         .setDeveloperKey(VITE_GOOGLE_API_KEY)
+        .setOrigin(pickerOrigin())
         .setLocale(locale)
         .setTitle(locale === "de" ? "Ordner für i7 OS auswählen" : "Select folder for i7 OS")
         .addView(myDriveView)
