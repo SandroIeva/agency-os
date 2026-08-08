@@ -22,9 +22,34 @@ import {
   readJsonBody,
   requireOrgMember,
   requireUser,
+  getEntitlementsForOrg,
 } from "../server/billing.js";
 
 const ZERNIO_BASE = "https://zernio.com/api/v1";
+
+// Connecting a social account bills us at Zernio the moment it happens, so the
+// allowance is checked HERE and not in the browser: this endpoint is the only
+// writer of workspace_social and the only caller of Zernio's connect route, so
+// it is the actual boundary. A trial gets none — resolveEntitlements zeroes the
+// allowance until there is a real subscription behind the account.
+async function requirePaidSocial(orgId) {
+  const ent = await getEntitlementsForOrg(orgId);
+  if ((ent?.limits?.socialAccounts ?? 0) === 0) {
+    throw new HttpError(402, "Social publishing needs a paid plan.", "social_needs_plan");
+  }
+  return ent;
+}
+async function requireSocialSlot(orgId, connectedCount) {
+  const ent = await getEntitlementsForOrg(orgId);
+  const limit = ent?.limits?.socialAccounts ?? 0;
+  if (limit === 0) {
+    throw new HttpError(402, "Connecting social accounts needs a paid plan.", "social_needs_plan");
+  }
+  if (connectedCount >= limit) {
+    throw new HttpError(402, `Your plan connects up to ${limit} social account${limit === 1 ? "" : "s"}.`, "social_limit_reached");
+  }
+  return ent;
+}
 
 function zernioKey() {
   const key = process.env.ZERNIO_API_KEY;
@@ -120,6 +145,10 @@ export default async function handler(req, res) {
       const platform = String(body.platform || "");
       if (!/^[a-z]+$/.test(platform)) throw new HttpError(400, "Invalid platform", "invalid_platform");
       const profileId = await ensureProfile(orgId);
+      // Counted from Zernio rather than from our own table: Zernio is where the
+      // accounts actually live, and one removed on their side must free a slot.
+      const current = await zfetch(`/accounts?profileId=${encodeURIComponent(profileId)}`);
+      await requireSocialSlot(orgId, (current.accounts || []).length);
       // Zernio appends connected={platform}&accountId=… to this URL after OAuth;
       // the app detects ?zernio=connected on load and jumps back to Analytics.
       const redirect = `${getAppUrl(req)}/?zernio=connected`;
@@ -158,6 +187,9 @@ export default async function handler(req, res) {
     //    so media bytes never pass through this function) ──
     if (mode === "presign") {
       await requireOrgMember(user.id, orgId);
+      // Publishing bills upstream as well, and a lapsed account keeps whatever
+      // it had connected — so this cannot lean on "they have no accounts".
+      await requirePaidSocial(orgId);
       const { filename, contentType, size } = body;
       if (!filename || !contentType) throw new HttpError(400, "filename and contentType required", "invalid_media");
       const data = await zfetch("/media/presign", { method: "POST", body: { filename, contentType, size } });
@@ -167,6 +199,7 @@ export default async function handler(req, res) {
     // ── post — create/schedule/publish a post ──
     if (mode === "post") {
       await requireOrgMember(user.id, orgId);
+      await requirePaidSocial(orgId);
       const { content, platforms, mediaItems, scheduledFor, timezone, isDraft } = body;
       if (!Array.isArray(platforms) || (!isDraft && platforms.length === 0)) {
         throw new HttpError(400, "At least one platform/account is required", "invalid_platforms");

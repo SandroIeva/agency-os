@@ -13,6 +13,12 @@ export const STORAGE_GB = 1024 * 1024 * 1024;
 
 // `null` means unlimited. (Not Infinity — this crosses JSON, where Infinity
 // serializes to null anyway; being explicit avoids a silent surprise.)
+// `socialAccounts` is how many social profiles may be CONNECTED. Connecting one
+// costs us money at the upstream provider, so it is the one limit a cardless
+// trial does not get any of — see the zeroing in resolveEntitlements. It is
+// enforced in api/zernio.js rather than by a Postgres trigger, because that
+// endpoint is the only writer of workspace_social and it writes with the
+// service key, which triggers deliberately let through.
 export const PLAN_ENTITLEMENTS = {
   // No subscription, or the trial has run out. Existing content stays readable
   // and exportable; nothing new can be created.
@@ -21,6 +27,7 @@ export const PLAN_ENTITLEMENTS = {
     seats: 1,
     workspaces: 1,
     projects: 0,
+    socialAccounts: 0,
     collaboration: false,
     readOnly: true,
   },
@@ -29,6 +36,7 @@ export const PLAN_ENTITLEMENTS = {
     seats: 1,
     workspaces: 1,
     projects: 3,
+    socialAccounts: 1,
     collaboration: false,
     readOnly: false,
   },
@@ -37,6 +45,7 @@ export const PLAN_ENTITLEMENTS = {
     seats: 5,
     workspaces: 5,
     projects: null,
+    socialAccounts: 3,
     collaboration: true,
     readOnly: false,
   },
@@ -45,6 +54,7 @@ export const PLAN_ENTITLEMENTS = {
     seats: 12,
     workspaces: null,
     projects: null,
+    socialAccounts: 6,
     collaboration: true,
     readOnly: false,
   },
@@ -174,6 +184,10 @@ export function resolveEntitlements(account, now = Date.now()) {
     trialExpired,
     trialEndsAt: trialEndsAt ? new Date(trialEndsAt).toISOString() : null,
     trialDaysLeft: trialActive ? Math.max(0, Math.ceil((trialEndsAt - now) / 86400000)) : 0,
-    limits: limitsFor(plan),
+    // The trial runs on the Starter plan, but connecting a social account bills
+    // us upstream the moment it happens — so that one allowance is withheld
+    // until there is a real subscription behind it. A comped account returns
+    // earlier, above, and keeps its plan's allowance: that grant is deliberate.
+    limits: paidPlan ? limitsFor(plan) : { ...limitsFor(plan), socialAccounts: 0 },
   };
 }

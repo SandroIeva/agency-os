@@ -15797,6 +15797,20 @@ const ZERNIO_MESSAGE_DE = [
 ];
 function zernioErrorText(error, de) {
   if (!error) return null;
+  // Our own plan gate — i7 OS's rule, not Zernio's, so it speaks in our voice
+  // and gets no attribution. Attributing it would blame the provider for a
+  // limit we set.
+  if (error.code === "social_needs_plan") {
+    return de
+      ? "Social-Accounts verbinden und posten ist Teil eines bezahlten Plans — in der Testphase noch nicht enthalten."
+      : "Connecting and publishing social accounts is part of a paid plan — not included during the trial.";
+  }
+  if (error.code === "social_limit_reached") {
+    const n = String(error.message || "").match(/up to (\d+)/)?.[1];
+    return de
+      ? `Dein Plan erlaubt ${n ? n : "eine begrenzte Zahl"} verbundene Social-Accounts. Für mehr bitte upgraden.`
+      : String(error.message);
+  }
   // Our own message about a missing env var — not Zernio's, so no attribution.
   if (error.code === "zernio_not_configured") {
     return de
@@ -15839,6 +15853,13 @@ const fmtMetric = (n, de = true) => {
 };
 
 function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg }) {
+  // Read from the module-level mirror rather than threaded through two more
+  // components — the same mirror the upload guards use. Advisory only: the real
+  // gate is api/zernio.js, because connecting bills us upstream and a client
+  // check can always be skipped. This exists so the reason is visible before
+  // clicking, not after.
+  const socialSlots = currentEntitlements.limits?.socialAccounts ?? 0;
+  const socialBlocked = currentEntitlements.loaded && socialSlots === 0;
   const de = appLanguage === "de";
   const [accounts, setAccounts] = useState(null);   // null = loading
   const [data, setData] = useState(null);           // { top, followers, daily }
@@ -15928,7 +15949,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
     const p = platformMeta(uiKey);
     const busy = busyKey === uiKey;
     return (
-      <motion.div whileTap={{ scale: 0.97 }} onClick={() => !busy && connect(uiKey)}
+      <motion.div whileTap={socialBlocked ? {} : { scale: 0.97 }} onClick={() => !busy && !socialBlocked && connect(uiKey)}
         style={{ display: "flex", alignItems: "center", gap: 9, padding: big ? "12px 16px" : "7px 13px 7px 8px", borderRadius: big ? 14 : 999,
           border: `1px solid ${theme.borderFaint}`, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>
         <div style={{ width: big ? 30 : 22, height: big ? 30 : 22, borderRadius: big ? 9 : 7, background: p.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -15944,6 +15965,16 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
 
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
+      {socialBlocked && !errorText && (
+        <div style={{ marginBottom: 16, padding: "12px 16px", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap",
+          background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.text, fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>
+          <span>
+            {de
+              ? "Social-Accounts verbinden ist Teil eines bezahlten Plans — in der Testphase noch nicht enthalten."
+              : "Connecting social accounts is part of a paid plan — not included during the trial."}
+          </span>
+        </div>
+      )}
       {errorText && (
         <div style={{ marginBottom: 18, padding: "10px 14px", borderRadius: 12, background: "rgba(232,103,103,.08)", border: "1px solid rgba(232,103,103,.16)", color: "#E86767", fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>
           {errorText}
