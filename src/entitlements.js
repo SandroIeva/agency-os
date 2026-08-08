@@ -45,7 +45,7 @@ export const PLAN_ENTITLEMENTS = {
     seats: 5,
     workspaces: 5,
     projects: null,
-    socialAccounts: 3,
+    socialAccounts: 2,
     collaboration: true,
     readOnly: false,
   },
@@ -54,7 +54,7 @@ export const PLAN_ENTITLEMENTS = {
     seats: 12,
     workspaces: null,
     projects: null,
-    socialAccounts: 6,
+    socialAccounts: 5,
     collaboration: true,
     readOnly: false,
   },
@@ -110,6 +110,13 @@ export function planFeatures(plan, de = true) {
   out.push(!l.collaboration
     ? (de ? "Für eine Person" : "For one person")
     : (de ? `Zusammenarbeit mit bis zu ${l.seats} Personen` : `Collaborate with up to ${l.seats} people`));
+
+  // Named on the plan card because it is now a real differentiator between the
+  // tiers — and because someone comparing plans should not have to discover the
+  // limit by hitting it.
+  out.push(l.socialAccounts === 1
+    ? (de ? "Ein Social-Account" : "One social account")
+    : (de ? `${l.socialAccounts} Social-Accounts` : `${l.socialAccounts} social accounts`));
 
   out.push(de ? `${gb(l.storageBytes)} Speicher` : `${gb(l.storageBytes)} storage`);
 

@@ -43,6 +43,11 @@ annual price is charged once per year; the UI displays its monthly equivalent.
 | Pro | EUR 24 / month | EUR 240 / year |
 | Agency | EUR 85 / month | EUR 864 / year |
 
+Connectable social accounts per plan — 1 / 2 / 5, and none at all on a cardless
+trial. These are a direct cost: the upstream provider bills per connected
+account, so the allowance is what keeps a plan profitable. The numbers live in
+`src/entitlements.js`; changing them here alone changes nothing.
+
 Copy the generated `price_...` IDs into the matching Vercel environment
 variables listed in `.env.example`.
 
