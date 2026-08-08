@@ -19,6 +19,36 @@ const pickerOrigin = () =>
     ? `${window.location.protocol}//${window.location.host}`
     : undefined;
 
+// Firefox isolates third-party storage per site ("Total Cookie Protection"), and
+// the Picker runs in an iframe from docs.google.com that needs the user's Google
+// session. When it cannot reach it, the Picker shows "the API developer key is
+// invalid" — a message about something entirely different, inside Google's own
+// iframe, where we can neither catch it nor correct it.
+//
+// So the note goes next to the picker rather than inside it. It lives here, in
+// the module, so every caller gets it without each one re-implementing it, and
+// it disappears when the picker does.
+const isFirefox = () => typeof navigator !== "undefined" && /firefox/i.test(navigator.userAgent);
+
+function showThirdPartyCookieHint(locale) {
+  if (!isFirefox() || typeof document === "undefined") return () => {};
+  const de = locale === "de";
+  const el = document.createElement("div");
+  el.setAttribute("role", "status");
+  el.style.cssText = [
+    "position:fixed", "left:50%", "bottom:24px", "transform:translateX(-50%)",
+    "z-index:2147483647", "max-width:min(520px,92vw)", "box-sizing:border-box",
+    "padding:12px 16px", "border-radius:13px", "background:#15151c", "color:#fff",
+    "font:400 12.5px/1.55 'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+    "box-shadow:0 16px 44px rgba(0,0,0,0.34)", "border:1px solid rgba(255,255,255,0.12)",
+  ].join(";");
+  el.textContent = de
+    ? "Zeigt Google hier einen Fehler zum „Entwicklerschlüssel“? Das ist Firefox’ Schutz vor Aktivitätenverfolgung — er trennt die Google-Sitzung ab. Schild-Symbol links in der Adresszeile → „Schutz für diese Website deaktivieren“. Oder die Datei direkt hochladen, das ist davon nicht betroffen."
+    : "Is Google showing a “developer key” error? That is Firefox’s tracking protection cutting off the Google session. Click the shield in the address bar → “Turn off protection for this site”. Or upload the file directly — that path is unaffected.";
+  document.body.appendChild(el);
+  return () => { try { el.remove(); } catch (_) {} };
+}
+
 let pickerLoaded = false;
 let pickerLoading = null;
 
@@ -47,6 +77,15 @@ function loadPickerOnce() {
  * @param {string[]} [opts.mimeTypes] — restrict to specific MIME types
  */
 export async function openGooglePicker({ accessToken, locale = "en", multi = false, mimeTypes } = {}) {
+  const hideHint = showThirdPartyCookieHint(locale);
+  try {
+    return await openGooglePickerInner({ accessToken, locale, multi, mimeTypes });
+  } finally {
+    hideHint();
+  }
+}
+
+async function openGooglePickerInner({ accessToken, locale = "en", multi = false, mimeTypes } = {}) {
   if (!accessToken) throw new Error("No access token — please sign in with Google first");
   if (!VITE_GOOGLE_API_KEY) throw new Error("VITE_GOOGLE_API_KEY not configured");
 
@@ -108,6 +147,15 @@ export async function openGooglePicker({ accessToken, locale = "en", multi = fal
  * Resolves with: { id, name, type: 'my_drive' | 'shared_drive', driveId? } or null on cancel.
  */
 export async function openGoogleFolderPicker({ accessToken, locale = "en" } = {}) {
+  const hideHint = showThirdPartyCookieHint(locale);
+  try {
+    return await openGoogleFolderPickerInner({ accessToken, locale });
+  } finally {
+    hideHint();
+  }
+}
+
+async function openGoogleFolderPickerInner({ accessToken, locale = "en" } = {}) {
   if (!accessToken) throw new Error("No access token — please sign in with Google first");
   if (!VITE_GOOGLE_API_KEY) throw new Error("VITE_GOOGLE_API_KEY not configured");
 
