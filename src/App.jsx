@@ -35921,7 +35921,12 @@ export default function CircularMenu() {
           position: "fixed", top: 0, left: 0, right: 0, zIndex: 100001,
           display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
           padding: "9px 20px", fontFamily: FONT, fontSize: 12.5, fontWeight: 500,
-          background: "#15151c", color: "#fff",
+          // Light mode: dark bar on a light page, already distinct. Dark mode
+          // needs its own tone — #15151c sits three steps per channel from the
+          // page's #111117 and read as part of the background rather than as a
+          // bar sitting above it.
+          background: darkMode ? "#282833" : "#15151c", color: "#fff",
+          borderBottom: darkMode ? "1px solid rgba(255,255,255,0.09)" : "none",
         }}>
           <span style={{ opacity: 0.92 }}>
             {appLanguage === "de"
