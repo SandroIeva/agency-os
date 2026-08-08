@@ -334,9 +334,9 @@ export default async function handler(req) {
     if (!job) return json({ error: "Unknown job", code: "unknown_job" }, 404);
     // Terminal states are answered from our own row — asking the provider again
     // would be a request we pay for and already know the answer to.
-    if (job.status === "completed") return json({ status: "completed", url: job.result_url });
-    if (job.status === "failed") return json({ status: "failed", error: job.error });
-    if (!job.polling_url) return json({ status: job.status });
+    if (job.status === "completed") return json({ jobId: job.id, status: "completed", url: job.result_url });
+    if (job.status === "failed") return json({ jobId: job.id, status: "failed", error: job.error });
+    if (!job.polling_url) return json({ jobId: job.id, status: job.status });
 
     let payload;
     try {
@@ -346,7 +346,7 @@ export default async function handler(req) {
       });
       payload = await res.json().catch(() => ({}));
     } catch (e) {
-      return json({ status: job.status, note: e?.message || "status check failed" });
+      return json({ jobId: job.id, status: job.status, note: e?.message || "status check failed" });
     }
 
     const state = String(payload?.status || "").toUpperCase();
@@ -361,21 +361,21 @@ export default async function handler(req) {
           completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
         }).eq("id", job.id);
         return json({
-          status: "completed", url: stored.publicUrl,
+          jobId: job.id, status: "completed", url: stored.publicUrl,
           storagePath: stored.path, bytes: stored.bytes, bucket: "brand-assets",
           model: job.model, credits: creditsFor(model.microUsd),
         });
       } catch (e) {
         await db.from("generation_jobs").update({ status: "failed", error: e.message, updated_at: new Date().toISOString() }).eq("id", job.id);
-        return json({ status: "failed", error: e.message });
+        return json({ jobId: job.id, status: "failed", error: e.message });
       }
     }
     if (["ERROR", "FAILED", "CANCELLED"].includes(state)) {
       const msg = payload?.error || payload?.message || "Generation failed";
       await db.from("generation_jobs").update({ status: "failed", error: msg, updated_at: new Date().toISOString() }).eq("id", job.id);
-      return json({ status: "failed", error: msg });
+      return json({ jobId: job.id, status: "failed", error: msg });
     }
-    return json({ status: "running" });
+    return json({ jobId: job.id, status: "running" });
   }
 
   return json({ error: "Unknown mode" }, 400);

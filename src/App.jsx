@@ -18448,6 +18448,10 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     setGenBusy(true); setGenError(""); genCancelRef.current = false;
     try {
       let res = await genRequest({ mode: "submit", model: genModel, prompt });
+      // Hold the id separately. Only the submit answer carries it — the status
+      // answers do not, and reading it off the latest response meant the second
+      // poll asked about `undefined` and got told the job was unknown.
+      const jobId = res.jobId;
       // Some models answer at once, others hand back a job. Poll only when we
       // were actually given one — see api/generate.js for why both exist.
       const started = Date.now();
@@ -18457,7 +18461,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
         if (Date.now() - started > 120000) throw new Error(de ? "Die Erzeugung dauert ungewöhnlich lange. Sie läuft weiter — schau gleich noch mal her." : "This is taking unusually long. It keeps running — check back shortly.");
         await new Promise(r => setTimeout(r, 2500));
         if (genCancelRef.current) return;
-        res = await genRequest({ mode: "status", jobId: res.jobId });
+        res = await genRequest({ mode: "status", jobId });
       }
       if (genCancelRef.current) return;
       if (res.status !== "completed" || !res.url) throw new Error(res.error || (de ? "Erzeugung fehlgeschlagen." : "Generation failed."));
