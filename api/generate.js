@@ -163,28 +163,42 @@ const pixazo = (path, body, ms = PIXAZO_SUBMIT_MS) => fetch(GATEWAY + path, {
   signal: AbortSignal.timeout(ms),
 });
 
-// Pull an image URL (or a data URI) out of whatever shape came back. Providers
-// disagree about this even between their own models, so look in the places it
-// is plausibly hiding rather than insisting on one.
+// Pull an image URL out of whatever shape came back.
+//
+// The first version looked in a fixed list of field names and missed: the
+// provider reported COMPLETED and the picture was somewhere this did not think
+// to look, so the job spun until the client gave up. Guessing field names was
+// the mistake — this walks the entire payload instead and judges the VALUES.
+//
+// Anything that is not the polling URL and looks like an image wins; failing
+// that, any remaining http(s) string, since a completed job's payload has very
+// little else in it.
 function findImage(payload) {
-  if (!payload || typeof payload !== "object") return null;
-  const direct = payload.image_url || payload.imageUrl || payload.url || payload.output_url;
-  if (typeof direct === "string" && /^(https?:|data:image)/.test(direct)) return direct;
-  for (const key of ["images", "output", "outputs", "data", "result"]) {
-    const v = payload[key];
-    if (typeof v === "string" && /^(https?:|data:image)/.test(v)) return v;
-    if (Array.isArray(v) && v.length) {
-      const first = v[0];
-      if (typeof first === "string" && /^(https?:|data:image)/.test(first)) return first;
-      const nested = findImage(first);
-      if (nested) return nested;
+  const urls = [];
+  const seen = new Set();
+  const walk = (node, depth = 0) => {
+    if (node == null || depth > 8) return;
+    if (typeof node === "string") {
+      if (/^data:image\//.test(node)) urls.push({ url: node, image: true });
+      else if (/^https?:\/\//.test(node) && !node.includes("/requests/status/")) {
+        urls.push({ url: node, image: /\.(png|jpe?g|webp|gif|avif|bmp)(\?|$)/i.test(node) });
+      }
+      return;
     }
-    if (v && typeof v === "object") {
-      const nested = findImage(v);
-      if (nested) return nested;
+    if (Array.isArray(node)) { for (const v of node) walk(v, depth + 1); return; }
+    if (typeof node === "object") {
+      for (const [k, v] of Object.entries(node)) {
+        if (seen.has(v) ) continue;
+        if (v && typeof v === "object") seen.add(v);
+        // Never mistake the provider's own plumbing for the result.
+        if (/^(polling_url|pollingUrl|webhook|callback)/i.test(k)) continue;
+        walk(v, depth + 1);
+      }
     }
-  }
-  return null;
+  };
+  walk(payload);
+  if (!urls.length) return null;
+  return (urls.find(u => u.image) || urls[0]).url;
 }
 
 const findRequestId = (p) => p?.request_id || p?.requestId || p?.id || null;
@@ -387,6 +401,20 @@ export default async function handler(req) {
         await db.from("generation_jobs").update({ status: "failed", error: e.message, updated_at: new Date().toISOString() }).eq("id", job.id);
         return json({ jobId: job.id, status: "failed", error: e.message });
       }
+    }
+    // The provider says it is done and we still found no picture. Failing here
+    // beats spinning: the client would poll a finished job until it gave up, and
+    // the payload — the one thing that would explain it — would be discarded on
+    // every pass. Keeping a snippet turns the next occurrence into a five-second
+    // diagnosis.
+    if (["COMPLETED", "SUCCESS", "SUCCEEDED", "DONE"].includes(state)) {
+      const snippet = JSON.stringify(payload || {}).slice(0, 600);
+      const msg = `Provider reported ${state} but returned no usable image. Payload: ${snippet}`;
+      await db.from("generation_jobs").update({
+        status: "failed", error: msg, provider_status: state,
+        updated_at: new Date().toISOString(),
+      }).eq("id", job.id);
+      return json({ jobId: job.id, status: "failed", error: "The image service finished but returned no image." });
     }
     if (["ERROR", "FAILED", "CANCELLED"].includes(state)) {
       const msg = payload?.error || payload?.message || "Generation failed";
