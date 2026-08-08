@@ -81,7 +81,13 @@ const MODELS = {
     body: (prompt) => ({ prompt, resolution: "1K", num_images: 1, output_format: "png" }),
   },
 };
-const DEFAULT_MODEL = "flux-1-schnell";
+// GPT Image 2, not the free model. Flux Schnell's getData is undocumented and,
+// measured against the live service, does not answer within twenty seconds nor
+// hand back a request id — it appears to generate synchronously, which no Edge
+// function can wait out. The documented asynchronous models answer at once with
+// an id, which is what this design is built around. Schnell stays in the list
+// but must not be what a first-time user meets.
+const DEFAULT_MODEL = "gpt-image-2";
 
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
@@ -141,7 +147,9 @@ async function remainingCredits(db, orgId) {
 // no job id, nothing to act on. Cutting the call off ourselves turns that into
 // an answer we control, and leaves room to record the failure before the
 // function ends.
-const PIXAZO_SUBMIT_MS = 12000;
+// Close to the platform ceiling, with room left to record the failure. A model
+// that answers synchronously needs every second it can get.
+const PIXAZO_SUBMIT_MS = 20000;
 const PIXAZO_STATUS_MS = 8000;
 const DOWNLOAD_MS = 10000;
 

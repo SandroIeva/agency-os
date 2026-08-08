@@ -18412,7 +18412,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   // ── Generate with AI ────────────────────────────────────────────────────────
   const [genOpen, setGenOpen] = useState(false);
   const [genPrompt, setGenPrompt] = useState("");
-  const [genModel, setGenModel] = useState("flux-1-schnell");
+  const [genModel, setGenModel] = useState("gpt-image-2");
   const [genBusy, setGenBusy] = useState(false);
   const [genError, setGenError] = useState("");
   const [genCredits, setGenCredits] = useState(null); // { limit, used, left, models }
