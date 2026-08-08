@@ -18423,6 +18423,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   const [genBusy, setGenBusy] = useState(false);
   const [genError, setGenError] = useState("");
   const [genCredits, setGenCredits] = useState(null); // { limit, used, left, models }
+  const [genProgress, setGenProgress] = useState(null); // { seconds, state } while waiting
   const genCancelRef = useRef(false);
 
   const genRequest = useCallback(async (payload) => {
@@ -18452,7 +18453,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   const runGeneration = async () => {
     const prompt = genPrompt.trim();
     if (!prompt || genBusy || !userOrg?.id || !session?.user?.id) return;
-    setGenBusy(true); setGenError(""); genCancelRef.current = false;
+    setGenBusy(true); setGenError(""); setGenProgress(null); genCancelRef.current = false;
     try {
       let res = await genRequest({ mode: "submit", model: genModel, prompt });
       // Hold the id separately. Only the submit answer carries it — the status
@@ -18462,14 +18463,24 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
       // Some models answer at once, others hand back a job. Poll only when we
       // were actually given one — see api/generate.js for why both exist.
       const started = Date.now();
+      // Five minutes. Measured against the live service, an image takes two to
+      // three — the previous two-minute limit was cutting off work that was
+      // still running, which is why this looked like a failure when it was
+      // merely slow.
+      const WAIT_MS = 300000;
       while (res.status === "running" && !genCancelRef.current) {
-        // Two minutes, then stop asking. The job itself keeps running server
-        // side and its result is stored either way; only the waiting ends.
-        if (Date.now() - started > 120000) throw new Error(de ? "Die Erzeugung dauert ungewöhnlich lange. Sie läuft weiter — schau gleich noch mal her." : "This is taking unusually long. It keeps running — check back shortly.");
+        if (Date.now() - started > WAIT_MS) {
+          throw new Error(de
+            ? "Die Erzeugung dauert diesmal ungewöhnlich lange. Sie läuft weiter — sieh gleich noch mal in den Assets nach."
+            : "This is taking unusually long. It keeps running — check your assets again shortly.");
+        }
         await new Promise(r => setTimeout(r, 2500));
         if (genCancelRef.current) return;
         res = await genRequest({ mode: "status", jobId });
-        if (res.providerStatus) setGenError("");   // still alive; clear any stale note
+        // Show that something is happening. A spinner that never changes for
+        // three minutes reads as broken, and the last run was abandoned for
+        // exactly that reason while the provider was still working.
+        setGenProgress({ seconds: Math.round((Date.now() - started) / 1000), state: res.providerStatus || null });
       }
       if (genCancelRef.current) return;
       if (res.status !== "completed" || !res.url) throw new Error(res.error || (de ? "Erzeugung fehlgeschlagen." : "Generation failed."));
@@ -18496,6 +18507,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
           : (e.message || String(e)));
     }
     setGenBusy(false);
+    setGenProgress(null);
     loadGenCredits();
   };
 
@@ -18930,6 +18942,13 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
               );
             })()}
 
+            {genBusy && genProgress && (
+              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
+                {appLanguage === "de"
+                  ? `Wird erzeugt … ${genProgress.seconds} s${genProgress.state ? ` · ${genProgress.state.toLowerCase()}` : ""}. Das dauert meist zwei bis drei Minuten.`
+                  : `Generating … ${genProgress.seconds}s${genProgress.state ? ` · ${genProgress.state.toLowerCase()}` : ""}. This usually takes two to three minutes.`}
+              </div>
+            )}
             {genError && (
               <div style={{ fontSize: 12, fontFamily: FONT, color: "#E86767", lineHeight: 1.5 }}>{genError}</div>
             )}
