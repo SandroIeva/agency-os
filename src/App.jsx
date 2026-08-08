@@ -15779,6 +15779,46 @@ const ZERNIO_UI_PLATFORMS = ["linkedin", "instagram", "threads", "x", "pinterest
 const zernioKeyFor = (uiKey) => (uiKey === "x" ? "twitter" : uiKey);
 const uiKeyFor = (zKey) => (zKey === "twitter" ? "x" : zKey);
 // POST /api/zernio — shared by the Analytics tab and the post composer.
+// Zernio's own error messages reach us in English and used to be shown
+// verbatim — so a Zernio quota notice ("Add a payment method to connect more
+// than 2 accounts.") read as if i7 OS were asking for money. They are now
+// attributed to Zernio, and the ones we have actually seen are translated.
+// Anything unrecognised is passed through unchanged rather than guessed at: a
+// mistranslated error is worse than an English one.
+const ZERNIO_MESSAGE_DE = [
+  { re: /add a payment method to connect more than (\d+) accounts?/i,
+    de: (m) => `Hinterlege bei Zernio eine Zahlungsmethode, um mehr als ${m[1]} Accounts zu verbinden.` },
+  { re: /rate limit|too many requests/i,
+    de: () => "Zu viele Anfragen — bitte einen Moment warten." },
+  { re: /unauthorized|invalid (api[- ]?)?key|forbidden/i,
+    de: () => "Zugriff verweigert — bitte die Zernio-Zugangsdaten prüfen." },
+  { re: /timed? ?out/i,
+    de: () => "Zeitüberschreitung — Zernio hat nicht rechtzeitig geantwortet." },
+];
+function zernioErrorText(error, de) {
+  if (!error) return null;
+  // Our own message about a missing env var — not Zernio's, so no attribution.
+  if (error.code === "zernio_not_configured") {
+    return de
+      ? "Zernio ist noch nicht konfiguriert — ZERNIO_API_KEY als Env-Var hinterlegen (siehe docs/zernio-integration.md)."
+      : "Zernio is not configured yet — set the ZERNIO_API_KEY env var (see docs/zernio-integration.md).";
+  }
+  // No code means this Error was built here — the composer's own validation
+  // ("select at least one account"). Attributing that to Zernio would be a lie;
+  // only errors relayed by zernioRequest carry a code.
+  const raw = String(error.message || "").trim();
+  if (!error.code) return raw || null;
+  if (!raw) return de ? "Von Zernio: unbekannter Fehler." : "From Zernio: unknown error.";
+  let body = raw;
+  if (de) {
+    for (const entry of ZERNIO_MESSAGE_DE) {
+      const hit = raw.match(entry.re);
+      if (hit) { body = entry.de(hit); break; }
+    }
+  }
+  return (de ? "Von Zernio: " : "From Zernio: ") + body;
+}
+
 async function zernioRequest(session, body) {
   const res = await fetch("/api/zernio", {
     method: "POST",
@@ -15881,11 +15921,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
     { label: "Engagement-Rate", value: dailyOk && impressions ? ((de ? engagementRate.toFixed(1).replace(".", ",") : engagementRate.toFixed(1)) + " %") : "–", delta: null },
   ];
 
-  const errorText = error
-    ? (error.code === "zernio_not_configured"
-        ? (de ? "Zernio ist noch nicht konfiguriert — ZERNIO_API_KEY als Env-Var hinterlegen (siehe docs/zernio-integration.md)." : "Zernio is not configured yet — set the ZERNIO_API_KEY env var (see docs/zernio-integration.md).")
-        : error.message)
-    : null;
+  const errorText = zernioErrorText(error, de);
 
   // Reusable connect chip (icon + "Verbinden") for a platform.
   const ConnectChip = ({ uiKey, big = false }) => {
@@ -16309,9 +16345,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 24 }}>
           {error && (
             <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 12, background: "rgba(232,103,103,.08)", border: "1px solid rgba(232,103,103,.16)", color: "#E86767", fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>
-              {error.code === "zernio_not_configured"
-                ? (de ? "Zernio ist noch nicht konfiguriert — ZERNIO_API_KEY als Env-Var hinterlegen (siehe docs/zernio-integration.md)." : "Zernio is not configured yet — set the ZERNIO_API_KEY env var (see docs/zernio-integration.md).")
-                : error.message}
+              {zernioErrorText(error, de)}
             </div>
           )}
 
