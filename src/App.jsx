@@ -10288,8 +10288,84 @@ function TokenUsageBar({ orgId, theme, darkMode, appLanguage = "de" }) {
           );
         })}
         <div style={{ marginTop: breakdown.length ? 6 : 12, fontSize: 11, color: theme.textFaint, lineHeight: 1.5 }}>
-          {de ? "Läuft aktuell über deine eigenen API-Keys. Grundlage für spätere KI-Credits." : "Currently via your own API keys. Basis for future AI credits."}
+          {de ? "Text und Chat laufen über deine eigenen API-Keys — hierfür werden keine Credits verbraucht."
+              : "Text and chat run on your own API keys — these use no credits."}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// AI credits for the current month — the same shape as the storage bar, because
+// they answer the same question: how much of my allowance is left.
+//
+// Read from /api/generate rather than the database: the allowance depends on the
+// owner's plan and the month's completed jobs, and that resolution already lives
+// server-side. Doing it again here would be a second place to get it wrong.
+function ImageCreditsBar({ orgId, theme, darkMode, appLanguage = "de" }) {
+  const de = appLanguage === "de";
+  const [data, setData] = useState(null);   // { limit, used, left }
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!orgId) return;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const r = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+          body: JSON.stringify({ mode: "credits", orgId }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!alive) return;
+        if (r.ok) setData(j); else setFailed(true);
+      } catch { if (alive) setFailed(true); }
+    })();
+    return () => { alive = false; };
+  }, [orgId]);
+
+  // Nothing to say if the endpoint is unreachable — an empty card would just be
+  // a question mark where a number belongs.
+  if (failed) return null;
+
+  const limit = data?.limit ?? 0;
+  const used = data?.used ?? 0;
+  const left = data?.left ?? 0;
+  const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const exhausted = limit > 0 && left <= 0;
+  const low = limit > 0 && !exhausted && left <= limit * 0.2;
+  const barColor = exhausted ? "#E86767" : low ? "#E0A64D" : theme.text;
+  const fmt = (n) => n.toLocaleString(de ? "de-DE" : "en-US");
+
+  return (
+    <div style={{ marginTop: 24, fontFamily: FONT }}>
+      <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
+        {de ? "KI-Credits" : "AI Credits"}
+      </div>
+      <div style={{ borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`, padding: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: theme.text }}>{de ? "Bildgenerierung" : "Image generation"}</span>
+          <span style={{ fontSize: 13, fontWeight: 500, color: exhausted ? "#E86767" : theme.textDim }}>
+            {data == null ? "…" : `${fmt(left)} ${de ? "von" : "of"} ${fmt(limit)}`}
+          </span>
+        </div>
+        <div style={{ fontSize: 11, color: theme.textFaint, marginBottom: 12, lineHeight: 1.5 }}>
+          {limit === 0
+            ? (de ? "KI-Bildgenerierung ist Teil eines bezahlten Plans." : "AI image generation is part of a paid plan.")
+            : (de ? "Setzt sich am Ersten jedes Monats zurück. Ein Bild kostet je nach Modell 1 bis 71 Credits."
+                  : "Resets on the first of each month. An image costs 1 to 71 credits depending on the model.")}
+        </div>
+        <div style={{ height: 8, borderRadius: 999, background: theme.borderFaint, overflow: "hidden" }}>
+          <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: barColor, transition: "width .4s ease" }} />
+        </div>
+        {exhausted && (
+          <div style={{ marginTop: 12, fontSize: 12, color: "#E86767", lineHeight: 1.5 }}>
+            {de ? "Deine Credits für diesen Monat sind aufgebraucht. Am Ersten gibt es neue — oder upgrade für mehr."
+                : "This month's credits are used up. New ones arrive on the first — or upgrade for more."}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -35651,6 +35727,7 @@ export default function CircularMenu() {
                   })}
                 </div>
                 {userOrg && <TokenUsageBar orgId={userOrg.id} theme={theme} darkMode={darkMode} appLanguage={appLanguage} />}
+                {userOrg && <ImageCreditsBar orgId={userOrg.id} theme={theme} darkMode={darkMode} appLanguage={appLanguage} />}
               </motion.div>
               )}
               </div>
