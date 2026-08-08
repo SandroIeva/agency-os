@@ -253,13 +253,21 @@ async function completeJob(db, job, imageUrl) {
   }).eq("id", job.id);
 
   // The whole point of doing this here: the person may be somewhere else
-  // entirely by now, three minutes later.
-  await db.from("notifications").insert({
+  // entirely by now, minutes later.
+  //
+  // The error is checked. `notifications.type` is a closed set, and the first
+  // version of this used a type that was not in it — the insert was rejected and
+  // the only symptom was a notification that never arrived, with nothing
+  // anywhere to say why.
+  const { error: notifyErr } = await db.from("notifications").insert({
     user_id: job.user_id, org_id: job.org_id, type: "image_ready",
     title: "Dein KI-Bild ist fertig",
     body: (job.prompt || "").slice(0, 120),
     metadata: { url: stored.publicUrl, model: job.model },
   });
+  // Logged, not thrown: the picture is finished and filed. Losing the note is a
+  // nuisance; failing the job over it would throw away the work.
+  if (notifyErr) console.error("[generate] notification insert failed:", notifyErr.message);
 
   return { url: stored.publicUrl, path: stored.path, bytes: stored.bytes, credits };
 }
