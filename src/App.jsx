@@ -18469,6 +18469,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
         await new Promise(r => setTimeout(r, 2500));
         if (genCancelRef.current) return;
         res = await genRequest({ mode: "status", jobId });
+        if (res.providerStatus) setGenError("");   // still alive; clear any stale note
       }
       if (genCancelRef.current) return;
       if (res.status !== "completed" || !res.url) throw new Error(res.error || (de ? "Erzeugung fehlgeschlagen." : "Generation failed."));

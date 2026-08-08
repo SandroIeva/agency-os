@@ -338,18 +338,36 @@ export default async function handler(req) {
     if (job.status === "failed") return json({ jobId: job.id, status: "failed", error: job.error });
     if (!job.polling_url) return json({ jobId: job.id, status: job.status });
 
-    let payload;
+    let payload, httpStatus;
     try {
       const res = await fetch(job.polling_url, {
         headers: { "Ocp-Apim-Subscription-Key": process.env.PIXAZO_API_KEY || "" },
         signal: AbortSignal.timeout(PIXAZO_STATUS_MS),
       });
+      httpStatus = res.status;
       payload = await res.json().catch(() => ({}));
+      // A failed status check used to fall through to "running", because that is
+      // this code's word for "not finished yet". The client then polled a dead
+      // job until it gave up, and the reason never left this function.
+      if (!res.ok) {
+        const msg = payload?.message || payload?.error || `Status check failed (HTTP ${res.status})`;
+        await db.from("generation_jobs").update({
+          status: "failed", error: msg, provider_status: `HTTP ${res.status}`,
+          updated_at: new Date().toISOString(),
+        }).eq("id", job.id);
+        return json({ jobId: job.id, status: "failed", error: msg });
+      }
     } catch (e) {
       return json({ jobId: job.id, status: job.status, note: e?.message || "status check failed" });
     }
 
     const state = String(payload?.status || "").toUpperCase();
+    // Kept verbatim on the row. Otherwise a job stuck at "running" is a black
+    // box — our own word for "not finished" tells us nothing about why.
+    await db.from("generation_jobs").update({
+      provider_status: state || `HTTP ${httpStatus} (kein status-Feld)`,
+      updated_at: new Date().toISOString(),
+    }).eq("id", job.id);
     const image = findImage(payload);
     if (image) {
       try {
@@ -375,7 +393,7 @@ export default async function handler(req) {
       await db.from("generation_jobs").update({ status: "failed", error: msg, updated_at: new Date().toISOString() }).eq("id", job.id);
       return json({ jobId: job.id, status: "failed", error: msg });
     }
-    return json({ jobId: job.id, status: "running" });
+    return json({ jobId: job.id, status: "running", providerStatus: state || null });
   }
 
   return json({ error: "Unknown mode" }, 400);
