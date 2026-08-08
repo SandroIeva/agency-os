@@ -18799,7 +18799,6 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
               <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>{appLanguage === "de" ? "Modell" : "Model"}</span>
               {(genCredits?.models || []).map(m => {
                 const on = genModel === m.key;
-                const free = m.microUsd === 0;
                 return (
                   <div key={m.key} onClick={() => !genBusy && setGenModel(m.key)}
                     style={{ padding: "6px 11px", borderRadius: 999, cursor: genBusy ? "default" : "pointer",
@@ -18808,7 +18807,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                       background: on ? "#15151c" : "transparent", color: on ? "#fff" : theme.text }}>
                     {m.label}
                     <span style={{ opacity: 0.6, marginLeft: 6, fontWeight: 400 }}>
-                      {free ? (appLanguage === "de" ? "gratis" : "free") : `$${(m.microUsd / 1e6).toFixed(3)}`}
+                      {m.credits} {m.credits === 1 ? "Credit" : "Credits"}
                     </span>
                   </div>
                 );
@@ -18822,8 +18821,12 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
               return (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, fontFamily: FONT, color: low ? "#E86767" : theme.textDim }}>
-                    <span>{appLanguage === "de" ? "KI-Guthaben diesen Monat" : "AI allowance this month"}</span>
-                    <span>${(genCredits.left / 1e6).toFixed(2)} {appLanguage === "de" ? "von" : "of"} ${(genCredits.limit / 1e6).toFixed(2)}</span>
+                    <span>{appLanguage === "de" ? "KI-Credits diesen Monat" : "AI credits this month"}</span>
+                    <span>
+                      {genCredits.left.toLocaleString(appLanguage === "de" ? "de-DE" : "en-US")}
+                      {" "}{appLanguage === "de" ? "von" : "of"}{" "}
+                      {genCredits.limit.toLocaleString(appLanguage === "de" ? "de-DE" : "en-US")}
+                    </span>
                   </div>
                   <div style={{ height: 5, borderRadius: 999, background: theme.borderFaint, overflow: "hidden" }}>
                     <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: low ? "#E86767" : theme.text, transition: "width .3s ease" }} />

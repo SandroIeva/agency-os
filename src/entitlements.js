@@ -13,11 +13,15 @@ export const STORAGE_GB = 1024 * 1024 * 1024;
 
 // `null` means unlimited. (Not Infinity — this crosses JSON, where Infinity
 // serializes to null anyway; being explicit avoids a silent surprise.)
-// `imageCreditsMicroUsd` is the monthly allowance for AI generation, in
-// MICRO-dollars: a single image can cost a fraction of a cent, and that is
-// exactly the range where floating point starts lying. The allowance is spent
-// at the real per-model price, so switching provider or model changes what it
-// buys without changing the promise.
+// `imageCredits` is the monthly allowance for AI generation, in credits — the
+// unit the customer sees, the way Firefly and the rest do it. One credit is a
+// tenth of a cent of provider cost (see CREDIT_MICRO_USD in api/generate.js),
+// which makes the plans land on round numbers and every model land on a whole
+// number of credits.
+//
+// Deliberately NOT a currency: it lets a provider's price move, or a model be
+// swapped, without rewriting what a plan promises. And nobody has to reason
+// about $0.00069.
 //
 // A cardless trial gets none, for the same reason it gets no social accounts —
 // see the zeroing in resolveEntitlements. Both cost us money per use.
@@ -37,7 +41,7 @@ export const PLAN_ENTITLEMENTS = {
     workspaces: 1,
     projects: 0,
     socialAccounts: 0,
-    imageCreditsMicroUsd: 0,
+    imageCredits: 0,
     collaboration: false,
     readOnly: true,
   },
@@ -47,7 +51,7 @@ export const PLAN_ENTITLEMENTS = {
     workspaces: 1,
     projects: 3,
     socialAccounts: 1,
-    imageCreditsMicroUsd: 2000000,
+    imageCredits: 2000,
     collaboration: false,
     readOnly: false,
   },
@@ -57,7 +61,7 @@ export const PLAN_ENTITLEMENTS = {
     workspaces: 5,
     projects: null,
     socialAccounts: 2,
-    imageCreditsMicroUsd: 4000000,
+    imageCredits: 4000,
     collaboration: true,
     readOnly: false,
   },
@@ -67,7 +71,7 @@ export const PLAN_ENTITLEMENTS = {
     workspaces: null,
     projects: null,
     socialAccounts: 5,
-    imageCreditsMicroUsd: 10000000,
+    imageCredits: 10000,
     collaboration: true,
     readOnly: false,
   },
@@ -135,6 +139,10 @@ export function planFeatures(plan, de = true) {
   out.push(l.socialAccounts === 1
     ? (de ? "Ein Social-Account" : "One social account")
     : (de ? `${l.socialAccounts} Social-Accounts` : `${l.socialAccounts} social accounts`));
+
+  out.push(de
+    ? `${l.imageCredits.toLocaleString("de-DE")} KI-Credits pro Monat`
+    : `${l.imageCredits.toLocaleString("en-US")} AI credits per month`);
 
   out.push(de ? `${gb(l.storageBytes)} Speicher` : `${gb(l.storageBytes)} storage`);
 
@@ -215,6 +223,6 @@ export function resolveEntitlements(account, now = Date.now()) {
     // earlier, above, and keeps its plan's allowance: that grant is deliberate.
     limits: paidPlan
       ? limitsFor(plan)
-      : { ...limitsFor(plan), socialAccounts: 0, imageCreditsMicroUsd: 0 },
+      : { ...limitsFor(plan), socialAccounts: 0, imageCredits: 0 },
   };
 }

@@ -24,6 +24,16 @@ export const config = { runtime: "edge" };
 
 const GATEWAY = "https://gateway.pixazo.ai";
 
+// One credit is a tenth of a cent of provider cost. Everything the customer sees
+// is credits; micro-USD stays internal, as the record of what we actually paid.
+//
+// Every generation costs at least one credit, including the models that cost us
+// nothing. Otherwise "your credits are used up" would be untrue — a free model
+// would still generate — and the provider throttles those anyway, so unlimited
+// was never on offer.
+const CREDIT_MICRO_USD = 1000;
+const creditsFor = (microUsd) => Math.max(1, Math.ceil(microUsd / CREDIT_MICRO_USD));
+
 // Per-model: where it lives and what it costs, in micro-USD per image.
 // One table, because a price that appears twice eventually disagrees with
 // itself. Prices from Pixazo's published rates — when they change, they change
@@ -110,18 +120,18 @@ async function remainingCredits(db, orgId) {
   if (!owner) return { limit: 0, used: 0, left: 0 };
 
   const { data: account } = await db.from("billing_accounts").select("*").eq("owner_user_id", owner).maybeSingle();
-  const limit = resolveEntitlements(account).limits.imageCreditsMicroUsd ?? 0;
+  const limit = resolveEntitlements(account).limits.imageCredits ?? 0;
 
   const since = new Date();
   since.setUTCDate(1);
   since.setUTCHours(0, 0, 0, 0);
   const { data: rows } = await db
     .from("generation_jobs")
-    .select("cost_micro_usd")
+    .select("cost_credits")
     .eq("org_id", orgId)
     .eq("status", "completed")
     .gte("completed_at", since.toISOString());
-  const used = (rows || []).reduce((n, r) => n + Number(r.cost_micro_usd || 0), 0);
+  const used = (rows || []).reduce((n, r) => n + Number(r.cost_credits || 0), 0);
   return { limit, used, left: Math.max(0, limit - used) };
 }
 
@@ -201,7 +211,7 @@ export default async function handler(req) {
     const c = await remainingCredits(db, orgId);
     return json({
       ...c,
-      models: Object.entries(MODELS).map(([key, m]) => ({ key, label: m.label, microUsd: m.microUsd })),
+      models: Object.entries(MODELS).map(([key, m]) => ({ key, label: m.label, credits: creditsFor(m.microUsd) })),
     });
   }
 
@@ -218,11 +228,11 @@ export default async function handler(req) {
     if (credits.limit === 0) {
       return json({ error: "AI generation needs a paid plan.", code: "generation_needs_plan" }, 402);
     }
-    if (model.microUsd > credits.left) {
+    if (creditsFor(model.microUsd) > credits.left) {
       return json({
-        error: "This month's AI generation allowance is used up.",
+        error: "This month's AI credits are used up.",
         code: "generation_no_credits",
-        limit: credits.limit, used: credits.used,
+        limit: credits.limit, used: credits.used, needed: creditsFor(model.microUsd),
       }, 402);
     }
 
@@ -256,7 +266,8 @@ export default async function handler(req) {
       try {
         const stored = await persistImage(db, { url: immediate, orgId });
         await db.from("generation_jobs").update({
-          status: "completed", result_url: stored.publicUrl, cost_micro_usd: model.microUsd,
+          status: "completed", result_url: stored.publicUrl,
+          cost_micro_usd: model.microUsd, cost_credits: creditsFor(model.microUsd),
           completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
         }).eq("id", job.id);
         return json({
@@ -264,7 +275,7 @@ export default async function handler(req) {
           // Handed back so the client can file it as an asset and record the
           // bytes in the storage ledger — the same bookkeeping an upload does.
           storagePath: stored.path, bytes: stored.bytes, bucket: "brand-assets",
-          model: modelKey, costMicroUsd: model.microUsd,
+          model: modelKey, credits: creditsFor(model.microUsd),
         });
       } catch (e) {
         await db.from("generation_jobs").update({ status: "failed", error: e.message, updated_at: new Date().toISOString() }).eq("id", job.id);
@@ -315,13 +326,14 @@ export default async function handler(req) {
         const stored = await persistImage(db, { url: image, orgId });
         const model = MODELS[job.model] || { microUsd: 0 };
         await db.from("generation_jobs").update({
-          status: "completed", result_url: stored.publicUrl, cost_micro_usd: model.microUsd,
+          status: "completed", result_url: stored.publicUrl,
+          cost_micro_usd: model.microUsd, cost_credits: creditsFor(model.microUsd),
           completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
         }).eq("id", job.id);
         return json({
           status: "completed", url: stored.publicUrl,
           storagePath: stored.path, bytes: stored.bytes, bucket: "brand-assets",
-          model: job.model, costMicroUsd: model.microUsd,
+          model: job.model, credits: creditsFor(model.microUsd),
         });
       } catch (e) {
         await db.from("generation_jobs").update({ status: "failed", error: e.message, updated_at: new Date().toISOString() }).eq("id", job.id);
