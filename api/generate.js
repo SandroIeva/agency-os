@@ -160,6 +160,15 @@ export default async function handler(req) {
     return json({ error: "Not a member of this workspace", code: "forbidden" }, 403);
   }
 
+  // ── credits — what is left this month, for the dialog to show ────────────
+  if (mode === "credits") {
+    const c = await remainingCredits(db, orgId);
+    return json({
+      ...c,
+      models: Object.entries(MODELS).map(([key, m]) => ({ key, label: m.label, microUsd: m.microUsd })),
+    });
+  }
+
   // ── submit ────────────────────────────────────────────────────────────────
   if (mode === "submit") {
     const modelKey = MODELS[body.model] ? body.model : DEFAULT_MODEL;
@@ -214,7 +223,13 @@ export default async function handler(req) {
           status: "completed", result_url: stored.publicUrl, cost_micro_usd: model.microUsd,
           completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
         }).eq("id", job.id);
-        return json({ jobId: job.id, status: "completed", url: stored.publicUrl });
+        return json({
+          jobId: job.id, status: "completed", url: stored.publicUrl,
+          // Handed back so the client can file it as an asset and record the
+          // bytes in the storage ledger — the same bookkeeping an upload does.
+          storagePath: stored.path, bytes: stored.bytes, bucket: "brand-assets",
+          model: modelKey, costMicroUsd: model.microUsd,
+        });
       } catch (e) {
         await db.from("generation_jobs").update({ status: "failed", error: e.message, updated_at: new Date().toISOString() }).eq("id", job.id);
         return json({ error: e.message, code: "generation_failed", jobId: job.id }, 502);
@@ -267,7 +282,11 @@ export default async function handler(req) {
           status: "completed", result_url: stored.publicUrl, cost_micro_usd: model.microUsd,
           completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
         }).eq("id", job.id);
-        return json({ status: "completed", url: stored.publicUrl });
+        return json({
+          status: "completed", url: stored.publicUrl,
+          storagePath: stored.path, bytes: stored.bytes, bucket: "brand-assets",
+          model: job.model, costMicroUsd: model.microUsd,
+        });
       } catch (e) {
         await db.from("generation_jobs").update({ status: "failed", error: e.message, updated_at: new Date().toISOString() }).eq("id", job.id);
         return json({ status: "failed", error: e.message });

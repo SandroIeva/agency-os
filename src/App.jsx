@@ -17286,6 +17286,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const creationsDrivePick = useRef(null); // CreationsTab registers its "import from Drive" fn here
   const creationsNewFolder = useRef(null); // CreationsTab registers its "create folder" fn here
   const creationsWebImport = useRef(null); // CreationsTab registers its "import from a website" fn here
+  const creationsGenerate = useRef(null);  // CreationsTab registers its "generate with AI" fn here
   const [creationsUploading, setCreationsUploading] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false); // "Hinzufügen" dropdown (creations tab)
   const [docsAddOpen, setDocsAddOpen] = useState(false); // "Hinzufügen" dropdown (docs tab)
@@ -17745,6 +17746,10 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             sub: appLanguage === "de" ? "Datei aus Drive wählen" : "Pick a file from Drive",
                             icon: <><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="8 17 12 21 16 17"/><line x1="12" y1="15" x2="12" y2="21"/></>,
                             onClick: () => { setAddMenuOpen(false); creationsDrivePick.current?.(); } },
+                          { key: "ai", label: appLanguage === "de" ? "Mit KI erstellen" : "Create with AI",
+                            sub: appLanguage === "de" ? "Bild aus einer Beschreibung" : "An image from a description",
+                            icon: <><path d="M12 3l1.9 5.8L20 10.5l-6.1 1.7L12 18l-1.9-5.8L4 10.5l6.1-1.7z"/><path d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z"/></>,
+                            onClick: () => { setAddMenuOpen(false); creationsGenerate.current?.(); } },
                           { key: "web", label: appLanguage === "de" ? "Von Website" : "From a website",
                             sub: appLanguage === "de" ? "Bilder einer URL übernehmen" : "Pull the images off a URL",
                             icon: <><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18"/></>,
@@ -17956,7 +17961,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           {tab === "creations" && (
             <CreationsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} grad={grad} glow={glow} t={t}
               appLanguage={appLanguage} onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive} orgMembers={orgMembers} projectId={projectId}
-              pickRef={creationsPick} drivePickRef={creationsDrivePick} newFolderRef={creationsNewFolder} webImportRef={creationsWebImport} onUploadingChange={setCreationsUploading}
+              pickRef={creationsPick} drivePickRef={creationsDrivePick} newFolderRef={creationsNewFolder} webImportRef={creationsWebImport} generateRef={creationsGenerate} onUploadingChange={setCreationsUploading}
               getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin}
               llmProvider={llmProvider} llmKeys={llmKeys} />
           )}
@@ -18297,7 +18302,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 // Top-level component (not inline) so framer-motion never re-mounts it per render.
 // Creations tab — gallery of the workspace's images AND videos (AI-generated +
 // user uploads). Filter by media type; upload your own via the button.
-function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, drivePickRef, newFolderRef, webImportRef, onUploadingChange, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null }) {
+function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, drivePickRef, newFolderRef, webImportRef, generateRef, onUploadingChange, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null }) {
   const memberById = useMemo(() => {
     const m = {}; (orgMembers || []).forEach(om => { if (om.user_id) m[om.user_id] = { ...(om.profiles || {}) }; }); return m;
   }, [orgMembers]);
@@ -18325,6 +18330,80 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   // Register the file-picker trigger so the header Upload button can call it,
   // and surface uploading state upward.
   useEffect(() => { if (pickRef) pickRef.current = () => inputRef.current?.click(); }, [pickRef]);
+
+  // ── Generate with AI ────────────────────────────────────────────────────────
+  const [genOpen, setGenOpen] = useState(false);
+  const [genPrompt, setGenPrompt] = useState("");
+  const [genModel, setGenModel] = useState("flux-1-schnell");
+  const [genBusy, setGenBusy] = useState(false);
+  const [genError, setGenError] = useState("");
+  const [genCredits, setGenCredits] = useState(null); // { limit, used, left, models }
+  const genCancelRef = useRef(false);
+
+  const genRequest = useCallback(async (payload) => {
+    const { data: { session: sess } } = await supabase.auth.getSession();
+    const r = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${sess?.access_token || ""}` },
+      body: JSON.stringify({ orgId: userOrg?.id, ...payload }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { const e = new Error(j.error || `HTTP ${r.status}`); e.code = j.code; throw e; }
+    return j;
+  }, [userOrg?.id]);
+
+  const loadGenCredits = useCallback(async () => {
+    try { setGenCredits(await genRequest({ mode: "credits" })); }
+    catch (e) { setGenCredits(null); setGenError(e.message); }
+  }, [genRequest]);
+
+  useEffect(() => {
+    if (generateRef) generateRef.current = () => {
+      setGenOpen(true); setGenError(""); setGenPrompt("");
+      loadGenCredits();
+    };
+  }, [generateRef, loadGenCredits]);
+
+  const runGeneration = async () => {
+    const prompt = genPrompt.trim();
+    if (!prompt || genBusy || !userOrg?.id || !session?.user?.id) return;
+    setGenBusy(true); setGenError(""); genCancelRef.current = false;
+    try {
+      let res = await genRequest({ mode: "submit", model: genModel, prompt });
+      // Some models answer at once, others hand back a job. Poll only when we
+      // were actually given one — see api/generate.js for why both exist.
+      const started = Date.now();
+      while (res.status === "running" && !genCancelRef.current) {
+        // Two minutes, then stop asking. The job itself keeps running server
+        // side and its result is stored either way; only the waiting ends.
+        if (Date.now() - started > 120000) throw new Error(de ? "Die Erzeugung dauert ungewöhnlich lange. Sie läuft weiter — schau gleich noch mal her." : "This is taking unusually long. It keeps running — check back shortly.");
+        await new Promise(r => setTimeout(r, 2500));
+        if (genCancelRef.current) return;
+        res = await genRequest({ mode: "status", jobId: res.jobId });
+      }
+      if (genCancelRef.current) return;
+      if (res.status !== "completed" || !res.url) throw new Error(res.error || (de ? "Erzeugung fehlgeschlagen." : "Generation failed."));
+
+      // The picture already lives in our storage — the endpoint put it there so
+      // it cannot expire. What is left is filing it as an asset and recording
+      // the bytes, which is exactly what an upload does.
+      trackStorageUpload({ orgId: userOrg.id, userId: session.user.id, bucket: res.bucket || "brand-assets", path: res.storagePath, sizeBytes: res.bytes || 0 });
+      const name = (prompt.slice(0, 60).replace(/[\n\r]+/g, " ").trim() || "KI-Bild") + ".png";
+      const { data, error } = await supabase.from("user_files").insert({
+        user_id: session.user.id, org_id: userOrg.id, project_id: projectId || null, name,
+        mime_type: "image/png", size_bytes: res.bytes || 0, storage_path: res.storagePath,
+        storage_provider: "supabase", public_url: res.url, folder_id: null,
+        metadata: { generated: true, model: res.model || genModel, prompt },
+      }).select(FILE_COLS).single();
+      if (error) throw new Error(error.message);
+      setFiles(prev => [data, ...(prev || [])]);
+      setGenOpen(false); setGenPrompt("");
+    } catch (e) {
+      setGenError(e.message || String(e));
+    }
+    setGenBusy(false);
+    loadGenCredits();
+  };
 
   // ── Import from a website ───────────────────────────────────────────────────
   const [webOpen, setWebOpen] = useState(false);
@@ -18688,6 +18767,91 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <input ref={inputRef} type="file" accept="image/*,video/*" multiple style={{ display: "none" }} onChange={e => { upload(e.target.files); e.target.value = ""; }} />
+
+      {/* Generate with AI. The allowance is shown at all times, not only when it
+          runs low — the cost per model differs by a factor of sixty, and someone
+          choosing between them should see what they are spending. */}
+      {genOpen && createPortal(
+        <div onClick={() => !genBusy && setGenOpen(false)}
+          style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}
+            style={{ width: "min(560px, 100%)", display: "flex", flexDirection: "column", gap: 14,
+              background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 18,
+              boxShadow: "0 30px 80px rgba(0,0,0,0.35)", padding: 22 }}>
+            <div>
+              <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                {appLanguage === "de" ? "Mit KI erstellen" : "Create with AI"}
+              </div>
+              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>
+                {appLanguage === "de" ? "Beschreibe das Bild — es landet danach in deinen Assets." : "Describe the image — it lands in your assets."}
+              </div>
+            </div>
+
+            <textarea value={genPrompt} autoFocus rows={4} disabled={genBusy}
+              onChange={e => setGenPrompt(e.target.value)}
+              placeholder={appLanguage === "de" ? "z. B. Ein minimalistisches Studio-Foto einer Keramikvase auf Sandstein, weiches Morgenlicht" : "e.g. A minimal studio photo of a ceramic vase on sandstone, soft morning light"}
+              style={{ width: "100%", boxSizing: "border-box", padding: "11px 13px", borderRadius: 12, resize: "vertical",
+                border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
+                color: theme.text, fontFamily: FONT, fontSize: 13, lineHeight: 1.55, outline: "none" }} />
+
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>{appLanguage === "de" ? "Modell" : "Model"}</span>
+              {(genCredits?.models || []).map(m => {
+                const on = genModel === m.key;
+                const free = m.microUsd === 0;
+                return (
+                  <div key={m.key} onClick={() => !genBusy && setGenModel(m.key)}
+                    style={{ padding: "6px 11px", borderRadius: 999, cursor: genBusy ? "default" : "pointer",
+                      fontSize: 12, fontFamily: FONT, fontWeight: on ? 600 : 500,
+                      border: `1px solid ${on ? "transparent" : theme.borderFaint}`,
+                      background: on ? "#15151c" : "transparent", color: on ? "#fff" : theme.text }}>
+                    {m.label}
+                    <span style={{ opacity: 0.6, marginLeft: 6, fontWeight: 400 }}>
+                      {free ? (appLanguage === "de" ? "gratis" : "free") : `$${(m.microUsd / 1e6).toFixed(3)}`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Always-on allowance readout. */}
+            {genCredits && (() => {
+              const pct = genCredits.limit ? Math.min(100, Math.round((genCredits.used / genCredits.limit) * 100)) : 0;
+              const low = genCredits.limit > 0 && genCredits.left <= genCredits.limit * 0.2;
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, fontFamily: FONT, color: low ? "#E86767" : theme.textDim }}>
+                    <span>{appLanguage === "de" ? "KI-Guthaben diesen Monat" : "AI allowance this month"}</span>
+                    <span>${(genCredits.left / 1e6).toFixed(2)} {appLanguage === "de" ? "von" : "of"} ${(genCredits.limit / 1e6).toFixed(2)}</span>
+                  </div>
+                  <div style={{ height: 5, borderRadius: 999, background: theme.borderFaint, overflow: "hidden" }}>
+                    <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: low ? "#E86767" : theme.text, transition: "width .3s ease" }} />
+                  </div>
+                </div>
+              );
+            })()}
+
+            {genError && (
+              <div style={{ fontSize: 12, fontFamily: FONT, color: "#E86767", lineHeight: 1.5 }}>{genError}</div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <motion.button whileTap={{ scale: 0.97 }}
+                onClick={() => { if (genBusy) { genCancelRef.current = true; setGenBusy(false); } else setGenOpen(false); }}
+                style={{ padding: "9px 16px", borderRadius: 11, border: `1px solid ${theme.borderFaint}`, background: "transparent",
+                  color: theme.text, fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                {genBusy ? (appLanguage === "de" ? "Abbrechen" : "Cancel") : (appLanguage === "de" ? "Schließen" : "Close")}
+              </motion.button>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={runGeneration} disabled={genBusy || !genPrompt.trim()}
+                style={{ padding: "9px 18px", borderRadius: 11, border: "none", background: "#15151c", color: "#fff",
+                  fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
+                  cursor: genBusy || !genPrompt.trim() ? "default" : "pointer", opacity: genBusy || !genPrompt.trim() ? 0.55 : 1 }}>
+                {genBusy ? (appLanguage === "de" ? "Erzeugt…" : "Generating…") : (appLanguage === "de" ? "Erzeugen" : "Generate")}
+              </motion.button>
+            </div>
+          </div>
+        </div>, document.body)}
 
       {/* Import from a website: paste a URL, pick from what the page references. */}
       {webOpen && createPortal(
