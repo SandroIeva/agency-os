@@ -9883,6 +9883,13 @@ function setCurrentEntitlements(e) {
   currentEntitlements = e ? { ...FREE_ENTITLEMENTS, ...e, limits: e.limits || limitsFor(e.plan) } : FREE_ENTITLEMENTS;
 }
 
+// Jump to the billing settings from anywhere. Registered by the app root, which
+// is the only component that can switch views — the alternative is threading a
+// callback through every layer in between for a link that a handful of places
+// need. Same reasoning as the entitlements mirror above.
+let openBillingSettings = () => {};
+function setBillingSettingsOpener(fn) { openBillingSettings = typeof fn === "function" ? fn : () => {}; }
+
 // Primary action button fill. Anthracite on light, INVERTED on dark (near-white
 // pill, anthracite label) — the same rule the main nav's selected pill follows.
 // Defined once so the colour can't drift back into per-button hex codes; purple
@@ -15973,6 +15980,12 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
               ? "Social-Accounts verbinden ist Teil eines bezahlten Plans — in der Testphase noch nicht enthalten."
               : "Connecting social accounts is part of a paid plan — not included during the trial."}
           </span>
+          <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+            onClick={() => openBillingSettings()}
+            style={{ ...primaryBtn(darkMode), padding: "7px 15px", borderRadius: 999, border: "none", flexShrink: 0,
+              fontFamily: FONT, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            {de ? "Plan wählen" : "Choose a plan"}
+          </motion.button>
         </div>
       )}
       {errorText && (
@@ -31940,6 +31953,10 @@ export default function CircularMenu() {
   useLayoutEffect(() => {
     document.documentElement.style.setProperty("--i7-banner", `${bannerH}px`);
   }, [bannerH]);
+  useEffect(() => {
+    setBillingSettingsOpener(() => { setSettingsTab("account"); setCurrentView("settings"); });
+    return () => setBillingSettingsOpener(null);
+  }, []);
 
   return (
     <div ref={containerRef} style={{
