@@ -4209,7 +4209,11 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
-      style={{ position: "fixed", inset: 0, background: theme.bg, display: "flex", flexDirection: "row", zIndex: 5 }}
+      // absolute, not fixed — fixed anchors to the VIEWPORT, so this view alone
+      // ignored the offset that moves the app below the read-only banner and
+      // slid underneath it. Every other view shell is absolute and sits inside
+      // the app root, which is what makes that offset work for all of them.
+      style={{ position: "absolute", inset: 0, background: theme.bg, display: "flex", flexDirection: "row", zIndex: 5 }}
     >
       {/* Left Sidebar */}
       <div style={{
