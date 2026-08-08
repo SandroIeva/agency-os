@@ -11,7 +11,7 @@ written to during the transition but nothing reads it.
 
 ## Plan limits
 
-| | Free | Starter | Pro | Agency |
+| | Free | Basic | Pro | Max |
 |---|---|---|---|---|
 | Storage (per account) | 1 GB | 5 GB | 25 GB | 100 GB |
 | Seats (per account) | 1 | 1 | 5 | 12 |
@@ -24,7 +24,7 @@ the enforcement triggers read. Enforcement genuinely runs in two runtimes that
 cannot call each other, so a limit change has to be made in **both** places.
 
 New signups get a **7-day trial without a credit card**, started by a trigger on
-`organizations` insert and granting Starter entitlements. An expired trial is
+`organizations` insert and granting Basic entitlements. An expired trial is
 still stored as `status = 'trialing'`; the expiry is resolved in
 `resolveEntitlements()` and `account_plan()`, not by a scheduled job.
 
@@ -39,9 +39,9 @@ annual price is charged once per year; the UI displays its monthly equivalent.
 
 | Product | Monthly price | Annual price |
 | --- | ---: | ---: |
-| Starter | EUR 15 / month | EUR 144 / year |
-| Pro | EUR 24 / month | EUR 240 / year |
-| Agency | EUR 85 / month | EUR 864 / year |
+| Basic (key `starter`) | EUR 15 / month | EUR 144 / year |
+| Pro (key `pro`) | EUR 24 / month | EUR 240 / year |
+| Max (key `agency`) | EUR 85 / month | EUR 864 / year |
 
 Connectable social accounts per plan — 1 / 2 / 5, and none at all on a cardless
 trial. These are a direct cost: the upstream provider bills per connected
@@ -102,7 +102,7 @@ allow customers to update payment methods, view invoices, and cancel their
 subscription. If plan switching is enabled, add all six recurring prices to the
 portal product catalogue.
 
-Plan switching matters more than it used to: an upgrade from Starter to Pro runs
+Plan switching matters more than it used to: an upgrade from Basic to Pro runs
 through the portal, so all six prices must be in its product catalogue. Without
 that, the only way to change plan is to cancel and buy again.
 

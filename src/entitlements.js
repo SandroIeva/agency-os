@@ -71,7 +71,12 @@ export const PLAN_PRICES = {
   agency: { monthly: 85, annual: 72 },
 };
 
-export const PLAN_NAMES = { free: "Free", starter: "Starter", pro: "Pro", agency: "Agency" };
+// Display names only. The KEYS are permanent: they are values in
+// billing_accounts.plan and plan_limits, they build the STRIPE_PRICE_* env var
+// names, and they appear in the pricing page's checkout links. Renaming a plan
+// means changing the right-hand side here and in Stripe's product name —
+// never the left.
+export const PLAN_NAMES = { free: "Free", starter: "Basic", pro: "Pro", agency: "Max" };
 
 function gb(bytes) {
   return Math.round(bytes / STORAGE_GB) + " GB";
