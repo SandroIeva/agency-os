@@ -10348,7 +10348,9 @@ function ImageCreditsBar({ orgId, theme, darkMode, appLanguage = "de" }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: theme.text }}>{de ? "Bildgenerierung" : "Image generation"}</span>
           <span style={{ fontSize: 13, fontWeight: 500, color: exhausted ? "#E86767" : theme.textDim }}>
-            {data == null ? "…" : `${fmt(left)} ${de ? "von" : "of"} ${fmt(limit)}`}
+            {/* The unit belongs on the number: "10.000" alone reads as ten
+                thousand images, which is off by a factor of seventy. */}
+            {data == null ? "…" : `${fmt(left)} / ${fmt(limit)} Credits`}
           </span>
         </div>
         <div style={{ fontSize: 11, color: theme.textFaint, marginBottom: 12, lineHeight: 1.5 }}>
@@ -18900,8 +18902,9 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                     <span>{appLanguage === "de" ? "KI-Credits diesen Monat" : "AI credits this month"}</span>
                     <span>
                       {genCredits.left.toLocaleString(appLanguage === "de" ? "de-DE" : "en-US")}
-                      {" "}{appLanguage === "de" ? "von" : "of"}{" "}
+                      {" / "}
                       {genCredits.limit.toLocaleString(appLanguage === "de" ? "de-DE" : "en-US")}
+                      {" Credits"}
                     </span>
                   </div>
                   <div style={{ height: 5, borderRadius: 999, background: theme.borderFaint, overflow: "hidden" }}>
