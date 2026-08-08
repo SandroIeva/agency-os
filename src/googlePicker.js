@@ -30,23 +30,63 @@ const pickerOrigin = () =>
 // it disappears when the picker does.
 const isFirefox = () => typeof navigator !== "undefined" && /firefox/i.test(navigator.userAgent);
 
-function showThirdPartyCookieHint(locale) {
-  if (!isFirefox() || typeof document === "undefined") return () => {};
+// A way out of the picker that does not depend on the picker.
+//
+// Google renders its own error page inside the iframe when something upsets it —
+// most reliably Firefox's tracking protection, which isolates the Google session
+// the picker needs and makes it report "the API developer key is invalid". That
+// page has no close control, so the overlay became a dead end with no way back
+// to the app.
+//
+// We build the picker, so we hold the reference: this bar sits above it with a
+// close button, and Escape does the same. It is attached for every picker, in
+// every browser — an error we have not seen yet must not be able to trap anyone
+// either. On Firefox it also carries the explanation, since there the cause is
+// known and fixable by the user.
+function attachPickerEscape({ locale, onCancel }) {
+  if (typeof document === "undefined") return () => {};
   const de = locale === "de";
-  const el = document.createElement("div");
-  el.setAttribute("role", "status");
-  el.style.cssText = [
+  const bar = document.createElement("div");
+  bar.setAttribute("role", "status");
+  bar.style.cssText = [
     "position:fixed", "left:50%", "bottom:24px", "transform:translateX(-50%)",
-    "z-index:2147483647", "max-width:min(520px,92vw)", "box-sizing:border-box",
-    "padding:12px 16px", "border-radius:13px", "background:#15151c", "color:#fff",
+    "z-index:2147483647", "max-width:min(560px,92vw)", "box-sizing:border-box",
+    "display:flex", "align-items:center", "gap:14px",
+    "padding:12px 12px 12px 16px", "border-radius:13px",
+    "background:#15151c", "color:#fff",
     "font:400 12.5px/1.55 'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
     "box-shadow:0 16px 44px rgba(0,0,0,0.34)", "border:1px solid rgba(255,255,255,0.12)",
   ].join(";");
-  el.textContent = de
-    ? "Zeigt Google hier einen Fehler zum „Entwicklerschlüssel“? Das ist Firefox’ Schutz vor Aktivitätenverfolgung — er trennt die Google-Sitzung ab. Schild-Symbol links in der Adresszeile → „Schutz für diese Website deaktivieren“. Oder die Datei direkt hochladen, das ist davon nicht betroffen."
-    : "Is Google showing a “developer key” error? That is Firefox’s tracking protection cutting off the Google session. Click the shield in the address bar → “Turn off protection for this site”. Or upload the file directly — that path is unaffected.";
-  document.body.appendChild(el);
-  return () => { try { el.remove(); } catch (_) {} };
+
+  if (isFirefox()) {
+    const note = document.createElement("span");
+    note.style.cssText = "flex:1;min-width:0";
+    note.textContent = de
+      ? "Zeigt Google einen Fehler zum „Entwicklerschlüssel“? Das ist Firefox’ Schutz vor Aktivitätenverfolgung — Schild-Symbol in der Adresszeile → „Schutz für diese Website deaktivieren“. Der direkte Datei-Upload ist davon nicht betroffen."
+      : "Is Google showing a “developer key” error? That is Firefox’s tracking protection — click the shield in the address bar → “Turn off protection for this site”. Uploading a file directly is unaffected.";
+    bar.appendChild(note);
+  }
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = de ? "Schließen" : "Close";
+  btn.style.cssText = [
+    "flex-shrink:0", "padding:7px 15px", "border-radius:999px", "border:none",
+    "background:#fff", "color:#15151c", "cursor:pointer",
+    "font:600 12px 'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+  ].join(";");
+  btn.addEventListener("click", onCancel);
+  bar.appendChild(btn);
+
+  // Capture phase: the picker's iframe would otherwise swallow the key.
+  const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); onCancel(); } };
+  window.addEventListener("keydown", onKey, true);
+  document.body.appendChild(bar);
+
+  return () => {
+    window.removeEventListener("keydown", onKey, true);
+    try { bar.remove(); } catch (_) {}
+  };
 }
 
 let pickerLoaded = false;
@@ -77,15 +117,11 @@ function loadPickerOnce() {
  * @param {string[]} [opts.mimeTypes] — restrict to specific MIME types
  */
 export async function openGooglePicker({ accessToken, locale = "en", multi = false, mimeTypes } = {}) {
-  const hideHint = showThirdPartyCookieHint(locale);
-  try {
-    return await openGooglePickerInner({ accessToken, locale, multi, mimeTypes });
-  } finally {
-    hideHint();
-  }
+  return withEscape(locale, [], (register) =>
+    openGooglePickerInner({ accessToken, locale, multi, mimeTypes, register }));
 }
 
-async function openGooglePickerInner({ accessToken, locale = "en", multi = false, mimeTypes } = {}) {
+async function openGooglePickerInner({ accessToken, locale = "en", multi = false, mimeTypes, register } = {}) {
   if (!accessToken) throw new Error("No access token — please sign in with Google first");
   if (!VITE_GOOGLE_API_KEY) throw new Error("VITE_GOOGLE_API_KEY not configured");
 
@@ -133,6 +169,7 @@ async function openGooglePickerInner({ accessToken, locale = "en", multi = false
       if (VITE_GOOGLE_APP_ID) builder.setAppId(VITE_GOOGLE_APP_ID);
 
       const picker = builder.build();
+      register?.(picker);
       picker.setVisible(true);
     } catch (e) {
       reject(e);
@@ -147,15 +184,32 @@ async function openGooglePickerInner({ accessToken, locale = "en", multi = false
  * Resolves with: { id, name, type: 'my_drive' | 'shared_drive', driveId? } or null on cancel.
  */
 export async function openGoogleFolderPicker({ accessToken, locale = "en" } = {}) {
-  const hideHint = showThirdPartyCookieHint(locale);
-  try {
-    return await openGoogleFolderPickerInner({ accessToken, locale });
-  } finally {
-    hideHint();
-  }
+  return withEscape(locale, null, (register) =>
+    openGoogleFolderPickerInner({ accessToken, locale, register }));
 }
 
-async function openGoogleFolderPickerInner({ accessToken, locale = "en" } = {}) {
+// Runs `open` with an escape bar attached. `cancelValue` is what the caller gets
+// when the user closes it — the same value a normal cancel produces, so callers
+// need no new branch. Whichever settles first wins: a real pick, a real cancel,
+// or the way out.
+function withEscape(locale, cancelValue, open) {
+  let picker = null;
+  let detach = () => {};
+  const register = (p) => { picker = p; };
+  const escaped = new Promise((resolve) => {
+    detach = attachPickerEscape({
+      locale,
+      onCancel: () => {
+        try { picker?.setVisible(false); } catch (_) {}
+        try { picker?.dispose?.(); } catch (_) {}
+        resolve(cancelValue);
+      },
+    });
+  });
+  return Promise.race([open(register), escaped]).finally(() => detach());
+}
+
+async function openGoogleFolderPickerInner({ accessToken, locale = "en", register } = {}) {
   if (!accessToken) throw new Error("No access token — please sign in with Google first");
   if (!VITE_GOOGLE_API_KEY) throw new Error("VITE_GOOGLE_API_KEY not configured");
 
@@ -212,6 +266,7 @@ async function openGoogleFolderPickerInner({ accessToken, locale = "en" } = {}) 
       if (VITE_GOOGLE_APP_ID) builder.setAppId(VITE_GOOGLE_APP_ID);
 
       const picker = builder.build();
+      register?.(picker);
       picker.setVisible(true);
     } catch (e) {
       reject(e);
