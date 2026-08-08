@@ -13,6 +13,15 @@ export const STORAGE_GB = 1024 * 1024 * 1024;
 
 // `null` means unlimited. (Not Infinity — this crosses JSON, where Infinity
 // serializes to null anyway; being explicit avoids a silent surprise.)
+// `imageCreditsMicroUsd` is the monthly allowance for AI generation, in
+// MICRO-dollars: a single image can cost a fraction of a cent, and that is
+// exactly the range where floating point starts lying. The allowance is spent
+// at the real per-model price, so switching provider or model changes what it
+// buys without changing the promise.
+//
+// A cardless trial gets none, for the same reason it gets no social accounts —
+// see the zeroing in resolveEntitlements. Both cost us money per use.
+
 // `socialAccounts` is how many social profiles may be CONNECTED. Connecting one
 // costs us money at the upstream provider, so it is the one limit a cardless
 // trial does not get any of — see the zeroing in resolveEntitlements. It is
@@ -28,6 +37,7 @@ export const PLAN_ENTITLEMENTS = {
     workspaces: 1,
     projects: 0,
     socialAccounts: 0,
+    imageCreditsMicroUsd: 0,
     collaboration: false,
     readOnly: true,
   },
@@ -37,6 +47,7 @@ export const PLAN_ENTITLEMENTS = {
     workspaces: 1,
     projects: 3,
     socialAccounts: 1,
+    imageCreditsMicroUsd: 2000000,
     collaboration: false,
     readOnly: false,
   },
@@ -46,6 +57,7 @@ export const PLAN_ENTITLEMENTS = {
     workspaces: 5,
     projects: null,
     socialAccounts: 2,
+    imageCreditsMicroUsd: 4000000,
     collaboration: true,
     readOnly: false,
   },
@@ -55,6 +67,7 @@ export const PLAN_ENTITLEMENTS = {
     workspaces: null,
     projects: null,
     socialAccounts: 5,
+    imageCreditsMicroUsd: 10000000,
     collaboration: true,
     readOnly: false,
   },
@@ -200,6 +213,8 @@ export function resolveEntitlements(account, now = Date.now()) {
     // us upstream the moment it happens — so that one allowance is withheld
     // until there is a real subscription behind it. A comped account returns
     // earlier, above, and keeps its plan's allowance: that grant is deliberate.
-    limits: paidPlan ? limitsFor(plan) : { ...limitsFor(plan), socialAccounts: 0 },
+    limits: paidPlan
+      ? limitsFor(plan)
+      : { ...limitsFor(plan), socialAccounts: 0, imageCreditsMicroUsd: 0 },
   };
 }
