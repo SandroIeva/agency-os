@@ -4209,11 +4209,14 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
-      // absolute, not fixed — fixed anchors to the VIEWPORT, so this view alone
-      // ignored the offset that moves the app below the read-only banner and
-      // slid underneath it. Every other view shell is absolute and sits inside
-      // the app root, which is what makes that offset work for all of them.
-      style={{ position: "absolute", inset: 0, background: theme.bg, display: "flex", flexDirection: "row", zIndex: 5 }}
+      // Covers the viewport, offset at the top by the read-only banner's height
+      // (0 when there is none). It cannot simply be absolute like the other view
+      // shells: those fill the app's middle column, whose sibling is the bottom
+      // menu — Timeline is built to run the full height, and confining it to
+      // that column left its horizontal scrollbar stranded above the menu with
+      // a visible seam under it.
+      style={{ position: "fixed", top: "var(--i7-banner, 0px)", left: 0, right: 0, bottom: 0,
+        background: theme.bg, display: "flex", flexDirection: "row", zIndex: 5 }}
     >
       {/* Left Sidebar */}
       <div style={{
@@ -31862,11 +31865,16 @@ export default function CircularMenu() {
   useLayoutEffect(() => {
     if (!showReadOnlyBanner) { setBannerH(0); return undefined; }
     const measure = () => setBannerH(bannerRef.current?.offsetHeight || 0);
+    // Also published as a CSS variable so viewport-anchored layers can clear the
+    // banner without having the height threaded down to them as a prop.
     measure();
     const ro = new ResizeObserver(measure);
     if (bannerRef.current) ro.observe(bannerRef.current);
     return () => ro.disconnect();
   }, [showReadOnlyBanner, appLanguage]);
+  useLayoutEffect(() => {
+    document.documentElement.style.setProperty("--i7-banner", `${bannerH}px`);
+  }, [bannerH]);
 
   return (
     <div ref={containerRef} style={{
