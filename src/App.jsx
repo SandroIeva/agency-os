@@ -17336,7 +17336,7 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
 // a Grid (overview of everything) and a freeform Canvas (drag images around).
 // Images upload to the public brand-assets bucket so their URLs can later be
 // reused as reference inputs for image/video generation (Higgsfield etc.).
-function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, docFullscreen, setDocFullscreen, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null, embedded = false, headerSlotRef = null, projectName = "", projectLogoUrl = "", projectColor = "", onOpenWhiteboard = null }) {
+function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, assetDeepLink, docFullscreen, setDocFullscreen, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null, embedded = false, headerSlotRef = null, projectName = "", projectLogoUrl = "", projectColor = "", onOpenWhiteboard = null }) {
   // Embedded: action buttons portal into BrandView's header slot once it exists.
   const [assetSlotReady, setAssetSlotReady] = useState(false);
   useEffect(() => { setAssetSlotReady(true); }, []);
@@ -17347,6 +17347,10 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const [docOpen, setDocOpen] = useState(false); // a document is open in the editor → hide header/tabs
   // A notification deep-link → jump to the Documents tab so DocsTab can open it.
   useEffect(() => { if (docDeepLink?.documentId) setTab("docs"); }, [docDeepLink?.ts]); // eslint-disable-line
+  // Keyed on `ts`, not on the url: the link stays set while the view is open, and
+  // an effect that watched the value alone would re-fire on every unrelated
+  // render. Same guard the document link needs.
+  useEffect(() => { if (assetDeepLink?.url) setTab("creations"); }, [assetDeepLink?.ts]); // eslint-disable-line
   // Brand identity for the header (logo + name), to stay consistent with the
   // Brand views: "<Brand> Assets".
   const [brand, setBrand] = useState(null);
@@ -18039,7 +18043,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           {tab === "creations" && (
             <CreationsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} grad={grad} glow={glow} t={t}
               appLanguage={appLanguage} onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive} orgMembers={orgMembers} projectId={projectId}
-              pickRef={creationsPick} drivePickRef={creationsDrivePick} newFolderRef={creationsNewFolder} webImportRef={creationsWebImport} generateRef={creationsGenerate} onUploadingChange={setCreationsUploading}
+              pickRef={creationsPick} drivePickRef={creationsDrivePick} newFolderRef={creationsNewFolder} webImportRef={creationsWebImport} generateRef={creationsGenerate} deepLink={assetDeepLink} onUploadingChange={setCreationsUploading}
               getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin}
               llmProvider={llmProvider} llmKeys={llmKeys} />
           )}
@@ -18380,7 +18384,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 // Top-level component (not inline) so framer-motion never re-mounts it per render.
 // Creations tab — gallery of the workspace's images AND videos (AI-generated +
 // user uploads). Filter by media type; upload your own via the button.
-function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, drivePickRef, newFolderRef, webImportRef, generateRef, onUploadingChange, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null }) {
+function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, drivePickRef, newFolderRef, webImportRef, generateRef, deepLink, onUploadingChange, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null }) {
   const memberById = useMemo(() => {
     const m = {}; (orgMembers || []).forEach(om => { if (om.user_id) m[om.user_id] = { ...(om.profiles || {}) }; }); return m;
   }, [orgMembers]);
@@ -18607,6 +18611,21 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   }, [userOrg?.id, projectId]);
   useEffect(() => { load(); }, [load]);
   loadRef.current = load;
+
+  // Opened from a notification: show that exact picture, not just the list it
+  // sits in. The list may still be loading when the link arrives, so this waits
+  // for the file to appear rather than giving up on the first miss — and the
+  // handled-ref stops it reopening on every later render, which is the trap
+  // these deep links have here.
+  const deepLinkDone = useRef(null);
+  useEffect(() => {
+    if (!deepLink?.url || !deepLink?.ts) return;
+    if (deepLinkDone.current === deepLink.ts) return;
+    const hit = (files || []).find(f => f.public_url === deepLink.url);
+    if (!hit) return;
+    deepLinkDone.current = deepLink.ts;
+    setZoom(hit);
+  }, [deepLink?.ts, deepLink?.url, files]);
 
   // Folders (user_folders) for the move-to-folder dropdown in the large view.
   const loadFolders = useCallback(async () => {
@@ -29140,6 +29159,7 @@ export default function CircularMenu() {
   const [onboardingError, setOnboardingError] = useState(null);
   const [orgMembers, setOrgMembers] = useState([]);          // team members for chat etc.
   const [docDeepLink, setDocDeepLink] = useState(null);      // open a document from a notification: { documentId, blockId, ts }
+  const [assetDeepLink, setAssetDeepLink] = useState(null);  // open an asset from a notification: { url, ts }
   const [whiteboardId, setWhiteboardId] = useState(null);    // board to open in the Brainstorm whiteboard view
   const [whiteboardReturn, setWhiteboardReturn] = useState("dashboard"); // view to return to when leaving the whiteboard
   const [docFullscreen, setDocFullscreen] = useState(false); // document editor in full-viewport mode
@@ -32977,6 +32997,12 @@ export default function CircularMenu() {
                               else if (n.type === "calendar_reminder") { setCurrentView("calendar"); setNotifOpen(false); }
                               else if (n.type === "project_added") { setCurrentView("projects"); setNotifOpen(false); }
                               else if (n.type === "comment_mention" && n.metadata?.document_id) { setDocDeepLink({ documentId: n.metadata.document_id, blockId: n.metadata.block_id || null, ts: Date.now() }); setCurrentView("assets"); setNotifOpen(false); }
+                              // A finished image opens where it lives, showing the
+                              // picture itself. Landing on the asset list and
+                              // leaving someone to find it would be half an
+                              // answer — the notification already knows which
+                              // one it means.
+                              else if (n.type === "image_ready" && n.metadata?.url) { setAssetDeepLink({ url: n.metadata.url, ts: Date.now() }); setCurrentView("assets"); setNotifOpen(false); }
                               else if (n.type === "reminder") { setNotifOpen(false); }
                             }}
                             style={{
@@ -33104,7 +33130,7 @@ export default function CircularMenu() {
         {/* ASSETS VIEW (Brand → Assets): Moodboards / Creations / Inspirations */}
         <AnimatePresence>
           {currentView === "assets" && (
-            <AssetsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive} orgMembers={orgMembers} createNotification={createNotification} docDeepLink={docDeepLink} docFullscreen={docFullscreen} setDocFullscreen={setDocFullscreen} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} llmProvider={llmProvider} llmKeys={llmKeys} onOpenWhiteboard={openWhiteboardFromAssets} onBack={() => setCurrentView("dashboard")} />
+            <AssetsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive} orgMembers={orgMembers} createNotification={createNotification} docDeepLink={docDeepLink} assetDeepLink={assetDeepLink} docFullscreen={docFullscreen} setDocFullscreen={setDocFullscreen} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} llmProvider={llmProvider} llmKeys={llmKeys} onOpenWhiteboard={openWhiteboardFromAssets} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
