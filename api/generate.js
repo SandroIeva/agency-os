@@ -28,12 +28,46 @@ const GATEWAY = "https://gateway.pixazo.ai";
 // One table, because a price that appears twice eventually disagrees with
 // itself. Prices from Pixazo's published rates — when they change, they change
 // HERE and nowhere else.
+// `body` builds the request: the models do not share a request shape any more
+// than they share an endpoint. GPT Image 2 in particular is priced by size AND
+// quality, so those are pinned here — asking for the cheap variant is what makes
+// the price below true.
+//
+// Listed cheapest first; the dialog renders them in this order.
 const MODELS = {
-  "flux-1-schnell": { path: "/flux-1-schnell/v1/getData", microUsd: 0, label: "Flux Schnell" },
-  "flux-2-klein":   { path: "/flux-2-klein-4b/v1/generateImage", microUsd: 692, label: "Flux 2 Klein" },
-  "flux-2-dev":     { path: "/flux-2-dev/v1/generateT2I", microUsd: 12000, label: "Flux 2 Dev" },
-  "flux-dev":       { path: "/flux-dev/v1/dev/textToImage", microUsd: 25000, label: "Flux Dev" },
-  "flux-pro":       { path: "/flux-pro/v1/pro/textToImage", microUsd: 40000, label: "FLUX Pro" },
+  "flux-1-schnell": {
+    path: "/flux-1-schnell/v1/getData", microUsd: 0, label: "Flux Schnell",
+    body: (prompt) => ({ prompt }),
+  },
+  "flux-2-klein": {
+    path: "/flux-2-klein-4b/v1/generateImage", microUsd: 692, label: "Flux 2 Klein",
+    body: (prompt) => ({ prompt }),
+  },
+  "gpt-image-2": {
+    path: "/gpt-image-2/v1/text-to-image", microUsd: 5000, label: "GPT Image 2",
+    // 1536x1024 at low quality is the $0.005 tier. Medium at the same size is
+    // eight times that, so the two fields are not cosmetic.
+    body: (prompt) => ({ prompt, image_size: "1536x1024", quality: "low", num_images: 1, output_format: "png" }),
+  },
+  "flux-2-dev": {
+    path: "/flux-2-dev/v1/generateT2I", microUsd: 12000, label: "Flux 2 Dev",
+    body: (prompt) => ({ prompt }),
+  },
+  "flux-dev": {
+    path: "/flux-dev/v1/dev/textToImage", microUsd: 25000, label: "Flux Dev",
+    body: (prompt) => ({ prompt }),
+  },
+  "flux-pro": {
+    path: "/flux-pro/v1/pro/textToImage", microUsd: 40000, label: "FLUX Pro",
+    body: (prompt) => ({ prompt }),
+  },
+  "nano-banana-2": {
+    // Priced per resolution — $0.047 at 0.5K, $0.070 at 1K. The default is not
+    // documented, so the higher one is charged: guessing low would mean paying
+    // the difference ourselves on every image.
+    path: "/nano-banana-2/v1/text-to-image", microUsd: 70350, label: "Nano Banana 2",
+    body: (prompt) => ({ prompt }),
+  },
 };
 const DEFAULT_MODEL = "flux-1-schnell";
 
@@ -197,7 +231,7 @@ export default async function handler(req) {
 
     let payload;
     try {
-      const res = await pixazo(model.path, { prompt });
+      const res = await pixazo(model.path, model.body(prompt));
       payload = await res.json().catch(() => ({}));
       if (!res.ok) {
         // 429 is the provider throttling us, most likely on a free model. Say
