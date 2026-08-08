@@ -23,6 +23,7 @@ import { PLAN_ENTITLEMENTS, limitsFor, resolveEntitlements } from "../src/entitl
 export const config = { runtime: "edge" };
 
 const GATEWAY = "https://gateway.pixazo.ai";
+const ASSET_BUCKET = "user-files";
 
 // One credit is a tenth of a cent of provider cost. Everything the customer sees
 // is credits; micro-USD stays internal, as the record of what we actually paid.
@@ -214,9 +215,12 @@ async function persistImage(db, { url, orgId }) {
   const type = blob.type || "image/png";
   const ext = (type.split("/")[1] || "png").split("+")[0].replace("jpeg", "jpg");
   const path = `generated/${orgId}/${crypto.randomUUID()}.${ext}`;
-  const { error } = await db.storage.from("brand-assets").upload(path, blob, { contentType: type });
+  // Same bucket as every other asset. They are assets — putting them somewhere
+  // else meant the app's own delete looked in the wrong place, removed the row
+  // and left the file behind.
+  const { error } = await db.storage.from(ASSET_BUCKET).upload(path, blob, { contentType: type });
   if (error) throw new Error(error.message);
-  const { data } = db.storage.from("brand-assets").getPublicUrl(path);
+  const { data } = db.storage.from(ASSET_BUCKET).getPublicUrl(path);
   return { publicUrl: data.publicUrl, path, bytes: blob.size };
 }
 
@@ -225,6 +229,23 @@ async function persistImage(db, { url, orgId }) {
 // user. The client used to do the last three, which meant closing the dialog
 // lost the result — the image existed in storage and nothing pointed at it.
 async function completeJob(db, job, imageUrl) {
+  // Claim it first. Completion has two triggers — the status poll and the
+  // provider's webhook — and they can arrive together. Checking the status and
+  // then acting is not enough: both readers see "running", both proceed, and the
+  // picture gets downloaded, stored and filed twice under different ids. That
+  // happened, two seconds apart.
+  //
+  // `update … where claimed_at is null` is atomic, so exactly one caller gets a
+  // row back and the other steps aside.
+  const { data: claimed } = await db
+    .from("generation_jobs")
+    .update({ claimed_at: new Date().toISOString() })
+    .eq("id", job.id)
+    .is("claimed_at", null)
+    .select("id")
+    .maybeSingle();
+  if (!claimed) return null;   // someone else is finishing it
+
   const model = MODELS[job.model] || { microUsd: 0 };
   const credits = creditsFor(model.microUsd);
   const stored = await persistImage(db, { url: imageUrl, orgId: job.org_id });
@@ -236,13 +257,14 @@ async function completeJob(db, job, imageUrl) {
     user_id: job.user_id, org_id: job.org_id, name,
     mime_type: "image/png", size_bytes: stored.bytes, storage_path: stored.path,
     storage_provider: "supabase", public_url: stored.publicUrl,
-    metadata: { generated: true, model: job.model, prompt: job.prompt },
+    // The bucket travels with the row: deletion should never have to infer it.
+    metadata: { generated: true, model: job.model, prompt: job.prompt, bucket: ASSET_BUCKET },
   });
 
   // The storage ledger. Skipping this is how the ledger drifts from reality —
   // an upload does it, so a generation must too.
   await db.from("workspace_files").upsert(
-    { org_id: job.org_id, bucket: "brand-assets", path: stored.path, size_bytes: stored.bytes, created_by: job.user_id },
+    { org_id: job.org_id, bucket: ASSET_BUCKET, path: stored.path, size_bytes: stored.bytes, created_by: job.user_id },
     { onConflict: "bucket,path" },
   );
 
@@ -304,7 +326,7 @@ export default async function handler(req) {
     const image = findImage(payload);
     await db0.from("generation_jobs").update({ provider_status: state || "webhook", updated_at: new Date().toISOString() }).eq("id", job.id);
     if (image) {
-      try { await completeJob(db0, job, image); return json({ ok: true }); }
+      try { const done = await completeJob(db0, job, image); return json({ ok: true, claimed: Boolean(done) }); }
       catch (e) {
         await db0.from("generation_jobs").update({ status: "failed", error: e.message, updated_at: new Date().toISOString() }).eq("id", job.id);
         return json({ ok: false, error: e.message });
@@ -413,6 +435,10 @@ export default async function handler(req) {
     if (immediate) {
       try {
         const done = await completeJob(db, job, immediate);
+        if (!done) {
+          const { data: fresh } = await db.from("generation_jobs").select("result_url,status").eq("id", job.id).maybeSingle();
+          return json({ jobId: job.id, status: fresh?.status || "running", url: fresh?.result_url || null });
+        }
         return json({ jobId: job.id, status: "completed", url: done.url });
       } catch (e) {
         await db.from("generation_jobs").update({ status: "failed", error: e.message, updated_at: new Date().toISOString() }).eq("id", job.id);
@@ -481,6 +507,10 @@ export default async function handler(req) {
     if (image) {
       try {
         const done = await completeJob(db, job, image);
+        if (!done) {
+          const { data: fresh } = await db.from("generation_jobs").select("result_url,status").eq("id", job.id).maybeSingle();
+          return json({ jobId: job.id, status: fresh?.status || "running", url: fresh?.result_url || null });
+        }
         return json({ jobId: job.id, status: "completed", url: done.url });
       } catch (e) {
         await db.from("generation_jobs").update({ status: "failed", error: e.message, updated_at: new Date().toISOString() }).eq("id", job.id);

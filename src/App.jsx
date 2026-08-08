@@ -18807,7 +18807,11 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     const f = confirmDel; setConfirmDel(null); if (!f) return;
     setFiles(prev => (prev || []).filter(x => x.id !== f.id));
     if (f.storage_provider === "supabase" && f.storage_path) {
-      try { await supabase.storage.from("user-files").remove([f.storage_path]); trackStorageDelete({ bucket: "user-files", paths: [f.storage_path] }); } catch (_) {}
+      // The bucket is whatever the row says, falling back to the one everything
+      // used before generated images existed. Hardcoding it deleted the database
+      // row while leaving the file — and the ledger entry — behind.
+      const bucket = f.metadata?.bucket || "user-files";
+      try { await supabase.storage.from(bucket).remove([f.storage_path]); trackStorageDelete({ bucket, paths: [f.storage_path] }); } catch (_) {}
     }
     await supabase.from("user_files").delete().eq("id", f.id);
   };
