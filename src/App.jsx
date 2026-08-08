@@ -10171,7 +10171,11 @@ function StorageUsageBar({ orgId, theme, appLanguage = "de" }) {
   }, [orgId]);
   const pct = limit ? Math.min(100, Math.round(((used || 0) / limit) * 100)) : 0;
   const danger = pct >= 90;
-  const barColor = danger ? "#E86767" : (pct >= 70 ? "#E0A64D" : "#15151c");
+  // The normal fill follows the theme's foreground instead of a fixed #15151c:
+  // that value is anthracite, which on the dark card is invisible — the bar
+  // looked empty no matter how full it was. The warning colours are legible on
+  // both backgrounds and stay as they are.
+  const barColor = danger ? "#E86767" : (pct >= 70 ? "#E0A64D" : theme.text);
   return (
     <div style={{ marginTop: 24, fontFamily: FONT }}>
       {/* Grey section label above the card — same pattern as the Account / Billing
