@@ -18423,7 +18423,12 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   const [genBusy, setGenBusy] = useState(false);
   const [genError, setGenError] = useState("");
   const [genCredits, setGenCredits] = useState(null); // { limit, used, left, models }
-  const [genProgress, setGenProgress] = useState(null); // { seconds, state } while waiting
+  const [genPending, setGenPending] = useState([]);  // jobs running in the background
+  const [genToast, setGenToast] = useState("");     // "your image is ready"
+  // `load` is declared further down; naming it in a dependency array up here
+  // would read it before its initialiser runs. A ref sidesteps the ordering
+  // without moving three hundred lines around.
+  const loadRef = useRef(null);
   const genCancelRef = useRef(false);
 
   const genRequest = useCallback(async (payload) => {
@@ -18453,63 +18458,60 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   const runGeneration = async () => {
     const prompt = genPrompt.trim();
     if (!prompt || genBusy || !userOrg?.id || !session?.user?.id) return;
-    setGenBusy(true); setGenError(""); setGenProgress(null); genCancelRef.current = false;
+    setGenBusy(true); setGenError(""); genCancelRef.current = false;
     try {
-      let res = await genRequest({ mode: "submit", model: genModel, prompt });
-      // Hold the id separately. Only the submit answer carries it — the status
-      // answers do not, and reading it off the latest response meant the second
-      // poll asked about `undefined` and got told the job was unknown.
-      const jobId = res.jobId;
-      // Some models answer at once, others hand back a job. Poll only when we
-      // were actually given one — see api/generate.js for why both exist.
-      const started = Date.now();
-      // Five minutes. Measured against the live service, an image takes two to
-      // three — the previous two-minute limit was cutting off work that was
-      // still running, which is why this looked like a failure when it was
-      // merely slow.
-      const WAIT_MS = 300000;
-      while (res.status === "running" && !genCancelRef.current) {
-        if (Date.now() - started > WAIT_MS) {
-          throw new Error(de
-            ? "Die Erzeugung dauert diesmal ungewöhnlich lange. Sie läuft weiter — sieh gleich noch mal in den Assets nach."
-            : "This is taking unusually long. It keeps running — check your assets again shortly.");
-        }
-        await new Promise(r => setTimeout(r, 2500));
-        if (genCancelRef.current) return;
-        res = await genRequest({ mode: "status", jobId });
-        // Show that something is happening. A spinner that never changes for
-        // three minutes reads as broken, and the last run was abandoned for
-        // exactly that reason while the provider was still working.
-        setGenProgress({ seconds: Math.round((Date.now() - started) / 1000), state: res.providerStatus || null });
-      }
-      if (genCancelRef.current) return;
-      if (res.status !== "completed" || !res.url) throw new Error(res.error || (de ? "Erzeugung fehlgeschlagen." : "Generation failed."));
+      const res = await genRequest({ mode: "submit", model: genModel, prompt });
 
-      // The picture already lives in our storage — the endpoint put it there so
-      // it cannot expire. What is left is filing it as an asset and recording
-      // the bytes, which is exactly what an upload does.
-      trackStorageUpload({ orgId: userOrg.id, userId: session.user.id, bucket: res.bucket || "brand-assets", path: res.storagePath, sizeBytes: res.bytes || 0 });
-      const name = (prompt.slice(0, 60).replace(/[\n\r]+/g, " ").trim() || "KI-Bild") + ".png";
-      const { data, error } = await supabase.from("user_files").insert({
-        user_id: session.user.id, org_id: userOrg.id, project_id: projectId || null, name,
-        mime_type: "image/png", size_bytes: res.bytes || 0, storage_path: res.storagePath,
-        storage_provider: "supabase", public_url: res.url, folder_id: null,
-        metadata: { generated: true, model: res.model || genModel, prompt },
-      }).select(FILE_COLS).single();
-      if (error) throw new Error(error.message);
-      setFiles(prev => [data, ...(prev || [])]);
-      setGenOpen(false); setGenPrompt("");
+      // Synchronous models hand the picture back at once — show it and be done.
+      if (res.status === "completed") { await loadRef.current?.(); setGenOpen(false); setGenPrompt(""); }
+      else {
+        // Otherwise the job runs on without us. The server finishes it — files
+        // the asset, records the storage, writes the notification — so closing
+        // this dialog is safe and nobody has to watch a spinner for three
+        // minutes. Watching is now optional, not load-bearing.
+        setGenOpen(false); setGenPrompt("");
+        watchJob(res.jobId);
+      }
     } catch (e) {
-      setGenError(
-        e.code === "generation_timeout"
-          ? (de ? "Der Bilddienst hat nicht rechtzeitig geantwortet. Versuch es gleich noch mal — es wurden keine Credits verbraucht."
-                : "The image service did not answer in time. Try again shortly — no credits were used.")
-          : (e.message || String(e)));
+      setGenError(e.code === "generation_timeout"
+        ? (de ? "Der Bilddienst hat nicht rechtzeitig geantwortet. Versuch es gleich noch mal — es wurden keine Credits verbraucht."
+              : "The image service did not answer in time. Try again shortly — no credits were used.")
+        : (e.message || String(e)));
     }
     setGenBusy(false);
-    setGenProgress(null);
     loadGenCredits();
   };
+
+  // Follow a job in the background and slide the picture in when it lands.
+  // Purely a courtesy: the server completes the job either way, so a closed tab
+  // or a reload costs the update, never the image.
+  const watchJob = useCallback(async (jobId) => {
+    if (!jobId) return;
+    setGenPending(p => [...p, jobId]);
+    const started = Date.now();
+    try {
+      for (;;) {
+        if (Date.now() - started > 600000) break;   // ten minutes, then leave it to the server
+        await new Promise(r => setTimeout(r, 4000));
+        const r = await genRequest({ mode: "status", jobId }).catch(() => null);
+        if (!r) continue;
+        if (r.status === "completed") {
+          await loadRef.current?.();
+          setGenToast(de ? "Dein KI-Bild ist fertig." : "Your AI image is ready.");
+          setTimeout(() => setGenToast(""), 6000);
+          break;
+        }
+        if (r.status === "failed") {
+          setGenToast(r.error || (de ? "Bilderzeugung fehlgeschlagen." : "Image generation failed."));
+          setTimeout(() => setGenToast(""), 8000);
+          break;
+        }
+      }
+    } finally {
+      setGenPending(p => p.filter(x => x !== jobId));
+      loadGenCredits();
+    }
+  }, [genRequest, de, loadGenCredits]);
 
   // ── Import from a website ───────────────────────────────────────────────────
   const [webOpen, setWebOpen] = useState(false);
@@ -18604,6 +18606,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     setFiles((data || []).filter(f => { const m = f.mime_type || ""; return m.startsWith("image/") || m.startsWith("video/"); }));
   }, [userOrg?.id, projectId]);
   useEffect(() => { load(); }, [load]);
+  loadRef.current = load;
 
   // Folders (user_folders) for the move-to-folder dropdown in the large view.
   const loadFolders = useCallback(async () => {
@@ -18874,6 +18877,17 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <input ref={inputRef} type="file" accept="image/*,video/*" multiple style={{ display: "none" }} onChange={e => { upload(e.target.files); e.target.value = ""; }} />
 
+      {/* Background generation reports back here. Bottom-right so it does not
+          cover the add menu, and it clears itself — an image arriving is news,
+          not a decision. */}
+      {genToast && createPortal(
+        <div style={{ position: "fixed", right: 20, bottom: 20, zIndex: 100003, maxWidth: "min(380px, 90vw)",
+          padding: "13px 16px", borderRadius: 13, background: "#15151c", color: "#fff",
+          fontFamily: FONT, fontSize: 12.5, lineHeight: 1.5,
+          boxShadow: "0 16px 44px rgba(0,0,0,0.34)", border: "1px solid rgba(255,255,255,0.12)" }}>
+          {genToast}
+        </div>, document.body)}
+
       {/* Generate with AI. The allowance is shown at all times, not only when it
           runs low — the cost per model differs by a factor of sixty, and someone
           choosing between them should see what they are spending. */}
@@ -18890,7 +18904,9 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                 {appLanguage === "de" ? "Mit KI erstellen" : "Create with AI"}
               </div>
               <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>
-                {appLanguage === "de" ? "Beschreibe das Bild — es landet danach in deinen Assets." : "Describe the image — it lands in your assets."}
+                {appLanguage === "de"
+                  ? "Beschreibe das Bild. Es wird im Hintergrund erzeugt und erscheint dann in deinen Assets — du kannst dieses Fenster schließen."
+                  : "Describe the image. It is generated in the background and appears in your assets — you can close this window."}
               </div>
             </div>
 
@@ -18942,13 +18958,6 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
               );
             })()}
 
-            {genBusy && genProgress && (
-              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
-                {appLanguage === "de"
-                  ? `Wird erzeugt … ${genProgress.seconds} s${genProgress.state ? ` · ${genProgress.state.toLowerCase()}` : ""}. Das dauert meist zwei bis drei Minuten.`
-                  : `Generating … ${genProgress.seconds}s${genProgress.state ? ` · ${genProgress.state.toLowerCase()}` : ""}. This usually takes two to three minutes.`}
-              </div>
-            )}
             {genError && (
               <div style={{ fontSize: 12, fontFamily: FONT, color: "#E86767", lineHeight: 1.5 }}>{genError}</div>
             )}
@@ -18964,7 +18973,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                 style={{ padding: "9px 18px", borderRadius: 11, border: "none", background: "#15151c", color: "#fff",
                   fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
                   cursor: genBusy || !genPrompt.trim() ? "default" : "pointer", opacity: genBusy || !genPrompt.trim() ? 0.55 : 1 }}>
-                {genBusy ? (appLanguage === "de" ? "Erzeugt…" : "Generating…") : (appLanguage === "de" ? "Erzeugen" : "Generate")}
+                {genBusy ? (appLanguage === "de" ? "Wird gestartet…" : "Starting…") : (appLanguage === "de" ? "Erzeugen" : "Generate")}
               </motion.button>
             </div>
           </div>

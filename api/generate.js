@@ -153,11 +153,12 @@ const PIXAZO_SUBMIT_MS = 20000;
 const PIXAZO_STATUS_MS = 8000;
 const DOWNLOAD_MS = 10000;
 
-const pixazo = (path, body, ms = PIXAZO_SUBMIT_MS) => fetch(GATEWAY + path, {
+const pixazo = (path, body, ms = PIXAZO_SUBMIT_MS, extraHeaders = {}) => fetch(GATEWAY + path, {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
     "Ocp-Apim-Subscription-Key": process.env.PIXAZO_API_KEY || "",
+    ...extraHeaders,
   },
   body: JSON.stringify(body),
   signal: AbortSignal.timeout(ms),
@@ -219,8 +220,98 @@ async function persistImage(db, { url, orgId }) {
   return { publicUrl: data.publicUrl, path, bytes: blob.size };
 }
 
+// Everything that has to happen when a picture is ready, in one place and
+// entirely server-side: bill it, file it as an asset, record the bytes, tell the
+// user. The client used to do the last three, which meant closing the dialog
+// lost the result — the image existed in storage and nothing pointed at it.
+async function completeJob(db, job, imageUrl) {
+  const model = MODELS[job.model] || { microUsd: 0 };
+  const credits = creditsFor(model.microUsd);
+  const stored = await persistImage(db, { url: imageUrl, orgId: job.org_id });
+
+  // The asset row. Named from the prompt so a generated picture is findable by
+  // what was asked for.
+  const name = ((job.prompt || "").slice(0, 60).replace(/[\n\r]+/g, " ").trim() || "KI-Bild") + ".png";
+  await db.from("user_files").insert({
+    user_id: job.user_id, org_id: job.org_id, name,
+    mime_type: "image/png", size_bytes: stored.bytes, storage_path: stored.path,
+    storage_provider: "supabase", public_url: stored.publicUrl,
+    metadata: { generated: true, model: job.model, prompt: job.prompt },
+  });
+
+  // The storage ledger. Skipping this is how the ledger drifts from reality —
+  // an upload does it, so a generation must too.
+  await db.from("workspace_files").upsert(
+    { org_id: job.org_id, bucket: "brand-assets", path: stored.path, size_bytes: stored.bytes, created_by: job.user_id },
+    { onConflict: "bucket,path" },
+  );
+
+  await db.from("generation_jobs").update({
+    status: "completed", result_url: stored.publicUrl,
+    cost_micro_usd: model.microUsd, cost_credits: credits,
+    completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  }).eq("id", job.id);
+
+  // The whole point of doing this here: the person may be somewhere else
+  // entirely by now, three minutes later.
+  await db.from("notifications").insert({
+    user_id: job.user_id, org_id: job.org_id, type: "image_ready",
+    title: "Dein KI-Bild ist fertig",
+    body: (job.prompt || "").slice(0, 120),
+    metadata: { url: stored.publicUrl, model: job.model },
+  });
+
+  return { url: stored.publicUrl, path: stored.path, bytes: stored.bytes, credits };
+}
+
+// The webhook URL handed to the provider, signed so only URLs we minted are
+// accepted. Without a signature this would be an open endpoint that completes
+// and BILLS arbitrary jobs on request.
+async function hookToken(jobId) {
+  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || "";
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(jobId));
+  return [...new Uint8Array(sig)].slice(0, 16).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
 export default async function handler(req) {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+
+  // ── webhook — the provider telling us a job is done ───────────────────────
+  // No session here: the caller is Pixazo, not a person. The signature is what
+  // authorises it, and the work is idempotent — a job already completed is left
+  // alone, so a retried callback cannot bill twice.
+  const hook = new URL(req.url).searchParams.get("hook");
+  if (hook) {
+    const [jobId, sig] = hook.split(".");
+    if (!jobId || !sig || sig !== await hookToken(jobId)) return json({ error: "bad signature" }, 403);
+    const db0 = admin();
+    const { data: job } = await db0.from("generation_jobs").select("*").eq("id", jobId).maybeSingle();
+    if (!job) return json({ error: "unknown job" }, 404);
+    if (job.status === "completed" || job.status === "failed") return json({ ok: true, already: job.status });
+
+    const payload = await req.json().catch(() => ({}));
+    const state = String(payload?.status || "").toUpperCase();
+    const image = findImage(payload);
+    await db0.from("generation_jobs").update({ provider_status: state || "webhook", updated_at: new Date().toISOString() }).eq("id", job.id);
+    if (image) {
+      try { await completeJob(db0, job, image); return json({ ok: true }); }
+      catch (e) {
+        await db0.from("generation_jobs").update({ status: "failed", error: e.message, updated_at: new Date().toISOString() }).eq("id", job.id);
+        return json({ ok: false, error: e.message });
+      }
+    }
+    if (["ERROR", "FAILED", "CANCELLED"].includes(state)) {
+      await db0.from("generation_jobs").update({
+        status: "failed", error: payload?.error || payload?.message || "Generation failed",
+        updated_at: new Date().toISOString(),
+      }).eq("id", job.id);
+    }
+    // Anything else: the poll path will finish it. A webhook that arrives
+    // without a usable picture is not a reason to fail a running job.
+    return json({ ok: true, noted: state || null });
+  }
   if (!process.env.PIXAZO_API_KEY) {
     return json({ error: "Image generation is not configured.", code: "generation_not_configured" }, 503);
   }
@@ -276,7 +367,14 @@ export default async function handler(req) {
     let payload;
     const startedAt = Date.now();
     try {
-      const res = await pixazo(model.path, model.body(prompt));
+      const origin = new URL(req.url).origin;
+      const res = await pixazo(model.path, model.body(prompt), PIXAZO_SUBMIT_MS, {
+        // Terminal mode: one callback when it is done or has failed. Polling
+        // still works and stays as the fallback — a webhook that never arrives
+        // must not strand the job.
+        "X-Webhook-URL": `${origin}/api/generate?hook=${job.id}.${await hookToken(job.id)}`,
+        "X-Webhook-Mode": "terminal",
+      });
       payload = await res.json().catch(() => ({}));
       if (!res.ok) {
         // 429 is the provider throttling us, most likely on a free model. Say
@@ -306,19 +404,8 @@ export default async function handler(req) {
     const immediate = findImage(payload);
     if (immediate) {
       try {
-        const stored = await persistImage(db, { url: immediate, orgId });
-        await db.from("generation_jobs").update({
-          status: "completed", result_url: stored.publicUrl,
-          cost_micro_usd: model.microUsd, cost_credits: creditsFor(model.microUsd),
-          completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-        }).eq("id", job.id);
-        return json({
-          jobId: job.id, status: "completed", url: stored.publicUrl,
-          // Handed back so the client can file it as an asset and record the
-          // bytes in the storage ledger — the same bookkeeping an upload does.
-          storagePath: stored.path, bytes: stored.bytes, bucket: "brand-assets",
-          model: modelKey, credits: creditsFor(model.microUsd),
-        });
+        const done = await completeJob(db, job, immediate);
+        return json({ jobId: job.id, status: "completed", url: done.url });
       } catch (e) {
         await db.from("generation_jobs").update({ status: "failed", error: e.message, updated_at: new Date().toISOString() }).eq("id", job.id);
         return json({ error: e.message, code: "generation_failed", jobId: job.id }, 502);
@@ -385,18 +472,8 @@ export default async function handler(req) {
     const image = findImage(payload);
     if (image) {
       try {
-        const stored = await persistImage(db, { url: image, orgId });
-        const model = MODELS[job.model] || { microUsd: 0 };
-        await db.from("generation_jobs").update({
-          status: "completed", result_url: stored.publicUrl,
-          cost_micro_usd: model.microUsd, cost_credits: creditsFor(model.microUsd),
-          completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-        }).eq("id", job.id);
-        return json({
-          jobId: job.id, status: "completed", url: stored.publicUrl,
-          storagePath: stored.path, bytes: stored.bytes, bucket: "brand-assets",
-          model: job.model, credits: creditsFor(model.microUsd),
-        });
+        const done = await completeJob(db, job, image);
+        return json({ jobId: job.id, status: "completed", url: done.url });
       } catch (e) {
         await db.from("generation_jobs").update({ status: "failed", error: e.message, updated_at: new Date().toISOString() }).eq("id", job.id);
         return json({ jobId: job.id, status: "failed", error: e.message });
