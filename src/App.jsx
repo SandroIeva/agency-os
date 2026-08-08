@@ -18477,7 +18477,11 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
       setFiles(prev => [data, ...(prev || [])]);
       setGenOpen(false); setGenPrompt("");
     } catch (e) {
-      setGenError(e.message || String(e));
+      setGenError(
+        e.code === "generation_timeout"
+          ? (de ? "Der Bilddienst hat nicht rechtzeitig geantwortet. Versuch es gleich noch mal — es wurden keine Credits verbraucht."
+                : "The image service did not answer in time. Try again shortly — no credits were used.")
+          : (e.message || String(e)));
     }
     setGenBusy(false);
     loadGenCredits();

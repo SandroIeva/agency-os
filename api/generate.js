@@ -135,14 +135,24 @@ async function remainingCredits(db, orgId) {
   return { limit, used, left: Math.max(0, limit - used) };
 }
 
-const pixazo = (path, body, extraHeaders = {}) => fetch(GATEWAY + path, {
+// Every outbound call is time-boxed well inside the platform's own limit.
+//
+// An Edge function is killed at ~25s and the caller gets a bare 504 — no JSON,
+// no job id, nothing to act on. Cutting the call off ourselves turns that into
+// an answer we control, and leaves room to record the failure before the
+// function ends.
+const PIXAZO_SUBMIT_MS = 12000;
+const PIXAZO_STATUS_MS = 8000;
+const DOWNLOAD_MS = 10000;
+
+const pixazo = (path, body, ms = PIXAZO_SUBMIT_MS) => fetch(GATEWAY + path, {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
     "Ocp-Apim-Subscription-Key": process.env.PIXAZO_API_KEY || "",
-    ...extraHeaders,
   },
   body: JSON.stringify(body),
+  signal: AbortSignal.timeout(ms),
 });
 
 // Pull an image URL (or a data URI) out of whatever shape came back. Providers
@@ -175,7 +185,7 @@ const findPollingUrl = (p) => p?.polling_url || p?.pollingUrl || null;
 // Store the picture ourselves. The provider's link expires and points at their
 // infrastructure; an asset in a moodboard has to still be there next year.
 async function persistImage(db, { url, orgId }) {
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_MS) });
   if (!res.ok) throw new Error(`could not fetch generated image (${res.status})`);
   const blob = await res.blob();
   const type = blob.type || "image/png";
@@ -242,6 +252,7 @@ export default async function handler(req) {
     if (jobErr) return json({ error: jobErr.message }, 500);
 
     let payload;
+    const startedAt = Date.now();
     try {
       const res = await pixazo(model.path, model.body(prompt));
       payload = await res.json().catch(() => ({}));
@@ -255,9 +266,18 @@ export default async function handler(req) {
         return json({ error: msg, code: res.status === 429 ? "generation_busy" : "generation_failed", jobId: job.id }, 502);
       }
     } catch (e) {
-      const msg = e?.message || "Image service unreachable";
-      await db.from("generation_jobs").update({ status: "failed", error: msg, updated_at: new Date().toISOString() }).eq("id", job.id);
-      return json({ error: msg, code: "generation_failed", jobId: job.id }, 502);
+      const timedOut = e?.name === "TimeoutError" || /abort|timeout/i.test(e?.message || "");
+      const msg = timedOut
+        ? "The image service did not answer in time. It may still be working — try again in a moment."
+        : (e?.message || "Image service unreachable");
+      await db.from("generation_jobs").update({
+        status: "failed", error: msg, updated_at: new Date().toISOString(),
+      }).eq("id", job.id);
+      return json({
+        error: msg,
+        code: timedOut ? "generation_timeout" : "generation_failed",
+        jobId: job.id,
+      }, 504);
     }
 
     // Synchronous answer: the image is already here.
@@ -284,6 +304,7 @@ export default async function handler(req) {
     }
 
     // Asynchronous answer: remember where to ask.
+    const upstreamMs = Date.now() - startedAt;
     const requestId = findRequestId(payload);
     if (!requestId) {
       const msg = "The image service returned nothing we could use.";
@@ -296,7 +317,7 @@ export default async function handler(req) {
       polling_url: findPollingUrl(payload) || `${GATEWAY}/v2/requests/status/${requestId}`,
       updated_at: new Date().toISOString(),
     }).eq("id", job.id);
-    return json({ jobId: job.id, status: "running" });
+    return json({ jobId: job.id, status: "running", upstreamMs });
   }
 
   // ── status ────────────────────────────────────────────────────────────────
@@ -313,6 +334,7 @@ export default async function handler(req) {
     try {
       const res = await fetch(job.polling_url, {
         headers: { "Ocp-Apim-Subscription-Key": process.env.PIXAZO_API_KEY || "" },
+        signal: AbortSignal.timeout(PIXAZO_STATUS_MS),
       });
       payload = await res.json().catch(() => ({}));
     } catch (e) {
