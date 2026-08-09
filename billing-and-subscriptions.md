@@ -10,9 +10,9 @@ Open **Settings → Plan & Billing** to compare the available plans and choose m
 
 The current plan options are:
 
-* Starter
+* Basic
 * Pro
-* Agency
+* Max
 
 Visit the [pricing page](https://i7os.com/pricing) for current prices and included features.
 
