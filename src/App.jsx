@@ -18437,11 +18437,34 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   const [genCredits, setGenCredits] = useState(null); // { limit, used, left, models }
   const [genPending, setGenPending] = useState([]);  // jobs running in the background
   const [genToast, setGenToast] = useState("");     // "your image is ready"
+  const [genWaiting, setGenWaiting] = useState(null); // { jobId, prompt, startedAt } — waiting in the dialog
+  const [genElapsed, setGenElapsed] = useState(0);    // seconds spent waiting, for the readout
   // `load` is declared further down; naming it in a dependency array up here
   // would read it before its initialiser runs. A ref sidesteps the ordering
   // without moving three hundred lines around.
   const loadRef = useRef(null);
-  const genCancelRef = useRef(false);
+  // Whether the dialog is still on this job when it finishes. It has to be a
+  // ref: the watcher runs in a closure that would otherwise keep reading the
+  // state as it was when the job started.
+  const waitingRef = useRef(null);
+
+  // One way in for "show me this picture", used by both endings — the
+  // notification and the wait. The file has to be in `files` first and the
+  // reload is asynchronous, so the target is remembered and an effect opens it
+  // as soon as it turns up.
+  const [openTarget, setOpenTarget] = useState(null); // { url, ts }
+  const openAsset = useCallback((url) => { if (url) setOpenTarget({ url, ts: Date.now() }); }, []);
+
+  const closeGen = useCallback(() => {
+    waitingRef.current = null;   // from here on the job reports by notification
+    setGenWaiting(null); setGenOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!genWaiting) { setGenElapsed(0); return; }
+    const h = setInterval(() => setGenElapsed(Math.round((Date.now() - genWaiting.startedAt) / 1000)), 1000);
+    return () => clearInterval(h);
+  }, [genWaiting]);
 
   const genRequest = useCallback(async (payload) => {
     const { data: { session: sess } } = await supabase.auth.getSession();
@@ -18469,19 +18492,24 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
 
   const runGeneration = async () => {
     const prompt = genPrompt.trim();
-    if (!prompt || genBusy || !userOrg?.id || !session?.user?.id) return;
-    setGenBusy(true); setGenError(""); genCancelRef.current = false;
+    if (!prompt || genBusy || genWaiting || !userOrg?.id || !session?.user?.id) return;
+    setGenBusy(true); setGenError("");
     try {
       const res = await genRequest({ mode: "submit", model: genModel, prompt });
 
-      // Synchronous models hand the picture back at once — show it and be done.
-      if (res.status === "completed") { await loadRef.current?.(); setGenOpen(false); setGenPrompt(""); }
-      else {
-        // Otherwise the job runs on without us. The server finishes it — files
-        // the asset, records the storage, writes the notification — so closing
-        // this dialog is safe and nobody has to watch a spinner for three
-        // minutes. Watching is now optional, not load-bearing.
+      // Synchronous models hand the picture back at once — open it and be done.
+      if (res.status === "completed") {
         setGenOpen(false); setGenPrompt("");
+        await loadRef.current?.();
+        openAsset(res.url);
+      } else {
+        // Otherwise the job outlives this request, and how it ends is the
+        // user's choice: wait here and have the picture open by itself, or
+        // close the dialog and be told by notification. The server finishes the
+        // job either way — files the asset, records the storage, writes the
+        // notification — so leaving costs the update, never the image.
+        waitingRef.current = res.jobId;
+        setGenWaiting({ jobId: res.jobId, prompt, startedAt: Date.now() });
         watchJob(res.jobId);
       }
     } catch (e) {
@@ -18494,9 +18522,10 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     loadGenCredits();
   };
 
-  // Follow a job in the background and slide the picture in when it lands.
-  // Purely a courtesy: the server completes the job either way, so a closed tab
-  // or a reload costs the update, never the image.
+  // Follow a job and end it where the user is. Whoever is still waiting in the
+  // dialog gets the picture opened in front of them; whoever left gets the
+  // notification the server wrote. The watching itself is a courtesy either
+  // way — the server completes the job even if this tab is gone.
   const watchJob = useCallback(async (jobId) => {
     if (!jobId) return;
     setGenPending(p => [...p, jobId]);
@@ -18508,14 +18537,26 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
         const r = await genRequest({ mode: "status", jobId }).catch(() => null);
         if (!r) continue;
         if (r.status === "completed") {
+          const waited = waitingRef.current === jobId;
+          if (waited) { waitingRef.current = null; setGenWaiting(null); setGenOpen(false); setGenPrompt(""); }
           await loadRef.current?.();
-          setGenToast(de ? "Dein KI-Bild ist fertig." : "Your AI image is ready.");
-          setTimeout(() => setGenToast(""), 6000);
+          if (waited) openAsset(r.url);          // same ending as clicking the notification
+          else {
+            setGenToast(de ? "Dein KI-Bild ist fertig." : "Your AI image is ready.");
+            setTimeout(() => setGenToast(""), 6000);
+          }
           break;
         }
         if (r.status === "failed") {
-          setGenToast(r.error || (de ? "Bilderzeugung fehlgeschlagen." : "Image generation failed."));
-          setTimeout(() => setGenToast(""), 8000);
+          const msg = r.error || (de ? "Bilderzeugung fehlgeschlagen." : "Image generation failed.");
+          if (waitingRef.current === jobId) {
+            // Still watching: say it where they are looking, and leave the
+            // dialog open so the prompt can go straight back out.
+            waitingRef.current = null; setGenWaiting(null); setGenError(msg);
+          } else {
+            setGenToast(msg);
+            setTimeout(() => setGenToast(""), 8000);
+          }
           break;
         }
       }
@@ -18523,7 +18564,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
       setGenPending(p => p.filter(x => x !== jobId));
       loadGenCredits();
     }
-  }, [genRequest, de, loadGenCredits]);
+  }, [genRequest, de, loadGenCredits, openAsset]);
 
   // ── Import from a website ───────────────────────────────────────────────────
   const [webOpen, setWebOpen] = useState(false);
@@ -18625,15 +18666,18 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   // for the file to appear rather than giving up on the first miss — and the
   // handled-ref stops it reopening on every later render, which is the trap
   // these deep links have here.
-  const deepLinkDone = useRef(null);
+  const openDone = useRef(null);
   useEffect(() => {
-    if (!deepLink?.url || !deepLink?.ts) return;
-    if (deepLinkDone.current === deepLink.ts) return;
-    const hit = (files || []).find(f => f.public_url === deepLink.url);
+    if (deepLink?.url && deepLink?.ts) setOpenTarget({ url: deepLink.url, ts: deepLink.ts });
+  }, [deepLink?.ts, deepLink?.url]);
+  useEffect(() => {
+    if (!openTarget?.url || !openTarget?.ts) return;
+    if (openDone.current === openTarget.ts) return;
+    const hit = (files || []).find(f => f.public_url === openTarget.url);
     if (!hit) return;
-    deepLinkDone.current = deepLink.ts;
+    openDone.current = openTarget.ts;
     setZoom(hit);
-  }, [deepLink?.ts, deepLink?.url, files]);
+  }, [openTarget, files]);
 
   // Folders (user_folders) for the move-to-folder dropdown in the large view.
   const loadFolders = useCallback(async () => {
@@ -18923,7 +18967,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
           runs low — the cost per model differs by a factor of sixty, and someone
           choosing between them should see what they are spending. */}
       {genOpen && createPortal(
-        <div onClick={() => !genBusy && setGenOpen(false)}
+        <div onClick={() => !genBusy && closeGen()}
           style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
             display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
           <div onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}
@@ -18935,37 +18979,76 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                 {appLanguage === "de" ? "Mit KI erstellen" : "Create with AI"}
               </div>
               <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>
-                {appLanguage === "de"
-                  ? "Beschreibe das Bild. Es wird im Hintergrund erzeugt und erscheint dann in deinen Assets — du kannst dieses Fenster schließen."
-                  : "Describe the image. It is generated in the background and appears in your assets — you can close this window."}
+                {genWaiting
+                  ? (appLanguage === "de" ? "Das Bild wird erzeugt." : "Your image is being generated.")
+                  : (appLanguage === "de" ? "Beschreibe das Bild, das du erzeugen möchtest." : "Describe the image you want to create.")}
               </div>
             </div>
 
-            <textarea value={genPrompt} autoFocus rows={4} disabled={genBusy}
-              onChange={e => setGenPrompt(e.target.value)}
-              placeholder={appLanguage === "de" ? "z. B. Ein minimalistisches Studio-Foto einer Keramikvase auf Sandstein, weiches Morgenlicht" : "e.g. A minimal studio photo of a ceramic vase on sandstone, soft morning light"}
-              style={{ width: "100%", boxSizing: "border-box", padding: "11px 13px", borderRadius: 12, resize: "vertical",
-                border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
-                color: theme.text, fontFamily: FONT, fontSize: 13, lineHeight: 1.55, outline: "none" }} />
-
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>{appLanguage === "de" ? "Modell" : "Model"}</span>
-              {(genCredits?.models || []).map(m => {
-                const on = genModel === m.key;
-                return (
-                  <div key={m.key} onClick={() => !genBusy && setGenModel(m.key)}
-                    style={{ padding: "6px 11px", borderRadius: 999, cursor: genBusy ? "default" : "pointer",
-                      fontSize: 12, fontFamily: FONT, fontWeight: on ? 600 : 500,
-                      border: `1px solid ${on ? "transparent" : theme.borderFaint}`,
-                      background: on ? "#15151c" : "transparent", color: on ? "#fff" : theme.text }}>
-                    {m.label}
-                    <span style={{ opacity: 0.6, marginLeft: 6, fontWeight: 400 }}>
-                      {m.credits} {m.credits === 1 ? "Credit" : "Credits"}
-                    </span>
+            {genWaiting ? (() => {
+              // Waiting is one of two equal endings, so the dialog says what
+              // each one does instead of leaving the user to guess whether
+              // closing it throws the picture away.
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <span style={{ width: 19, height: 19, flexShrink: 0, borderRadius: "50%",
+                      border: `2px solid ${theme.borderFaint}`, borderTopColor: theme.text,
+                      animation: "spin 0.9s linear infinite" }} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                        {appLanguage === "de" ? "Wird erzeugt…" : "Generating…"}
+                      </div>
+                      <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                        {genElapsed}s · {appLanguage === "de" ? "meist 30–90 Sekunden" : "usually 30–90 seconds"}
+                      </div>
+                    </div>
                   </div>
-                );
-              })}
-            </div>
+
+                  <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5,
+                    fontStyle: "italic", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+                    overflow: "hidden" }}>
+                    „{genWaiting.prompt}“
+                  </div>
+
+                  <div style={{ display: "flex", gap: 10, padding: "11px 13px", borderRadius: 12,
+                    background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
+                    border: `1px solid ${theme.borderFaint}` }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2"
+                      strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                      <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" />
+                    </svg>
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
+                      {appLanguage === "de"
+                        ? "Bleib hier, dann öffnet sich das Bild automatisch. Oder schließ das Fenster — du bekommst eine Benachrichtigung, sobald es fertig ist."
+                        : "Stay here and the image opens by itself. Or close this window — you will get a notification as soon as it is ready."}
+                    </div>
+                  </div>
+                </div>
+              );
+            })() : (
+              <>
+                <textarea value={genPrompt} autoFocus rows={4} disabled={genBusy}
+                  onChange={e => setGenPrompt(e.target.value)}
+                  placeholder={appLanguage === "de" ? "z. B. Ein minimalistisches Studio-Foto einer Keramikvase auf Sandstein, weiches Morgenlicht" : "e.g. A minimal studio photo of a ceramic vase on sandstone, soft morning light"}
+                  style={{ width: "100%", boxSizing: "border-box", padding: "11px 13px", borderRadius: 12, resize: "vertical",
+                    border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
+                    color: theme.text, fontFamily: FONT, fontSize: 13, lineHeight: 1.55, outline: "none" }} />
+
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>{appLanguage === "de" ? "Modell" : "Model"}</span>
+                  <Dropdown
+                    value={genModel} onChange={setGenModel} theme={theme} darkMode={darkMode}
+                    disabled={genBusy} minWidth={260} maxHeight={300}
+                    options={(genCredits?.models || []).map(m => ({
+                      value: m.key,
+                      label: m.label,
+                      sub: `${m.credits} ${m.credits === 1 ? "Credit" : "Credits"}`,
+                    }))}
+                    placeholder={appLanguage === "de" ? "Modell wählen" : "Choose model"} />
+                </div>
+              </>
+            )}
 
             {/* Always-on allowance readout. */}
             {genCredits && (() => {
@@ -18994,18 +19077,28 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
             )}
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-              <motion.button whileTap={{ scale: 0.97 }}
-                onClick={() => { if (genBusy) { genCancelRef.current = true; setGenBusy(false); } else setGenOpen(false); }}
-                style={{ padding: "9px 16px", borderRadius: 11, border: `1px solid ${theme.borderFaint}`, background: "transparent",
-                  color: theme.text, fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
-                {genBusy ? (appLanguage === "de" ? "Abbrechen" : "Cancel") : (appLanguage === "de" ? "Schließen" : "Close")}
-              </motion.button>
-              <motion.button whileTap={{ scale: 0.97 }} onClick={runGeneration} disabled={genBusy || !genPrompt.trim()}
-                style={{ padding: "9px 18px", borderRadius: 11, border: "none", background: "#15151c", color: "#fff",
-                  fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
-                  cursor: genBusy || !genPrompt.trim() ? "default" : "pointer", opacity: genBusy || !genPrompt.trim() ? 0.55 : 1 }}>
-                {genBusy ? (appLanguage === "de" ? "Wird gestartet…" : "Starting…") : (appLanguage === "de" ? "Erzeugen" : "Generate")}
-              </motion.button>
+              {genWaiting ? (
+                <motion.button whileTap={{ scale: 0.97 }} onClick={closeGen}
+                  style={{ padding: "9px 18px", borderRadius: 11, border: `1px solid ${theme.borderFaint}`, background: "transparent",
+                    color: theme.text, fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                  {appLanguage === "de" ? "Benachrichtige mich" : "Notify me instead"}
+                </motion.button>
+              ) : (
+                <>
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={closeGen} disabled={genBusy}
+                    style={{ padding: "9px 16px", borderRadius: 11, border: `1px solid ${theme.borderFaint}`, background: "transparent",
+                      color: theme.text, fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
+                      cursor: genBusy ? "default" : "pointer", opacity: genBusy ? 0.55 : 1 }}>
+                    {appLanguage === "de" ? "Schließen" : "Close"}
+                  </motion.button>
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={runGeneration} disabled={genBusy || !genPrompt.trim()}
+                    style={{ padding: "9px 18px", borderRadius: 11, border: "none", background: "#15151c", color: "#fff",
+                      fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
+                      cursor: genBusy || !genPrompt.trim() ? "default" : "pointer", opacity: genBusy || !genPrompt.trim() ? 0.55 : 1 }}>
+                    {genBusy ? (appLanguage === "de" ? "Wird gestartet…" : "Starting…") : (appLanguage === "de" ? "Erzeugen" : "Generate")}
+                  </motion.button>
+                </>
+              )}
             </div>
           </div>
         </div>, document.body)}
