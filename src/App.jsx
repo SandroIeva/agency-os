@@ -6090,7 +6090,25 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     let alive = true;
     (async () => {
       const { data } = await supabase.from("whiteboard_items").select("id,type,data").eq("board_id", board.id).order("created_at", { ascending: true });
-      if (alive) setItems(data || []);
+      const rows = data || [];
+      if (alive) setItems(rows);
+
+      // Images placed from Assets hold a signed link, and once it lapses the
+      // board shows empty frames where the pictures were. Renewed as the board
+      // opens, and written back so it is done once — the update also reaches
+      // everyone else on the board through the usual channel.
+      const stale = rows.filter(r => r.type === "image" && urlNeedsRenewal(r.data?.src));
+      if (stale.length) {
+        const fixed = await Promise.all(stale.map(async (r) => {
+          const src = await refreshSignedUrlString(r.data?.src);
+          if (!src) return null;
+          const next = { ...r.data, src };
+          await supabase.from("whiteboard_items").update({ data: next }).eq("id", r.id);
+          return [r.id, next];
+        }));
+        const byId = new Map(fixed.filter(Boolean));
+        if (alive && byId.size) setItems(prev => prev.map(i => byId.has(i.id) ? { ...i, data: byId.get(i.id) } : i));
+      }
     })();
     const ch = supabase.channel(`wb-${board.id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "whiteboard_items", filter: `board_id=eq.${board.id}` }, (payload) => {
@@ -9818,6 +9836,74 @@ function trackStorageDelete({ bucket, paths }) {
 }
 // Upload to Storage AND record it in the ledger in one call. Returns the raw
 // storage result ({ data, error }) so callers keep their existing error handling.
+// ── Keeping links into the private user-files bucket alive ──────────────────
+//
+// That bucket is private, so a link into it only works while it carries a
+// signature, and a signature expires. Everything that saves one into
+// user_files.public_url therefore saves something with a shelf life — a year —
+// after which a whole library of perfectly good pictures goes dark at once,
+// with nothing having changed and nothing to explain it.
+//
+// The remedy is to never let one get close: the expiry is inside the token, so
+// checking costs nothing, and rows are refreshed as they are read.
+const SIGNED_URL_TTL = 60 * 60 * 24 * 365;           // what we ask for
+const SIGNED_URL_RENEW_BEFORE = 60 * 60 * 24 * 30;   // renew with a month to spare
+
+// When this signature lapses, in seconds since the epoch — or null when the URL
+// carries none. Unsigned is not "never expires": a plain /object/public/ link
+// into a private bucket answers "Bucket not found" and never worked at all.
+function signedUrlExpiry(url) {
+  const token = /[?&]token=([^&]+)/.exec(url || "")?.[1];
+  if (!token) return null;
+  try {
+    const claims = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return Number.isFinite(claims?.exp) ? claims.exp : null;
+  } catch (_) { return null; }
+}
+
+function urlNeedsRenewal(url) {
+  if (!url || !url.includes("/user-files/")) return false;   // public buckets keep working
+  const exp = signedUrlExpiry(url);
+  return exp === null || exp - Date.now() / 1000 < SIGNED_URL_RENEW_BEFORE;
+}
+
+function needsFreshUrl(f) {
+  if (!f?.storage_path) return false;                        // Drive and the like
+  if (f.storage_provider && f.storage_provider !== "supabase") return false;
+  if (!f.public_url) return true;
+  return urlNeedsRenewal(f.public_url);
+}
+
+// The same problem one step removed: a link copied out of Assets into a
+// whiteboard carries the expiry with it, and the copy has no user_files row
+// behind it to be refreshed from. It does not need one — the object path is in
+// the URL, so the link can be renewed from the string alone.
+async function refreshSignedUrlString(url) {
+  const m = /\/object\/(?:sign|public)\/user-files\/([^?]+)/.exec(url || "");
+  if (!m) return null;
+  const { data } = await supabase.storage.from("user-files")
+    .createSignedUrl(decodeURIComponent(m[1]), SIGNED_URL_TTL);
+  return data?.signedUrl || null;
+}
+
+// Re-sign the rows that need it and write the new links back, so the work is
+// done once rather than on every load. Returns a map of id → fresh url, or null
+// when there was nothing to do — the common case, and it costs one pass over an
+// array. A row that cannot be refreshed is skipped rather than thrown on: that
+// leaves it exactly as it already was.
+async function refreshUserFileUrls(rows) {
+  const stale = (rows || []).filter(needsFreshUrl);
+  if (!stale.length) return null;
+  const pairs = await Promise.all(stale.map(async (f) => {
+    const { data } = await supabase.storage.from("user-files").createSignedUrl(f.storage_path, SIGNED_URL_TTL);
+    if (!data?.signedUrl) return null;
+    await supabase.from("user_files").update({ public_url: data.signedUrl }).eq("id", f.id);
+    return [f.id, data.signedUrl];
+  }));
+  const fresh = new Map(pairs.filter(Boolean));
+  return fresh.size ? fresh : null;
+}
+
 async function uploadTracked({ bucket, path, file, orgId, userId, contentType, upsert = false, sizeBytes }) {
   const res = await supabase.storage.from(bucket).upload(path, file, { contentType, upsert });
   if (!res.error) trackStorageUpload({ orgId, userId, bucket, path, sizeBytes: sizeBytes ?? file?.size ?? 0 });
@@ -18657,29 +18743,8 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     const { data, error } = await q.order("created_at", { ascending: false }).limit(300);
     if (error) { console.warn("[creations] load failed:", error.message); setFiles([]); return; }
     const media = (data || []).filter(f => { const m = f.mime_type || ""; return m.startsWith("image/") || m.startsWith("video/"); });
-
-    // user-files is a private bucket, so a link into it only works while it
-    // carries a signature. A row pointing at /object/public/ there can never
-    // load — the picture is in storage and unreachable. Re-signing costs one
-    // call and recovers the file instead of leaving a broken tile behind.
-    const broken = media.filter(f =>
-      f.storage_provider === "supabase" && f.storage_path &&
-      /\/object\/public\/user-files\//.test(f.public_url || ""));
-    if (broken.length) {
-      const fixed = await Promise.all(broken.map(async (f) => {
-        const { data: signed } = await supabase.storage.from("user-files")
-          .createSignedUrl(f.storage_path, 60 * 60 * 24 * 365);
-        if (!signed?.signedUrl) return null;
-        await supabase.from("user_files").update({ public_url: signed.signedUrl }).eq("id", f.id);
-        return [f.id, signed.signedUrl];
-      }));
-      const byId = new Map(fixed.filter(Boolean));
-      if (byId.size) {
-        setFiles(media.map(f => byId.has(f.id) ? { ...f, public_url: byId.get(f.id) } : f));
-        return;
-      }
-    }
-    setFiles(media);
+    const fresh = await refreshUserFileUrls(media);
+    setFiles(fresh ? media.map(f => fresh.has(f.id) ? { ...f, public_url: fresh.get(f.id) } : f) : media);
   }, [userOrg?.id, projectId]);
   useEffect(() => { load(); }, [load]);
   loadRef.current = load;
@@ -20482,12 +20547,19 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
     (async () => {
       if (!orgId) { setImgs([]); return; }
       const { data, error } = await supabase.from("user_files")
-        .select("id,name,public_url,mime_type,created_at")
+        // storage_path and storage_provider are selected so a lapsed signature
+        // can be renewed here too — without them this list can only show what
+        // is already broken.
+        .select("id,name,public_url,mime_type,created_at,storage_path,storage_provider")
         .eq("org_id", orgId)
         .order("created_at", { ascending: false }).limit(300);
       if (!alive) return;
       if (error) { setImgs([]); return; }
-      setImgs((data || []).filter(f => (f.mime_type || "").startsWith("image/") && f.public_url));
+      const rows = (data || []).filter(f => (f.mime_type || "").startsWith("image/"));
+      const fresh = await refreshUserFileUrls(rows);
+      if (!alive) return;
+      setImgs((fresh ? rows.map(f => fresh.has(f.id) ? { ...f, public_url: fresh.get(f.id) } : f) : rows)
+        .filter(f => f.public_url));
     })();
     return () => { alive = false; };
   }, [orgId]);
