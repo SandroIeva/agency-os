@@ -227,7 +227,7 @@ function sniffImage(buf) {
   return null;
 }
 
-async function persistImage(db, { url, orgId }) {
+async function persistImage(db, { url, userId }) {
   const res = await fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_MS) });
   if (!res.ok) throw new Error(`could not fetch generated image (${res.status})`);
   const buf = await res.arrayBuffer();
@@ -241,7 +241,12 @@ async function persistImage(db, { url, orgId }) {
   // Same bucket as every other asset. They are assets — putting them somewhere
   // else meant the app's own delete looked in the wrong place, removed the row
   // and left the file behind.
-  const path = `generated/${orgId}/${crypto.randomUUID()}.${kind.ext}`;
+  // <user_id>/ai-generated/… is the layout the policies already describe: the
+  // storage rules key on the first folder being the owner, and user_files lets
+  // org members see a row whose path contains /creations/ or /ai-generated/.
+  // Written under generated/<org_id>/ instead, a picture was readable by nobody
+  // and visible to no colleague — while the workspace paid for it.
+  const path = `${userId}/ai-generated/${crypto.randomUUID()}.${kind.ext}`;
   const { error } = await db.storage.from(ASSET_BUCKET).upload(path, buf, { contentType: kind.type });
   if (error) throw new Error(error.message);
 
@@ -325,7 +330,7 @@ async function completeJob(db, job, imageUrl) {
 
   const model = MODELS[job.model] || { microUsd: 0 };
   const credits = creditsFor(model.microUsd);
-  const stored = await persistImage(db, { url: imageUrl, orgId: job.org_id });
+  const stored = await persistImage(db, { url: imageUrl, userId: job.user_id });
 
   // The asset row. Named from the prompt so a generated picture is findable by
   // what was asked for.
