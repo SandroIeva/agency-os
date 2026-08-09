@@ -37,7 +37,7 @@ Supported connections currently include:
 * Instagram
 * LinkedIn
 * Threads
-* X
+* X (Twitter)
 * Pinterest
 
 The exact analytics available can vary by platform and account type.
