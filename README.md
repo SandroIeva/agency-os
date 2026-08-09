@@ -8,7 +8,7 @@ Whether you launch them as apps, run them at enterprise scale, or plug them into
 
 #### What you can do with i7OS
 
-With i7OS, you can produce on-brand creative at scale—from product imagery and static ads to UGC and video. Start with a single brief and generate every format your campaign requires.
+With i7OS, you can produce on-brand creative at scale from product imagery and static ads to UGC and video. Start with a single brief and generate every format your campaign requires.
 
 Orchestrate the industry's best models in unified pipelines. Chain image, video, and text generation on a single canvas—no more stitching tools together by hand.
 

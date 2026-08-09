@@ -32,10 +32,10 @@ The update can take a few seconds after checkout.
 
 Use the customer portal from **Plan & Billing** to:
 
-* review the active subscription;
-* update the payment method;
-* change or cancel the subscription when available;
-* view and download invoices.
+* review the active subscription
+* update the payment method
+* change or cancel the subscription when available
+* view and download invoices
 
 Stripe may also send payment confirmations and invoice notifications to the billing email.
 
