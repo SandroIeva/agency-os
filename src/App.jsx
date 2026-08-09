@@ -18495,7 +18495,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     if (!prompt || genBusy || genWaiting || !userOrg?.id || !session?.user?.id) return;
     setGenBusy(true); setGenError("");
     try {
-      const res = await genRequest({ mode: "submit", model: genModel, prompt });
+      const res = await genRequest({ mode: "submit", model: genModel, prompt, lang: appLanguage });
 
       // Synchronous models hand the picture back at once — open it and be done.
       if (res.status === "completed") {
@@ -18656,7 +18656,30 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     if (projectId) q = q.eq("project_id", projectId); // project brand: only this project's assets
     const { data, error } = await q.order("created_at", { ascending: false }).limit(300);
     if (error) { console.warn("[creations] load failed:", error.message); setFiles([]); return; }
-    setFiles((data || []).filter(f => { const m = f.mime_type || ""; return m.startsWith("image/") || m.startsWith("video/"); }));
+    const media = (data || []).filter(f => { const m = f.mime_type || ""; return m.startsWith("image/") || m.startsWith("video/"); });
+
+    // user-files is a private bucket, so a link into it only works while it
+    // carries a signature. A row pointing at /object/public/ there can never
+    // load — the picture is in storage and unreachable. Re-signing costs one
+    // call and recovers the file instead of leaving a broken tile behind.
+    const broken = media.filter(f =>
+      f.storage_provider === "supabase" && f.storage_path &&
+      /\/object\/public\/user-files\//.test(f.public_url || ""));
+    if (broken.length) {
+      const fixed = await Promise.all(broken.map(async (f) => {
+        const { data: signed } = await supabase.storage.from("user-files")
+          .createSignedUrl(f.storage_path, 60 * 60 * 24 * 365);
+        if (!signed?.signedUrl) return null;
+        await supabase.from("user_files").update({ public_url: signed.signedUrl }).eq("id", f.id);
+        return [f.id, signed.signedUrl];
+      }));
+      const byId = new Map(fixed.filter(Boolean));
+      if (byId.size) {
+        setFiles(media.map(f => byId.has(f.id) ? { ...f, public_url: byId.get(f.id) } : f));
+        return;
+      }
+    }
+    setFiles(media);
   }, [userOrg?.id, projectId]);
   useEffect(() => { load(); }, [load]);
   loadRef.current = load;
@@ -33103,6 +33126,11 @@ export default function CircularMenu() {
                               // answer — the notification already knows which
                               // one it means.
                               else if (n.type === "image_ready" && n.metadata?.url) { setAssetDeepLink({ url: n.metadata.url, ts: Date.now() }); setCurrentView("assets"); setNotifOpen(false); }
+                              // A failed one has nothing to open. It goes to
+                              // Assets like the rest so the prompt can go
+                              // straight back out, and the panel closes rather
+                              // than sitting there having done nothing.
+                              else if (n.type === "image_failed") { setCurrentView("assets"); setNotifOpen(false); }
                               else if (n.type === "reminder") { setNotifOpen(false); }
                             }}
                             style={{

@@ -208,20 +208,97 @@ const findPollingUrl = (p) => p?.polling_url || p?.pollingUrl || null;
 
 // Store the picture ourselves. The provider's link expires and points at their
 // infrastructure; an asset in a moodboard has to still be there next year.
+// A picture is only a picture if it looks like one. A provider can answer with
+// an error page, an expired link or a JSON body, and every one of those
+// downloads perfectly happily — the status code says nothing about the
+// content. The bytes decide, and they also decide the extension, so a PNG
+// never gets filed as a .jpg because a header said so.
+const IMAGE_MAGIC = [
+  { ext: "png",  type: "image/png",  head: [0x89, 0x50, 0x4e, 0x47] },
+  { ext: "jpg",  type: "image/jpeg", head: [0xff, 0xd8, 0xff] },
+  { ext: "gif",  type: "image/gif",  head: [0x47, 0x49, 0x46, 0x38] },
+  { ext: "webp", type: "image/webp", head: [0x52, 0x49, 0x46, 0x46], at8: [0x57, 0x45, 0x42, 0x50] },
+];
+function sniffImage(buf) {
+  const b = new Uint8Array(buf || new ArrayBuffer(0));
+  for (const m of IMAGE_MAGIC) {
+    if (m.head.every((v, i) => b[i] === v) && (!m.at8 || m.at8.every((v, i) => b[8 + i] === v))) return m;
+  }
+  return null;
+}
+
 async function persistImage(db, { url, orgId }) {
   const res = await fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_MS) });
   if (!res.ok) throw new Error(`could not fetch generated image (${res.status})`);
-  const blob = await res.blob();
-  const type = blob.type || "image/png";
-  const ext = (type.split("/")[1] || "png").split("+")[0].replace("jpeg", "jpg");
-  const path = `generated/${orgId}/${crypto.randomUUID()}.${ext}`;
+  const buf = await res.arrayBuffer();
+
+  const kind = sniffImage(buf);
+  if (!kind) {
+    const head = new TextDecoder().decode(buf.slice(0, 200)).replace(/\s+/g, " ").trim();
+    throw new Error(`the image service returned no image${head ? `: ${head.slice(0, 140)}` : ""}`);
+  }
+
   // Same bucket as every other asset. They are assets — putting them somewhere
   // else meant the app's own delete looked in the wrong place, removed the row
   // and left the file behind.
-  const { error } = await db.storage.from(ASSET_BUCKET).upload(path, blob, { contentType: type });
+  const path = `generated/${orgId}/${crypto.randomUUID()}.${kind.ext}`;
+  const { error } = await db.storage.from(ASSET_BUCKET).upload(path, buf, { contentType: kind.type });
   if (error) throw new Error(error.message);
-  const { data } = db.storage.from(ASSET_BUCKET).getPublicUrl(path);
-  return { publicUrl: data.publicUrl, path, bytes: blob.size };
+
+  // user-files is a PRIVATE bucket, so only a signed link works — the same
+  // year-long signature the Assets upload path uses. getPublicUrl builds a URL
+  // that looks perfectly valid and answers "Bucket not found", which is exactly
+  // how a job reported success while pointing at nothing.
+  const { data: signed, error: signErr } =
+    await db.storage.from(ASSET_BUCKET).createSignedUrl(path, 60 * 60 * 24 * 365);
+  const link = signed?.signedUrl;
+  if (signErr || !link) {
+    await db.storage.from(ASSET_BUCKET).remove([path]).catch(() => {});
+    throw new Error(signErr?.message || "could not create a link to the stored image");
+  }
+
+  // One request to prove the link serves the picture, before anybody is told it
+  // is ready. Every way this can break — wrong bucket, private bucket, wrong
+  // path, bad signature — produces a URL that looks fine until it is opened,
+  // and by then it is an asset row and a notification, not a failed job.
+  const check = await fetch(link, { headers: { Range: "bytes=0-15" }, signal: AbortSignal.timeout(DOWNLOAD_MS) })
+    .catch(() => null);
+  const checkBytes = check?.ok ? await check.arrayBuffer().catch(() => null) : null;
+  if (!sniffImage(checkBytes)) {
+    await db.storage.from(ASSET_BUCKET).remove([path]).catch(() => {});
+    throw new Error(`the stored image is not readable (HTTP ${check?.status ?? "no response"})`);
+  }
+
+  return { publicUrl: link, path, bytes: buf.byteLength };
+}
+
+// The other ending. A generation can fail minutes after the request, long after
+// whoever asked has moved on — so a failure has to travel the same way success
+// does, or the only person who ever learns about it is the one who happened to
+// still be watching.
+//
+// The status change is the guard: `in ('queued','running')` returns a row to
+// exactly one caller, so the poll and the webhook cannot both report the same
+// failure.
+async function failJob(db, job, message, extra = {}) {
+  const { data: marked } = await db
+    .from("generation_jobs")
+    .update({ status: "failed", error: message, updated_at: new Date().toISOString(), ...extra })
+    .eq("id", job.id)
+    .in("status", ["queued", "running"])
+    .select("id")
+    .maybeSingle();
+  if (!marked) return false;   // already resolved by the other trigger
+
+  const de = job.lang === "de";
+  const { error } = await db.from("notifications").insert({
+    user_id: job.user_id, org_id: job.org_id, type: "image_failed",
+    title: de ? "Bilderzeugung fehlgeschlagen" : "Image generation failed",
+    body: (job.prompt || "").slice(0, 120),
+    metadata: { model: job.model, reason: String(message).slice(0, 300) },
+  });
+  if (error) console.error("[generate] failure notification insert failed:", error.message);
+  return true;
 }
 
 // Everything that has to happen when a picture is ready, in one place and
@@ -283,7 +360,7 @@ async function completeJob(db, job, imageUrl) {
   // anywhere to say why.
   const { error: notifyErr } = await db.from("notifications").insert({
     user_id: job.user_id, org_id: job.org_id, type: "image_ready",
-    title: "Dein KI-Bild ist fertig",
+    title: job.lang === "de" ? "Dein KI-Bild ist fertig" : "Your AI image is ready",
     body: (job.prompt || "").slice(0, 120),
     metadata: { url: stored.publicUrl, model: job.model },
   });
@@ -328,15 +405,12 @@ export default async function handler(req) {
     if (image) {
       try { const done = await completeJob(db0, job, image); return json({ ok: true, claimed: Boolean(done) }); }
       catch (e) {
-        await db0.from("generation_jobs").update({ status: "failed", error: e.message, updated_at: new Date().toISOString() }).eq("id", job.id);
+        await failJob(db0, job, e.message);
         return json({ ok: false, error: e.message });
       }
     }
     if (["ERROR", "FAILED", "CANCELLED"].includes(state)) {
-      await db0.from("generation_jobs").update({
-        status: "failed", error: payload?.error || payload?.message || "Generation failed",
-        updated_at: new Date().toISOString(),
-      }).eq("id", job.id);
+      await failJob(db0, job, payload?.error || payload?.message || "Generation failed");
     }
     // Anything else: the poll path will finish it. A webhook that arrives
     // without a usable picture is not a reason to fail a running job.
@@ -391,6 +465,9 @@ export default async function handler(req) {
 
     const { data: job, error: jobErr } = await db.from("generation_jobs").insert({
       org_id: orgId, user_id: user.id, kind: "image", model: modelKey, prompt, status: "queued",
+      // Remembered now because the notification is written minutes later, by
+      // which time there is nobody left to ask what language they were using.
+      lang: body.lang === "de" ? "de" : "en",
     }).select().single();
     if (jobErr) return json({ error: jobErr.message }, 500);
 
@@ -486,10 +563,7 @@ export default async function handler(req) {
       // job until it gave up, and the reason never left this function.
       if (!res.ok) {
         const msg = payload?.message || payload?.error || `Status check failed (HTTP ${res.status})`;
-        await db.from("generation_jobs").update({
-          status: "failed", error: msg, provider_status: `HTTP ${res.status}`,
-          updated_at: new Date().toISOString(),
-        }).eq("id", job.id);
+        await failJob(db, job, msg, { provider_status: `HTTP ${res.status}` });
         return json({ jobId: job.id, status: "failed", error: msg });
       }
     } catch (e) {
@@ -513,7 +587,7 @@ export default async function handler(req) {
         }
         return json({ jobId: job.id, status: "completed", url: done.url });
       } catch (e) {
-        await db.from("generation_jobs").update({ status: "failed", error: e.message, updated_at: new Date().toISOString() }).eq("id", job.id);
+        await failJob(db, job, e.message);
         return json({ jobId: job.id, status: "failed", error: e.message });
       }
     }
@@ -525,15 +599,12 @@ export default async function handler(req) {
     if (["COMPLETED", "SUCCESS", "SUCCEEDED", "DONE"].includes(state)) {
       const snippet = JSON.stringify(payload || {}).slice(0, 600);
       const msg = `Provider reported ${state} but returned no usable image. Payload: ${snippet}`;
-      await db.from("generation_jobs").update({
-        status: "failed", error: msg, provider_status: state,
-        updated_at: new Date().toISOString(),
-      }).eq("id", job.id);
+      await failJob(db, job, msg, { provider_status: state });
       return json({ jobId: job.id, status: "failed", error: "The image service finished but returned no image." });
     }
     if (["ERROR", "FAILED", "CANCELLED"].includes(state)) {
       const msg = payload?.error || payload?.message || "Generation failed";
-      await db.from("generation_jobs").update({ status: "failed", error: msg, updated_at: new Date().toISOString() }).eq("id", job.id);
+      await failJob(db, job, msg);
       return json({ jobId: job.id, status: "failed", error: msg });
     }
     return json({ jobId: job.id, status: "running", providerStatus: state || null });
