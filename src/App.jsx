@@ -9881,9 +9881,13 @@ function needsFreshUrl(f) {
 async function refreshSignedUrlString(url) {
   const m = /\/object\/(?:sign|public)\/user-files\/([^?]+)/.exec(url || "");
   if (!m) return null;
-  const { data } = await supabase.storage.from("user-files")
+  const { data, error } = await supabase.storage.from("user-files")
     .createSignedUrl(decodeURIComponent(m[1]), SIGNED_URL_TTL);
-  return data?.signedUrl || null;
+  if (error || !data?.signedUrl) {
+    console.warn("[assets] could not renew copied link", url, "–", error?.message || "no url returned");
+    return null;
+  }
+  return data.signedUrl;
 }
 
 // Re-sign the rows that need it and write the new links back, so the work is
@@ -9895,8 +9899,14 @@ async function refreshUserFileUrls(rows) {
   const stale = (rows || []).filter(needsFreshUrl);
   if (!stale.length) return null;
   const pairs = await Promise.all(stale.map(async (f) => {
-    const { data } = await supabase.storage.from("user-files").createSignedUrl(f.storage_path, SIGNED_URL_TTL);
-    if (!data?.signedUrl) return null;
+    const { data, error } = await supabase.storage.from("user-files").createSignedUrl(f.storage_path, SIGNED_URL_TTL);
+    // Said out loud rather than swallowed. A silent refusal here is what let a
+    // picture sit unreachable while everything reported success: the storage
+    // rules would not let the reader sign that path, and nothing said so.
+    if (error || !data?.signedUrl) {
+      console.warn("[assets] could not renew link for", f.storage_path, "–", error?.message || "no url returned");
+      return null;
+    }
     await supabase.from("user_files").update({ public_url: data.signedUrl }).eq("id", f.id);
     return [f.id, data.signedUrl];
   }));
@@ -18951,7 +18961,18 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
       // used before generated images existed. Hardcoding it deleted the database
       // row while leaving the file — and the ledger entry — behind.
       const bucket = f.metadata?.bucket || "user-files";
-      try { await supabase.storage.from(bucket).remove([f.storage_path]); trackStorageDelete({ bucket, paths: [f.storage_path] }); } catch (_) {}
+      // remove() reports a refusal in `error` rather than throwing, so the old
+      // try/catch caught nothing and the row was deleted regardless. That is how
+      // a file ends up invisible and still counted against the workspace: the
+      // only record of it was the row we had just removed. Deletion is all or
+      // nothing now — if the file stays, so does the row.
+      const { error } = await supabase.storage.from(bucket).remove([f.storage_path]);
+      if (error) {
+        setFiles(prev => [f, ...(prev || [])].sort((a, b) => (b.created_at || "").localeCompare(a.created_at || "")));
+        alert((de ? "Datei konnte nicht gelöscht werden: " : "Could not delete the file: ") + error.message);
+        return;
+      }
+      trackStorageDelete({ bucket, paths: [f.storage_path] });
     }
     await supabase.from("user_files").delete().eq("id", f.id);
   };
