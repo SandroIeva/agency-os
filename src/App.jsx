@@ -142,6 +142,14 @@ const deriveWsRole = (m) => {
 
 const FONT = "'Geist', -apple-system, sans-serif";
 
+// Which language a first-time visitor gets. German browsers get German;
+// everyone else gets English, including anyone whose language we cannot read.
+// English is the default, not a "detection failed" fallback.
+const detectLanguage = () => {
+  const tag = (typeof navigator !== "undefined" && navigator.language) || "";
+  return tag.toLowerCase().startsWith("de") ? "de" : "en";
+};
+
 // How long a plan choice carried over from the pricing site stays actionable.
 // Covers a magic-link login (open mail, click, come back) without ever becoming
 // a permanent "always open Settings on load" flag.
@@ -28995,9 +29003,15 @@ export default function CircularMenu() {
     const saved = localStorage.getItem("agencyos-dark-mode");
     return saved !== null ? JSON.parse(saved) : true; // default dark
   });
-  const [appLanguage, setAppLanguage] = useState(() => localStorage.getItem("agencyos-language") || "");
-  useEffect(() => { if (appLanguage) localStorage.setItem("agencyos-language", appLanguage); }, [appLanguage]);
-  const t = useCallback((key, vars) => getTranslation(key, appLanguage || "de", vars), [appLanguage]);
+  // A stored choice wins; otherwise the browser decides. Only an explicit pick
+  // is written back, so someone who never touched the setting keeps following
+  // their browser instead of being frozen into whatever we detected once.
+  const [appLanguage, setAppLanguage] = useState(() => localStorage.getItem("agencyos-language") || detectLanguage());
+  const chooseLanguage = useCallback((lang) => {
+    setAppLanguage(lang);
+    localStorage.setItem("agencyos-language", lang);
+  }, []);
+  const t = useCallback((key, vars) => getTranslation(key, appLanguage, vars), [appLanguage]);
   // Translated menu items
   const MENU_ITEMS = useMemo(() => MENU_ITEMS_DEF.map(item => ({
     ...item, label: t(item.labelKey),
@@ -29835,17 +29849,6 @@ export default function CircularMenu() {
     });
     return () => subscription.unsubscribe();
   }, [storeGoogleToken, persistGoogleRefreshToken]);
-
-  // Auto-detect language from Google profile locale (only if user hasn't manually set one)
-  useEffect(() => {
-    if (session && !localStorage.getItem("agencyos-language")) {
-      const locale = session.user?.user_metadata?.locale || session.user?.user_metadata?.language || "";
-      const lang = locale.startsWith("de") ? "de" : "en";
-      setAppLanguage(lang);
-    } else if (!appLanguage) {
-      setAppLanguage("de"); // fallback default
-    }
-  }, [session]);
 
   const handleGoogleLogin = async () => {
     setAuthError(null);
@@ -35354,7 +35357,7 @@ export default function CircularMenu() {
                     <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
                       <select
                         value={appLanguage}
-                        onChange={(e) => setAppLanguage(e.target.value)}
+                        onChange={(e) => chooseLanguage(e.target.value)}
                         style={{
                           width: 150, padding: "10px 28px 10px 12px", borderRadius: 10,
                           background: darkMode ? "rgba(255,255,255,0.08)" : "#fff",

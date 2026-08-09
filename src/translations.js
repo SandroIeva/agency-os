@@ -514,7 +514,7 @@ const translations = {
  * @param {object} vars — optional interpolation variables (e.g. { name: "Max" })
  * @returns {string}
  */
-export function getTranslation(key, lang = "de", vars = {}) {
+export function getTranslation(key, lang = "en", vars = {}) {
   const entry = translations[key];
   if (!entry) return key; // fallback: return key itself
   let text = entry[lang] || entry.en || key;

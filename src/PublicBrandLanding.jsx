@@ -140,7 +140,8 @@ export default function PublicBrandLanding({ token }) {
   const [voiceSub, setVoiceSub] = useState("intro"); // inner nav within Voice & Tone
   const [voiceNavOpen, setVoiceNavOpen] = useState(false); // mobile: voice inner nav as dropdown
   const voiceRefs = React.useRef({});
-  const de = typeof navigator !== "undefined" ? (navigator.language || "de").toLowerCase().startsWith("de") : true;
+  // German browsers get German, everyone else English — same rule as the app.
+  const de = typeof navigator !== "undefined" && (navigator.language || "").toLowerCase().startsWith("de");
   const darkMode = false; // the public brand page is always light
 
   useEffect(() => {
