@@ -36866,9 +36866,14 @@ export default function CircularMenu() {
           >
             <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
               <rect x="0.6" y="0.6" width="50.4" height="50.4" rx="25.2" stroke={darkMode ? "white" : "#1a1a2e"} strokeOpacity={dialogMode ? 0.45 : 0.15} strokeWidth="1.2" />
-              {/* Speech bubble, drawn in the same weight as the circle around it. */}
-              <path d="M18 21.5C18 20.1193 19.1193 19 20.5 19H31.5C32.8807 19 34 20.1193 34 21.5V28.5C34 29.8807 32.8807 31 31.5 31H24.5L20 34.5V31H20.5C19.1193 31 18 29.8807 18 28.5V21.5Z"
-                stroke={darkMode ? "white" : "#1a1a2e"} strokeOpacity={0.75} strokeWidth="1.5" strokeLinejoin="round" />
+              {/* Speech bubble. Same colour rules as the grid beside it: the muted
+                  icon colour by default, bright only while the messenger is the
+                  view you are in. Drawn with a fixed bright stroke it read as
+                  permanently selected, including from the dashboard. */}
+              <motion.path d="M18 21.5C18 20.1193 19.1193 19 20.5 19H31.5C32.8807 19 34 20.1193 34 21.5V28.5C34 29.8807 32.8807 31 31.5 31H24.5L20 34.5V31H20.5C19.1193 31 18 29.8807 18 28.5V21.5Z"
+                animate={{ stroke: currentView === "chat" ? (darkMode ? "#ffffff" : "#1a1a2e") : theme.iconColor }}
+                transition={gentleTween}
+                strokeWidth="2" fill="none" strokeLinejoin="round" />
             </svg>
           </motion.div>
           )}

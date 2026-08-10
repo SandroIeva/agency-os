@@ -25,7 +25,7 @@ const translations = {
   "linearMenu.identity":      { de: "Identität",        en: "Identity" },
   "linearMenu.designSystem":  { de: "Design System",    en: "Design System" },
   "linearMenu.touchpoints":   { de: "Audience",         en: "Audience" },
-  "linearMenu.assets":        { de: "Dateien",          en: "Files" },
+  "linearMenu.assets":        { de: "Files Manager",    en: "Files Manager" },
   // Legacy Brand sub-item labels (kept for any older references)
   "linearMenu.files":         { de: "Dateien",          en: "Files" },
   "linearMenu.brandIdentity": { de: "Markenidentität",  en: "Brand Identity" },
