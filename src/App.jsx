@@ -12305,7 +12305,42 @@ function InitialsAvatar({ color = "#5B6CFF", initials = "?", size = 42, fontSize
   );
 }
 
-function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t, session, userOrg, orgMembers, darkMode, theme, createNotification, notifications = [], markNotifRead }) {
+// The advisors you can talk to in the Messenger. A fixed set for now: three
+// roles worth having, each with its own brief. Conversations with them live in
+// the same tables as conversations with people, so they sit in one list — and so
+// an agent can later simply be another participant in a group.
+const CHAT_AGENTS = [
+  {
+    key: "marketing", color: "#C4624A", initials: "MG",
+    name: { de: "Marketing Guide", en: "Marketing Guide" },
+    role: { de: "Kampagnen, Positionierung, Kanäle", en: "Campaigns, positioning, channels" },
+    brief: {
+      de: "Du bist Marketing Guide, ein erfahrener Marketingberater für Kreativagenturen. Du denkst in Zielgruppen, Positionierung und Kanälen. Du gibst konkrete, umsetzbare Empfehlungen statt allgemeiner Ratschläge und fragst nach, wenn dir Kontext fehlt. Antworte auf Deutsch.",
+      en: "You are Marketing Guide, an experienced marketing advisor for creative agencies. You think in audiences, positioning and channels. You give concrete, actionable recommendations rather than general advice, and you ask when context is missing. Answer in English.",
+    },
+  },
+  {
+    key: "trends", color: "#2D7A6A", initials: "TS",
+    name: { de: "Trend Scout", en: "Trend Scout" },
+    role: { de: "Trends, Kultur, Wettbewerb", en: "Trends, culture, competition" },
+    brief: {
+      de: "Du bist Trend Scout. Du beobachtest Kultur, Design und Konsumverhalten und erkennst früh, was sich verschiebt. Du benennst Trends präzise, ordnest ein wie belastbar sie sind, und sagst offen wenn etwas eher Hype als Bewegung ist. Antworte auf Deutsch.",
+      en: "You are Trend Scout. You watch culture, design and consumer behaviour and spot shifts early. You name trends precisely, judge how durable they are, and say plainly when something is hype rather than a movement. Answer in English.",
+    },
+  },
+  {
+    key: "business", color: "#4A6FA5", initials: "BD",
+    name: { de: "Business Developer", en: "Business Developer" },
+    role: { de: "Wachstum, Angebote, Preise", en: "Growth, offers, pricing" },
+    brief: {
+      de: "Du bist Business Developer, spezialisiert auf das Wachstum von Kreativagenturen. Du denkst in Angeboten, Preisen, Kundenbeziehungen und Auslastung. Du rechnest nach statt zu schätzen und nennst Annahmen, auf denen deine Zahlen beruhen. Antworte auf Deutsch.",
+      en: "You are Business Developer, focused on how creative agencies grow. You think in offers, pricing, client relationships and utilisation. You do the arithmetic rather than estimating, and you state the assumptions your numbers rest on. Answer in English.",
+    },
+  },
+];
+const AGENT_BY_KEY = Object.fromEntries(CHAT_AGENTS.map(a => [a.key, a]));
+
+function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t, session, userOrg, orgMembers, darkMode, theme, createNotification, notifications = [], markNotifRead, appLanguage = "en", llmProvider, llmKeys }) {
   const [search, setSearch] = useState("");
   const [conversations, setConversations] = useState([]);
   const [activeConvId, setActiveConvId] = useState(null);
@@ -12429,12 +12464,17 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       const other = otherIds.length > 0 ? memberMap[otherIds[0]] : null;
       const msgs = c.chat_messages || [];
       const lastMsg = msgs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
-      const name = c.is_group ? (c.name || "Gruppenchat") : (other?.display_name || "Unbekannt");
-      const avatar_url = !c.is_group ? other?.avatar_url : null;
-      const color = !c.is_group
+      // An agent conversation borrows its identity from the agent, not from a
+      // member row — there is no auth.users behind it.
+      const agent = c.agent_id ? AGENT_BY_KEY[c.agent_id] : null;
+      const name = agent ? agent.name[appLanguage === "de" ? "de" : "en"]
+        : c.is_group ? (c.name || "Gruppenchat") : (other?.display_name || "Unbekannt");
+      const avatar_url = (!c.is_group && !agent) ? other?.avatar_url : null;
+      const color = agent ? agent.color : !c.is_group
         ? (other?.color || "#5B6CFF")
         : (c.color || CHAT_COLORS[Math.abs((c.id || "x").charCodeAt(0)) % CHAT_COLORS.length]);
-      const initials = !c.is_group ? (other?.initials || "?") : (c.name || "G").slice(0, 2).toUpperCase();
+      const initials = agent ? agent.initials
+        : !c.is_group ? (other?.initials || "?") : (c.name || "G").slice(0, 2).toUpperCase();
       // Time formatting
       let timeStr = "";
       if (lastMsg) {
@@ -12447,6 +12487,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       }
       return {
         id: c.id, name, avatar_url, color, initials, is_group: c.is_group, created_by: c.created_by,
+        agent_id: c.agent_id || null,
         lastMsg: lastMsg?.text || "", time: timeStr,
         lastMsgAt: lastMsg?.created_at || c.created_at,
         participants, otherIds,
@@ -12547,6 +12588,67 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     }
   };
 
+  // Ask the agent and record its answer. Written by this client with no sender,
+  // which is what the message policy expects and what marks it as not-a-person
+  // everywhere it is rendered.
+  const [agentThinking, setAgentThinking] = useState(false);
+  const replyAsAgent = async (convId, agentKey, history) => {
+    const agent = AGENT_BY_KEY[agentKey];
+    if (!agent) return;
+    const de = appLanguage === "de";
+    const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
+    setAgentThinking(true);
+    try {
+      const resp = await fetch("/api/chat-multi", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: history[history.length - 1]?.text || "",
+          history: history.slice(0, -1).map(m => ({
+            role: m.agent_id ? "assistant" : "user", content: m.text || "",
+          })),
+          systemPrompt: agent.brief[de ? "de" : "en"],
+          provider: llmProvider || "gemini",
+          apiKey: apiKey || undefined,
+          orgId: userOrg?.id, userId: myId, feature: "agent-chat",
+          maxTokens: 2000,
+        }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      const text = ((data?.content || []).find(c => c.type === "text")?.text || data?.content?.[0]?.text || "").trim();
+      // A refusal is said out loud in the conversation rather than swallowed: a
+      // silent non-answer is indistinguishable from the agent ignoring you.
+      const body = (resp.ok && text) ? text
+        : (data?.error || (de
+            ? "Ich konnte gerade nicht antworten. Prüf deinen KI-Schlüssel unter Einstellungen → KI & Modelle."
+            : "I could not answer just now. Check your AI key under Settings → AI & models."));
+      await supabase.from("chat_messages").insert({ conversation_id: convId, agent_id: agentKey, text: body });
+    } catch (e) {
+      await supabase.from("chat_messages").insert({
+        conversation_id: convId, agent_id: agentKey,
+        text: (appLanguage === "de" ? "Fehler: " : "Error: ") + (e?.message || String(e)),
+      });
+    }
+    setAgentThinking(false);
+  };
+
+  // Open (or reopen) the conversation with an agent. One per person per agent:
+  // a second click continues where the last one left off rather than starting
+  // an empty thread beside it.
+  const startAgentConversation = async (agentKey) => {
+    if (!userOrg?.id || !myId) return;
+    const existing = conversations.find(c => c.agent_id === agentKey);
+    if (existing) { setActiveConvId(existing.id); return; }
+    const { data: conv, error } = await supabase.from("chat_conversations")
+      .insert({ org_id: userOrg.id, is_group: false, created_by: myId, agent_id: agentKey })
+      .select().single();
+    if (error || !conv) { console.warn("[chat] agent conversation failed:", error?.message); return; }
+    // The list only shows conversations you take part in, so the row is what
+    // makes it appear at all.
+    await supabase.from("chat_participants").insert({ conversation_id: conv.id, user_id: myId });
+    await loadConversations();
+    setActiveConvId(conv.id);
+  };
+
   const sendMessage = async () => {
     if ((!msgInput.trim() && !pendingAttachment) || !activeConvId || !myId) return;
     const text = msgInput.trim();
@@ -12568,6 +12670,16 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       attachment_type: attachment?.type || null,
       attachment_size: attachment?.size || null,
     });
+    // An agent conversation answers itself. The history comes from what is on
+    // screen plus the message just sent, so the agent sees the same thread the
+    // person does.
+    const activeConv = conversations.find(c => c.id === activeConvId);
+    if (activeConv?.agent_id) {
+      await replyAsAgent(activeConvId, activeConv.agent_id,
+        [...messages.map(m => ({ text: m.text, agent_id: m.agent_id })), { text, agent_id: null }]);
+      return;
+    }
+
     // Notify other participants
     if (createNotification) {
       const myName = memberMap[myId]?.display_name || "Jemand";
@@ -12831,8 +12943,21 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                 !membersWithConv.has(m.user_id) &&
                 (m.display_name.toLowerCase().includes(search.toLowerCase()) || !search)
               );
+              // Agents you have not spoken to yet sit in the same list as
+              // colleagues you have not written to yet. Same shape, so they need
+              // no second rendering path — only a different click.
+              const agentLang = appLanguage === "de" ? "de" : "en";
+              const agentsWithoutConv = CHAT_AGENTS
+                .filter(a => !conversations.some(c => c.agent_id === a.key))
+                .filter(a => !search || a.name[agentLang].toLowerCase().includes(search.toLowerCase()))
+                .map(a => ({
+                  type: "member", user_id: "agent:" + a.key, agentKey: a.key,
+                  display_name: a.name[agentLang], initials: a.initials,
+                  color: a.color, avatar_url: null, role: a.role[agentLang],
+                }));
               const allItems = [
                 ...filtered.map(c => ({ type: "conv", ...c })),
+                ...agentsWithoutConv,
                 ...membersWithoutConv.map(m => ({ type: "member", ...m })),
               ];
               if (allItems.length === 0) return (
@@ -12903,7 +13028,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.03 + i * 0.025, duration: 0.25 }}
-                    onClick={() => startConversation(item.user_id)}
+                    onClick={() => item.agentKey ? startAgentConversation(item.agentKey) : startConversation(item.user_id)}
                     className="hover-row"
                     style={{
                       display: "flex", alignItems: "center", gap: 12,
@@ -33604,7 +33729,7 @@ export default function CircularMenu() {
         <AnimatePresence>
           {currentView === "chat" && (
             <ChatView
-              initialTab={chatTab}
+              initialTab={chatTab} appLanguage={appLanguage} llmProvider={llmProvider} llmKeys={llmKeys}
               initialConvId={openChatConvId}
               onConvOpened={() => setOpenChatConvId(null)}
               t={t}
