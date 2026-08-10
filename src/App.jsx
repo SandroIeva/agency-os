@@ -29679,16 +29679,6 @@ export default function CircularMenu() {
   // Asked once. Dismissing is remembered so the workspace is not nagged, and it
   // never appears again once a key exists.
   const [aiIntroOpen, setAiIntroOpen] = useState(false);
-  // Where this person is, kept current for the messenger's local-time readout.
-  // Taken from the browser instead of asked for: it is already known exactly,
-  // and a setting nobody remembers to change would be worse than none.
-  useEffect(() => {
-    if (!session?.user?.id) return;
-    let tz = null;
-    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch (_) { tz = null; }
-    if (!tz) return;
-    supabase.from("profiles").update({ timezone: tz }).eq("id", session.user.id).then(() => {});
-  }, [session?.user?.id]);
   const onDashboard = currentView === "dashboard";
   // openBrainstorm is declared far below this file's start-card memo, so naming
   // it there would read it before its initialiser runs. A ref sidesteps that.
@@ -29870,6 +29860,17 @@ export default function CircularMenu() {
 
   // Auth state
   const [session, setSession] = useState(null);
+  // Where this person is, kept current for the messenger's local-time readout.
+  // Taken from the browser instead of asked for: it is already known exactly,
+  // and a setting nobody remembers to change would be worse than none.
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    let tz = null;
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch (_) { tz = null; }
+    if (!tz) return;
+    supabase.from("profiles").update({ timezone: tz }).eq("id", session.user.id).then(() => {});
+  }, [session?.user?.id]);
+
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
   const [loginEmail, setLoginEmail] = useState("");     // magic-link email
