@@ -12328,7 +12328,7 @@ function InitialsAvatar({ color = "#5B6CFF", initials = "?", size = 42, fontSize
 // an agent can later simply be another participant in a group.
 const CHAT_AGENTS = [
   {
-    key: "marketing", color: "#C4624A", initials: "MG",
+    key: "marketing", color: "#C4624A", initials: "MG", avatar: "/agent-marketing.png",
     name: { de: "Marketing Guide", en: "Marketing Guide" },
     role: { de: "Kampagnen, Positionierung, Kanäle", en: "Campaigns, positioning, channels" },
     brief: {
@@ -12337,7 +12337,7 @@ const CHAT_AGENTS = [
     },
   },
   {
-    key: "trends", color: "#2D7A6A", initials: "TS",
+    key: "trends", color: "#2D7A6A", initials: "TS", avatar: "/agent-trend.png",
     name: { de: "Trend Scout", en: "Trend Scout" },
     role: { de: "Trends, Kultur, Wettbewerb", en: "Trends, culture, competition" },
     brief: {
@@ -12346,12 +12346,12 @@ const CHAT_AGENTS = [
     },
   },
   {
-    key: "business", color: "#4A6FA5", initials: "BD",
-    name: { de: "Business Developer", en: "Business Developer" },
-    role: { de: "Wachstum, Angebote, Preise", en: "Growth, offers, pricing" },
+    key: "business", color: "#4A6FA5", initials: "BS", avatar: "/agent-brand.png",
+    name: { de: "Brand Strategist", en: "Brand Strategist" },
+    role: { de: "Positionierung, Wachstum, Angebote", en: "Positioning, growth, offers" },
     brief: {
-      de: "Du bist Business Developer, spezialisiert auf das Wachstum von Kreativagenturen. Du denkst in Angeboten, Preisen, Kundenbeziehungen und Auslastung. Du rechnest nach statt zu schätzen und nennst Annahmen, auf denen deine Zahlen beruhen. Antworte auf Deutsch.",
-      en: "You are Business Developer, focused on how creative agencies grow. You think in offers, pricing, client relationships and utilisation. You do the arithmetic rather than estimating, and you state the assumptions your numbers rest on. Answer in English.",
+      de: "Du bist Brand Strategist. Du verbindest Markenführung mit dem Geschäft dahinter: Positionierung, Angebote, Preise und Kundenbeziehungen. Du rechnest nach statt zu schätzen und nennst die Annahmen, auf denen deine Zahlen beruhen. Antworte auf Deutsch.",
+      en: "You are Brand Strategist. You connect how a brand is run with the business behind it: positioning, offers, pricing and client relationships. You do the arithmetic rather than estimating, and you state the assumptions your numbers rest on. Answer in English.",
     },
   },
 ];
@@ -12486,7 +12486,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       const agent = c.agent_id ? AGENT_BY_KEY[c.agent_id] : null;
       const name = agent ? agent.name[appLanguage === "de" ? "de" : "en"]
         : c.is_group ? (c.name || "Gruppenchat") : (other?.display_name || "Unbekannt");
-      const avatar_url = (!c.is_group && !agent) ? other?.avatar_url : null;
+      const avatar_url = agent ? agent.avatar : (!c.is_group ? other?.avatar_url : null);
       const color = agent ? agent.color : !c.is_group
         ? (other?.color || "#5B6CFF")
         : (c.color || CHAT_COLORS[Math.abs((c.id || "x").charCodeAt(0)) % CHAT_COLORS.length]);
@@ -12970,7 +12970,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                 .map(a => ({
                   type: "member", user_id: "agent:" + a.key, agentKey: a.key,
                   display_name: a.name[agentLang], initials: a.initials,
-                  color: a.color, avatar_url: null, role: a.role[agentLang],
+                  color: a.color, avatar_url: a.avatar, role: a.role[agentLang],
                 }));
               const allItems = [
                 ...filtered.map(c => ({ type: "conv", ...c })),
