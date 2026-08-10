@@ -12622,6 +12622,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
   // and it needs them for one person at a time.
   const [partner, setPartner] = useState(null);       // { profile, member, projects }
   const [agentInfo, setAgentInfo] = useState(null);   // agent shown in the info overlay
+  const [listFilter, setListFilter] = useState("team"); // "team" | "agents" | "group"
   useEffect(() => {
     const conv = conversations.find(c => c.id === activeConvId);
     const otherId = (!conv || conv.agent_id || conv.is_group) ? null : (conv.otherIds || [])[0];
@@ -12967,7 +12968,39 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                   style={{ cursor: "pointer", color: theme.textDim, fontSize: 11, fontFamily: FONT }}>✕</motion.div>
               )}
             </div>
-            <motion.div
+            {/* Three kinds of conversation that have nothing to do with each
+                other: colleagues, advisors, and rooms. One list mixing them was
+                fine with four entries and stops being fine at twenty. */}
+            <div style={{
+              marginTop: 10, display: "flex", padding: 4, borderRadius: 999,
+              background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
+            }}>
+              {[
+                ["team",   appLanguage === "de" ? "Team" : "Team"],
+                ["agents", appLanguage === "de" ? "Agents" : "Agents"],
+                ["group",  appLanguage === "de" ? "Gruppen" : "Group"],
+              ].map(([key, label]) => {
+                const on = listFilter === key;
+                return (
+                  <motion.div key={key} whileTap={{ scale: 0.97 }} onClick={() => setListFilter(key)}
+                    style={{
+                      flex: 1, textAlign: "center", padding: "7px 0", borderRadius: 999, cursor: "pointer",
+                      fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500,
+                      // Dark mode inverts the selected pill, the way the main
+                      // navigation does.
+                      background: on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
+                      color: on ? (darkMode ? "#15151c" : "#fff") : theme.textDim,
+                      transition: "background .16s ease, color .16s ease",
+                    }}>
+                    {label}
+                  </motion.div>
+                );
+              })}
+            </div>
+
+            {/* Only under Gruppen. Beside Team or Agents it offered something
+                that has nothing to do with what is in the list. */}
+            {listFilter === "group" && <motion.div
               whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }}
               onClick={() => { setGroupName(""); setGroupSelected([]); setGroupColor(GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)]); setGroupModalOpen(true); }}
               style={{
@@ -12980,7 +13013,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
               Neue Gruppe
-            </motion.div>
+            </motion.div>}
           </div>
 
           {/* Conversation list — shows all team members, with existing chats on top */}
@@ -13010,10 +13043,17 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                   display_name: a.name[agentLang], initials: a.initials,
                   color: a.color, avatar_url: a.avatar, role: a.role[agentLang],
                 }));
+              // Conversations you have already had, split the same way the
+              // switcher is. Someone you have never written to only belongs in
+              // Team, and an agent you have never asked only in Agents.
+              const convItems = filtered.filter(c =>
+                listFilter === "group" ? c.is_group
+                  : listFilter === "agents" ? Boolean(c.agent_id)
+                  : !c.is_group && !c.agent_id);
               const allItems = [
-                ...filtered.map(c => ({ type: "conv", ...c })),
-                ...agentsWithoutConv,
-                ...membersWithoutConv.map(m => ({ type: "member", ...m })),
+                ...convItems.map(c => ({ type: "conv", ...c })),
+                ...(listFilter === "agents" ? agentsWithoutConv : []),
+                ...(listFilter === "team" ? membersWithoutConv.map(m => ({ type: "member", ...m })) : []),
               ];
               if (allItems.length === 0) return (
                 <div style={{ padding: 32, textAlign: "center" }}>
