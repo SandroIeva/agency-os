@@ -12328,8 +12328,8 @@ function InitialsAvatar({ color = "#5B6CFF", initials = "?", size = 42, fontSize
 // an agent can later simply be another participant in a group.
 const CHAT_AGENTS = [
   {
-    key: "marketing", color: "#C4624A", initials: "MA", avatar: "/agent-marketing.png",
-    name: { de: "Mara", en: "Mara" },
+    key: "marketing", color: "#C4624A", initials: "MV", avatar: "/agent-marketing.png",
+    name: { de: "Mara Vogel", en: "Mara Vogel" },
     role: { de: "Marketing Guide", en: "Marketing Guide" },
     brief: {
       de: "Du bist Mara, eine erfahrene Marketingberaterin für Kreativagenturen. Du denkst in Zielgruppen, Positionierung und Kanälen. Du gibst konkrete, umsetzbare Empfehlungen statt allgemeiner Ratschläge und fragst nach, wenn dir Kontext fehlt. Antworte auf Deutsch.",
@@ -12338,8 +12338,8 @@ const CHAT_AGENTS = [
     prompts: { de: ["Positionierung für eine neue Kampagne schärfen", "Welche Kanäle passen zu meiner Zielgruppe?", "Wie messe ich ob eine Kampagne wirkt?"], en: ["Sharpen the positioning for a new campaign", "Which channels fit my audience?", "How do I tell whether a campaign worked?"] },
   },
   {
-    key: "trends", color: "#2D7A6A", initials: "JU", avatar: "/agent-trend.png",
-    name: { de: "Juno", en: "Juno" },
+    key: "trends", color: "#2D7A6A", initials: "JR", avatar: "/agent-trend.png",
+    name: { de: "Juno Reyes", en: "Juno Reyes" },
     role: { de: "Trend Scout", en: "Trend Scout" },
     brief: {
       de: "Du bist Juno, Trend Scout. Du beobachtest Kultur, Design und Konsumverhalten und erkennst früh, was sich verschiebt. Du benennst Trends präzise, ordnest ein wie belastbar sie sind, und sagst offen wenn etwas eher Hype als Bewegung ist. Antworte auf Deutsch.",
@@ -12348,8 +12348,8 @@ const CHAT_AGENTS = [
     prompts: { de: ["Was verändert sich gerade in meiner Branche?", "Ist das ein Trend oder nur ein Hype?", "Woran erkenne ich einen Trend früh?"], en: ["What is shifting in my industry right now?", "Is this a trend or just hype?", "How do I spot a trend early?"] },
   },
   {
-    key: "business", color: "#4A6FA5", initials: "EL", avatar: "/agent-brand.png",
-    name: { de: "Elio", en: "Elio" },
+    key: "business", color: "#4A6FA5", initials: "EM", avatar: "/agent-brand.png",
+    name: { de: "Elio Marchetti", en: "Elio Marchetti" },
     role: { de: "Brand Strategist", en: "Brand Strategist" },
     brief: {
       de: "Du bist Elio, Brand Strategist. Du verbindest Markenführung mit dem Geschäft dahinter: Positionierung, Angebote, Preise und Kundenbeziehungen. Du rechnest nach statt zu schätzen und nennst die Annahmen, auf denen deine Zahlen beruhen. Antworte auf Deutsch.",
@@ -13112,21 +13112,17 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
         {activeConv ? (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
             {/* Chat Header */}
+            {/* Deliberately bare: no name, no rule. Who you are talking to is
+                said twice already, in the list and in the panel. Only the group
+                controls stay, and they sit at the edge rather than in the
+                middle. */}
             <div style={{
-              padding: "14px 24px", borderBottom: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)"}`,
-              display: "flex", alignItems: "center", gap: 14,
+              padding: "14px 24px", display: "flex", alignItems: "center", gap: 14, minHeight: 34,
             }}>
               {/* No avatar here. It is already in the list on the left and large
                   in the panel on the right; a third copy above the conversation
                   only crowded the name. */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{activeConv.name}</div>
-                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {activeConv.is_group
-                    ? `${(activeConv.participants || []).length} Mitglieder · ` + (activeConv.participants || []).map(id => id === myId ? "Du" : (memberMap[id]?.display_name || "?")).join(", ")
-                    : "Direkte Nachricht"}
-                </div>
-              </div>
+              <div style={{ flex: 1, minWidth: 0 }} />
               {activeConv.is_group && (
                 <motion.div
                   whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
@@ -13148,9 +13144,13 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               padding: "20px 24px", display: "flex", flexDirection: "column", gap: 8,
             }}>
               {messages.length === 0 && (
-                <div style={{ textAlign: "center", padding: "60px 20px" }}>
-                  <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.2 }}>👋</div>
-                  <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>Sag Hallo!</div>
+                // Centred in the whole area rather than floating near the top,
+                // and it names who you are about to write to.
+                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textDim, textAlign: "center" }}>
+                    {(appLanguage === "de" ? "Starte eine Konversation mit " : "Start a conversation with ")
+                      + (activeConv.name || "").split(" ")[0]}
+                  </div>
                 </div>
               )}
               {messages.map((msg, i) => {
@@ -13455,7 +13455,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
           );
           return (
             <div style={{
-              width: 300, flexShrink: 0, borderLeft: `1px solid ${theme.borderFaint}`,
+              width: 340, flexShrink: 0, borderLeft: `1px solid ${theme.borderFaint}`,
               display: "flex", flexDirection: "column", overflowY: "auto",
               // The tint is picked up from the conversation itself, so the panel
               // belongs to the person rather than being a grey slab beside them.
@@ -13504,7 +13504,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                     style={{ marginTop: 18, padding: "9px 20px", borderRadius: 999, cursor: "pointer",
                       border: `1px solid ${theme.borderFaint}`, color: theme.text,
                       fontFamily: FONT, fontSize: 12.5, fontWeight: 600 }}>
-                    {de ? "Was Mara kann".replace("Mara", agent.name.de) : `What ${agent.name.en} does`}
+                    {(de ? "Über " : "About ") + agent.name[de ? "de" : "en"].split(" ")[0]}
                   </motion.div>
                 )}
 
