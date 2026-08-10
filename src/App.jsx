@@ -12987,7 +12987,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                   <motion.div key={key} whileTap={{ scale: 0.97 }}
                     onClick={() => { setListFilter(key); setActiveConvId(null); }}
                     style={{
-                      flex: 1, textAlign: "center", padding: "7px 0", borderRadius: 999, cursor: "pointer",
+                      flex: 1, textAlign: "center", padding: "9px 0", borderRadius: 999, cursor: "pointer",
                       fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500,
                       // Dark mode inverts the selected pill, the way the main
                       // navigation does.
@@ -13008,7 +13008,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               onClick={() => { setGroupName(""); setGroupSelected([]); setGroupColor(GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)]); setGroupModalOpen(true); }}
               style={{
                 marginTop: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-                padding: "11px 14px", borderRadius: 12, cursor: "pointer",
+                padding: "13px 14px", borderRadius: 12, cursor: "pointer",
                 background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
                 border: `1px dashed ${theme.border}`,
                 color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500,
