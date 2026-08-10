@@ -12328,13 +12328,14 @@ function InitialsAvatar({ color = "#5B6CFF", initials = "?", size = 42, fontSize
 // an agent can later simply be another participant in a group.
 const CHAT_AGENTS = [
   {
-    key: "marketing", color: "#C4624A", initials: "MV", avatar: "/agent-marketing.png",
-    name: { de: "Mara Vogel", en: "Mara Vogel" },
+    key: "marketing", color: "#C4624A", initials: "ML", avatar: "/agent-marketing.png",
+    name: { de: "Mara Lindqvist", en: "Mara Lindqvist" },
     role: { de: "Marketing Guide", en: "Marketing Guide" },
     brief: {
       de: "Du bist Mara, eine erfahrene Marketingberaterin für Kreativagenturen. Du denkst in Zielgruppen, Positionierung und Kanälen. Du gibst konkrete, umsetzbare Empfehlungen statt allgemeiner Ratschläge und fragst nach, wenn dir Kontext fehlt. Antworte auf Deutsch.",
       en: "You are Mara, an experienced marketing advisor for creative agencies. You think in audiences, positioning and channels. You give concrete, actionable recommendations rather than general advice, and you ask when context is missing. Answer in English.",
     },
+    bio: { de: "Bringt Kampagnen dahin wo die Zielgruppe wirklich ist. Fragt lieber zweimal nach dem Ziel als einmal zu schnell zu liefern.", en: "Gets campaigns to where the audience actually is. Would rather ask twice about the goal than deliver once too quickly." },
     prompts: { de: ["Positionierung für eine neue Kampagne schärfen", "Welche Kanäle passen zu meiner Zielgruppe?", "Wie messe ich ob eine Kampagne wirkt?"], en: ["Sharpen the positioning for a new campaign", "Which channels fit my audience?", "How do I tell whether a campaign worked?"] },
   },
   {
@@ -12345,6 +12346,7 @@ const CHAT_AGENTS = [
       de: "Du bist Juno, Trend Scout. Du beobachtest Kultur, Design und Konsumverhalten und erkennst früh, was sich verschiebt. Du benennst Trends präzise, ordnest ein wie belastbar sie sind, und sagst offen wenn etwas eher Hype als Bewegung ist. Antworte auf Deutsch.",
       en: "You are Juno, a trend scout. You watch culture, design and consumer behaviour and spot shifts early. You name trends precisely, judge how durable they are, and say plainly when something is hype rather than a movement. Answer in English.",
     },
+    bio: { de: "Liest Kultur schon bevor sie im Briefing auftaucht. Sagt genauso klar wenn etwas nur Lärm ist.", en: "Reads culture before it shows up in a brief. Just as clear about what is only noise." },
     prompts: { de: ["Was verändert sich gerade in meiner Branche?", "Ist das ein Trend oder nur ein Hype?", "Woran erkenne ich einen Trend früh?"], en: ["What is shifting in my industry right now?", "Is this a trend or just hype?", "How do I spot a trend early?"] },
   },
   {
@@ -12355,6 +12357,7 @@ const CHAT_AGENTS = [
       de: "Du bist Elio, Brand Strategist. Du verbindest Markenführung mit dem Geschäft dahinter: Positionierung, Angebote, Preise und Kundenbeziehungen. Du rechnest nach statt zu schätzen und nennst die Annahmen, auf denen deine Zahlen beruhen. Antworte auf Deutsch.",
       en: "You are Elio, a brand strategist. You connect how a brand is run with the business behind it: positioning, offers, pricing and client relationships. You do the arithmetic rather than estimating, and you state the assumptions your numbers rest on. Answer in English.",
     },
+    bio: { de: "Verbindet Haltung mit Zahlen. Rechnet nach bevor er eine Positionierung empfiehlt.", en: "Puts numbers behind a point of view. Does the arithmetic before recommending a position." },
     prompts: { de: ["Angebot und Preis für ein neues Projekt prüfen", "Wie ordne ich mich gegenüber dem Wettbewerb ein?", "Womit wächst eine Agentur am verlässlichsten?"], en: ["Check the offer and price for a new project", "Where do I stand against the competition?", "What grows an agency most reliably?"] },
   },
 ];
@@ -13519,11 +13522,11 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               </div>
 
               {(agent || prof?.bio) && (
-                <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6,
-                  textAlign: "center", marginTop: 20 }}>
-                  {/* For an agent, the opening sentence of its brief — what it is,
-                      in its own words. For a person, whatever they wrote. */}
-                  {agent ? agent.brief[de ? "de" : "en"].split(". ")[0] + "." : prof.bio}
+                // A narrower measure than the panel: full-width centred text
+                // wraps too late and reads as a block rather than a sentence.
+                <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.45,
+                  textAlign: "center", margin: "20px auto 0", maxWidth: "80%" }}>
+                  {agent ? agent.bio[de ? "de" : "en"] : prof.bio}
                 </div>
               )}
 
@@ -13587,7 +13590,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               </div>
             </div>
             <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
-              {agentInfo.brief[appLanguage === "de" ? "de" : "en"]}
+              {agentInfo.bio[appLanguage === "de" ? "de" : "en"]}
             </div>
             <div>
               <div style={{ fontSize: 10.5, fontFamily: FONT, letterSpacing: 0.6, textTransform: "uppercase",
