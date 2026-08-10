@@ -23882,7 +23882,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
             <div style={{ padding: "12px 14px" }}>
               <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{p.name || "Persona"}{p.age ? <span style={{ fontWeight: 500, color: theme.textDim, fontSize: 13 }}>  ·  {p.age}</span> : null}</div>
               {p.role && <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{p.role}</div>}
-              {p.consumer_behavior && <div style={{ marginTop: 8, display: "inline-block", padding: "3px 9px", borderRadius: 7, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.accent, fontSize: 11, fontFamily: FONT, fontWeight: 600 }}>{p.consumer_behavior}</div>}
+              {p.consumer_behavior && <div style={{ ...brandChip(theme, darkMode), marginTop: 8 }}>{p.consumer_behavior}</div>}
             </div>
           </motion.div>
         ))}
@@ -23896,6 +23896,18 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
     </div>
   );
 }
+
+// One pill, used by the persona cards and the competitor cards, so a fact on one
+// card looks like a fact on the other. Neutral grey and normal weight: these are
+// attributes, not emphasis, and the persona chip used to shout them in the
+// accent colour.
+const brandChip = (theme, darkMode) => ({
+  display: "inline-flex", alignItems: "center", gap: 5,
+  padding: "4px 11px", borderRadius: 999,
+  background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
+  color: theme.textDim, fontSize: 11, fontFamily: FONT, fontWeight: 500,
+  whiteSpace: "nowrap",
+});
 
 // Small back link used across persona sub-screens.
 function BackLink({ theme, onClick, label }) {
@@ -24383,9 +24395,9 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
           </div>
           {c.website && <span style={{ fontSize: 12, fontFamily: FONT, color: theme.accent }}>{c.website}</span>}
           {c.summary && <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{c.summary}</span>}
-          <div style={{ display: "flex", gap: 14, marginTop: 2, flexWrap: "wrap" }}>
-            {c.team_size && <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>👥 {c.team_size}</span>}
-            {c.location && <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>📍 {c.location}</span>}
+          <div style={{ display: "flex", gap: 7, marginTop: 4, flexWrap: "wrap" }}>
+            {c.team_size && <span style={brandChip(theme, darkMode)}>👥 {c.team_size}</span>}
+            {c.location && <span style={brandChip(theme, darkMode)}>📍 {c.location}</span>}
           </div>
         </motion.div>
       ))}
