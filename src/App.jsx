@@ -12328,32 +12328,32 @@ function InitialsAvatar({ color = "#5B6CFF", initials = "?", size = 42, fontSize
 // an agent can later simply be another participant in a group.
 const CHAT_AGENTS = [
   {
-    key: "marketing", color: "#C4624A", initials: "MG", avatar: "/agent-marketing.png",
-    name: { de: "Marketing Guide", en: "Marketing Guide" },
-    role: { de: "Kampagnen, Positionierung, Kanäle", en: "Campaigns, positioning, channels" },
+    key: "marketing", color: "#C4624A", initials: "MA", avatar: "/agent-marketing.png",
+    name: { de: "Mara", en: "Mara" },
+    role: { de: "Marketing Guide", en: "Marketing Guide" },
     brief: {
-      de: "Du bist Marketing Guide, ein erfahrener Marketingberater für Kreativagenturen. Du denkst in Zielgruppen, Positionierung und Kanälen. Du gibst konkrete, umsetzbare Empfehlungen statt allgemeiner Ratschläge und fragst nach, wenn dir Kontext fehlt. Antworte auf Deutsch.",
-      en: "You are Marketing Guide, an experienced marketing advisor for creative agencies. You think in audiences, positioning and channels. You give concrete, actionable recommendations rather than general advice, and you ask when context is missing. Answer in English.",
+      de: "Du bist Mara, eine erfahrene Marketingberaterin für Kreativagenturen. Du denkst in Zielgruppen, Positionierung und Kanälen. Du gibst konkrete, umsetzbare Empfehlungen statt allgemeiner Ratschläge und fragst nach, wenn dir Kontext fehlt. Antworte auf Deutsch.",
+      en: "You are Mara, an experienced marketing advisor for creative agencies. You think in audiences, positioning and channels. You give concrete, actionable recommendations rather than general advice, and you ask when context is missing. Answer in English.",
     },
     prompts: { de: ["Positionierung für eine neue Kampagne schärfen", "Welche Kanäle passen zu meiner Zielgruppe?", "Wie messe ich ob eine Kampagne wirkt?"], en: ["Sharpen the positioning for a new campaign", "Which channels fit my audience?", "How do I tell whether a campaign worked?"] },
   },
   {
-    key: "trends", color: "#2D7A6A", initials: "TS", avatar: "/agent-trend.png",
-    name: { de: "Trend Scout", en: "Trend Scout" },
-    role: { de: "Trends, Kultur, Wettbewerb", en: "Trends, culture, competition" },
+    key: "trends", color: "#2D7A6A", initials: "JU", avatar: "/agent-trend.png",
+    name: { de: "Juno", en: "Juno" },
+    role: { de: "Trend Scout", en: "Trend Scout" },
     brief: {
-      de: "Du bist Trend Scout. Du beobachtest Kultur, Design und Konsumverhalten und erkennst früh, was sich verschiebt. Du benennst Trends präzise, ordnest ein wie belastbar sie sind, und sagst offen wenn etwas eher Hype als Bewegung ist. Antworte auf Deutsch.",
-      en: "You are Trend Scout. You watch culture, design and consumer behaviour and spot shifts early. You name trends precisely, judge how durable they are, and say plainly when something is hype rather than a movement. Answer in English.",
+      de: "Du bist Juno, Trend Scout. Du beobachtest Kultur, Design und Konsumverhalten und erkennst früh, was sich verschiebt. Du benennst Trends präzise, ordnest ein wie belastbar sie sind, und sagst offen wenn etwas eher Hype als Bewegung ist. Antworte auf Deutsch.",
+      en: "You are Juno, a trend scout. You watch culture, design and consumer behaviour and spot shifts early. You name trends precisely, judge how durable they are, and say plainly when something is hype rather than a movement. Answer in English.",
     },
     prompts: { de: ["Was verändert sich gerade in meiner Branche?", "Ist das ein Trend oder nur ein Hype?", "Woran erkenne ich einen Trend früh?"], en: ["What is shifting in my industry right now?", "Is this a trend or just hype?", "How do I spot a trend early?"] },
   },
   {
-    key: "business", color: "#4A6FA5", initials: "BS", avatar: "/agent-brand.png",
-    name: { de: "Brand Strategist", en: "Brand Strategist" },
-    role: { de: "Positionierung, Wachstum, Angebote", en: "Positioning, growth, offers" },
+    key: "business", color: "#4A6FA5", initials: "EL", avatar: "/agent-brand.png",
+    name: { de: "Elio", en: "Elio" },
+    role: { de: "Brand Strategist", en: "Brand Strategist" },
     brief: {
-      de: "Du bist Brand Strategist. Du verbindest Markenführung mit dem Geschäft dahinter: Positionierung, Angebote, Preise und Kundenbeziehungen. Du rechnest nach statt zu schätzen und nennst die Annahmen, auf denen deine Zahlen beruhen. Antworte auf Deutsch.",
-      en: "You are Brand Strategist. You connect how a brand is run with the business behind it: positioning, offers, pricing and client relationships. You do the arithmetic rather than estimating, and you state the assumptions your numbers rest on. Answer in English.",
+      de: "Du bist Elio, Brand Strategist. Du verbindest Markenführung mit dem Geschäft dahinter: Positionierung, Angebote, Preise und Kundenbeziehungen. Du rechnest nach statt zu schätzen und nennst die Annahmen, auf denen deine Zahlen beruhen. Antworte auf Deutsch.",
+      en: "You are Elio, a brand strategist. You connect how a brand is run with the business behind it: positioning, offers, pricing and client relationships. You do the arithmetic rather than estimating, and you state the assumptions your numbers rest on. Answer in English.",
     },
     prompts: { de: ["Angebot und Preis für ein neues Projekt prüfen", "Wie ordne ich mich gegenüber dem Wettbewerb ein?", "Womit wächst eine Agentur am verlässlichsten?"], en: ["Check the offer and price for a new project", "Where do I stand against the competition?", "What grows an agency most reliably?"] },
   },
@@ -12617,7 +12617,8 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
   // in common. Fetched here rather than threaded through the member list: the
   // panel needs fields (email, bio, when they joined) the list never asked for,
   // and it needs them for one person at a time.
-  const [partner, setPartner] = useState(null);       // { profile, role, joinedAt, projects }
+  const [partner, setPartner] = useState(null);       // { profile, member, projects }
+  const [agentInfo, setAgentInfo] = useState(null);   // agent shown in the info overlay
   useEffect(() => {
     const conv = conversations.find(c => c.id === activeConvId);
     const otherId = (!conv || conv.agent_id || conv.is_group) ? null : (conv.otherIds || [])[0];
@@ -12625,7 +12626,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     let alive = true;
     (async () => {
       const [prof, mem, mine, theirs] = await Promise.all([
-        supabase.from("profiles").select("display_name,avatar_url,email,bio,initials,created_at").eq("id", otherId).maybeSingle(),
+        supabase.from("profiles").select("display_name,avatar_url,email,bio,initials,created_at,timezone").eq("id", otherId).maybeSingle(),
         supabase.from("org_members").select("role,workspace_role,joined_at").eq("org_id", userOrg?.id).eq("user_id", otherId).maybeSingle(),
         supabase.from("project_members").select("project_id").eq("user_id", myId),
         supabase.from("project_members").select("project_id").eq("user_id", otherId),
@@ -13115,13 +13116,9 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               padding: "14px 24px", borderBottom: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)"}`,
               display: "flex", alignItems: "center", gap: 14,
             }}>
-              <div style={{ position: "relative", flexShrink: 0 }}>
-                {activeConv.avatar_url ? (
-                  <img src={activeConv.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 38, height: 38, borderRadius: "50%" }} />
-                ) : (
-                  <InitialsAvatar color={activeConv.color} initials={activeConv.initials} size={38} fontSize={13} />
-                )}
-              </div>
+              {/* No avatar here. It is already in the list on the left and large
+                  in the panel on the right; a third copy above the conversation
+                  only crowded the name. */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{activeConv.name}</div>
                 <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -13463,7 +13460,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               // The tint is picked up from the conversation itself, so the panel
               // belongs to the person rather than being a grey slab beside them.
               background: `radial-gradient(120% 60% at 50% 0%, ${tint}22 0%, transparent 70%)`,
-              padding: "34px 22px 24px",
+              padding: "58px 22px 24px",
             }}>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
                 {activeConv.avatar_url ? (
@@ -13482,10 +13479,33 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                 {role && (
                   <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 4 }}>{role}</div>
                 )}
+                {!agent && prof?.timezone && (() => {
+                  // Said before you write, not after: the whole point is knowing
+                  // whether now is a reasonable moment to reach them.
+                  let clock = null;
+                  try {
+                    clock = new Date().toLocaleTimeString(de ? "de-DE" : "en-US",
+                      { timeZone: prof.timezone, hour: "2-digit", minute: "2-digit" });
+                  } catch (_) { clock = null; }
+                  return clock ? (
+                    <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, marginTop: 3 }}>
+                      {(de ? "Ortszeit " : "local time ") + clock}
+                    </div>
+                  ) : null;
+                })()}
                 {!agent && joined && (
                   <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, marginTop: 3 }}>
                     {(de ? "dabei seit " : "joined ") + new Date(joined).getFullYear()}
                   </div>
+                )}
+
+                {agent && (
+                  <motion.div whileTap={{ scale: 0.97 }} onClick={() => setAgentInfo(agent)}
+                    style={{ marginTop: 18, padding: "9px 20px", borderRadius: 999, cursor: "pointer",
+                      border: `1px solid ${theme.borderFaint}`, color: theme.text,
+                      fontFamily: FONT, fontSize: 12.5, fontWeight: 600 }}>
+                    {de ? "Was Mara kann".replace("Mara", agent.name.de) : `What ${agent.name.en} does`}
+                  </motion.div>
                 )}
 
                 {!agent && prof?.email && (
@@ -13544,6 +13564,54 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
           );
         })()}
       </div>
+
+      {/* What this agent is for, at more length than a panel line allows. */}
+      {agentInfo && createPortal(
+        <div onClick={() => setAgentInfo(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <motion.div initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+            onClick={e => e.stopPropagation()}
+            style={{ width: "min(480px, 100%)", background: darkMode ? "#16161e" : "#fff",
+              border: `1px solid ${theme.borderFaint}`, borderRadius: 18, padding: 26,
+              boxShadow: "0 30px 80px rgba(0,0,0,0.35)", display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <img src={agentInfo.avatar} alt="" style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover" }} />
+              <div>
+                <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                  {agentInfo.name[appLanguage === "de" ? "de" : "en"]}
+                </div>
+                <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                  {agentInfo.role[appLanguage === "de" ? "de" : "en"]}
+                </div>
+              </div>
+            </div>
+            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+              {agentInfo.brief[appLanguage === "de" ? "de" : "en"]}
+            </div>
+            <div>
+              <div style={{ fontSize: 10.5, fontFamily: FONT, letterSpacing: 0.6, textTransform: "uppercase",
+                color: theme.textFaint, marginBottom: 8 }}>
+                {appLanguage === "de" ? "Typische Fragen" : "Typical questions"}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                {agentInfo.prompts[appLanguage === "de" ? "de" : "en"].map(q => (
+                  <div key={q} className="hover-row" onClick={() => { setMsgInput(q); setAgentInfo(null); }}
+                    style={{ padding: "9px 11px", borderRadius: 10, cursor: "pointer",
+                      border: `1px solid ${theme.borderFaint}`, fontSize: 12.5, fontFamily: FONT,
+                      color: theme.text, lineHeight: 1.45 }}>{q}</div>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setAgentInfo(null)}
+                style={{ padding: "9px 18px", borderRadius: 11, border: "none", background: "#15151c", color: "#fff",
+                  fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                {appLanguage === "de" ? "Schließen" : "Close"}
+              </motion.button>
+            </div>
+          </motion.div>
+        </div>, document.body)}
 
       {/* ── New-group modal ── */}
       {groupModalOpen && createPortal(
@@ -29611,6 +29679,16 @@ export default function CircularMenu() {
   // Asked once. Dismissing is remembered so the workspace is not nagged, and it
   // never appears again once a key exists.
   const [aiIntroOpen, setAiIntroOpen] = useState(false);
+  // Where this person is, kept current for the messenger's local-time readout.
+  // Taken from the browser instead of asked for: it is already known exactly,
+  // and a setting nobody remembers to change would be worse than none.
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    let tz = null;
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch (_) { tz = null; }
+    if (!tz) return;
+    supabase.from("profiles").update({ timezone: tz }).eq("id", session.user.id).then(() => {});
+  }, [session?.user?.id]);
   const onDashboard = currentView === "dashboard";
   // openBrainstorm is declared far below this file's start-card memo, so naming
   // it there would read it before its initialiser runs. A ref sidesteps that.
