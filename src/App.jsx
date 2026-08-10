@@ -34161,9 +34161,16 @@ export default function CircularMenu() {
                       padding: "5px 8px", borderRadius: 6,
                       background: theme.borderFaint,
                     }}>⌘</span>
+                    {/* Sized by the widest digit rather than by whichever digit
+                        this happens to be: the badges are stacked in a column and
+                        proportional figures made every row a different width.
+                        tabular-nums does it in fonts that carry the figures, and
+                        the minimum width holds the line in fonts that do not. */}
                     <span style={{
                       fontSize: 13, color: theme.textDim, fontFamily: FONT,
-                      padding: "5px 8px", borderRadius: 6,
+                      padding: "5px 8px", borderRadius: 6, boxSizing: "border-box",
+                      minWidth: 26, display: "inline-flex", justifyContent: "center",
+                      fontVariantNumeric: "tabular-nums",
                       background: theme.borderFaint,
                     }}>{i + 1}</span>
                   </div>
