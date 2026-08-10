@@ -12622,7 +12622,9 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
   // and it needs them for one person at a time.
   const [partner, setPartner] = useState(null);       // { profile, member, projects }
   const [agentInfo, setAgentInfo] = useState(null);   // agent shown in the info overlay
-  const [listFilter, setListFilter] = useState("team"); // "team" | "agents" | "group"
+  // Agents by default: on a fresh workspace it is the only tab with anything in
+  // it, and landing on an empty Team list reads as a broken messenger.
+  const [listFilter, setListFilter] = useState("agents"); // "team" | "agents" | "group"
   useEffect(() => {
     const conv = conversations.find(c => c.id === activeConvId);
     const otherId = (!conv || conv.agent_id || conv.is_group) ? null : (conv.otherIds || [])[0];
@@ -12982,7 +12984,8 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               ].map(([key, label]) => {
                 const on = listFilter === key;
                 return (
-                  <motion.div key={key} whileTap={{ scale: 0.97 }} onClick={() => setListFilter(key)}
+                  <motion.div key={key} whileTap={{ scale: 0.97 }}
+                    onClick={() => { setListFilter(key); setActiveConvId(null); }}
                     style={{
                       flex: 1, textAlign: "center", padding: "7px 0", borderRadius: 999, cursor: "pointer",
                       fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500,
@@ -13508,11 +13511,11 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
                 {activeConv.avatar_url ? (
                   <img src={activeConv.avatar_url} alt="" referrerPolicy="no-referrer"
-                    style={{ width: 96, height: 96, borderRadius: "50%", objectFit: "cover" }} />
+                    style={{ width: 112, height: 112, borderRadius: "50%", objectFit: "cover" }} />
                 ) : (
-                  <div style={{ width: 96, height: 96, borderRadius: "50%", background: tint,
+                  <div style={{ width: 112, height: 112, borderRadius: "50%", background: tint,
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 30, fontFamily: FONT, fontWeight: 600, color: "#fff" }}>
+                    fontSize: 34, fontFamily: FONT, fontWeight: 600, color: "#fff" }}>
                     {activeConv.initials}
                   </div>
                 )}
