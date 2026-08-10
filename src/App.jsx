@@ -12974,7 +12974,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                 other: colleagues, advisors, and rooms. One list mixing them was
                 fine with four entries and stops being fine at twenty. */}
             <div style={{
-              marginTop: 10, display: "flex", padding: 4, borderRadius: 999,
+              marginTop: 16, display: "flex", padding: 4, borderRadius: 999,
               background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
             }}>
               {[
@@ -13007,7 +13007,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }}
               onClick={() => { setGroupName(""); setGroupSelected([]); setGroupColor(GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)]); setGroupModalOpen(true); }}
               style={{
-                marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                marginTop: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
                 padding: "11px 14px", borderRadius: 12, cursor: "pointer",
                 background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
                 border: `1px dashed ${theme.border}`,
@@ -13058,12 +13058,22 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                 ...(listFilter === "agents" ? agentsWithoutConv : []),
                 ...(listFilter === "team" ? membersWithoutConv.map(m => ({ type: "member", ...m })) : []),
               ];
-              if (allItems.length === 0) return (
-                <div style={{ padding: 32, textAlign: "center" }}>
-                  <div style={{ fontSize: 28, marginBottom: 8, opacity: 0.2 }}>💬</div>
-                  <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>Keine Ergebnisse</div>
-                </div>
-              );
+              if (allItems.length === 0) {
+                // "No results" is only true when something was searched for. An
+                // empty tab is not a failed search, and saying so on the group
+                // tab told nobody anything they could act on.
+                const de = appLanguage === "de";
+                const note = search
+                  ? (de ? "Keine Ergebnisse" : "No results")
+                  : listFilter === "team"
+                    ? (de ? "Noch niemand sonst in diesem Workspace" : "Nobody else in this workspace yet")
+                    : null;
+                if (!note) return null;
+                return (
+                  <div style={{ padding: "28px 24px", textAlign: "center", fontSize: 12.5,
+                    fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>{note}</div>
+                );
+              }
               return allItems.map((item, i) => {
                 if (item.type === "conv") {
                   const isActive = activeConvId === item.id;
