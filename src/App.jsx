@@ -13004,7 +13004,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                     >
                       <div style={{ position: "relative", flexShrink: 0 }}>
                         {item.avatar_url ? (
-                          <img src={item.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 42, height: 42, borderRadius: "50%" }} />
+                          <img src={item.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 42, height: 42, borderRadius: "50%", objectFit: "cover" }} />
                         ) : (
                           <InitialsAvatar color={item.color} initials={item.initials} size={42} fontSize={14} />
                         )}
@@ -13055,7 +13055,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                   >
                     <div style={{ position: "relative", flexShrink: 0 }}>
                       {item.avatar_url ? (
-                        <img src={item.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 42, height: 42, borderRadius: "50%" }} />
+                        <img src={item.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 42, height: 42, borderRadius: "50%", objectFit: "cover" }} />
                       ) : (
                         <InitialsAvatar color={item.color} initials={item.initials} size={42} fontSize={14} />
                       )}
