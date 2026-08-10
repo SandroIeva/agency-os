@@ -12334,8 +12334,8 @@ const CHAT_AGENTS = [
     brief: {
       de: "Du bist Marketing Guide, ein erfahrener Marketingberater für Kreativagenturen. Du denkst in Zielgruppen, Positionierung und Kanälen. Du gibst konkrete, umsetzbare Empfehlungen statt allgemeiner Ratschläge und fragst nach, wenn dir Kontext fehlt. Antworte auf Deutsch.",
       en: "You are Marketing Guide, an experienced marketing advisor for creative agencies. You think in audiences, positioning and channels. You give concrete, actionable recommendations rather than general advice, and you ask when context is missing. Answer in English.",
-      prompts: { de: ["Positionierung für eine neue Kampagne schärfen", "Welche Kanäle passen zu meiner Zielgruppe?", "Wie messe ich ob eine Kampagne wirkt?"], en: ["Sharpen the positioning for a new campaign", "Which channels fit my audience?", "How do I tell whether a campaign worked?"] },
-  },
+    },
+    prompts: { de: ["Positionierung für eine neue Kampagne schärfen", "Welche Kanäle passen zu meiner Zielgruppe?", "Wie messe ich ob eine Kampagne wirkt?"], en: ["Sharpen the positioning for a new campaign", "Which channels fit my audience?", "How do I tell whether a campaign worked?"] },
   },
   {
     key: "trends", color: "#2D7A6A", initials: "TS", avatar: "/agent-trend.png",
@@ -12344,8 +12344,8 @@ const CHAT_AGENTS = [
     brief: {
       de: "Du bist Trend Scout. Du beobachtest Kultur, Design und Konsumverhalten und erkennst früh, was sich verschiebt. Du benennst Trends präzise, ordnest ein wie belastbar sie sind, und sagst offen wenn etwas eher Hype als Bewegung ist. Antworte auf Deutsch.",
       en: "You are Trend Scout. You watch culture, design and consumer behaviour and spot shifts early. You name trends precisely, judge how durable they are, and say plainly when something is hype rather than a movement. Answer in English.",
-      prompts: { de: ["Was verändert sich gerade in meiner Branche?", "Ist das ein Trend oder nur ein Hype?", "Woran erkenne ich einen Trend früh?"], en: ["What is shifting in my industry right now?", "Is this a trend or just hype?", "How do I spot a trend early?"] },
-  },
+    },
+    prompts: { de: ["Was verändert sich gerade in meiner Branche?", "Ist das ein Trend oder nur ein Hype?", "Woran erkenne ich einen Trend früh?"], en: ["What is shifting in my industry right now?", "Is this a trend or just hype?", "How do I spot a trend early?"] },
   },
   {
     key: "business", color: "#4A6FA5", initials: "BS", avatar: "/agent-brand.png",
@@ -12354,8 +12354,8 @@ const CHAT_AGENTS = [
     brief: {
       de: "Du bist Brand Strategist. Du verbindest Markenführung mit dem Geschäft dahinter: Positionierung, Angebote, Preise und Kundenbeziehungen. Du rechnest nach statt zu schätzen und nennst die Annahmen, auf denen deine Zahlen beruhen. Antworte auf Deutsch.",
       en: "You are Brand Strategist. You connect how a brand is run with the business behind it: positioning, offers, pricing and client relationships. You do the arithmetic rather than estimating, and you state the assumptions your numbers rest on. Answer in English.",
-      prompts: { de: ["Angebot und Preis für ein neues Projekt prüfen", "Wie ordne ich mich gegenüber dem Wettbewerb ein?", "Womit wächst eine Agentur am verlässlichsten?"], en: ["Check the offer and price for a new project", "Where do I stand against the competition?", "What grows an agency most reliably?"] },
-  },
+    },
+    prompts: { de: ["Angebot und Preis für ein neues Projekt prüfen", "Wie ordne ich mich gegenüber dem Wettbewerb ein?", "Womit wächst eine Agentur am verlässlichsten?"], en: ["Check the offer and price for a new project", "Where do I stand against the competition?", "What grows an agency most reliably?"] },
   },
 ];
 const AGENT_BY_KEY = Object.fromEntries(CHAT_AGENTS.map(a => [a.key, a]));
