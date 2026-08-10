@@ -1191,6 +1191,85 @@ function Dropdown({ value, onChange, options = [], placeholder = "Auswählen", t
   );
 }
 
+// Shown once to a workspace with no AI key on file. Half the app quietly does
+// less without one — Brand analysis, document and note drafting, image
+// descriptions — and until now nothing said so anywhere: features simply
+// refused with an error at the moment they were needed, which reads as broken
+// rather than unconfigured.
+//
+// Deliberately not one of the start-view first steps. Those are things to try;
+// this is a setting, and it needs the reason spelled out before someone goes
+// looking for an API key.
+function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss }) {
+  const de = appLanguage === "de";
+  const benefits = de ? [
+    ["Brand analysieren", "Website einlesen, Positionierung und Tonalität vorschlagen"],
+    ["Texte entwerfen", "In Dokumenten und Notizen schreiben, kürzen, übersetzen"],
+    ["Assets beschreiben", "Bilder benennen, Farben und Moodboards auswerten"],
+  ] : [
+    ["Analyse a brand", "Read a website, propose positioning and tone of voice"],
+    ["Draft text", "Write, shorten and translate inside documents and notes"],
+    ["Describe assets", "Name images, read out colours and moodboards"],
+  ];
+  return createPortal(
+    <div onClick={onDismiss}
+      style={{ position: "fixed", inset: 0, zIndex: 100003, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <motion.div initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+        onClick={e => e.stopPropagation()}
+        style={{ width: "min(520px, 100%)", display: "flex", flexDirection: "column", gap: 18,
+          background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 18,
+          boxShadow: "0 30px 80px rgba(0,0,0,0.35)", padding: 26 }}>
+        <div>
+          <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+            {de ? "KI im Workspace aktivieren" : "Turn on AI in your workspace"}
+          </div>
+          <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 5, lineHeight: 1.55 }}>
+            {de
+              ? "Die KI-Funktionen laufen über deinen eigenen Schlüssel bei Anthropic, OpenAI oder Google — hinterlegt in einer Minute."
+              : "The AI features run on your own key from Anthropic, OpenAI or Google — set up in a minute."}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {benefits.map(([title, sub]) => (
+            <div key={title} style={{ display: "flex", gap: 11, alignItems: "flex-start" }}>
+              <span style={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0, marginTop: 1,
+                background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
+                display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme.text} strokeWidth="3"
+                  strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+              </span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{title}</div>
+                <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 1, lineHeight: 1.5 }}>{sub}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, lineHeight: 1.55 }}>
+          {de
+            ? "Der Schlüssel bleibt in diesem Browser und wird nur für deine eigenen Anfragen benutzt. Abgerechnet wird direkt bei deinem Anbieter."
+            : "The key stays in this browser and is only used for your own requests. Your provider bills you directly."}
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={onDismiss}
+            style={{ padding: "9px 16px", borderRadius: 11, border: `1px solid ${theme.borderFaint}`, background: "transparent",
+              color: theme.text, fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+            {de ? "Später" : "Later"}
+          </motion.button>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={onGoToSettings}
+            style={{ padding: "9px 18px", borderRadius: 11, border: "none", background: "#15151c", color: "#fff",
+              fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+            {de ? "Schlüssel hinterlegen" : "Add a key"}
+          </motion.button>
+        </div>
+      </motion.div>
+    </div>, document.body);
+}
+
 // Kanban board data
 const priColors = { high: "#EF4444", medium: "#F59E0B", low: "#999999" };
 const ASSIGNEE_COLORS = ["#8B7AFF", "#E84393", "#00B894", "#F59E0B", "#5B8DEF", "#E88D67", "#6C5CE7", "#FD79A8"];
@@ -14319,7 +14398,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
 // Single-project view — opened by clicking a project card. Shows the project's
 // files (documents + images) with upload + empty state. Settings stay behind
 // the card's edit button.
-function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", onOpenInKanban, orgMembers = [], myProjectIds = [], createNotification, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true, onNavigate, onOpenDoc, onUploadStorage, onUploadDrive, getProviderToken, autoReLogin, onOpenWhiteboard = null }) {
+function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", onOpenInKanban, triggerNewProject = false, onNewProjectTriggered = null, orgMembers = [], myProjectIds = [], createNotification, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true, onNavigate, onOpenDoc, onUploadStorage, onUploadDrive, getProviderToken, autoReLogin, onOpenWhiteboard = null }) {
   const [projects, setProjects] = useState([]);
   const [taskCounts, setTaskCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -14559,6 +14638,14 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
       setLogoUploading(false);
     }
   };
+
+  // Opened straight from the dashboard's first-step card. The handled callback
+  // clears the trigger so returning here later does not reopen the dialog.
+  useEffect(() => {
+    if (!triggerNewProject) return;
+    openNew();
+    onNewProjectTriggered?.();
+  }, [triggerNewProject]); // eslint-disable-line
 
   const saveProject = async () => {
     if (!form.name.trim()) return;
@@ -17440,7 +17527,7 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
 // a Grid (overview of everything) and a freeform Canvas (drag images around).
 // Images upload to the public brand-assets bucket so their URLs can later be
 // reused as reference inputs for image/video generation (Higgsfield etc.).
-function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, assetDeepLink, docFullscreen, setDocFullscreen, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null, embedded = false, headerSlotRef = null, projectName = "", projectLogoUrl = "", projectColor = "", onOpenWhiteboard = null }) {
+function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, assetDeepLink, openWebImport = null, docFullscreen, setDocFullscreen, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null, embedded = false, headerSlotRef = null, projectName = "", projectLogoUrl = "", projectColor = "", onOpenWhiteboard = null }) {
   // Embedded: action buttons portal into BrandView's header slot once it exists.
   const [assetSlotReady, setAssetSlotReady] = useState(false);
   useEffect(() => { setAssetSlotReady(true); }, []);
@@ -17455,6 +17542,9 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   // an effect that watched the value alone would re-fire on every unrelated
   // render. Same guard the document link needs.
   useEffect(() => { if (assetDeepLink?.url) setTab("creations"); }, [assetDeepLink?.ts]); // eslint-disable-line
+  // The website import lives in the Creations tab, so arriving here from the
+  // dashboard has to land on it first; the tab itself opens the dialog.
+  useEffect(() => { if (openWebImport?.ts) setTab("creations"); }, [openWebImport?.ts]); // eslint-disable-line
   // Brand identity for the header (logo + name), to stay consistent with the
   // Brand views: "<Brand> Assets".
   const [brand, setBrand] = useState(null);
@@ -18147,7 +18237,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           {tab === "creations" && (
             <CreationsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} grad={grad} glow={glow} t={t}
               appLanguage={appLanguage} onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive} orgMembers={orgMembers} projectId={projectId}
-              pickRef={creationsPick} drivePickRef={creationsDrivePick} newFolderRef={creationsNewFolder} webImportRef={creationsWebImport} generateRef={creationsGenerate} deepLink={assetDeepLink} onUploadingChange={setCreationsUploading}
+              pickRef={creationsPick} drivePickRef={creationsDrivePick} newFolderRef={creationsNewFolder} webImportRef={creationsWebImport} openWebImport={openWebImport} generateRef={creationsGenerate} deepLink={assetDeepLink} onUploadingChange={setCreationsUploading}
               getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin}
               llmProvider={llmProvider} llmKeys={llmKeys} />
           )}
@@ -18488,7 +18578,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 // Top-level component (not inline) so framer-motion never re-mounts it per render.
 // Creations tab — gallery of the workspace's images AND videos (AI-generated +
 // user uploads). Filter by media type; upload your own via the button.
-function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, drivePickRef, newFolderRef, webImportRef, generateRef, deepLink, onUploadingChange, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null }) {
+function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, openWebImport = null, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, drivePickRef, newFolderRef, webImportRef, generateRef, deepLink, onUploadingChange, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null }) {
   const memberById = useMemo(() => {
     const m = {}; (orgMembers || []).forEach(om => { if (om.user_id) m[om.user_id] = { ...(om.profiles || {}) }; }); return m;
   }, [orgMembers]);
@@ -18672,6 +18762,15 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   const [webImporting, setWebImporting] = useState(false);
   const [webBroken, setWebBroken] = useState(() => new Set()); // would not load → hidden
   useEffect(() => { if (webImportRef) webImportRef.current = () => { setWebOpen(true); setWebError(""); }; }, [webImportRef]);
+  // Sent from the dashboard's first-step card. Keyed on the timestamp and
+  // guarded by a handled-ref: the prop stays set while this view is open, and an
+  // effect watching the value alone would reopen the dialog on every render.
+  const webAutoDone = useRef(null);
+  useEffect(() => {
+    if (!openWebImport?.ts || webAutoDone.current === openWebImport.ts) return;
+    webAutoDone.current = openWebImport.ts;
+    setWebOpen(true); setWebError("");
+  }, [openWebImport?.ts]);
 
   const scanSite = async () => {
     const u = webUrl.trim();
@@ -29178,6 +29277,20 @@ export default function CircularMenu() {
   const [openChatConvId, setOpenChatConvId] = useState(null);
   const [openTaskId, setOpenTaskId] = useState(null);
   const [triggerNewTask, setTriggerNewTask] = useState(false);
+  const [triggerNewProject, setTriggerNewProject] = useState(false);
+  const [webImportLink, setWebImportLink] = useState(null);   // { ts } — open "import from a website"
+  // Which of the four first steps are already behind us. Derived from the data
+  // rather than stored as flags: a step cannot get stuck ticked, nothing has to
+  // be written when one is completed, and a workspace that was set up before
+  // this existed starts with all four already done.
+  const [onboarding, setOnboarding] = useState(null);
+  // Asked once. Dismissing is remembered so the workspace is not nagged, and it
+  // never appears again once a key exists.
+  const [aiIntroOpen, setAiIntroOpen] = useState(false);
+  const onDashboard = currentView === "dashboard";
+  // openBrainstorm is declared far below this file's start-card memo, so naming
+  // it there would read it before its initialiser runs. A ref sidesteps that.
+  const openBrainstormRef = useRef(null);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [pushSubExists, setPushSubExists] = useState(false);
   const [googleConnectionBroken, setGoogleConnectionBroken] = useState(false);
@@ -30938,7 +31051,37 @@ export default function CircularMenu() {
     }
   }, [pushSetupOverlay]);
 
-  // ── Build startview cards (tasks + events + placeholders) ──
+  useEffect(() => {
+    if (!session || !onDashboard) return;
+    if (localStorage.getItem("agencyos-ai-key-intro") === "seen") return;
+    if (Object.values(llmKeys || {}).some(Boolean)) return;
+    setAiIntroOpen(true);
+  }, [session, onDashboard, llmKeys]);
+  const closeAiIntro = () => { localStorage.setItem("agencyos-ai-key-intro", "seen"); setAiIntroOpen(false); };
+
+  // Re-read on every return to the dashboard, which is where the cards are: a
+  // step finished elsewhere should be gone by the time you come back to it.
+  useEffect(() => {
+    if (!userOrg?.id || !onDashboard) return;
+    let alive = true;
+    (async () => {
+      const head = (table) => supabase.from(table).select("id", { count: "exact", head: true }).eq("org_id", userOrg.id);
+      const [proj, files, boards, brand] = await Promise.all([
+        head("projects"), head("user_files"), head("whiteboards"),
+        supabase.from("brand_profile").select("vision").eq("org_id", userOrg.id).not("vision", "is", null).limit(1),
+      ]);
+      if (!alive) return;
+      setOnboarding({
+        project: (proj.count || 0) > 0,
+        assets:  (files.count || 0) > 0,
+        board:   (boards.count || 0) > 0,
+        brand:   (brand.data || []).some(r => r.vision && Object.keys(r.vision).length > 0),
+      });
+    })();
+    return () => { alive = false; };
+  }, [userOrg?.id, onDashboard]);
+
+  // ── Build startview cards (tasks + events + first steps) ──
   const startviewCards = useMemo(() => {
     const priorityOrder = { high: 0, medium: 1, low: 2 };
     // Visibility: strictly by project membership (or no project at all)
@@ -31006,21 +31149,49 @@ export default function CircularMenu() {
     const otherTasks = taskCards.filter(tc => tc.priority !== "high");
     const liveCards = [...soonEvents, ...highTasks, ...laterEvents, ...otherTasks].slice(0, 4);
 
-    const placeholders = [
-      { icon: "🎨", iconBg: "#2D7A6A", name: "Figma", desc: "Complete the Dashboard Design", key: "F" },
-      { icon: "🤖", iconBg: "#C4624A", name: "Claude Code", desc: "Build the new app idea", key: "2" },
-      { icon: "👤", iconBg: "#5A7AB5", name: "Reply to Tom Behrens over Gmail", desc: null, key: "G" },
-      { icon: "✦", iconBg: "#4A9A8A", name: "Research with Perplexity", desc: null, key: "P" },
-    ];
+    // What fills the empty half of a new workspace's start view. It used to be
+    // four decorations — a Figma file, a Gmail reply — that were English-only
+    // and did nothing when clicked. These are the same four slots, but each one
+    // is a real first step and each one goes where it says it goes.
+    //
+    // A step disappears once its evidence exists, so the list shortens as the
+    // workspace fills up and is empty for anyone who was already using the app.
+    const dl = appLanguage === "de";
+    const firstSteps = [
+      {
+        done: onboarding?.project, icon: "◧", iconBg: "#4A6FA5", key: "step-project",
+        name: dl ? "Erstes Projekt anlegen" : "Create your first project",
+        desc: dl ? "Der Rahmen für Aufgaben, Dateien und Brand" : "The frame for tasks, files and brand",
+        onClick: () => { setTriggerNewProject(true); setCurrentView("projects"); },
+      },
+      {
+        done: onboarding?.assets, icon: "🌐", iconBg: "#2D7A6A", key: "step-assets",
+        name: dl ? "Assets von einer Website holen" : "Pull assets from a website",
+        desc: dl ? "URL eingeben, Bilder auswählen, fertig" : "Paste a URL, pick the images, done",
+        onClick: () => { setWebImportLink({ ts: Date.now() }); setCurrentView("assets"); },
+      },
+      {
+        done: onboarding?.board, icon: "💡", iconBg: "#C4624A", key: "step-board",
+        name: dl ? "Ideen sammeln im Brainstorm" : "Collect ideas on a brainstorm board",
+        desc: dl ? "Unendliche Leinwand für Notizen und Skizzen" : "An infinite canvas for notes and sketches",
+        onClick: () => openBrainstormRef.current?.(),
+      },
+      {
+        done: onboarding?.brand, icon: "✦", iconBg: "#4A9A8A", key: "step-brand",
+        name: dl ? "Brand Vision definieren" : "Define your brand vision",
+        desc: dl ? "Wofür die Marke steht — Grundlage für alles Weitere" : "What the brand stands for — the basis for the rest",
+        onClick: () => { setBrandTab("strategy"); setCurrentView("brand"); },
+      },
+    ].filter(step => !step.done);
 
     const cards = [...liveCards];
-    let pIdx = 0;
-    while (cards.length < 4 && pIdx < placeholders.length) {
-      cards.push(placeholders[pIdx]);
-      pIdx++;
+    let sIdx = 0;
+    while (cards.length < 4 && sIdx < firstSteps.length) {
+      cards.push(firstSteps[sIdx]);
+      sIdx++;
     }
     return cards;
-  }, [dashboardTasks, dashboardProjects, upcomingEvents, t, appLanguage, osVisuals, myProjectNames, session?.user?.id]);
+  }, [dashboardTasks, dashboardProjects, upcomingEvents, t, appLanguage, osVisuals, myProjectNames, session?.user?.id, onboarding]);
 
   const getGreeting = () => {
     const h = new Date().getHours();
@@ -32393,6 +32564,8 @@ export default function CircularMenu() {
   };
 
   // Create a fresh Brainstorm board and open the whiteboard view (Erstellen → Brainstorm).
+  // Published for the start-view card, which is built above this line.
+  useEffect(() => { openBrainstormRef.current = openBrainstorm; });
   const openBrainstorm = async () => {
     if (!userOrg?.id) return;
     const { data, error } = await supabase.from("whiteboards")
@@ -33337,7 +33510,7 @@ export default function CircularMenu() {
         {/* PROJECTS VIEW */}
         <AnimatePresence>
           {currentView === "projects" && (
-            <ProjectsView session={session} userOrg={userOrg} orgMembers={orgMembers} myProjectIds={myProjectIds} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} createNotification={createNotification} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} canEditBrand={canEditBrand} canEditDesign={canEditDesign} onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive} getProviderToken={getProviderToken} autoReLogin={autoReLogin} onNavigate={(v) => setCurrentView(v)} onOpenDoc={(id) => { setDocDeepLink({ documentId: id, blockId: null, ts: Date.now() }); setCurrentView("assets"); }} onOpenWhiteboard={openWhiteboardFromAssets} onBack={() => setCurrentView("dashboard")} onOpenInKanban={(projectName) => { setCurrentView("kanban"); }} />
+            <ProjectsView triggerNewProject={triggerNewProject} onNewProjectTriggered={() => setTriggerNewProject(false)} session={session} userOrg={userOrg} orgMembers={orgMembers} myProjectIds={myProjectIds} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} createNotification={createNotification} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} canEditBrand={canEditBrand} canEditDesign={canEditDesign} onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive} getProviderToken={getProviderToken} autoReLogin={autoReLogin} onNavigate={(v) => setCurrentView(v)} onOpenDoc={(id) => { setDocDeepLink({ documentId: id, blockId: null, ts: Date.now() }); setCurrentView("assets"); }} onOpenWhiteboard={openWhiteboardFromAssets} onBack={() => setCurrentView("dashboard")} onOpenInKanban={(projectName) => { setCurrentView("kanban"); }} />
           )}
         </AnimatePresence>
 
@@ -33351,7 +33524,7 @@ export default function CircularMenu() {
         {/* ASSETS VIEW (Brand → Assets): Moodboards / Creations / Inspirations */}
         <AnimatePresence>
           {currentView === "assets" && (
-            <AssetsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive} orgMembers={orgMembers} createNotification={createNotification} docDeepLink={docDeepLink} assetDeepLink={assetDeepLink} docFullscreen={docFullscreen} setDocFullscreen={setDocFullscreen} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} llmProvider={llmProvider} llmKeys={llmKeys} onOpenWhiteboard={openWhiteboardFromAssets} onBack={() => setCurrentView("dashboard")} />
+            <AssetsView openWebImport={webImportLink} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive} orgMembers={orgMembers} createNotification={createNotification} docDeepLink={docDeepLink} assetDeepLink={assetDeepLink} docFullscreen={docFullscreen} setDocFullscreen={setDocFullscreen} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} llmProvider={llmProvider} llmKeys={llmKeys} onOpenWhiteboard={openWhiteboardFromAssets} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
@@ -36597,6 +36770,12 @@ export default function CircularMenu() {
         darkMode={darkMode}
         appLanguage={appLanguage}
       />
+
+      {aiIntroOpen && (
+        <AiKeyIntro theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+          onDismiss={closeAiIntro}
+          onGoToSettings={() => { closeAiIntro(); setSettingsTab("ai"); setCurrentView("settings"); }} />
+      )}
 
       {/* Bottom bar — in document fullscreen only the AI orb floats above the overlay */}
       <div style={{
