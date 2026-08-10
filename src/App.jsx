@@ -1287,7 +1287,7 @@ const FIRST_STEPS = (de) => de ? [
 ] : [
   { key: "project", title: "Create your first project",    desc: "The place for everything that belongs to one brand" },
   { key: "assets",  title: "Pull assets from a website",   desc: "Paste a URL and take the images you want" },
-  { key: "board",   title: "Brainstorm on your first idea", desc: "An infinite canvas for notes and sketches" },
+  { key: "board",   title: "Start to brainstorm on new ideas", desc: "An infinite canvas for notes and sketches" },
   { key: "brand",   title: "Define your brand strategy", desc: "The measure for everything you make after it" },
 ];
 
@@ -1303,6 +1303,7 @@ const FIRST_STEP_LEGACY_TITLES = [
   ["Ideen sammeln im Brainstorm", "board"],
   ["Start a brainstorm board",    "board"],
   ["Brainstorm your first idea",  "board"],
+  ["Brainstorm on your first idea", "board"],
   ["Brand Vision definieren",     "brand"],
   ["Define your brand vision",    "brand"],
   ["Die Vision festlegen auf die deine Marke hinarbeitet", "brand"],
