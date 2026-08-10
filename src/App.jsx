@@ -12334,7 +12334,8 @@ const CHAT_AGENTS = [
     brief: {
       de: "Du bist Marketing Guide, ein erfahrener Marketingberater für Kreativagenturen. Du denkst in Zielgruppen, Positionierung und Kanälen. Du gibst konkrete, umsetzbare Empfehlungen statt allgemeiner Ratschläge und fragst nach, wenn dir Kontext fehlt. Antworte auf Deutsch.",
       en: "You are Marketing Guide, an experienced marketing advisor for creative agencies. You think in audiences, positioning and channels. You give concrete, actionable recommendations rather than general advice, and you ask when context is missing. Answer in English.",
-    },
+      prompts: { de: ["Positionierung für eine neue Kampagne schärfen", "Welche Kanäle passen zu meiner Zielgruppe?", "Wie messe ich ob eine Kampagne wirkt?"], en: ["Sharpen the positioning for a new campaign", "Which channels fit my audience?", "How do I tell whether a campaign worked?"] },
+  },
   },
   {
     key: "trends", color: "#2D7A6A", initials: "TS", avatar: "/agent-trend.png",
@@ -12343,7 +12344,8 @@ const CHAT_AGENTS = [
     brief: {
       de: "Du bist Trend Scout. Du beobachtest Kultur, Design und Konsumverhalten und erkennst früh, was sich verschiebt. Du benennst Trends präzise, ordnest ein wie belastbar sie sind, und sagst offen wenn etwas eher Hype als Bewegung ist. Antworte auf Deutsch.",
       en: "You are Trend Scout. You watch culture, design and consumer behaviour and spot shifts early. You name trends precisely, judge how durable they are, and say plainly when something is hype rather than a movement. Answer in English.",
-    },
+      prompts: { de: ["Was verändert sich gerade in meiner Branche?", "Ist das ein Trend oder nur ein Hype?", "Woran erkenne ich einen Trend früh?"], en: ["What is shifting in my industry right now?", "Is this a trend or just hype?", "How do I spot a trend early?"] },
+  },
   },
   {
     key: "business", color: "#4A6FA5", initials: "BS", avatar: "/agent-brand.png",
@@ -12352,7 +12354,8 @@ const CHAT_AGENTS = [
     brief: {
       de: "Du bist Brand Strategist. Du verbindest Markenführung mit dem Geschäft dahinter: Positionierung, Angebote, Preise und Kundenbeziehungen. Du rechnest nach statt zu schätzen und nennst die Annahmen, auf denen deine Zahlen beruhen. Antworte auf Deutsch.",
       en: "You are Brand Strategist. You connect how a brand is run with the business behind it: positioning, offers, pricing and client relationships. You do the arithmetic rather than estimating, and you state the assumptions your numbers rest on. Answer in English.",
-    },
+      prompts: { de: ["Angebot und Preis für ein neues Projekt prüfen", "Wie ordne ich mich gegenüber dem Wettbewerb ein?", "Womit wächst eine Agentur am verlässlichsten?"], en: ["Check the offer and price for a new project", "Where do I stand against the competition?", "What grows an agency most reliably?"] },
+  },
   },
 ];
 const AGENT_BY_KEY = Object.fromEntries(CHAT_AGENTS.map(a => [a.key, a]));
@@ -12609,6 +12612,37 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
   // which is what the message policy expects and what marks it as not-a-person
   // everywhere it is rendered.
   const [agentThinking, setAgentThinking] = useState(false);
+
+  // The person on the other side of the open conversation, plus what you have
+  // in common. Fetched here rather than threaded through the member list: the
+  // panel needs fields (email, bio, when they joined) the list never asked for,
+  // and it needs them for one person at a time.
+  const [partner, setPartner] = useState(null);       // { profile, role, joinedAt, projects }
+  useEffect(() => {
+    const conv = conversations.find(c => c.id === activeConvId);
+    const otherId = (!conv || conv.agent_id || conv.is_group) ? null : (conv.otherIds || [])[0];
+    if (!otherId) { setPartner(null); return; }
+    let alive = true;
+    (async () => {
+      const [prof, mem, mine, theirs] = await Promise.all([
+        supabase.from("profiles").select("display_name,avatar_url,email,bio,initials,created_at").eq("id", otherId).maybeSingle(),
+        supabase.from("org_members").select("role,workspace_role,joined_at").eq("org_id", userOrg?.id).eq("user_id", otherId).maybeSingle(),
+        supabase.from("project_members").select("project_id").eq("user_id", myId),
+        supabase.from("project_members").select("project_id").eq("user_id", otherId),
+      ]);
+      if (!alive) return;
+      const mineIds = new Set((mine.data || []).map(r => r.project_id));
+      const sharedIds = (theirs.data || []).map(r => r.project_id).filter(id => mineIds.has(id));
+      let projects = [];
+      if (sharedIds.length) {
+        const { data } = await supabase.from("projects").select("id,name,color").in("id", sharedIds).limit(6);
+        projects = data || [];
+      }
+      if (!alive) return;
+      setPartner({ profile: prof.data || null, member: mem.data || null, projects });
+    })();
+    return () => { alive = false; };
+  }, [activeConvId, conversations, myId, userOrg?.id]);
   const replyAsAgent = async (convId, agentKey, history) => {
     const agent = AGENT_BY_KEY[agentKey];
     if (!agent) return;
@@ -13405,6 +13439,110 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
             <div>Wähle ein Gespräch oder starte ein neues</div>
           </div>
         )}
+
+        {/* ── Right: who you are talking to ──
+            An agent has no email and no shared projects, so below its role it
+            offers openers instead — otherwise the panel would be half empty for
+            exactly the conversations people are least sure how to start. */}
+        {activeConv && (() => {
+          const de = appLanguage === "de";
+          const agent = activeConv.agent_id ? AGENT_BY_KEY[activeConv.agent_id] : null;
+          const prof = partner?.profile;
+          const tint = activeConv.color || "#5B6CFF";
+          const joined = partner?.member?.joined_at || prof?.created_at;
+          const role = agent ? agent.role[de ? "de" : "en"]
+            : (partner?.member?.workspace_role || partner?.member?.role || null);
+          const Label = ({ children }) => (
+            <div style={{ fontSize: 10.5, fontFamily: FONT, letterSpacing: 0.6, textTransform: "uppercase",
+              color: theme.textFaint, marginBottom: 8 }}>{children}</div>
+          );
+          return (
+            <div style={{
+              width: 300, flexShrink: 0, borderLeft: `1px solid ${theme.borderFaint}`,
+              display: "flex", flexDirection: "column", overflowY: "auto",
+              // The tint is picked up from the conversation itself, so the panel
+              // belongs to the person rather than being a grey slab beside them.
+              background: `radial-gradient(120% 60% at 50% 0%, ${tint}22 0%, transparent 70%)`,
+              padding: "34px 22px 24px",
+            }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
+                {activeConv.avatar_url ? (
+                  <img src={activeConv.avatar_url} alt="" referrerPolicy="no-referrer"
+                    style={{ width: 96, height: 96, borderRadius: "50%", objectFit: "cover" }} />
+                ) : (
+                  <div style={{ width: 96, height: 96, borderRadius: "50%", background: tint,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 30, fontFamily: FONT, fontWeight: 600, color: "#fff" }}>
+                    {activeConv.initials}
+                  </div>
+                )}
+                <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginTop: 16 }}>
+                  {activeConv.name}
+                </div>
+                {role && (
+                  <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 4 }}>{role}</div>
+                )}
+                {!agent && joined && (
+                  <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, marginTop: 3 }}>
+                    {(de ? "dabei seit " : "joined ") + new Date(joined).getFullYear()}
+                  </div>
+                )}
+
+                {!agent && prof?.email && (
+                  <motion.a whileTap={{ scale: 0.97 }} href={`mailto:${prof.email}`}
+                    style={{ marginTop: 18, padding: "9px 20px", borderRadius: 999, textDecoration: "none",
+                      border: `1px solid ${theme.borderFaint}`, color: theme.text,
+                      fontFamily: FONT, fontSize: 12.5, fontWeight: 600 }}>
+                    {de ? "E-Mail schreiben" : "Send email"}
+                  </motion.a>
+                )}
+              </div>
+
+              {(agent || prof?.bio) && (
+                <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6,
+                  textAlign: "center", marginTop: 20 }}>
+                  {/* For an agent, the opening sentence of its brief — what it is,
+                      in its own words. For a person, whatever they wrote. */}
+                  {agent ? agent.brief[de ? "de" : "en"].split(". ")[0] + "." : prof.bio}
+                </div>
+              )}
+
+              {agent && (
+                <div style={{ marginTop: 26 }}>
+                  <Label>{de ? "Womit anfangen" : "Where to start"}</Label>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {agent.prompts[de ? "de" : "en"].map(q => (
+                      <motion.div key={q} whileTap={{ scale: 0.98 }} onClick={() => setMsgInput(q)}
+                        className="hover-row"
+                        style={{ padding: "10px 12px", borderRadius: 11, cursor: "pointer",
+                          border: `1px solid ${theme.borderFaint}`,
+                          fontSize: 12.5, fontFamily: FONT, color: theme.text, lineHeight: 1.45 }}>
+                        {q}
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!agent && (partner?.projects || []).length > 0 && (
+                <div style={{ marginTop: 26 }}>
+                  <Label>{de ? "Gemeinsame Projekte" : "Projects you share"}</Label>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {partner.projects.map(pr => (
+                      <div key={pr.id} style={{ display: "flex", alignItems: "center", gap: 9,
+                        padding: "8px 10px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+                          background: pr.color || tint }} />
+                        <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text,
+                          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pr.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* ── New-group modal ── */}
