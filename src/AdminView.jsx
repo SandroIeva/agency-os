@@ -117,7 +117,12 @@ export default function AdminView() {
   };
 
   const shell = (children) => (
-    <div style={{ minHeight: "100vh", background: BG, color: TEXT, fontFamily: FONT, padding: "38px 26px 60px" }}>
+    // The document itself cannot scroll: index.html pins the body to
+    // overflow:hidden for the main app's full-screen layout, and this view is a
+    // sibling route inside that same body. With minHeight the tables simply grew
+    // past the bottom of the window with no way to reach them. So this view
+    // scrolls itself instead of changing a rule the rest of the app relies on.
+    <div style={{ height: "100vh", overflowY: "auto", background: BG, color: TEXT, fontFamily: FONT, padding: "38px 26px 60px" }}>
       <div style={{ maxWidth: 1160, margin: "0 auto" }}>{children}</div>
     </div>
   );
