@@ -1270,6 +1270,47 @@ function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss })
     </div>, document.body);
 }
 
+// The four things worth doing first in a new workspace. One definition, used
+// twice: as the cards that fill the start view and as real tasks seeded into
+// the board, so the two can never drift apart.
+//
+// Short sentences on purpose. Subtexts stacked with commas and dashes read as
+// clutter at this size.
+const FIRST_STEPS = (de) => de ? [
+  { key: "project", title: "Erstes Projekt anlegen",       desc: "Der Ort für alles was zu einer Marke gehört" },
+  { key: "assets",  title: "Assets von einer Website holen", desc: "URL einfügen und passende Bilder übernehmen" },
+  { key: "board",   title: "Ideen sammeln im Brainstorm",  desc: "Eine unendliche Leinwand für Notizen und Skizzen" },
+  { key: "brand",   title: "Brand Vision definieren",      desc: "Halte fest wofür deine Marke steht" },
+] : [
+  { key: "project", title: "Create your first project",    desc: "The place for everything that belongs to one brand" },
+  { key: "assets",  title: "Pull assets from a website",   desc: "Paste a URL and take the images you want" },
+  { key: "board",   title: "Start a brainstorm board",     desc: "An infinite canvas for notes and sketches" },
+  { key: "brand",   title: "Define your brand vision",     desc: "Write down what your brand stands for" },
+];
+
+// Every title in both languages, so a seeded card can still be recognised on
+// the dashboard after the workspace language is switched. Recognised by title
+// rather than a marker column: a label would show up as a chip on the card, and
+// a renamed card simply behaves like the ordinary task it has become.
+const FIRST_STEP_BY_TITLE = new Map(
+  [...FIRST_STEPS(true), ...FIRST_STEPS(false)].map(st => [st.title, st.key]));
+
+// Seeded when a workspace is created, so the board opens with something in it
+// instead of three empty columns. Real tasks: they can be moved, edited and
+// thrown away like any other.
+async function seedStarterTasks(orgId, userId, de) {
+  if (!orgId || !userId) return;
+  const rows = FIRST_STEPS(de).map((st, i) => ({
+    org_id: orgId, creator_id: userId, assignee_id: userId,
+    title: st.title, description: st.desc,
+    column_key: "todo", priority: i === 0 ? "high" : "medium", position: i,
+  }));
+  const { error } = await supabase.from("tasks").insert(rows);
+  // Never fatal: a workspace without its starter cards is a worse start, not a
+  // broken one, and failing the creation over it would be far worse.
+  if (error) console.warn("[onboarding] starter tasks not created:", error.message);
+}
+
 // Kanban board data
 const priColors = { high: "#EF4444", medium: "#F59E0B", low: "#999999" };
 const ASSIGNEE_COLORS = ["#8B7AFF", "#E84393", "#00B894", "#F59E0B", "#5B8DEF", "#E88D67", "#6C5CE7", "#FD79A8"];
@@ -29675,6 +29716,7 @@ export default function CircularMenu() {
       if (orgErr) throw orgErr;
       const { error: memErr } = await supabase.from("org_members").insert({ org_id: org.id, user_id: session.user.id, role: "admin" });
       if (memErr) throw memErr;
+      await seedStarterTasks(org.id, session.user.id, appLanguage === "de");
       const orgWithRole = { ...org, role: "admin" };
       bumpUsage("workspaces");
       setUserOrgs(prev => [...prev, orgWithRole]);
@@ -31090,6 +31132,17 @@ export default function CircularMenu() {
       .filter(tk => !tk.project_name || myProjectNames.has(tk.project_name))
       .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
 
+    const dl = appLanguage === "de";
+    const stepMeta = {
+      project: { icon: "◧", iconBg: "#4A6FA5", done: onboarding?.project,
+                 go: () => { setTriggerNewProject(true); setCurrentView("projects"); } },
+      assets:  { icon: "🌐", iconBg: "#2D7A6A", done: onboarding?.assets,
+                 go: () => { setWebImportLink({ ts: Date.now() }); setCurrentView("assets"); } },
+      board:   { icon: "💡", iconBg: "#C4624A", done: onboarding?.board,
+                 go: () => openBrainstormRef.current?.() },
+      brand:   { icon: "✦", iconBg: "#4A9A8A", done: onboarding?.brand,
+                 go: () => { setBrandTab("strategy"); setCurrentView("brand"); } },
+    };
     const colLabel = (key) => ({ todo: t("kanban.todo"), progress: t("kanban.inProgress"), in_progress: t("kanban.inProgress"), review: t("kanban.review"), done: t("kanban.done") }[key] || key);
     const getDashProjectLogo = (name) => dashboardProjects.find(p => p.name === name)?.logo_url || null;
     const taskCards = activeTasks.slice(0, 4).map(tk => {
@@ -31113,7 +31166,13 @@ export default function CircularMenu() {
         key: tk.id,
         priority: tk.priority,
         taskId: tk.id,
-        onClick: () => { setOpenTaskId(tk.id); setCurrentView("kanban"); },
+        // A seeded starter card goes where it points instead of into its own
+        // detail view. Renamed, it is an ordinary task again and behaves like one.
+        onClick: (() => {
+          const step = FIRST_STEP_BY_TITLE.get(tk.title);
+          return step && stepMeta[step] ? stepMeta[step].go
+            : () => { setOpenTaskId(tk.id); setCurrentView("kanban"); };
+        })(),
       };
     });
 
@@ -31156,33 +31215,11 @@ export default function CircularMenu() {
     //
     // A step disappears once its evidence exists, so the list shortens as the
     // workspace fills up and is empty for anyone who was already using the app.
-    const dl = appLanguage === "de";
-    const firstSteps = [
-      {
-        done: onboarding?.project, icon: "◧", iconBg: "#4A6FA5", key: "step-project",
-        name: dl ? "Erstes Projekt anlegen" : "Create your first project",
-        desc: dl ? "Der Rahmen für Aufgaben, Dateien und Brand" : "The frame for tasks, files and brand",
-        onClick: () => { setTriggerNewProject(true); setCurrentView("projects"); },
-      },
-      {
-        done: onboarding?.assets, icon: "🌐", iconBg: "#2D7A6A", key: "step-assets",
-        name: dl ? "Assets von einer Website holen" : "Pull assets from a website",
-        desc: dl ? "URL eingeben, Bilder auswählen, fertig" : "Paste a URL, pick the images, done",
-        onClick: () => { setWebImportLink({ ts: Date.now() }); setCurrentView("assets"); },
-      },
-      {
-        done: onboarding?.board, icon: "💡", iconBg: "#C4624A", key: "step-board",
-        name: dl ? "Ideen sammeln im Brainstorm" : "Collect ideas on a brainstorm board",
-        desc: dl ? "Unendliche Leinwand für Notizen und Skizzen" : "An infinite canvas for notes and sketches",
-        onClick: () => openBrainstormRef.current?.(),
-      },
-      {
-        done: onboarding?.brand, icon: "✦", iconBg: "#4A9A8A", key: "step-brand",
-        name: dl ? "Brand Vision definieren" : "Define your brand vision",
-        desc: dl ? "Wofür die Marke steht — Grundlage für alles Weitere" : "What the brand stands for — the basis for the rest",
-        onClick: () => { setBrandTab("strategy"); setCurrentView("brand"); },
-      },
-    ].filter(step => !step.done);
+    const firstSteps = FIRST_STEPS(dl).map(st => ({
+      key: "step-" + st.key, name: st.title, desc: st.desc,
+      icon: stepMeta[st.key].icon, iconBg: stepMeta[st.key].iconBg,
+      done: stepMeta[st.key].done, onClick: stepMeta[st.key].go,
+    })).filter(step => !step.done);
 
     const cards = [...liveCards];
     let sIdx = 0;
@@ -33047,6 +33084,7 @@ export default function CircularMenu() {
                           if (orgErr) throw orgErr;
                           const { error: memErr } = await supabase.from("org_members").insert({ org_id: org.id, user_id: session.user.id, role: "admin" });
                           if (memErr) throw memErr;
+                          await seedStarterTasks(org.id, session.user.id, appLanguage === "de");
                           // The creator is the workspace admin — carry the role so
                           // admin-only UI (delete workspace, logo, invites) shows up
                           // immediately, not only after the next full login.
@@ -33074,6 +33112,7 @@ export default function CircularMenu() {
                           if (orgErr) throw orgErr;
                           const { error: memErr } = await supabase.from("org_members").insert({ org_id: org.id, user_id: session.user.id, role: "admin" });
                           if (memErr) throw memErr;
+                          await seedStarterTasks(org.id, session.user.id, appLanguage === "de");
                           // The creator is the workspace admin — carry the role so
                           // admin-only UI (delete workspace, logo, invites) shows up
                           // immediately, not only after the next full login.
