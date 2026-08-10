@@ -87,17 +87,18 @@ const PLUS_MENU_ITEMS_DEF = [
 // for the selected category. The old radial code is kept in place but gated behind LINEAR_MENU.
 const LINEAR_MENU = true;
 const LINEAR_MENU_ITEMS_DEF = [
-  // Brand = 5 pillars (Strategie · Identität · Design System · Touchpoints · Assets).
-  // Each pillar opens a page whose individual topics live in tabs, so the menu stays
-  // flat no matter how many brand features get added. "Assets" holds Moodboards +
-  // references. Files was intentionally removed — asset access is contextual, not a
-  // standalone browser.
+  // Brand = 4 pillars (Strategie · Identität · Design System · Audience). Each
+  // opens a page whose individual topics live in tabs, so the menu stays flat no
+  // matter how many brand features get added.
+  //
+  // Files sat here too and no longer does. It is where every asset in the
+  // workspace lives, generated ones included, and reaching it through Brand made
+  // it look like a brand feature rather than the place things are kept.
   { id: "brand",     labelKey: "linearMenu.brand",     sub: [
     { id: "strategy",    labelKey: "linearMenu.strategy" },
     { id: "identity",    labelKey: "linearMenu.identity" },
     { id: "design",      labelKey: "linearMenu.designSystem" },
     { id: "touchpoints", labelKey: "linearMenu.touchpoints" },
-    { id: "assets",      labelKey: "linearMenu.assets" },
   ]},
   { id: "create",    labelKey: "linearMenu.create",    sub: [
     { id: "social-post", labelKey: "linearMenu.socialPost" },
@@ -105,7 +106,9 @@ const LINEAR_MENU_ITEMS_DEF = [
     { id: "document", labelKey: "linearMenu.document" },
   ]},
   { id: "projects",  labelKey: "linearMenu.projects",  sub: [] },
-  { id: "messenger", labelKey: "linearMenu.messenger", sub: [] },
+  // Files takes the slot Messenger held. Messenger moved to the bottom bar,
+  // where it is one click away from anywhere instead of two.
+  { id: "assets",    labelKey: "linearMenu.assets",    sub: [] },
   { id: "plan",      labelKey: "linearMenu.plan",      sub: [
     { id: "kanban",   labelKey: "linearMenu.kanban" },
     { id: "timeline", labelKey: "linearMenu.timeline" },
@@ -34361,8 +34364,8 @@ export default function CircularMenu() {
               if (catId === "brand") {
                 setMenuOpen(false);
                 setBrandPillar(subId || "strategy");
-                // "Assets" opens the Assets surface (Moodboards / Creations / Inspirations);
-                // the other pillars open the Brand view (per-pillar tab routing TBD).
+                // Files is a top-level entry now, but the alias stays: old deep
+                // links and stored pillars still arrive here asking for "assets".
                 if (subId === "assets") { setCurrentView("assets"); return; }
                 if (subId === "touchpoints") { setCurrentView("touchpoints"); return; }
                 // Open BrandView on the matching pillar tab (strategy/identity/design).
@@ -34370,9 +34373,9 @@ export default function CircularMenu() {
                 setCurrentView("brand");
                 return;
               }
-              if (catId === "messenger") {
+              if (catId === "assets") {
                 setMenuOpen(false);
-                setCurrentView("chat");
+                setCurrentView("assets");
                 return;
               }
               if (catId === "projects") {
@@ -36848,19 +36851,24 @@ export default function CircularMenu() {
         <div style={{
           display: "flex", gap: 12, alignItems: "center",
         }}>
-          {/* Icon1: Mic — opens AI dialog via voice. Hidden while the AI voice view
-              is active so the user only has "go to dashboard" (grid) + "ask again"
-              (click the sphere). */}
+          {/* Icon1: Messenger. It was the microphone, which opened the AI dialog by
+              voice — that is what the sphere to the right does, and it still
+              does. A second voice entry point cost the bar's only free slot,
+              while the messenger was two clicks deep in the menu.
+              Hidden while the AI voice view is active, so during a conversation
+              there is only "go to dashboard" (grid) and "ask again" (sphere). */}
           {!(aiSpeaking || voiceMode) && (
           <motion.div
             whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }} transition={smoothSpring}
             style={{ cursor: "pointer" }}
-            onClick={startVoiceForDialog}
-            title={appLanguage === "de" ? "Sprechen, dann im Dialog bearbeiten" : "Speak, then review in dialog"}
+            onClick={() => setCurrentView("chat")}
+            title={appLanguage === "de" ? "Messenger" : "Messenger"}
           >
             <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
               <rect x="0.6" y="0.6" width="50.4" height="50.4" rx="25.2" stroke={darkMode ? "white" : "#1a1a2e"} strokeOpacity={dialogMode ? 0.45 : 0.15} strokeWidth="1.2" />
-              <path d="M26.2839 28.4991C28.0558 28.4991 29.5239 27.0309 29.5239 25.2591V18.7791C29.5239 16.9566 28.0558 15.5391 26.2839 15.5391C24.512 15.5391 23.0439 16.9566 23.0439 18.7791V25.2591C23.0439 27.0309 24.512 28.4991 26.2839 28.4991ZM32.6627 25.2591C32.1564 25.2591 31.7008 25.6134 31.5995 26.1703C31.1439 28.7016 28.967 30.6253 26.2839 30.6253C23.6008 30.6253 21.4239 28.7016 20.9683 26.1703C20.867 25.6134 20.4114 25.2591 19.9052 25.2591C19.247 25.2591 18.7408 25.8159 18.842 26.4741C19.3483 29.7141 21.9302 32.2453 25.2208 32.7009V34.9791C25.2208 35.5359 25.6764 36.0422 26.2839 36.0422C26.8914 36.0422 27.347 35.5359 27.347 34.9791V32.7009C30.6377 32.2453 33.2195 29.7141 33.7258 26.4741C33.8777 25.8159 33.3208 25.2591 32.6627 25.2591Z" fill={theme.iconColor}/>
+              {/* Speech bubble, drawn in the same weight as the circle around it. */}
+              <path d="M18 21.5C18 20.1193 19.1193 19 20.5 19H31.5C32.8807 19 34 20.1193 34 21.5V28.5C34 29.8807 32.8807 31 31.5 31H24.5L20 34.5V31H20.5C19.1193 31 18 29.8807 18 28.5V21.5Z"
+                stroke={darkMode ? "white" : "#1a1a2e"} strokeOpacity={0.75} strokeWidth="1.5" strokeLinejoin="round" />
             </svg>
           </motion.div>
           )}
