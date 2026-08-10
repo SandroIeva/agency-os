@@ -1283,12 +1283,12 @@ const FIRST_STEPS = (de) => de ? [
   { key: "project", title: "Erstes Projekt anlegen",       desc: "Der Ort für alles was zu einer Marke gehört" },
   { key: "assets",  title: "Assets von einer Website holen", desc: "URL einfügen und passende Bilder übernehmen" },
   { key: "board",   title: "Erste Idee im Brainstorm sammeln", desc: "Eine unendliche Leinwand für Notizen und Skizzen" },
-  { key: "brand",   title: "Brand Vision definieren",      desc: "Halte fest wofür deine Marke steht" },
+  { key: "brand",   title: "Die Vision festlegen auf die deine Marke hinarbeitet", desc: "Der Maßstab für alles was danach entsteht" },
 ] : [
   { key: "project", title: "Create your first project",    desc: "The place for everything that belongs to one brand" },
   { key: "assets",  title: "Pull assets from a website",   desc: "Paste a URL and take the images you want" },
   { key: "board",   title: "Brainstorm your first idea",   desc: "An infinite canvas for notes and sketches" },
-  { key: "brand",   title: "Define your brand vision",     desc: "Write down what your brand stands for" },
+  { key: "brand",   title: "Define the vision your brand works toward", desc: "The measure for everything you make after it" },
 ];
 
 // Every title in both languages, so a seeded card can still be recognised on
@@ -1302,6 +1302,8 @@ const FIRST_STEPS = (de) => de ? [
 const FIRST_STEP_LEGACY_TITLES = [
   ["Ideen sammeln im Brainstorm", "board"],
   ["Start a brainstorm board",    "board"],
+  ["Brand Vision definieren",     "brand"],
+  ["Define your brand vision",    "brand"],
 ];
 const FIRST_STEP_BY_TITLE = new Map([
   ...[...FIRST_STEPS(true), ...FIRST_STEPS(false)].map(st => [st.title, st.key]),
