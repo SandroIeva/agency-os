@@ -360,11 +360,11 @@ export default function BillingSettings({ session, org, isAdmin, entitlements, o
             </div>
 
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginTop: 20 }}>
-              <div style={{ fontSize: 11, color: theme.textDim }}>
+              <div style={{ fontSize: 11, color: theme.textDim, minWidth: 0 }}>
                 {!isOwner && (de ? "Nur der Besitzer dieses Workspaces kann das Abo verwalten. Ein Abo deckt alle Workspaces seines Kontos ab." : "Only this workspace’s owner can manage the subscription. One plan covers every workspace on their account.")}
               </div>
-              <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }} onClick={startCheckout} disabled={!isOwner || Boolean(action) || loading} style={{ padding: "12px 24px", border: 0, borderRadius: 999, background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontFamily: APP_FONT, fontSize: 13, fontWeight: 600, cursor: !isOwner || action || loading ? "not-allowed" : "pointer", opacity: !isOwner || action || loading ? 0.55 : 1 }}>
-                {action === "checkout" ? (de ? "Öffnet Checkout …" : "Opening checkout …") : (de ? "Weiter zum sicheren Checkout" : "Continue to secure checkout")}
+              <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }} onClick={startCheckout} disabled={!isOwner || Boolean(action) || loading} style={{ padding: "12px 28px", whiteSpace: "nowrap", flexShrink: 0, border: 0, borderRadius: 999, background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontFamily: APP_FONT, fontSize: 13, fontWeight: 600, cursor: !isOwner || action || loading ? "not-allowed" : "pointer", opacity: !isOwner || action || loading ? 0.55 : 1 }}>
+                {action === "checkout" ? (de ? "Öffnet Checkout …" : "Opening checkout …") : (de ? "Weiter zum Checkout" : "Continue to checkout")}
               </motion.button>
             </div>
           </>
