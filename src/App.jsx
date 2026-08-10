@@ -31278,15 +31278,30 @@ export default function CircularMenu() {
       .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
 
     const dl = appLanguage === "de";
+    // Line icons rather than emoji: emoji bring their own colours and their own
+    // shapes, so four of them beside each other never look like one set. Drawn
+    // white on a coloured disc, all in the same weight.
+    const stepIcon = (children) => (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff"
+        strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{children}</svg>
+    );
     const stepMeta = {
-      project: { icon: "🗂", iconBg: "#4A6FA5", done: onboarding?.project,
-                 go: () => { setTriggerNewProject(true); setCurrentView("projects"); } },
-      assets:  { icon: "🌐", iconBg: "#2D7A6A", done: onboarding?.assets,
-                 go: () => { setWebImportLink({ ts: Date.now() }); setCurrentView("assets"); } },
-      board:   { icon: "💡", iconBg: "#C4624A", done: onboarding?.board,
-                 go: () => openBrainstormRef.current?.() },
-      brand:   { icon: "🎯", iconBg: "#8C6D1F", done: onboarding?.brand,
-                 go: () => { setBrandTab("strategy"); setCurrentView("brand"); } },
+      project: {
+        iconBg: "#4A6FA5", done: onboarding?.project,
+        icon: stepIcon(<><path d="M12 3 3.5 7.5 12 12l8.5-4.5L12 3Z" /><path d="M3.5 12.5 12 17l8.5-4.5" /><path d="M3.5 16.5 12 21l8.5-4.5" /></>),
+        go: () => { setTriggerNewProject(true); setCurrentView("projects"); } },
+      assets: {
+        iconBg: "#2D7A6A", done: onboarding?.assets,
+        icon: stepIcon(<><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3c2.5 2.4 3.8 5.5 3.8 9s-1.3 6.6-3.8 9c-2.5-2.4-3.8-5.5-3.8-9S9.5 5.4 12 3Z" /></>),
+        go: () => { setWebImportLink({ ts: Date.now() }); setCurrentView("assets"); } },
+      board: {
+        iconBg: "#D2569B", done: onboarding?.board,
+        icon: stepIcon(<><path d="M9.5 18h5" /><path d="M10.5 21h3" /><path d="M12 3a6 6 0 0 0-3.6 10.8c.5.4.8 1 .8 1.6V16h5.6v-.6c0-.6.3-1.2.8-1.6A6 6 0 0 0 12 3Z" /></>),
+        go: () => openBrainstormRef.current?.() },
+      brand: {
+        iconBg: "#63676E", done: onboarding?.brand,
+        icon: stepIcon(<><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" fill="#fff" /></>),
+        go: () => { setBrandTab("strategy"); setCurrentView("brand"); } },
     };
     const colLabel = (key) => ({ todo: t("kanban.todo"), progress: t("kanban.inProgress"), in_progress: t("kanban.inProgress"), review: t("kanban.review"), done: t("kanban.done") }[key] || key);
     const getDashProjectLogo = (name) => dashboardProjects.find(p => p.name === name)?.logo_url || null;
