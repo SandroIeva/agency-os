@@ -31279,13 +31279,13 @@ export default function CircularMenu() {
 
     const dl = appLanguage === "de";
     const stepMeta = {
-      project: { icon: "◧", iconBg: "#4A6FA5", done: onboarding?.project,
+      project: { icon: "🗂", iconBg: "#4A6FA5", done: onboarding?.project,
                  go: () => { setTriggerNewProject(true); setCurrentView("projects"); } },
       assets:  { icon: "🌐", iconBg: "#2D7A6A", done: onboarding?.assets,
                  go: () => { setWebImportLink({ ts: Date.now() }); setCurrentView("assets"); } },
       board:   { icon: "💡", iconBg: "#C4624A", done: onboarding?.board,
                  go: () => openBrainstormRef.current?.() },
-      brand:   { icon: "✦", iconBg: "#4A9A8A", done: onboarding?.brand,
+      brand:   { icon: "🎯", iconBg: "#8C6D1F", done: onboarding?.brand,
                  go: () => { setBrandTab("strategy"); setCurrentView("brand"); } },
     };
     const colLabel = (key) => ({ todo: t("kanban.todo"), progress: t("kanban.inProgress"), in_progress: t("kanban.inProgress"), review: t("kanban.review"), done: t("kanban.done") }[key] || key);
@@ -31299,9 +31299,11 @@ export default function CircularMenu() {
       const customIcon = slotData?.icon_url || null;
       const customBg = slotData?.bg_color || null;
       const fullbleed = slotData?.mode === "fullbleed" && customIcon;
+      const stepKey = FIRST_STEP_BY_TITLE.get(tk.title);
+      const step = stepKey ? stepMeta[stepKey] : null;
       return {
-        icon: projLogo || customIcon ? null : (tk.priority === "high" ? "⚡" : "◎"),
-        iconBg: customBg || slotDef?.defaultBg || (tk.priority === "high" ? "#C4624A" : "#5A7AB5"),
+        icon: projLogo || customIcon ? null : (step ? step.icon : (tk.priority === "high" ? "⚡" : "◎")),
+        iconBg: step ? step.iconBg : (customBg || slotDef?.defaultBg || (tk.priority === "high" ? "#C4624A" : "#5A7AB5")),
         logoUrl: projLogo || customIcon,
         // Project logos always fill the full circle (not affected by OS visual modes).
         // OS visual icons only fill when explicitly set to fullbleed mode.
