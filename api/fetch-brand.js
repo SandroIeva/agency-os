@@ -66,6 +66,137 @@ export default async function handler(req, res) {
   // font names) from a public URL. Merged in from the old /api/fetch-brand-pdf to
   // save a serverless slot; pdf-parse is dynamically imported so the main brand
   // analysis path never pays for it.
+  // ── Website Presence ───────────────────────────────────────────────────────
+  // A deterministic audit of a public site: what a crawler and an AI agent find
+  // when they arrive. No model is involved — every check below is a fact read
+  // off the page or off a well-known file, which keeps it fast, free and
+  // reproducible. Judgement (does this sound like the brand?) is a separate
+  // layer that runs on the user's own key, and it is not this.
+  //
+  // Lives here rather than in its own function because the Hobby plan allows 12
+  // Node functions and all 12 are in use.
+  if (req.method === "POST" && req.body?.mode === "presence") {
+    let origin;
+    try { origin = normaliseSite(String(req.body?.url || "")); }
+    catch (e) { return res.status(400).json({ error: e.message, code: "bad_url" }); }
+
+    // Server-side fetching of a user-supplied address is a request forgery
+    // primitive unless the target is checked. Only public http(s) hosts.
+    if (isPrivateHost(new URL(origin).hostname)) {
+      return res.status(400).json({ error: "That address is not publicly reachable.", code: "private_host" });
+    }
+
+    const grab = async (path, ms = 6000) => {
+      try {
+        const r = await fetch(new URL(path, origin).toString(), {
+          redirect: "follow", signal: AbortSignal.timeout(ms),
+          headers: { "User-Agent": "i7OS-WebsitePresence/1.0 (+https://i7os.com)" },
+        });
+        const text = r.ok ? (await r.text()).slice(0, 400000) : "";
+        return { ok: r.ok, status: r.status, text, headers: r.headers, url: r.url };
+      } catch (e) { return { ok: false, status: 0, text: "", headers: null, error: e?.message || "unreachable" }; }
+    };
+
+    const home = await grab("/", 9000);
+    if (!home.ok) {
+      return res.status(502).json({
+        error: `The site did not answer (${home.status || home.error}).`, code: "unreachable",
+      });
+    }
+    const [robotsRaw, sitemapRaw, llmsRaw] = await Promise.all([grab("/robots.txt"), grab("/sitemap.xml"), grab("/llms.txt")]);
+    // A single-page site answers 200 with its index.html for every unknown path,
+    // so "the request succeeded" is not "the file exists" — it reported robots,
+    // sitemap and llms as present on a site that has none of them. What came
+    // back has to look like the file that was asked for.
+    const robots  = { ...robotsRaw,  ok: robotsRaw.ok  && isTextFile(robotsRaw)  && /user-agent/i.test(robotsRaw.text) };
+    const sitemap = { ...sitemapRaw, ok: sitemapRaw.ok && /<(urlset|sitemapindex)\b/i.test(sitemapRaw.text) };
+    const llms    = { ...llmsRaw,    ok: llmsRaw.ok    && isTextFile(llmsRaw) };
+
+    const html = home.text;
+    const meta = (name) => {
+      const re = new RegExp(`<meta[^>]+(?:name|property)=["']${name}["'][^>]*content=["']([^"']*)["']`, "i");
+      const alt = new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]*(?:name|property)=["']${name}["']`, "i");
+      return (re.exec(html)?.[1] || alt.exec(html)?.[1] || "").trim();
+    };
+    const title = (/<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] || "").trim();
+    const h1 = (/<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(html)?.[1] || "").replace(/<[^>]+>/g, " ").trim();
+    const jsonLd = [...html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)]
+      .map(m => { try { return JSON.parse(m[1]); } catch { return null; } }).filter(Boolean);
+    const linkHeader = home.headers?.get("link") || "";
+    const robotsTxt = robots.ok ? robots.text : "";
+    const aiBots = /(GPTBot|ClaudeBot|Google-Extended|PerplexityBot|CCBot|anthropic-ai)/i.test(robotsTxt);
+
+    // Each check is a fact, a weight, and what to do about it. The weights are
+    // what turn a list of booleans into a score somebody can act on: a missing
+    // title costs more than a missing llms.txt because more depends on it.
+    const checks = [
+      ["search", "Seitentitel", "Page title", Boolean(title), 12,
+        "Ohne Titel entscheidet die Suchmaschine selbst, wie die Seite heißt.",
+        "Without one, search engines invent a name for the page."],
+      ["search", "Meta-Beschreibung", "Meta description", Boolean(meta("description")), 8,
+        "Der Text unter dem Treffer in der Suche.", "The line under your result in search."],
+      ["search", "Hauptüberschrift", "Main heading", Boolean(h1), 8,
+        "Sagt Mensch und Maschine, worum es auf der Seite geht.",
+        "Tells people and machines what the page is about."],
+      ["search", "sitemap.xml", "sitemap.xml", sitemap.ok, 8,
+        "Führt Crawler zu allen Unterseiten statt nur zur Startseite.",
+        "Leads crawlers to every page rather than only the homepage."],
+      ["search", "Kanonische URL", "Canonical URL", /rel=["']canonical["']/i.test(html), 5,
+        "Verhindert, dass dieselbe Seite mehrfach gewertet wird.",
+        "Stops the same page counting as several."],
+      ["ai", "robots.txt", "robots.txt", robots.ok, 8,
+        "Ohne robots.txt gilt für jeden Crawler die Voreinstellung.",
+        "Without it every crawler falls back to its own default."],
+      ["ai", "Regeln für KI-Crawler", "AI crawler rules", aiBots, 8,
+        "Legt fest, welche KI-Dienste die Inhalte nutzen dürfen.",
+        "Says which AI services may use the content."],
+      ["ai", "Content Signals", "Content Signals", /content-signal/i.test(robotsTxt), 6,
+        "Trennt Suche von KI-Training statt beides gemeinsam zu erlauben.",
+        "Separates search from AI training instead of allowing both together."],
+      ["ai", "llms.txt", "llms.txt", llms.ok, 6,
+        "Eine kurze, maschinenlesbare Beschreibung des Angebots.",
+        "A short machine-readable description of what you offer."],
+      ["ai", "Strukturierte Daten", "Structured data", jsonLd.length > 0, 8,
+        "Macht Firma und Angebot maschinenlesbar statt nur lesbar.",
+        "Makes the company and the offering machine-readable, not just readable."],
+      ["ai", "Link-Header", "Link headers", /rel=/i.test(linkHeader), 4,
+        "Weist Agenten auf Dokumentation hin, bevor sie die Seite lesen.",
+        "Points agents at documentation before they read the page."],
+      ["tech", "HTTPS", "HTTPS", origin.startsWith("https://"), 10,
+        "Ohne HTTPS warnen Browser die Besucher.", "Without it browsers warn your visitors."],
+      ["tech", "Mobile-Darstellung", "Mobile viewport", Boolean(meta("viewport")), 6,
+        "Ohne Viewport zeigt das Handy die Desktop-Ansicht verkleinert.",
+        "Without a viewport phones shrink the desktop layout."],
+      ["tech", "Social-Vorschau", "Social preview", Boolean(meta("og:title") || meta("og:image")), 6,
+        "Bestimmt, wie ein geteilter Link aussieht.", "Decides how a shared link looks."],
+      ["tech", "Sprache gesetzt", "Language declared", /<html[^>]+lang=/i.test(html), 4,
+        "Sagt Übersetzern und Vorlesern, in welcher Sprache die Seite ist.",
+        "Tells translators and screen readers which language this is."],
+    ];
+
+    const de = req.body?.lang === "de";
+    const cats = { search: [0, 0], ai: [0, 0], tech: [0, 0] };
+    const findings = checks.map(([cat, nameDe, nameEn, passed, weight, whyDe, whyEn]) => {
+      cats[cat][1] += weight;
+      if (passed) cats[cat][0] += weight;
+      return { category: cat, label: de ? nameDe : nameEn, passed, weight, why: de ? whyDe : whyEn };
+    });
+    const pct = ([got, max]) => (max ? Math.round((got / max) * 100) : 0);
+    const total = Object.values(cats).reduce((a, c) => [a[0] + c[0], a[1] + c[1]], [0, 0]);
+
+    return res.status(200).json({
+      url: origin,
+      scannedAt: new Date().toISOString(),
+      score: pct(total),
+      categories: { search: pct(cats.search), ai: pct(cats.ai), tech: pct(cats.tech) },
+      findings,
+      // The three that cost the most and are not yet done — the list to act on
+      // rather than the list of everything.
+      priority: findings.filter(f => !f.passed).sort((a, b) => b.weight - a.weight).slice(0, 3),
+      detected: { title, description: meta("description"), h1, structuredData: jsonLd.length },
+    });
+  }
+
   if (req.method === "POST" && req.body?.mode === "pdf") {
     const { url } = req.body || {};
     if (!url || typeof url !== "string") return res.status(400).json({ error: "Missing url" });
@@ -1040,4 +1171,45 @@ function decodeEntities(s) {
     .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)))
     .replace(/\s+/g, " ")
     .trim();
+}
+
+// Did we get the plain-text file we asked for, or the app's HTML shell? A
+// single-page site serves index.html for everything, so the status code alone
+// proves nothing.
+function isTextFile(r) {
+  const type = (r.headers?.get("content-type") || "").toLowerCase();
+  if (type.includes("html")) return false;
+  const head = (r.text || "").trimStart().slice(0, 200).toLowerCase();
+  return !head.startsWith("<!doctype") && !head.startsWith("<html");
+}
+
+// Accept what a person types and return an origin we are willing to fetch.
+function normaliseSite(raw) {
+  const trimmed = raw.trim();
+  if (!trimmed) throw new Error("No address given.");
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : "https://" + trimmed;
+  let u;
+  try { u = new URL(withScheme); } catch { throw new Error("That is not a valid address."); }
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("Only http and https are supported.");
+  if (!u.hostname.includes(".")) throw new Error("That is not a valid address.");
+  return u.origin;
+}
+
+// Refuse anything that points back into our own network. A scanner that will
+// fetch any address a user types is a way to reach machines only we can see.
+function isPrivateHost(host) {
+  const h = (host || "").toLowerCase();
+  if (h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local") || h.endsWith(".internal")) return true;
+  if (h === "metadata.google.internal") return true;
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    if (a === 10 || a === 127 || a === 0) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 169 && b === 254) return true;   // link-local, incl. cloud metadata
+    if (a >= 224) return true;
+  }
+  if (h.includes(":")) return true;            // IPv6 literals, incl. ::1
+  return false;
 }
