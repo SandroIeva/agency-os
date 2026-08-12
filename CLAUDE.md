@@ -100,6 +100,18 @@ that owner has, with a pooled storage and seat allowance. Full detail lives in
   DELETE and service-key writes (`auth.uid() is null`) pass through on purpose.
 - `billing_accounts.plan_override` grants a plan outside Stripe; the webhook
   never writes it.
+
+**What belongs behind a plan.** Cost decides, not perceived value. A feature
+that costs us nothing per use — deterministic work done on our own servers, no
+third-party call we are billed for — is available on every plan, including free.
+A feature that bills us per use (Zernio social accounts, Pixazo image credits,
+model calls we pay for) is gated. Stated by the owner on 2026-08-11.
+
+Careful with the free plan specifically: free is **read-only** (see the 30
+triggers above), so "free may use it" holds for reading and computing, and stops
+at the moment the feature writes a row. A free-plan feature that saves its
+result needs its table exempted from the read-only trigger, or it must work
+without saving.
 - `api/lifecycle-sweep.js` (daily cron, Edge) deletes abandoned workspaces in
   stages and **does nothing** unless `LIFECYCLE_PURGE_ENABLED=true`.
 
