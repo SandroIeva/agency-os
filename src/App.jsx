@@ -16576,6 +16576,184 @@ const fmtMetric = (n, de = true) => {
   return String(n);
 };
 
+// Website Presence — what a crawler and an AI agent find when they arrive.
+// The scan itself is free to run for anybody, because it costs us nothing; only
+// keeping the result counts against the monthly allowance, and the database
+// trigger is what actually holds that line.
+function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }) {
+  const de = appLanguage === "de";
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const [note, setNote] = useState("");
+  const [history, setHistory] = useState([]);
+
+  const loadHistory = useCallback(async () => {
+    if (!userOrg?.id) return;
+    const { data } = await supabase.from("website_scans")
+      .select("id,url,score,created_at").eq("org_id", userOrg.id)
+      .order("created_at", { ascending: false }).limit(5);
+    setHistory(data || []);
+  }, [userOrg?.id]);
+  useEffect(() => { loadHistory(); }, [loadHistory]);
+
+  const scan = async () => {
+    if (!url.trim() || busy) return;
+    setBusy(true); setError(""); setNote(""); setResult(null);
+    try {
+      const r = await fetch("/api/fetch-brand", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "presence", url: url.trim(), lang: de ? "de" : "en" }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) { setError(data.error || `HTTP ${r.status}`); setBusy(false); return; }
+      setResult(data);
+
+      // Saving is the part with an allowance. A refused save is not a failed
+      // scan, so it is said quietly beside the result instead of replacing it.
+      const { error: saveErr } = await supabase.from("website_scans").insert({
+        org_id: userOrg?.id, url: data.url, score: data.score,
+        categories: data.categories, findings: data.findings,
+        created_by: session?.user?.id,
+      });
+      if (saveErr) {
+        setNote(/i7os_scan_quota/.test(saveErr.message)
+          ? (de ? "Dieses Ergebnis wurde nicht gespeichert — das Monatskontingent ist aufgebraucht."
+                : "This result was not saved — the monthly allowance is used up.")
+          : (de ? "Dieses Ergebnis wurde nicht gespeichert. Ein Plan wird zum Speichern benötigt."
+                : "This result was not saved. Saving requires a plan."));
+      } else loadHistory();
+    } catch (e) { setError(e?.message || String(e)); }
+    setBusy(false);
+  };
+
+  const CATS = [
+    ["search", de ? "Sichtbarkeit in der Suche" : "Search visibility"],
+    ["ai",     de ? "Bereit für KI-Agenten" : "AI readiness"],
+    ["tech",   de ? "Technische Grundlage" : "Technical foundation"],
+  ];
+  const tone = (v) => v >= 80 ? "#2D7A6A" : v >= 50 ? "#B5803A" : "#C4624A";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div>
+        <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 620 }}>
+          {de
+            ? "Prüft, was Suchmaschinen und KI-Agenten auf deiner Website vorfinden. Der Scan liest nur öffentlich zugängliche Seiten und dauert wenige Sekunden."
+            : "Checks what search engines and AI agents find on your website. The scan reads only public pages and takes a few seconds."}
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 14, maxWidth: 560 }}>
+          <input value={url} onChange={e => setUrl(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") scan(); }}
+            placeholder={de ? "deine-website.de" : "your-website.com"}
+            style={{ flex: 1, padding: "11px 14px", borderRadius: 12, outline: "none",
+              border: `1px solid ${theme.borderFaint}`,
+              background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
+              color: theme.text, fontFamily: FONT, fontSize: 13 }} />
+          <motion.button whileTap={{ scale: 0.97 }} onClick={scan} disabled={busy || !url.trim()}
+            style={{ padding: "11px 22px", borderRadius: 12, border: "none", whiteSpace: "nowrap",
+              background: "#15151c", color: "#fff", fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
+              cursor: busy || !url.trim() ? "default" : "pointer", opacity: busy || !url.trim() ? 0.55 : 1 }}>
+            {busy ? (de ? "Prüft …" : "Scanning …") : (de ? "Analysieren" : "Analyse")}
+          </motion.button>
+        </div>
+      </div>
+
+      {error && (
+        <div style={{ padding: "10px 14px", borderRadius: 12, background: "rgba(232,103,103,.08)",
+          border: "1px solid rgba(232,103,103,.25)", color: "#E86767", fontSize: 12.5, fontFamily: FONT }}>{error}</div>
+      )}
+
+      {result && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 40, fontFamily: FONT, fontWeight: 700, color: tone(result.score), lineHeight: 1 }}>
+                {result.score}<span style={{ fontSize: 18, color: theme.textDim, fontWeight: 500 }}>/100</span>
+              </div>
+              <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, marginTop: 5 }}>{result.url}</div>
+            </div>
+            <div style={{ flex: 1, minWidth: 240, display: "flex", flexDirection: "column", gap: 9 }}>
+              {CATS.map(([key, label]) => (
+                <div key={key}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5,
+                    fontFamily: FONT, color: theme.textDim, marginBottom: 4 }}>
+                    <span>{label}</span><span>{result.categories[key]}</span>
+                  </div>
+                  <div style={{ height: 5, borderRadius: 999, background: theme.borderFaint, overflow: "hidden" }}>
+                    <div style={{ width: `${result.categories[key]}%`, height: "100%",
+                      background: tone(result.categories[key]), borderRadius: 999 }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {note && (
+            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{note}</div>
+          )}
+
+          {result.priority.length > 0 && (
+            <div>
+              <div style={{ fontSize: 10.5, fontFamily: FONT, letterSpacing: 0.6, textTransform: "uppercase",
+                color: theme.textFaint, marginBottom: 9 }}>
+                {de ? "Zuerst angehen" : "Fix these first"}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {result.priority.map(f => (
+                  <div key={f.label} style={{ padding: "11px 13px", borderRadius: 12,
+                    border: `1px solid ${theme.borderFaint}`,
+                    background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
+                    <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{f.label}</div>
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, lineHeight: 1.5 }}>{f.why}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <div style={{ fontSize: 10.5, fontFamily: FONT, letterSpacing: 0.6, textTransform: "uppercase",
+              color: theme.textFaint, marginBottom: 9 }}>
+              {de ? "Alle Prüfungen" : "Every check"}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+              {result.findings.map(f => (
+                <span key={f.label} style={{ display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "5px 11px", borderRadius: 999, fontSize: 11.5, fontFamily: FONT,
+                  background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                  color: f.passed ? theme.textDim : theme.text }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
+                    background: f.passed ? "#2D7A6A" : "#C4624A" }} />
+                  {f.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {!result && history.length > 0 && (
+        <div>
+          <div style={{ fontSize: 10.5, fontFamily: FONT, letterSpacing: 0.6, textTransform: "uppercase",
+            color: theme.textFaint, marginBottom: 9 }}>{de ? "Frühere Scans" : "Earlier scans"}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {history.map(h => (
+              <div key={h.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
+                padding: "9px 12px", borderRadius: 10,
+                background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+                <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text }}>{h.url}</span>
+                <span style={{ fontSize: 12, fontFamily: FONT, color: tone(h.score), fontWeight: 600 }}>{h.score}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg }) {
   // Read from the module-level mirror rather than threaded through two more
   // components — the same mirror the upload guards use. Advisory only: the real
@@ -16588,6 +16766,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
   const [accounts, setAccounts] = useState(null);   // null = loading
   const [data, setData] = useState(null);           // { top, followers, daily }
   const [platform, setPlatform] = useState("all");  // ui key or "all"
+  const [view, setView] = useState("social");       // "social" | "website"
   const [error, setError] = useState(null);
   const [busyKey, setBusyKey] = useState(null);     // platform being connected / account being removed
   const orgId = userOrg?.id;
@@ -16687,8 +16866,38 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
     );
   };
 
+  // A website is a channel like any other, so it sits beside the social numbers
+  // rather than in a place of its own. Same switch as the messenger uses.
+  const viewSwitch = (
+    <div style={{ display: "inline-flex", padding: 4, borderRadius: 999, marginBottom: 20,
+      background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
+      {[["social", de ? "Social Media" : "Social media"], ["website", de ? "Website" : "Website"]].map(([key, label]) => {
+        const on = view === key;
+        return (
+          <motion.div key={key} whileTap={{ scale: 0.97 }} onClick={() => setView(key)}
+            style={{ padding: "8px 20px", borderRadius: 999, cursor: "pointer",
+              fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500,
+              background: on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
+              color: on ? (darkMode ? "#15151c" : "#fff") : theme.textDim,
+              transition: "background .16s ease, color .16s ease" }}>
+            {label}
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+
+  if (view === "website") return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
+      {viewSwitch}
+      <WebsitePresencePanel theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+        session={session} userOrg={userOrg} />
+    </div>
+  );
+
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
+      {viewSwitch}
       {socialBlocked && !errorText && (
         <div style={{ marginBottom: 16, padding: "12px 16px", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap",
           background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.text, fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>

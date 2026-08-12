@@ -26,6 +26,12 @@ export const STORAGE_GB = 1024 * 1024 * 1024;
 // A cardless trial gets none, for the same reason it gets no social accounts —
 // see the zeroing in resolveEntitlements. Both cost us money per use.
 
+// `websiteScans` is how many Website Presence audits may be SAVED per month.
+// The scan costs us nothing, so this is not what the plan sells — it is what
+// stops one workspace fetching a thousand pages. Running a scan is open to
+// everyone; keeping the result and comparing it with the last one is the part
+// that counts against this.
+//
 // `socialAccounts` is how many social profiles may be CONNECTED. Connecting one
 // costs us money at the upstream provider, so it is the one limit a cardless
 // trial does not get any of — see the zeroing in resolveEntitlements. It is
@@ -42,6 +48,7 @@ export const PLAN_ENTITLEMENTS = {
     projects: 0,
     socialAccounts: 0,
     imageCredits: 0,
+    websiteScans: 0,
     collaboration: false,
     readOnly: true,
   },
@@ -52,6 +59,7 @@ export const PLAN_ENTITLEMENTS = {
     projects: 3,
     socialAccounts: 1,
     imageCredits: 2000,
+    websiteScans: 10,
     collaboration: false,
     readOnly: false,
   },
@@ -62,6 +70,7 @@ export const PLAN_ENTITLEMENTS = {
     projects: null,
     socialAccounts: 2,
     imageCredits: 4000,
+    websiteScans: 50,
     collaboration: true,
     readOnly: false,
   },
@@ -72,6 +81,7 @@ export const PLAN_ENTITLEMENTS = {
     projects: null,
     socialAccounts: 5,
     imageCredits: 10000,
+    websiteScans: Infinity,
     collaboration: true,
     readOnly: false,
   },
@@ -223,6 +233,6 @@ export function resolveEntitlements(account, now = Date.now()) {
     // earlier, above, and keeps its plan's allowance: that grant is deliberate.
     limits: paidPlan
       ? limitsFor(plan)
-      : { ...limitsFor(plan), socialAccounts: 0, imageCredits: 0 },
+      : { ...limitsFor(plan), socialAccounts: 0, imageCredits: 0, websiteScans: 0 },
   };
 }
