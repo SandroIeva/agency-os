@@ -16592,8 +16592,10 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }
   const loadHistory = useCallback(async () => {
     if (!userOrg?.id) return;
     const { data } = await supabase.from("website_scans")
-      .select("id,url,score,created_at").eq("org_id", userOrg.id)
-      .order("created_at", { ascending: false }).limit(5);
+      // The whole row, not just the score: a saved scan has to open again, or
+      // the only way back to its findings is to run it a second time.
+      .select("id,url,score,created_at,categories,findings").eq("org_id", userOrg.id)
+      .order("created_at", { ascending: false }).limit(12);
     setHistory(data || []);
   }, [userOrg?.id]);
   useEffect(() => { loadHistory(); }, [loadHistory]);
@@ -16637,27 +16639,24 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div>
-        <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 620 }}>
-          {de
-            ? "Prüft, was Suchmaschinen und KI-Agenten auf deiner Website vorfinden. Der Scan liest nur öffentlich zugängliche Seiten und dauert wenige Sekunden."
-            : "Checks what search engines and AI agents find on your website. The scan reads only public pages and takes a few seconds."}
-        </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 14, maxWidth: 560 }}>
-          <input value={url} onChange={e => setUrl(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") scan(); }}
-            placeholder={de ? "deine-website.de" : "your-website.com"}
-            style={{ flex: 1, padding: "11px 14px", borderRadius: 12, outline: "none",
-              border: `1px solid ${theme.borderFaint}`,
-              background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
-              color: theme.text, fontFamily: FONT, fontSize: 13 }} />
-          <motion.button whileTap={{ scale: 0.97 }} onClick={scan} disabled={busy || !url.trim()}
-            style={{ padding: "11px 22px", borderRadius: 12, border: "none", whiteSpace: "nowrap",
-              background: "#15151c", color: "#fff", fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
-              cursor: busy || !url.trim() ? "default" : "pointer", opacity: busy || !url.trim() ? 0.55 : 1 }}>
-            {busy ? (de ? "Prüft …" : "Scanning …") : (de ? "Analysieren" : "Analyse")}
-          </motion.button>
-        </div>
+      {/* One field with the action inside it. The paragraph that used to explain
+          the scan is gone: it said what the button already says, above the thing
+          it was describing. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, maxWidth: 560,
+        padding: "5px 5px 5px 16px", borderRadius: 999,
+        border: `1px solid ${theme.borderFaint}`,
+        background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }}>
+        <input value={url} onChange={e => setUrl(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") scan(); }}
+          placeholder={de ? "deine-website.de" : "your-website.com"}
+          style={{ flex: 1, minWidth: 0, padding: "8px 0", border: "none", outline: "none",
+            background: "none", color: theme.text, fontFamily: FONT, fontSize: 13 }} />
+        <motion.button whileTap={{ scale: 0.97 }} onClick={scan} disabled={busy || !url.trim()}
+          style={{ padding: "9px 20px", borderRadius: 999, border: "none", whiteSpace: "nowrap", flexShrink: 0,
+            background: "#15151c", color: "#fff", fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
+            cursor: busy || !url.trim() ? "default" : "pointer", opacity: busy || !url.trim() ? 0.55 : 1 }}>
+          {busy ? (de ? "Prüft …" : "Scanning …") : (de ? "Analysieren" : "Analyse")}
+        </motion.button>
       </div>
 
       {error && (
@@ -16734,19 +16733,34 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }
         </>
       )}
 
-      {!result && history.length > 0 && (
+      {history.length > 0 && (
         <div>
           <div style={{ fontSize: 10.5, fontFamily: FONT, letterSpacing: 0.6, textTransform: "uppercase",
-            color: theme.textFaint, marginBottom: 9 }}>{de ? "Frühere Scans" : "Earlier scans"}</div>
+            color: theme.textFaint, marginBottom: 9 }}>{de ? "Gespeicherte Scans" : "Saved scans"}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {history.map(h => (
-              <div key={h.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
-                padding: "9px 12px", borderRadius: 10,
-                background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
-                <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text }}>{h.url}</span>
-                <span style={{ fontSize: 12, fontFamily: FONT, color: tone(h.score), fontWeight: 600 }}>{h.score}</span>
-              </div>
-            ))}
+            {history.map(h => {
+              const open = result?.id === h.id;
+              return (
+                <motion.div key={h.id} whileTap={{ scale: 0.995 }}
+                  // Opens the stored scan instead of running it again. Everything
+                  // needed is on the row already.
+                  onClick={() => { setResult({ ...h, priority: (h.findings || []).filter(f => !f.passed).sort((a, b) => b.weight - a.weight).slice(0, 3) }); setNote(""); setError(""); }}
+                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer",
+                    padding: "10px 13px", borderRadius: 11,
+                    border: `1px solid ${open ? theme.border : "transparent"}`,
+                    background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+                  <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                    <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text,
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{h.url}</span>
+                    <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 2 }}>
+                      {new Date(h.created_at).toLocaleDateString(de ? "de-DE" : "en-US",
+                        { day: "2-digit", month: "short", year: "numeric" })}
+                    </span>
+                  </span>
+                  <span style={{ fontSize: 13, fontFamily: FONT, color: tone(h.score), fontWeight: 700, flexShrink: 0 }}>{h.score}</span>
+                </motion.div>
+              );
+            })}
           </div>
         </div>
       )}
