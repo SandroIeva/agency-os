@@ -15927,22 +15927,45 @@ async function extractColors(url, count = 5) {
 // avatar against each other — that is the whole use of it. Per-platform
 // differences are two values, not two components: how the avatar is cropped and
 // what sits under the name.
+// The real dimensions each platform asks for, so what gets uploaded here is
+// the file that can be uploaded there. A preview in the wrong proportion is
+// worse than none: it looks right and produces an image nobody can use.
 const CHANNEL_PREVIEW_SHAPE = {
-  linkedin:  { avatar: 8,   banner: 4.0, overlap: true,  meta: (de) => de ? "Technologie · 2–10 Mitarbeitende" : "Technology · 2–10 employees" },
-  instagram: { avatar: 999, banner: 3.2, overlap: false, meta: () => "" },
-  x:         { avatar: 999, banner: 3.0, overlap: true,  meta: () => "" },
-  pinterest: { avatar: 999, banner: 3.2, overlap: false, meta: () => "" },
-  facebook:  { avatar: 999, banner: 2.7, overlap: true,  meta: () => "" },
+  linkedin:  { avatar: 8,   bannerPx: [1128, 191], logoPx: [300, 300], overlap: true,
+               tabs: ["Home", "About", "Posts", "Jobs", "People", "Insights"],
+               meta: (de) => de ? "Branche · 2–10 Mitarbeitende" : "Industry · 2–10 employees" },
+  x:         { avatar: 999, bannerPx: [1500, 500], logoPx: [400, 400], overlap: true,
+               tabs: ["Posts", "Replies", "Media", "Likes"], meta: () => "" },
+  facebook:  { avatar: 999, bannerPx: [1640, 664], logoPx: [320, 320], overlap: true,
+               tabs: ["Posts", "About", "Photos", "More"], meta: () => "" },
+  instagram: { avatar: 999, bannerPx: null,        logoPx: [320, 320], overlap: false,
+               tabs: ["Posts", "Reels", "Tagged"], meta: () => "" },
+  pinterest: { avatar: 999, bannerPx: [1600, 900], logoPx: [280, 280], overlap: false,
+               tabs: ["Created", "Saved"], meta: () => "" },
 };
 
-function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, onUpload, logos, theme, darkMode, appLanguage, url }) {
+function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, onUpload, logos, orgId, theme, darkMode, appLanguage, url }) {
   const de = appLanguage === "de";
   const shape = CHANNEL_PREVIEW_SHAPE[platform.key] || CHANNEL_PREVIEW_SHAPE.linkedin;
+  const bannerRatio = shape.bannerPx ? shape.bannerPx[0] / shape.bannerPx[1] : 4;
+  const px = (d) => d ? `${d[0]} × ${d[1]} px` : null;
   const [banner, setBanner] = useState(saved?.banner || "");
   const [avatar, setAvatar] = useState(saved?.avatar || brand?.logo_url || "");
   const [busy, setBusy] = useState("");
   const [pickOpen, setPickOpen] = useState(false);
   const [handle, setHandle] = useState(url || "");
+  // Everything the workspace already has. Making somebody upload a logo a
+  // second time because this view cannot see the first one is the opposite of
+  // what one system is for.
+  const [assets, setAssets] = useState([]);
+  useEffect(() => {
+    if (!brand?.org_id && !orgId) return;
+    supabase.from("user_files")
+      .select("id,name,public_url,mime_type").eq("org_id", orgId)
+      .like("mime_type", "image/%")
+      .order("created_at", { ascending: false }).limit(24)
+      .then(({ data }) => setAssets((data || []).filter(f => f.public_url)));
+  }, [orgId]);
   const bannerInput = useRef(null);
   const avatarInput = useRef(null);
 
@@ -15960,8 +15983,11 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
 
   // Logos already in the brand, so the avatar does not have to be uploaded a
   // second time just to be seen here.
-  const library = [brand?.logo_url, ...(Array.isArray(logos) ? logos.map(l => l?.url || l) : [])]
-    .filter(v => typeof v === "string" && v);
+  const library = [...new Set([
+    brand?.logo_url,
+    ...(Array.isArray(logos) ? logos.map(l => l?.url || l) : []),
+    ...assets.map(a => a.public_url),
+  ])].filter(v => typeof v === "string" && v);
 
   const dropZone = (label) => ({
     display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
@@ -16013,12 +16039,16 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
         <div style={{ padding: 22, background: darkMode ? "rgba(255,255,255,0.03)" : "#EFEFEA" }}>
           <div style={{ borderRadius: 12, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.08)" }}>
             <div onClick={() => bannerInput.current?.click()}
-              style={{ position: "relative", width: "100%", aspectRatio: String(shape.banner),
+              style={{ position: "relative", width: "100%", aspectRatio: String(bannerRatio),
                 background: banner ? `center/cover no-repeat url(${banner})` : "#D9D9D4",
                 cursor: "pointer" }}>
               {!banner && (
-                <div style={{ ...dropZone(), position: "absolute", inset: 0, color: "#7A7A72", border: "none" }}>
-                  {busy === "banner" ? (de ? "Lädt …" : "Uploading …") : (de ? "Bannerbild hinzufügen" : "Add a banner image")}
+                <div style={{ ...dropZone(), position: "absolute", inset: 0, color: "#7A7A72", border: "none",
+                  flexDirection: "column", gap: 3 }}>
+                  <span>{busy === "banner" ? (de ? "Lädt …" : "Uploading …") : (de ? "Bannerbild hinzufügen" : "Add a banner image")}</span>
+                  {px(shape.bannerPx) && (
+                    <span style={{ fontSize: 11 }}>{px(shape.bannerPx)}</span>
+                  )}
                 </div>
               )}
             </div>
@@ -16037,7 +16067,8 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
                 <div style={{ marginTop: 10, padding: 12, borderRadius: 12, background: "#F5F5F2",
                   border: "1px solid rgba(0,0,0,0.08)" }}>
                   <div style={{ fontSize: 11, fontFamily: FONT, color: "#6B6B63", marginBottom: 8 }}>
-                    {de ? "Aus euren Logos wählen oder hochladen" : "Pick from your logos, or upload"}
+                    {(de ? "Aus euren Logos und Assets wählen oder hochladen" : "Pick from your logos and assets, or upload")
+                      + (px(shape.logoPx) ? ` · ${px(shape.logoPx)}` : "")}
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                     {library.map(src => (
@@ -16065,14 +16096,33 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
                 <div style={{ fontSize: 13, fontFamily: FONT, color: "#6B6B63", marginTop: 6 }}>{shape.meta(de)}</div>
               )}
 
-              <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-                <div style={{ padding: "9px 22px", borderRadius: 999, background: platform.color, color: "#fff",
-                  fontFamily: FONT, fontSize: 13, fontWeight: 600 }}>{de ? "Folgen" : "Follow"}</div>
-                <div style={{ padding: "9px 22px", borderRadius: 999, border: `1.5px solid ${platform.color}`,
-                  color: platform.color, fontFamily: FONT, fontSize: 13, fontWeight: 600 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center",
+                  padding: "0 22px", height: 38, borderRadius: 999, background: platform.color, color: "#fff",
+                  fontFamily: FONT, fontSize: 13, fontWeight: 600, lineHeight: 1 }}>
+                  {de ? "+ Folgen" : "+ Follow"}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center",
+                  padding: "0 22px", height: 38, borderRadius: 999, border: `1.5px solid ${platform.color}`,
+                  color: platform.color, fontFamily: FONT, fontSize: 13, fontWeight: 600, lineHeight: 1 }}>
                   {de ? "Nachricht" : "Message"}
                 </div>
+                <div style={{ width: 38, height: 38, borderRadius: "50%", border: "1px solid rgba(0,0,0,0.25)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "#444", fontFamily: FONT, fontSize: 15, lineHeight: 1 }}>···</div>
               </div>
+            </div>
+
+            {/* The row of sections the real profile carries. It says more about
+                how a page reads than any single element. */}
+            <div style={{ display: "flex", gap: 26, padding: "0 20px", borderTop: "1px solid rgba(0,0,0,0.08)" }}>
+              {(shape.tabs || []).map((tab, i) => (
+                <div key={tab} style={{ padding: "13px 0", fontFamily: FONT, fontSize: 13.5,
+                  fontWeight: i === 0 ? 600 : 400, color: i === 0 ? "#111" : "#5B5B55",
+                  borderBottom: i === 0 ? `2px solid ${platform.color}` : "2px solid transparent" }}>
+                  {tab}
+                </div>
+              ))}
             </div>
           </div>
 
@@ -17916,7 +17966,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
             saved={previews[previewKey]}
             onSave={(v) => savePreview(previewKey, v)}
             onSaveUrl={(v) => saveChannel(previewKey, v)}
-            onUpload={uploadPreviewImage}
+            onUpload={uploadPreviewImage} orgId={userOrg?.id}
             onClose={() => setPreviewKey(null)}
             theme={theme} darkMode={darkMode} appLanguage={appLanguage} />
         );
