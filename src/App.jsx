@@ -16589,6 +16589,18 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }
   const [note, setNote] = useState("");
   const [history, setHistory] = useState([]);
 
+  // What the workspace says about itself, to hold the website against. Empty
+  // fields are the point rather than a problem: a gap here is the reason the
+  // comparison cannot be made, and saying which one is more use than silence.
+  const [brand, setBrand] = useState(null);
+  useEffect(() => {
+    if (!userOrg?.id) return;
+    supabase.from("brand_profile")
+      .select("name,claim,description,vision,voice_tone,brand_values")
+      .eq("org_id", userOrg.id).is("project_id", null).maybeSingle()
+      .then(({ data }) => setBrand(data || {}));
+  }, [userOrg?.id]);
+
   const loadHistory = useCallback(async () => {
     if (!userOrg?.id) return;
     const { data } = await supabase.from("website_scans")
@@ -16692,6 +16704,76 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }
           {note && (
             <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{note}</div>
           )}
+
+          {result.machine && (() => {
+            const m = result.machine;
+            const row = (label, value, missingHint) => (
+              <div key={label} style={{ padding: "10px 0", borderBottom: `1px solid ${theme.borderFaint}` }}>
+                <div style={{ fontSize: 10.5, fontFamily: FONT, letterSpacing: 0.5, textTransform: "uppercase",
+                  color: theme.textFaint }}>{label}</div>
+                <div style={{ fontSize: 13, fontFamily: FONT, marginTop: 3, lineHeight: 1.5,
+                  color: value ? theme.text : "#C4624A", fontStyle: value ? "normal" : "italic" }}>
+                  {value || missingHint}
+                </div>
+              </div>
+            );
+            return (
+              <div>
+                <div style={{ fontSize: 10.5, fontFamily: FONT, letterSpacing: 0.6, textTransform: "uppercase",
+                  color: theme.textFaint, marginBottom: 4 }}>
+                  {de ? "So liest eine Maschine deine Seite" : "The same page, seen the way a machine sees it"}
+                </div>
+                {row(de ? "Name" : "Name", m.name, de ? "nicht als Fakt hinterlegt" : "not stated as fact")}
+                {row(de ? "Was ihr macht" : "What you do", result.detected?.description,
+                  de ? "keine Beschreibung gefunden" : "no description found")}
+                {row(de ? "Worum es auf dieser Seite geht" : "What this page is about", result.detected?.h1,
+                  de ? "keine Hauptüberschrift" : "no main heading")}
+                {row(de ? "Kontakt und Ort" : "Contact and place",
+                  [m.contact, m.place].filter(Boolean).join(" · "),
+                  de ? "nur aus dem Fließtext ableitbar" : "only inferable from prose")}
+                {row(de ? "Eure anderen Profile" : "Your other profiles",
+                  m.profiles.length ? `${m.profiles.length} ${de ? "verknüpft" : "linked"}` : "",
+                  de ? "von hier aus nicht lesbar" : "not readable from here")}
+                {row(de ? "Wörter, die ein Crawler liest" : "Words a crawler can read", String(m.words), "")}
+              </div>
+            );
+          })()}
+
+          {brand && (() => {
+            // A gap in the brand data is not a website problem, so it is not a
+            // finding. It is the reason a comparison cannot be made, and it
+            // belongs where the person can act on it.
+            const filled = (v) => typeof v === "string" ? v.trim().length > 0
+              : v && typeof v === "object" ? Object.keys(v).length > 0 : false;
+            const gaps = [
+              [filled(brand.claim) || filled(brand.description), de ? "Brand Core" : "Brand core",
+               de ? "Claim und Beschreibung sind leer, also gibt es nichts, womit sich der Text der Website vergleichen ließe."
+                  : "Claim and description are empty, so there is nothing to compare the site's wording against."],
+              [filled(brand.vision), de ? "Brand Vision" : "Brand vision",
+               de ? "In der Vision steht noch nichts. Trag sie ein, dann lässt sich prüfen, ob die Website dieselbe Richtung erzählt."
+                  : "Nothing is stored in the vision yet. Fill it in and the site can be checked against it."],
+              [filled(brand.voice_tone), de ? "Voice & Tone" : "Voice and tone",
+               de ? "Ohne festgelegte Tonalität lässt sich nicht sagen, ob die Website so klingt wie die Marke."
+                  : "Without a defined tone there is no way to say whether the site sounds like the brand."],
+            ].filter(([ok]) => !ok);
+            if (!gaps.length) return null;
+            return (
+              <div style={{ padding: "14px 16px", borderRadius: 14,
+                border: `1px solid ${theme.borderFaint}`,
+                background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
+                <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                  {de ? "Für den Abgleich mit deiner Marke fehlt noch etwas" : "Something is missing before we can compare with your brand"}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 10 }}>
+                  {gaps.map(([, where, why]) => (
+                    <div key={where} style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
+                      <span style={{ color: theme.text, fontWeight: 600 }}>{where}: </span>{why}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {result.priority.length > 0 && (
             <div>

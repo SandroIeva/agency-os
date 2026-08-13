@@ -194,6 +194,10 @@ export default async function handler(req, res) {
       // rather than the list of everything.
       priority: findings.filter(f => !f.passed).sort((a, b) => b.weight - a.weight).slice(0, 3),
       detected: { title, description: meta("description"), h1, structuredData: jsonLd.length },
+      // What a machine actually comes away with. The score says how well the
+      // page is set up; this says what it ends up knowing about you, which is
+      // the part a brand owner can read without knowing what a canonical is.
+      machine: machineView(html, jsonLd),
     });
   }
 
@@ -1212,4 +1216,50 @@ function isPrivateHost(host) {
   }
   if (h.includes(":")) return true;            // IPv6 literals, incl. ::1
   return false;
+}
+
+// The page as an assistant receives it: a name, what you do, whether your other
+// profiles are reachable from here, and how much text there is to read at all.
+// Facts only — anything absent is reported absent rather than guessed at.
+function machineView(html, jsonLd) {
+  const flat = [];
+  const walk = (n, d = 0) => {
+    if (!n || d > 4) return;
+    if (Array.isArray(n)) return n.forEach(x => walk(x, d + 1));
+    if (typeof n === "object") { flat.push(n); Object.values(n).forEach(x => walk(x, d + 1)); }
+  };
+  jsonLd.forEach(x => walk(x));
+  const typed = (t) => flat.find(o => {
+    const ty = o["@type"];
+    return Array.isArray(ty) ? ty.includes(t) : ty === t;
+  });
+  const org = typed("Organization") || typed("LocalBusiness") || typed("Corporation") || null;
+
+  const sameAs = [].concat(org?.sameAs || [])
+    .concat(flat.flatMap(o => (Array.isArray(o.sameAs) ? o.sameAs : [])));
+  let social = {};
+  try { social = extractSocialLinks(html) || {}; } catch (_) { social = {}; }
+  const profiles = [...new Set([...sameAs, ...Object.values(social).filter(Boolean)])].slice(0, 8);
+
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ");
+  const words = (text.match(/[\p{L}\p{N}'’-]+/gu) || []).length;
+
+  const address = org?.address
+    ? [org.address.streetAddress, org.address.postalCode, org.address.addressLocality, org.address.addressCountry]
+        .filter(Boolean).join(", ")
+    : null;
+
+  return {
+    name: org?.name || null,
+    contact: org?.telephone || org?.email || null,
+    place: address || null,
+    profiles,
+    words,
+    // "Stated as fact" means a machine read it from structured data instead of
+    // inferring it from prose. That distinction is the whole point of JSON-LD.
+    statedAsFact: Boolean(org),
+  };
 }
