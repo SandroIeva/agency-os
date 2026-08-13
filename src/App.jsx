@@ -15935,13 +15935,14 @@ const CHANNEL_PREVIEW_SHAPE = {
   facebook:  { avatar: 999, banner: 2.7, overlap: true,  meta: () => "" },
 };
 
-function ChannelPreview({ platform, brand, saved, onSave, onClose, onUpload, logos, theme, darkMode, appLanguage, url }) {
+function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, onUpload, logos, theme, darkMode, appLanguage, url }) {
   const de = appLanguage === "de";
   const shape = CHANNEL_PREVIEW_SHAPE[platform.key] || CHANNEL_PREVIEW_SHAPE.linkedin;
   const [banner, setBanner] = useState(saved?.banner || "");
   const [avatar, setAvatar] = useState(saved?.avatar || brand?.logo_url || "");
   const [busy, setBusy] = useState("");
   const [pickOpen, setPickOpen] = useState(false);
+  const [handle, setHandle] = useState(url || "");
   const bannerInput = useRef(null);
   const avatarInput = useRef(null);
 
@@ -16073,6 +16074,24 @@ function ChannelPreview({ platform, brand, saved, onSave, onClose, onUpload, log
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* The address lives here rather than in a second place, so a channel
+              is one thing to open whether or not it exists yet. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14,
+            padding: "5px 5px 5px 14px", borderRadius: 999,
+            border: `1px solid ${theme.borderFaint}`,
+            background: darkMode ? "rgba(255,255,255,0.05)" : "#fff" }}>
+            <input value={handle} onChange={e => setHandle(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") onSaveUrl(handle); }}
+              placeholder={platform.hint}
+              style={{ flex: 1, minWidth: 0, padding: "7px 0", border: "none", outline: "none",
+                background: "none", color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
+            <motion.button whileTap={{ scale: 0.97 }} onClick={() => onSaveUrl(handle)}
+              style={{ padding: "7px 16px", borderRadius: 999, border: "none", flexShrink: 0,
+                background: "#15151c", color: "#fff", fontFamily: FONT, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+              {de ? "Speichern" : "Save"}
+            </motion.button>
           </div>
 
           <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 12, lineHeight: 1.5 }}>
@@ -17896,6 +17915,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
             brand={profile} logos={profile?.logos}
             saved={previews[previewKey]}
             onSave={(v) => savePreview(previewKey, v)}
+            onSaveUrl={(v) => saveChannel(previewKey, v)}
             onUpload={uploadPreviewImage}
             onClose={() => setPreviewKey(null)}
             theme={theme} darkMode={darkMode} appLanguage={appLanguage} />
@@ -18030,7 +18050,10 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
                               );
                             }
                             return (
-                              <motion.div key={p.key} whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }} onClick={() => { setEditKey(p.key); setDraft(""); }}
+                              // A channel nobody has an account on yet is exactly
+                              // when the preview is worth the most, so this opens
+                              // it too. The address is entered inside it.
+                              <motion.div key={p.key} whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }} onClick={() => setPreviewKey(p.key)}
                                 style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 14px 8px 8px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.015)" }}>
                                 <div style={{ width: 26, height: 26, borderRadius: 999, background: p.color, opacity: 0.92, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                                   <svg width={tpGlyphSize(p.key, 15)} height={tpGlyphSize(p.key, 15)} viewBox="0 0 24 24">{touchpointGlyph(p.key)}</svg>
