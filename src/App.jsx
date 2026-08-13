@@ -15921,6 +15921,175 @@ async function extractColors(url, count = 5) {
 // Where the brand lives in the world. v1 focuses on social-media channels (read
 // from brand_profile.channels), shown as a grid of brand-coloured channel cards
 // you can connect/edit inline. Teases the upcoming Strategy/Analysis layer.
+
+// How the brand would look on a channel, before anything is published there.
+// The layout follows the real profile closely enough to judge a banner and an
+// avatar against each other — that is the whole use of it. Per-platform
+// differences are two values, not two components: how the avatar is cropped and
+// what sits under the name.
+const CHANNEL_PREVIEW_SHAPE = {
+  linkedin:  { avatar: 8,   banner: 4.0, overlap: true,  meta: (de) => de ? "Technologie · 2–10 Mitarbeitende" : "Technology · 2–10 employees" },
+  instagram: { avatar: 999, banner: 3.2, overlap: false, meta: () => "" },
+  x:         { avatar: 999, banner: 3.0, overlap: true,  meta: () => "" },
+  pinterest: { avatar: 999, banner: 3.2, overlap: false, meta: () => "" },
+  facebook:  { avatar: 999, banner: 2.7, overlap: true,  meta: () => "" },
+};
+
+function ChannelPreview({ platform, brand, saved, onSave, onClose, onUpload, logos, theme, darkMode, appLanguage, url }) {
+  const de = appLanguage === "de";
+  const shape = CHANNEL_PREVIEW_SHAPE[platform.key] || CHANNEL_PREVIEW_SHAPE.linkedin;
+  const [banner, setBanner] = useState(saved?.banner || "");
+  const [avatar, setAvatar] = useState(saved?.avatar || brand?.logo_url || "");
+  const [busy, setBusy] = useState("");
+  const [pickOpen, setPickOpen] = useState(false);
+  const bannerInput = useRef(null);
+  const avatarInput = useRef(null);
+
+  const commit = (next) => { onSave({ banner, avatar, ...next }); };
+
+  const choose = async (which, file) => {
+    if (!file) return;
+    setBusy(which);
+    const url2 = await onUpload(file);
+    setBusy("");
+    if (!url2) return;
+    if (which === "banner") { setBanner(url2); commit({ banner: url2 }); }
+    else { setAvatar(url2); commit({ avatar: url2 }); }
+  };
+
+  // Logos already in the brand, so the avatar does not have to be uploaded a
+  // second time just to be seen here.
+  const library = [brand?.logo_url, ...(Array.isArray(logos) ? logos.map(l => l?.url || l) : [])]
+    .filter(v => typeof v === "string" && v);
+
+  const dropZone = (label) => ({
+    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+    color: theme.textDim, fontSize: 12.5, fontFamily: FONT,
+    border: `1px dashed ${theme.borderFaint}`, cursor: "pointer",
+  });
+
+  return createPortal(
+    <div onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 24, overflowY: "auto" }}>
+      <motion.div initial={{ opacity: 0, y: 14, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+        onClick={e => e.stopPropagation()}
+        style={{ width: "min(860px, 100%)", background: darkMode ? "#16161e" : "#fff",
+          border: `1px solid ${theme.borderFaint}`, borderRadius: 20, overflow: "hidden",
+          boxShadow: "0 30px 80px rgba(0,0,0,0.35)" }}>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "16px 20px", borderBottom: `1px solid ${theme.borderFaint}` }}>
+          <div>
+            <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+              {platform.label} {de ? "Vorschau" : "preview"}
+            </div>
+            <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+              {de ? "So würde eure Marke dort wirken. Nichts davon wird veröffentlicht."
+                  : "How your brand would look there. None of this is published."}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {url && (
+              <motion.a whileTap={{ scale: 0.97 }} href={/^https?:\/\//.test(url) ? url : "https://" + url}
+                target="_blank" rel="noopener noreferrer"
+                style={{ padding: "8px 14px", borderRadius: 999, textDecoration: "none",
+                  border: `1px solid ${theme.borderFaint}`, color: theme.text,
+                  fontFamily: FONT, fontSize: 12, fontWeight: 600 }}>
+                {de ? "Profil öffnen" : "Open profile"}
+              </motion.a>
+            )}
+            <motion.button whileTap={{ scale: 0.97 }} onClick={onClose}
+              style={{ padding: "8px 16px", borderRadius: 999, border: "none", background: "#15151c",
+                color: "#fff", fontFamily: FONT, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+              {de ? "Fertig" : "Done"}
+            </motion.button>
+          </div>
+        </div>
+
+        {/* The mock itself, on its own light ground so it reads as a preview of
+            somewhere else rather than as part of this app. */}
+        <div style={{ padding: 22, background: darkMode ? "rgba(255,255,255,0.03)" : "#EFEFEA" }}>
+          <div style={{ borderRadius: 12, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.08)" }}>
+            <div onClick={() => bannerInput.current?.click()}
+              style={{ position: "relative", width: "100%", aspectRatio: String(shape.banner),
+                background: banner ? `center/cover no-repeat url(${banner})` : "#D9D9D4",
+                cursor: "pointer" }}>
+              {!banner && (
+                <div style={{ ...dropZone(), position: "absolute", inset: 0, color: "#7A7A72", border: "none" }}>
+                  {busy === "banner" ? (de ? "Lädt …" : "Uploading …") : (de ? "Bannerbild hinzufügen" : "Add a banner image")}
+                </div>
+              )}
+            </div>
+
+            <div style={{ padding: "0 20px 20px", position: "relative" }}>
+              <div onClick={() => setPickOpen(v => !v)}
+                style={{ width: 92, height: 92, borderRadius: shape.avatar, overflow: "hidden",
+                  marginTop: shape.overlap ? -34 : 14, border: "3px solid #fff", background: "#15151c",
+                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {avatar
+                  ? <img src={avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  : <span style={{ color: "#fff", fontFamily: FONT, fontSize: 11 }}>{de ? "Logo" : "Logo"}</span>}
+              </div>
+
+              {pickOpen && (
+                <div style={{ marginTop: 10, padding: 12, borderRadius: 12, background: "#F5F5F2",
+                  border: "1px solid rgba(0,0,0,0.08)" }}>
+                  <div style={{ fontSize: 11, fontFamily: FONT, color: "#6B6B63", marginBottom: 8 }}>
+                    {de ? "Aus euren Logos wählen oder hochladen" : "Pick from your logos, or upload"}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    {library.map(src => (
+                      <div key={src} onClick={() => { setAvatar(src); commit({ avatar: src }); setPickOpen(false); }}
+                        style={{ width: 46, height: 46, borderRadius: 10, overflow: "hidden", cursor: "pointer",
+                          border: avatar === src ? "2px solid #15151c" : "1px solid rgba(0,0,0,0.1)", background: "#fff" }}>
+                        <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                      </div>
+                    ))}
+                    <div onClick={() => avatarInput.current?.click()}
+                      style={{ width: 46, height: 46, borderRadius: 10, display: "flex", alignItems: "center",
+                        justifyContent: "center", border: "1px dashed rgba(0,0,0,0.25)", cursor: "pointer",
+                        color: "#6B6B63", fontSize: 18 }}>+</div>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ fontSize: 26, fontFamily: FONT, fontWeight: 700, color: "#111", marginTop: 14 }}>
+                {brand?.name || (de ? "Euer Markenname" : "Your brand name")}
+              </div>
+              {brand?.claim && (
+                <div style={{ fontSize: 15, fontFamily: FONT, color: "#333", marginTop: 6, lineHeight: 1.45 }}>{brand.claim}</div>
+              )}
+              {shape.meta(de) && (
+                <div style={{ fontSize: 13, fontFamily: FONT, color: "#6B6B63", marginTop: 6 }}>{shape.meta(de)}</div>
+              )}
+
+              <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+                <div style={{ padding: "9px 22px", borderRadius: 999, background: platform.color, color: "#fff",
+                  fontFamily: FONT, fontSize: 13, fontWeight: 600 }}>{de ? "Folgen" : "Follow"}</div>
+                <div style={{ padding: "9px 22px", borderRadius: 999, border: `1.5px solid ${platform.color}`,
+                  color: platform.color, fontFamily: FONT, fontSize: 13, fontWeight: 600 }}>
+                  {de ? "Nachricht" : "Message"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 12, lineHeight: 1.5 }}>
+            {de
+              ? "Name und Claim kommen aus eurer Brand. Ändert ihr sie dort, ändert sich auch diese Vorschau."
+              : "The name and claim come from your brand. Change them there and this preview follows."}
+          </div>
+        </div>
+
+        <input ref={bannerInput} type="file" accept="image/*" style={{ display: "none" }}
+          onChange={e => choose("banner", e.target.files?.[0])} />
+        <input ref={avatarInput} type="file" accept="image/*" style={{ display: "none" }}
+          onChange={e => choose("avatar", e.target.files?.[0])} />
+      </motion.div>
+    </div>, document.body);
+}
+
 const TOUCHPOINT_PLATFORMS = [
   { key: "website",    label: "Website",     color: "#6C5CE7", hint: "https://…" },
   { key: "instagram",  label: "Instagram",   color: "#E1306C", hint: "instagram.com/…" },
@@ -17645,17 +17814,20 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
   const [channels, setChannels] = useState({});
   const [loading, setLoading] = useState(true);
   const [editKey, setEditKey] = useState(null);
+  const [previewKey, setPreviewKey] = useState(null);   // channel whose preview is open
+  const [previews, setPreviews] = useState({});
   const [draft, setDraft] = useState("");
   const accent = theme.accent || "#8B7AFF";
 
   useEffect(() => {
     if (!userOrg?.id) { setLoading(false); return; }
     (async () => {
-      const { data } = await tpScope(supabase.from("brand_profile").select("id, channels, website_url, name, logo_url, logos").eq("org_id", userOrg.id)).maybeSingle();
+      const { data } = await tpScope(supabase.from("brand_profile").select("id, channels, website_url, name, claim, logo_url, logos, channel_previews").eq("org_id", userOrg.id)).maybeSingle();
       setProfile(data || null);
       const ch = { ...(data?.channels && typeof data.channels === "object" ? data.channels : {}) };
       if (data?.website_url && !ch.website) ch.website = data.website_url;
       setChannels(ch);
+      setPreviews(data?.channel_previews && typeof data.channel_previews === "object" ? data.channel_previews : {});
       setLoading(false);
     })();
   }, [userOrg?.id, projectId]);
@@ -17675,6 +17847,30 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
     }
   };
 
+  const savePreview = async (key, value) => {
+    const next = { ...previews, [key]: value };
+    setPreviews(next);
+    if (!profile?.id) return;
+    await supabase.from("brand_profile")
+      .update({ channel_previews: next, updated_at: new Date().toISOString() })
+      .eq("id", profile.id);
+  };
+
+  // Preview art goes to the same public bucket the rest of the brand uses, so
+  // it can be shown without signing anything.
+  const uploadPreviewImage = async (file) => {
+    if (!file || !userOrg?.id) return null;
+    const ext = (file.name?.split(".").pop() || "png").toLowerCase();
+    const path = `channel-previews/${userOrg.id}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await uploadTracked({
+      bucket: "brand-assets", path, file, orgId: userOrg.id,
+      userId: session?.user?.id, contentType: file.type,
+    });
+    if (error) { console.warn("[touchpoints] preview upload failed:", error.message); return null; }
+    const { data } = supabase.storage.from("brand-assets").getPublicUrl(path);
+    return data?.publicUrl || null;
+  };
+
   const prettyHandle = (url) => {
     if (!url) return "";
     try { const u = new URL(/^https?:\/\//.test(url) ? url : "https://" + url); return (u.hostname.replace(/^www\./, "") + u.pathname).replace(/\/$/, ""); }
@@ -17689,6 +17885,22 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
     <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
       style={panelWrap}>
+      {/* Rendered through a portal, so it does not matter that it sits at the
+          top of the tree — it belongs to whichever channel card was clicked. */}
+      {previewKey && (() => {
+        const plat = TOUCHPOINT_PLATFORMS.find(x => x.key === previewKey);
+        if (!plat) return null;
+        return (
+          <ChannelPreview
+            platform={plat} url={channels[previewKey]}
+            brand={profile} logos={profile?.logos}
+            saved={previews[previewKey]}
+            onSave={(v) => savePreview(previewKey, v)}
+            onUpload={uploadPreviewImage}
+            onClose={() => setPreviewKey(null)}
+            theme={theme} darkMode={darkMode} appLanguage={appLanguage} />
+        );
+      })()}
       <div style={card}>
         {/* Header — brand logo + "<Brand> Touchpoints" (consistent with Brand views) */}
         {!embedded && (
@@ -17748,7 +17960,11 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
                         {connected.map((p, i) => {
                           const url = channels[p.key];
                           const editing = editKey === p.key;
-                          const open = () => window.open(/^https?:\/\//.test(url) ? url : "https://" + url, "_blank", "noopener");
+                          // Opens the preview rather than the live profile. The
+                          // real profile is one click further, inside it — the
+                          // question here is how the brand looks, not what was
+                          // posted last week.
+                          const open = () => setPreviewKey(p.key);
                           return (
                             <motion.div key={p.key} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.02 + i * 0.04, duration: 0.34 }}
                               whileHover={editing ? {} : { y: -4 }} onClick={() => !editing && open()}
