@@ -16606,7 +16606,7 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }
     const { data } = await supabase.from("website_scans")
       // The whole row, not just the score: a saved scan has to open again, or
       // the only way back to its findings is to run it a second time.
-      .select("id,url,score,created_at,categories,findings").eq("org_id", userOrg.id)
+      .select("id,url,score,created_at,categories,findings,detail").eq("org_id", userOrg.id)
       .order("created_at", { ascending: false }).limit(12);
     setHistory(data || []);
   }, [userOrg?.id]);
@@ -16629,6 +16629,8 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }
       const { error: saveErr } = await supabase.from("website_scans").insert({
         org_id: userOrg?.id, url: data.url, score: data.score,
         categories: data.categories, findings: data.findings,
+        // Without this a stored scan reopened without its machine view.
+        detail: { detected: data.detected, machine: data.machine },
         created_by: session?.user?.id,
       });
       if (saveErr) {
@@ -16647,7 +16649,7 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }
     ["ai",     de ? "Bereit für KI-Agenten" : "AI readiness"],
     ["tech",   de ? "Technische Grundlage" : "Technical foundation"],
   ];
-  const tone = (v) => v >= 80 ? "#2D7A6A" : v >= 50 ? "#B5803A" : "#C4624A";
+  const tone = (v) => v >= 80 ? "#37699C" : v >= 50 ? "#B5803A" : "#C4624A";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -16711,10 +16713,19 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }
               <div key={label} style={{ padding: "10px 0", borderBottom: `1px solid ${theme.borderFaint}` }}>
                 <div style={{ fontSize: 10.5, fontFamily: FONT, letterSpacing: 0.5, textTransform: "uppercase",
                   color: theme.textFaint }}>{label}</div>
-                <div style={{ fontSize: 13, fontFamily: FONT, marginTop: 3, lineHeight: 1.5,
-                  color: value ? theme.text : "#C4624A", fontStyle: value ? "normal" : "italic" }}>
-                  {value || missingHint}
-                </div>
+                {value ? (
+                  <div style={{ fontSize: 13, fontFamily: FONT, marginTop: 3, lineHeight: 1.5, color: theme.text }}>
+                    {value}
+                  </div>
+                ) : (
+                  // A gap is a state, not a sentence. Set as a chip it reads as
+                  // one at a glance, the way the findings below already do.
+                  <span style={{ display: "inline-flex", alignItems: "center", marginTop: 5,
+                    padding: "4px 11px", borderRadius: 999, background: "rgba(196,98,74,0.12)",
+                    color: "#C4624A", fontSize: 11.5, fontFamily: FONT, fontWeight: 500 }}>
+                    {missingHint}
+                  </span>
+                )}
               </div>
             );
             return (
@@ -16806,7 +16817,7 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }
                   background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
                   color: f.passed ? theme.textDim : theme.text }}>
                   <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
-                    background: f.passed ? "#2D7A6A" : "#C4624A" }} />
+                    background: f.passed ? "#37699C" : "#C4624A" }} />
                   {f.label}
                 </span>
               ))}
@@ -16826,7 +16837,16 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }
                 <motion.div key={h.id} whileTap={{ scale: 0.995 }}
                   // Opens the stored scan instead of running it again. Everything
                   // needed is on the row already.
-                  onClick={() => { setResult({ ...h, priority: (h.findings || []).filter(f => !f.passed).sort((a, b) => b.weight - a.weight).slice(0, 3) }); setNote(""); setError(""); }}
+                  onClick={() => {
+                    setResult({
+                      ...h,
+                      detected: h.detail?.detected || null,
+                      machine: h.detail?.machine || null,
+                      priority: (h.findings || []).filter(f => !f.passed)
+                        .sort((a, b) => b.weight - a.weight).slice(0, 3),
+                    });
+                    setNote(""); setError("");
+                  }}
                   style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer",
                     padding: "10px 13px", borderRadius: 11,
                     border: `1px solid ${open ? theme.border : "transparent"}`,
@@ -16973,8 +16993,11 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
           <motion.div key={key} whileTap={{ scale: 0.97 }} onClick={() => setView(key)}
             style={{ padding: "8px 20px", borderRadius: 999, cursor: "pointer",
               fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500,
-              background: on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
-              color: on ? (darkMode ? "#15151c" : "#fff") : theme.textDim,
+              // Quiet on purpose: this only picks which numbers are on screen,
+              // and a black pill claimed more attention than the choice is worth.
+              background: on ? (darkMode ? "rgba(255,255,255,0.12)" : "#fff") : "transparent",
+              color: on ? theme.text : theme.textDim,
+              boxShadow: on && !darkMode ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
               transition: "background .16s ease, color .16s ease" }}>
             {label}
           </motion.div>
