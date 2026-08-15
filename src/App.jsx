@@ -16012,28 +16012,42 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
       style={{ position: "fixed", inset: 0, zIndex: 100002, overflowY: "auto",
         background: darkMode ? "#16161e" : "#fff" }}>
       <div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "16px 22px", borderBottom: `1px solid ${theme.borderFaint}`,
+        {/* Three columns so the address sits in the true middle of the window
+            rather than wherever the back link happens to end. */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr minmax(0, 420px) 1fr", alignItems: "center",
+          gap: 12, padding: "14px 22px", borderBottom: `1px solid ${theme.borderFaint}`,
           position: "sticky", top: 0, zIndex: 2, background: darkMode ? "#16161e" : "#fff" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-            <motion.div whileTap={{ scale: 0.95 }} onClick={onClose}
-              style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer",
-                color: theme.textDim, fontFamily: FONT, fontSize: 12.5, flexShrink: 0 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
-              {de ? "Touchpoints" : "Touchpoints"}
-            </motion.div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
-                {platform.label}
-              </div>
-              <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
-                {de ? "So würde eure Marke dort wirken. Nichts davon wird veröffentlicht."
-                    : "How your brand would look there. None of this is published."}
-              </div>
+          <motion.div whileTap={{ scale: 0.94 }} onClick={onClose} title={de ? "Zurück" : "Back"}
+            style={{ width: 34, height: 34, borderRadius: "50%", cursor: "pointer", justifySelf: "start",
+              display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim,
+              border: `1px solid ${theme.borderFaint}` }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+          </motion.div>
+
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8,
+              padding: "4px 4px 4px 14px", borderRadius: 999,
+              border: `1px solid ${theme.borderFaint}`,
+              background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }}>
+              <input value={handle} onChange={e => setHandle(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") onSaveUrl(handle); }}
+                placeholder={platform.hint}
+                style={{ flex: 1, minWidth: 0, padding: "6px 0", border: "none", outline: "none",
+                  background: "none", color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => onSaveUrl(handle)}
+                style={{ padding: "6px 15px", borderRadius: 999, border: "none", flexShrink: 0,
+                  background: "#15151c", color: "#fff", fontFamily: FONT, fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>
+                {de ? "Speichern" : "Save"}
+              </motion.button>
+            </div>
+            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 6, textAlign: "center" }}>
+              {de ? "So würde eure Marke dort wirken. Nichts davon wird veröffentlicht."
+                  : "How your brand would look there. None of this is published."}
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+
+          <div style={{ display: "flex", gap: 8, justifySelf: "end" }}>
             {url && (
               <motion.a whileTap={{ scale: 0.97 }} href={/^https?:\/\//.test(url) ? url : "https://" + url}
                 target="_blank" rel="noopener noreferrer"
@@ -16148,24 +16162,6 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
               </div>
             </div>
           )}
-
-          {/* The address lives here rather than in a second place, so a channel
-              is one thing to open whether or not it exists yet. */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14,
-            padding: "5px 5px 5px 14px", borderRadius: 999,
-            border: `1px solid ${theme.borderFaint}`,
-            background: darkMode ? "rgba(255,255,255,0.05)" : "#fff" }}>
-            <input value={handle} onChange={e => setHandle(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") onSaveUrl(handle); }}
-              placeholder={platform.hint}
-              style={{ flex: 1, minWidth: 0, padding: "7px 0", border: "none", outline: "none",
-                background: "none", color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
-            <motion.button whileTap={{ scale: 0.97 }} onClick={() => onSaveUrl(handle)}
-              style={{ padding: "7px 16px", borderRadius: 999, border: "none", flexShrink: 0,
-                background: "#15151c", color: "#fff", fontFamily: FONT, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-              {de ? "Speichern" : "Save"}
-            </motion.button>
-          </div>
 
           <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 12, lineHeight: 1.5 }}>
             {de
