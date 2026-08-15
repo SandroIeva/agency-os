@@ -15952,7 +15952,6 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
   const [banner, setBanner] = useState(saved?.banner || "");
   const [avatar, setAvatar] = useState(saved?.avatar || brand?.logo_url || "");
   const [busy, setBusy] = useState("");
-  const [pickOpen, setPickOpen] = useState(false);
   const [handle, setHandle] = useState(url || "");
   // Everything the workspace already has. Making somebody upload a logo a
   // second time because this view cannot see the first one is the opposite of
@@ -15988,6 +15987,16 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
     ...(Array.isArray(logos) ? logos.map(l => l?.url || l) : []),
     ...assets.map(a => a.public_url),
   ])].filter(v => typeof v === "string" && v);
+
+  // Clicking an image opens it large with the rest dimmed behind it: choosing a
+  // logo is a job on its own, and doing it at 92 pixels inside a page that is
+  // also being judged is doing two things badly at once.
+  const [zoom, setZoom] = useState(null);   // "banner" | "avatar" | null
+  const zoomTarget = zoom === "banner"
+    ? { title: de ? "Bannerbild" : "Banner image", value: banner, size: shape.bannerPx, ratio: bannerRatio, radius: 12 }
+    : zoom === "avatar"
+      ? { title: de ? "Profilbild" : "Profile image", value: avatar, size: shape.logoPx, ratio: 1, radius: shape.avatar }
+      : null;
 
   const dropZone = (label) => ({
     display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
@@ -16042,7 +16051,7 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
         <div style={{ padding: 22, background: darkMode ? "rgba(255,255,255,0.03)" : "#EFEFEA" }}>
           <div style={{ maxWidth: 900, margin: "0 auto", borderRadius: 12, overflow: "hidden",
             background: "#fff", border: "1px solid rgba(0,0,0,0.08)" }}>
-            <div onClick={() => bannerInput.current?.click()}
+            <div onClick={() => setZoom("banner")}
               style={{ position: "relative", width: "100%", aspectRatio: String(bannerRatio),
                 background: banner ? `center/cover no-repeat url(${banner})` : "#D9D9D4",
                 cursor: "pointer" }}>
@@ -16058,7 +16067,7 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
             </div>
 
             <div style={{ padding: "0 20px 20px", position: "relative" }}>
-              <div onClick={() => setPickOpen(v => !v)}
+              <div onClick={() => setZoom("avatar")}
                 style={{ width: 92, height: 92, borderRadius: shape.avatar, overflow: "hidden",
                   marginTop: shape.overlap ? -34 : 14, border: "3px solid #fff", background: "#15151c",
                   cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -16066,29 +16075,6 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
                   ? <img src={avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   : <span style={{ color: "#fff", fontFamily: FONT, fontSize: 11 }}>{de ? "Logo" : "Logo"}</span>}
               </div>
-
-              {pickOpen && (
-                <div style={{ marginTop: 10, padding: 12, borderRadius: 12, background: "#F5F5F2",
-                  border: "1px solid rgba(0,0,0,0.08)" }}>
-                  <div style={{ fontSize: 11, fontFamily: FONT, color: "#6B6B63", marginBottom: 8 }}>
-                    {(de ? "Aus euren Logos und Assets wählen oder hochladen" : "Pick from your logos and assets, or upload")
-                      + (px(shape.logoPx) ? ` · ${px(shape.logoPx)}` : "")}
-                  </div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                    {library.map(src => (
-                      <div key={src} onClick={() => { setAvatar(src); commit({ avatar: src }); setPickOpen(false); }}
-                        style={{ width: 46, height: 46, borderRadius: 10, overflow: "hidden", cursor: "pointer",
-                          border: avatar === src ? "2px solid #15151c" : "1px solid rgba(0,0,0,0.1)", background: "#fff" }}>
-                        <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                      </div>
-                    ))}
-                    <div onClick={() => avatarInput.current?.click()}
-                      style={{ width: 46, height: 46, borderRadius: 10, display: "flex", alignItems: "center",
-                        justifyContent: "center", border: "1px dashed rgba(0,0,0,0.25)", cursor: "pointer",
-                        color: "#6B6B63", fontSize: 18 }}>+</div>
-                  </div>
-                </div>
-              )}
 
               <div style={{ fontSize: 26, fontFamily: FONT, fontWeight: 700, color: "#111", marginTop: 14 }}>
                 {brand?.name || (de ? "Euer Markenname" : "Your brand name")}
@@ -16193,6 +16179,89 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
         <input ref={avatarInput} type="file" accept="image/*" style={{ display: "none" }}
           onChange={e => choose("avatar", e.target.files?.[0])} />
       </div>
+
+      {/* The focused editor, inside this panel rather than over the app: the
+          thing being changed stays where it is, only larger and alone. */}
+      <AnimatePresence>
+        {zoomTarget && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setZoom(null)}
+            style={{ position: "absolute", inset: 0, zIndex: 10, background: "rgba(0,0,0,0.55)",
+              backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <motion.div initial={{ scale: 0.97, y: 8 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.98 }}
+              onClick={e => e.stopPropagation()}
+              style={{ width: "min(680px, 100%)", maxHeight: "100%", overflowY: "auto",
+                background: darkMode ? "#16161e" : "#fff", borderRadius: 18, padding: 22,
+                border: `1px solid ${theme.borderFaint}`, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+                <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{zoomTarget.title}</div>
+                {px(zoomTarget.size) && (
+                  <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>
+                    {(de ? "Zielgröße " : "Target size ") + px(zoomTarget.size)}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ borderRadius: zoomTarget.radius === 999 ? 999 : 12, overflow: "hidden",
+                aspectRatio: String(zoomTarget.ratio),
+                width: zoomTarget.ratio === 1 ? 200 : "auto",
+                margin: zoomTarget.ratio === 1 ? "16px auto 0" : "16px 0 0",
+                background: zoomTarget.value ? `center/cover no-repeat url(${zoomTarget.value})`
+                  : (darkMode ? "rgba(255,255,255,0.06)" : "#EDEDE8"),
+                display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {!zoomTarget.value && (
+                  <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>
+                    {de ? "Noch kein Bild" : "No image yet"}
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
+                <motion.button whileTap={{ scale: 0.97 }}
+                  onClick={() => (zoom === "banner" ? bannerInput : avatarInput).current?.click()}
+                  style={{ padding: "9px 18px", borderRadius: 999, border: "none", background: "#15151c",
+                    color: "#fff", fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                  {busy ? (de ? "Lädt …" : "Uploading …") : (de ? "Bild hochladen" : "Upload an image")}
+                </motion.button>
+                {zoomTarget.value && (
+                  <motion.button whileTap={{ scale: 0.97 }}
+                    onClick={() => { if (zoom === "banner") { setBanner(""); commit({ banner: "" }); } else { setAvatar(""); commit({ avatar: "" }); } }}
+                    style={{ padding: "9px 16px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`,
+                      background: "transparent", color: theme.text, fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                    {de ? "Entfernen" : "Remove"}
+                  </motion.button>
+                )}
+              </div>
+
+              <div style={{ fontSize: 10.5, fontFamily: FONT, letterSpacing: 0.6, textTransform: "uppercase",
+                color: theme.textFaint, margin: "20px 0 9px" }}>
+                {de ? "Aus deinen Assets" : "From your assets"}
+              </div>
+              {library.length === 0 ? (
+                <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
+                  {de ? "In diesem Workspace liegen noch keine Bilder. Was du hier hochlädst, steht danach auch in den Assets."
+                      : "No images in this workspace yet. Whatever you upload here appears in your assets afterwards."}
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {library.map(src => {
+                    const on = zoomTarget.value === src;
+                    return (
+                      <div key={src}
+                        onClick={() => { if (zoom === "banner") { setBanner(src); commit({ banner: src }); } else { setAvatar(src); commit({ avatar: src }); } }}
+                        style={{ width: 62, height: 62, borderRadius: 10, overflow: "hidden", cursor: "pointer",
+                          border: on ? `2px solid ${platform.color}` : `1px solid ${theme.borderFaint}`,
+                          background: darkMode ? "rgba(255,255,255,0.05)" : "#fff" }}>
+                        <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -17985,7 +18054,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
   };
   const connectedCount = TOUCHPOINT_PLATFORMS.filter(p => channels[p.key]).length;
 
-  const panelWrap = embedded ? { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" } : { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 40px 80px" };
+  const panelWrap = embedded ? { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" } : { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 40px 80px" };
   const card = embedded ? { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" } : { width: "100%", maxWidth: 1050, height: "100%", ...frostedPanelStyle(darkMode), borderRadius: 26, overflow: "hidden", display: "flex", flexDirection: "column" };
 
   return (
