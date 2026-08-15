@@ -16293,6 +16293,12 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand
     </motion.div>, document.body);
 }
 
+// A preview only makes sense where there is a profile to look at. A website is
+// its own design and is judged in Website Presence; a newsletter has no public
+// profile page at all, so it is an address and nothing more.
+const TP_HAS_PREVIEW = new Set(["instagram", "linkedin", "tiktok", "youtube", "x", "facebook", "pinterest", "threads"]);
+const TP_HAS_LINK_BUTTON = (key) => key !== "newsletter";
+
 const TOUCHPOINT_PLATFORMS = [
   { key: "website",    label: "Website",     color: "#6C5CE7", hint: "https://…" },
   { key: "instagram",  label: "Instagram",   color: "#E1306C", hint: "instagram.com/…" },
@@ -18251,7 +18257,10 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
                               // A channel nobody has an account on yet is exactly
                               // when the preview is worth the most, so this opens
                               // it too. The address is entered inside it.
-                              <motion.div key={p.key} whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }} onClick={() => setPreviewKey(p.key)}
+                              <motion.div key={p.key} whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}
+                                onClick={() => TP_HAS_PREVIEW.has(p.key)
+                                  ? setPreviewKey(p.key)
+                                  : (setEditKey(p.key), setDraft(channels[p.key] || ""))}
                                 style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 14px 8px 8px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.015)" }}>
                                 <div style={{ width: 26, height: 26, borderRadius: 999, background: p.color, opacity: 0.92, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                                   <svg width={tpGlyphSize(p.key, 15)} height={tpGlyphSize(p.key, 15)} viewBox="0 0 24 24">{touchpointGlyph(p.key)}</svg>
@@ -18262,7 +18271,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
                                     it would read. One "+" had to stand for both. */}
                                 <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 2 }}
                                   onClick={e => e.stopPropagation()}>
-                                  <motion.div whileTap={{ scale: 0.92 }}
+                                  {TP_HAS_LINK_BUTTON(p.key) && <motion.div whileTap={{ scale: 0.92 }}
                                     onClick={() => { setEditKey(p.key); setDraft(channels[p.key] || ""); }}
                                     title={appLanguage === "de" ? "Adresse hinterlegen" : "Add the address"}
                                     style={{ width: 26, height: 26, borderRadius: "50%", cursor: "pointer",
@@ -18273,8 +18282,8 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
                                       <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
                                       <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
                                     </svg>
-                                  </motion.div>
-                                  <motion.div whileTap={{ scale: 0.92 }} onClick={() => setPreviewKey(p.key)}
+                                  </motion.div>}
+                                  {TP_HAS_PREVIEW.has(p.key) && <motion.div whileTap={{ scale: 0.92 }} onClick={() => setPreviewKey(p.key)}
                                     title={appLanguage === "de" ? "Vorschau ansehen" : "See the preview"}
                                     style={{ width: 26, height: 26, borderRadius: "50%", cursor: "pointer",
                                       display: "flex", alignItems: "center", justifyContent: "center",
@@ -18284,7 +18293,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
                                       <path d="M1.5 12S5 5.5 12 5.5 22.5 12 22.5 12 19 18.5 12 18.5 1.5 12 1.5 12z" />
                                       <circle cx="12" cy="12" r="3" />
                                     </svg>
-                                  </motion.div>
+                                  </motion.div>}
                                 </div>
                               </motion.div>
                             );
