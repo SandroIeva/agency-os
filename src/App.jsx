@@ -15995,25 +15995,33 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
     border: `1px dashed ${theme.borderFaint}`, cursor: "pointer",
   });
 
-  return createPortal(
-    <div onClick={onClose}
-      style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
-        display: "flex", alignItems: "center", justifyContent: "center", padding: 24, overflowY: "auto" }}>
-      <motion.div initial={{ opacity: 0, y: 14, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-        onClick={e => e.stopPropagation()}
-        style={{ width: "min(860px, 100%)", background: darkMode ? "#16161e" : "#fff",
-          border: `1px solid ${theme.borderFaint}`, borderRadius: 20, overflow: "hidden",
-          boxShadow: "0 30px 80px rgba(0,0,0,0.35)" }}>
-
+  // A view of its own rather than a dialog. Judging how a brand looks is not a
+  // decision to confirm and dismiss; it is somewhere you stay, scroll, change
+  // something and look again. A floating card fights all of that.
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+      style={{ position: "absolute", inset: 0, zIndex: 5, overflowY: "auto",
+        background: darkMode ? "#16161e" : "#fff" }}>
+      <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "16px 20px", borderBottom: `1px solid ${theme.borderFaint}` }}>
-          <div>
-            <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
-              {platform.label} {de ? "Vorschau" : "preview"}
-            </div>
-            <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
-              {de ? "So würde eure Marke dort wirken. Nichts davon wird veröffentlicht."
-                  : "How your brand would look there. None of this is published."}
+          padding: "16px 22px", borderBottom: `1px solid ${theme.borderFaint}`,
+          position: "sticky", top: 0, zIndex: 2, background: darkMode ? "#16161e" : "#fff" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+            <motion.div whileTap={{ scale: 0.95 }} onClick={onClose}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer",
+                color: theme.textDim, fontFamily: FONT, fontSize: 12.5, flexShrink: 0 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+              {de ? "Touchpoints" : "Touchpoints"}
+            </motion.div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                {platform.label}
+              </div>
+              <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                {de ? "So würde eure Marke dort wirken. Nichts davon wird veröffentlicht."
+                    : "How your brand would look there. None of this is published."}
+              </div>
             </div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -16026,18 +16034,14 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
                 {de ? "Profil öffnen" : "Open profile"}
               </motion.a>
             )}
-            <motion.button whileTap={{ scale: 0.97 }} onClick={onClose}
-              style={{ padding: "8px 16px", borderRadius: 999, border: "none", background: "#15151c",
-                color: "#fff", fontFamily: FONT, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-              {de ? "Fertig" : "Done"}
-            </motion.button>
           </div>
         </div>
 
         {/* The mock itself, on its own light ground so it reads as a preview of
             somewhere else rather than as part of this app. */}
         <div style={{ padding: 22, background: darkMode ? "rgba(255,255,255,0.03)" : "#EFEFEA" }}>
-          <div style={{ borderRadius: 12, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.08)" }}>
+          <div style={{ maxWidth: 900, margin: "0 auto", borderRadius: 12, overflow: "hidden",
+            background: "#fff", border: "1px solid rgba(0,0,0,0.08)" }}>
             <div onClick={() => bannerInput.current?.click()}
               style={{ position: "relative", width: "100%", aspectRatio: String(bannerRatio),
                 background: banner ? `center/cover no-repeat url(${banner})` : "#D9D9D4",
@@ -16126,6 +16130,39 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
             </div>
           </div>
 
+          {/* The page below the header, because a profile is not judged on its
+              header alone. The post is the brand's own description, set the way
+              the platform would set it — how the words look there is the point,
+              not that a post exists. */}
+          {platform.key === "linkedin" && (
+            <div style={{ maxWidth: 900, margin: "14px auto 0", borderRadius: 12, background: "#fff",
+              border: "1px solid rgba(0,0,0,0.08)", padding: "18px 20px 20px" }}>
+              <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 700, color: "#111" }}>
+                {de ? "Beiträge" : "Page posts"}
+              </div>
+              <div style={{ display: "flex", gap: 16, marginTop: 16, alignItems: "flex-start" }}>
+                <div style={{ width: 230, flexShrink: 0, aspectRatio: "1.1", borderRadius: 8, overflow: "hidden",
+                  background: banner ? `center/cover no-repeat url(${banner})` : "#E4E4DF" }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontFamily: FONT, color: "#6B6B63" }}>
+                    {de ? "vor 2 Tagen ·" : "2d ·"}
+                  </div>
+                  <div style={{ fontSize: 14, fontFamily: FONT, color: "#111", marginTop: 6, lineHeight: 1.5 }}>
+                    {brand?.description || brand?.claim
+                      || (de ? "Hier stünde euer Beitrag. Der Text kommt aus eurer Brand-Beschreibung."
+                            : "Your post would sit here. The words come from your brand description.")}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 26, marginTop: 18, paddingTop: 14,
+                borderTop: "1px solid rgba(0,0,0,0.08)" }}>
+                {[de ? "Gefällt mir" : "Like", de ? "Kommentieren" : "Comment", de ? "Teilen" : "Repost"].map(a => (
+                  <span key={a} style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: "#5B5B55" }}>{a}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* The address lives here rather than in a second place, so a channel
               is one thing to open whether or not it exists yet. */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14,
@@ -16155,8 +16192,9 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
           onChange={e => choose("banner", e.target.files?.[0])} />
         <input ref={avatarInput} type="file" accept="image/*" style={{ display: "none" }}
           onChange={e => choose("avatar", e.target.files?.[0])} />
-      </motion.div>
-    </div>, document.body);
+      </div>
+    </motion.div>
+  );
 }
 
 const TOUCHPOINT_PLATFORMS = [
@@ -17891,7 +17929,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
   useEffect(() => {
     if (!userOrg?.id) { setLoading(false); return; }
     (async () => {
-      const { data } = await tpScope(supabase.from("brand_profile").select("id, channels, website_url, name, claim, logo_url, logos, channel_previews").eq("org_id", userOrg.id)).maybeSingle();
+      const { data } = await tpScope(supabase.from("brand_profile").select("id, channels, website_url, name, claim, description, logo_url, logos, channel_previews").eq("org_id", userOrg.id)).maybeSingle();
       setProfile(data || null);
       const ch = { ...(data?.channels && typeof data.channels === "object" ? data.channels : {}) };
       if (data?.website_url && !ch.website) ch.website = data.website_url;
