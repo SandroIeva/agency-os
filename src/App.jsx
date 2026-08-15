@@ -16004,14 +16004,12 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
     border: `1px dashed ${theme.borderFaint}`, cursor: "pointer",
   });
 
-  // A view of its own rather than a dialog. Judging how a brand looks is not a
-  // decision to confirm and dismiss; it is somewhere you stay, scroll, change
-  // something and look again. A floating card fights all of that.
-  return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      // A flex child that fills what is left below the tabs, and positioned so
-      // the zoom editor inside it has something to anchor to.
-      style={{ flex: 1, minHeight: 0, position: "relative", overflowY: "auto",
+  // Full bleed, over everything. Neither a card floating on a dimmed app nor a
+  // panel among tabs: while you are judging how a brand reads on a channel, the
+  // only thing on screen should be that channel.
+  return createPortal(
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+      style={{ position: "fixed", inset: 0, zIndex: 100002, overflowY: "auto",
         background: darkMode ? "#16161e" : "#fff" }}>
       <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -16264,8 +16262,7 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
-  );
+    </motion.div>, document.body);
 }
 
 const TOUCHPOINT_PLATFORMS = [
