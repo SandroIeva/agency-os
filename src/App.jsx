@@ -16051,10 +16051,7 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand
                 {de ? "Speichern" : "Save"}
               </motion.button>
             </div>
-            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 6, textAlign: "center" }}>
-              {de ? "So würde eure Marke dort wirken. Nichts davon wird veröffentlicht."
-                  : "How your brand would look there. None of this is published."}
-            </div>
+
           </div>
 
           <div style={{ display: "flex", gap: 8, justifySelf: "end" }}>
@@ -18260,7 +18257,35 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
                                   <svg width={tpGlyphSize(p.key, 15)} height={tpGlyphSize(p.key, 15)} viewBox="0 0 24 24">{touchpointGlyph(p.key)}</svg>
                                 </div>
                                 <span style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{p.label}</span>
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                {/* Two things you can do with a channel, and they are
+                                    different things: say where it is, or look at how
+                                    it would read. One "+" had to stand for both. */}
+                                <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 2 }}
+                                  onClick={e => e.stopPropagation()}>
+                                  <motion.div whileTap={{ scale: 0.92 }}
+                                    onClick={() => { setEditKey(p.key); setDraft(channels[p.key] || ""); }}
+                                    title={appLanguage === "de" ? "Adresse hinterlegen" : "Add the address"}
+                                    style={{ width: 26, height: 26, borderRadius: "50%", cursor: "pointer",
+                                      display: "flex", alignItems: "center", justifyContent: "center",
+                                      border: `1px solid ${theme.borderFaint}`, color: theme.textDim }}>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+                                      <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+                                    </svg>
+                                  </motion.div>
+                                  <motion.div whileTap={{ scale: 0.92 }} onClick={() => setPreviewKey(p.key)}
+                                    title={appLanguage === "de" ? "Vorschau ansehen" : "See the preview"}
+                                    style={{ width: 26, height: 26, borderRadius: "50%", cursor: "pointer",
+                                      display: "flex", alignItems: "center", justifyContent: "center",
+                                      border: `1px solid ${theme.borderFaint}`, color: theme.textDim }}>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M1.5 12S5 5.5 12 5.5 22.5 12 22.5 12 19 18.5 12 18.5 1.5 12 1.5 12z" />
+                                      <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                  </motion.div>
+                                </div>
                               </motion.div>
                             );
                           })}
