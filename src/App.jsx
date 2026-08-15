@@ -16008,8 +16008,10 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
   // decision to confirm and dismiss; it is somewhere you stay, scroll, change
   // something and look again. A floating card fights all of that.
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-      style={{ position: "absolute", inset: 0, zIndex: 5, overflowY: "auto",
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+      // A flex child that fills what is left below the tabs, and positioned so
+      // the zoom editor inside it has something to anchor to.
+      style={{ flex: 1, minHeight: 0, position: "relative", overflowY: "auto",
         background: darkMode ? "#16161e" : "#fff" }}>
       <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -18061,23 +18063,6 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
     <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
       style={panelWrap}>
-      {/* Rendered through a portal, so it does not matter that it sits at the
-          top of the tree — it belongs to whichever channel card was clicked. */}
-      {previewKey && (() => {
-        const plat = TOUCHPOINT_PLATFORMS.find(x => x.key === previewKey);
-        if (!plat) return null;
-        return (
-          <ChannelPreview
-            platform={plat} url={channels[previewKey]}
-            brand={profile} logos={profile?.logos}
-            saved={previews[previewKey]}
-            onSave={(v) => savePreview(previewKey, v)}
-            onSaveUrl={(v) => saveChannel(previewKey, v)}
-            onUpload={uploadPreviewImage} orgId={userOrg?.id}
-            onClose={() => setPreviewKey(null)}
-            theme={theme} darkMode={darkMode} appLanguage={appLanguage} />
-        );
-      })()}
       <div style={card}>
         {/* Header — brand logo + "<Brand> Touchpoints" (consistent with Brand views) */}
         {!embedded && (
@@ -18115,6 +18100,26 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
           <PeopleTab theme={theme} darkMode={darkMode} accent={accent} appLanguage={appLanguage} headerSlotRef={peopleHeaderSlot} />
         ) : audTab === "analytics" ? (
           <AnalyticsTab theme={theme} darkMode={darkMode} appLanguage={appLanguage} session={session} userOrg={userOrg} />
+        ) : previewKey ? (
+          // In the content area, not over the panel: the workspace header and
+          // the Audience tabs stay exactly where they were, and only the part
+          // below them changes. Covering them made this look like a different
+          // screen rather than one channel opened inside Touchpoints.
+          (() => {
+            const plat = TOUCHPOINT_PLATFORMS.find(x => x.key === previewKey);
+            if (!plat) return null;
+            return (
+              <ChannelPreview
+                platform={plat} url={channels[previewKey]}
+                brand={profile} logos={profile?.logos} orgId={userOrg?.id}
+                saved={previews[previewKey]}
+                onSave={(v) => savePreview(previewKey, v)}
+                onSaveUrl={(v) => saveChannel(previewKey, v)}
+                onUpload={uploadPreviewImage}
+                onClose={() => setPreviewKey(null)}
+                theme={theme} darkMode={darkMode} appLanguage={appLanguage} />
+            );
+          })()
         ) : (
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
           {loading ? (
