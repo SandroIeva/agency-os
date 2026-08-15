@@ -15944,7 +15944,7 @@ const CHANNEL_PREVIEW_SHAPE = {
                tabs: ["Created", "Saved"], meta: () => "" },
 };
 
-function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, onUpload, logos, orgId, theme, darkMode, appLanguage, url }) {
+function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand, onClose, onUpload, logos, orgId, theme, darkMode, appLanguage, url }) {
   const de = appLanguage === "de";
   const shape = CHANNEL_PREVIEW_SHAPE[platform.key] || CHANNEL_PREVIEW_SHAPE.linkedin;
   const bannerRatio = shape.bannerPx ? shape.bannerPx[0] / shape.bannerPx[1] : 4;
@@ -15992,6 +15992,16 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
   // logo is a job on its own, and doing it at 92 pixels inside a page that is
   // also being judged is doing two things badly at once.
   const [zoom, setZoom] = useState(null);   // "banner" | "avatar" | null
+  const [hover, setHover] = useState(null);       // "name" | "claim"
+  const [editField, setEditField] = useState(null);
+  const [nameDraft, setNameDraft] = useState("");
+  const [claimDraft, setClaimDraft] = useState("");
+  const pencil = (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8A8A82"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
+    </svg>
+  );
   const zoomTarget = zoom === "banner"
     ? { title: de ? "Bannerbild" : "Banner image", value: banner, size: shape.bannerPx, ratio: bannerRatio, radius: 12 }
     : zoom === "avatar"
@@ -16010,11 +16020,11 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
   return createPortal(
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
       style={{ position: "fixed", inset: 0, zIndex: 100002, overflowY: "auto",
-        background: darkMode ? "#16161e" : "#fff" }}>
+        background: darkMode ? "#101016" : "#EFEFEA" }}>
       <div>
         {/* Three columns so the address sits in the true middle of the window
             rather than wherever the back link happens to end. */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr minmax(0, 420px) 1fr", alignItems: "center",
+        <div style={{ display: "grid", gridTemplateColumns: "1fr minmax(0, 546px) 1fr", alignItems: "center",
           gap: 12, padding: "14px 22px", borderBottom: `1px solid ${theme.borderFaint}`,
           position: "sticky", top: 0, zIndex: 2, background: darkMode ? "#16161e" : "#fff" }}>
           <motion.div whileTap={{ scale: 0.94 }} onClick={onClose} title={de ? "Zurück" : "Back"}
@@ -16090,11 +16100,40 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
                   : <span style={{ color: "#fff", fontFamily: FONT, fontSize: 11 }}>{de ? "Logo" : "Logo"}</span>}
               </div>
 
-              <div style={{ fontSize: 26, fontFamily: FONT, fontWeight: 700, color: "#111", marginTop: 14 }}>
-                {brand?.name || (de ? "Euer Markenname" : "Your brand name")}
-              </div>
-              {brand?.claim && (
-                <div style={{ fontSize: 15, fontFamily: FONT, color: "#333", marginTop: 6, lineHeight: 1.45 }}>{brand.claim}</div>
+              {/* Editable in place. The name and the claim belong to the brand,
+                  not to this channel, so a change here changes them everywhere —
+                  which is the point of noticing the problem while looking at the
+                  channel. */}
+              {editField === "name" ? (
+                <input autoFocus value={nameDraft} onChange={e => setNameDraft(e.target.value)}
+                  onBlur={() => { onSaveBrand({ name: nameDraft }); setEditField(null); }}
+                  onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditField(null); }}
+                  style={{ fontSize: 26, fontFamily: FONT, fontWeight: 700, color: "#111", marginTop: 14,
+                    border: "none", borderBottom: "2px solid #111", outline: "none", background: "none", width: "100%" }} />
+              ) : (
+                <div onClick={() => { setNameDraft(brand?.name || ""); setEditField("name"); }}
+                  onMouseEnter={() => setHover("name")} onMouseLeave={() => setHover(null)}
+                  style={{ fontSize: 26, fontFamily: FONT, fontWeight: 700, color: "#111", marginTop: 14,
+                    display: "inline-flex", alignItems: "center", gap: 8, cursor: "text" }}>
+                  {brand?.name || (de ? "Euer Markenname" : "Your brand name")}
+                  {hover === "name" && pencil}
+                </div>
+              )}
+
+              {editField === "claim" ? (
+                <input autoFocus value={claimDraft} onChange={e => setClaimDraft(e.target.value)}
+                  onBlur={() => { onSaveBrand({ claim: claimDraft }); setEditField(null); }}
+                  onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditField(null); }}
+                  style={{ fontSize: 15, fontFamily: FONT, color: "#333", marginTop: 8, display: "block",
+                    border: "none", borderBottom: "1.5px solid #999", outline: "none", background: "none", width: "100%" }} />
+              ) : (
+                <div onClick={() => { setClaimDraft(brand?.claim || ""); setEditField("claim"); }}
+                  onMouseEnter={() => setHover("claim")} onMouseLeave={() => setHover(null)}
+                  style={{ fontSize: 15, fontFamily: FONT, color: brand?.claim ? "#333" : "#9A9A93",
+                    marginTop: 6, lineHeight: 1.45, display: "flex", alignItems: "center", gap: 8, cursor: "text" }}>
+                  {brand?.claim || (de ? "Claim hinzufügen" : "Add a claim")}
+                  {hover === "claim" && pencil}
+                </div>
               )}
               {shape.meta(de) && (
                 <div style={{ fontSize: 13, fontFamily: FONT, color: "#6B6B63", marginTop: 6 }}>{shape.meta(de)}</div>
@@ -16163,11 +16202,7 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onClose, on
             </div>
           )}
 
-          <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 12, lineHeight: 1.5 }}>
-            {de
-              ? "Name und Claim kommen aus eurer Brand. Ändert ihr sie dort, ändert sich auch diese Vorschau."
-              : "The name and claim come from your brand. Change them there and this preview follows."}
-          </div>
+
         </div>
 
         <input ref={bannerInput} type="file" accept="image/*" style={{ display: "none" }}
@@ -18018,6 +18053,16 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
     }
   };
 
+  // Name and claim live on the brand, so editing them in a channel preview
+  // edits the brand — which is the point: you notice the wording is wrong while
+  // looking at where it lands.
+  const saveBrandFields = async (patch) => {
+    setProfile(p => ({ ...(p || {}), ...patch }));
+    if (!profile?.id) return;
+    await supabase.from("brand_profile")
+      .update({ ...patch, updated_at: new Date().toISOString() }).eq("id", profile.id);
+  };
+
   const savePreview = async (key, value) => {
     const next = { ...previews, [key]: value };
     setPreviews(next);
@@ -18108,6 +18153,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
                 saved={previews[previewKey]}
                 onSave={(v) => savePreview(previewKey, v)}
                 onSaveUrl={(v) => saveChannel(previewKey, v)}
+                onSaveBrand={saveBrandFields}
                 onUpload={uploadPreviewImage}
                 onClose={() => setPreviewKey(null)}
                 theme={theme} darkMode={darkMode} appLanguage={appLanguage} />
