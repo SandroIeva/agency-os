@@ -15922,6 +15922,134 @@ async function extractColors(url, count = 5) {
 // from brand_profile.channels), shown as a grid of brand-coloured channel cards
 // you can connect/edit inline. Teases the upcoming Strategy/Analysis layer.
 
+
+// Instagram reads nothing like LinkedIn: the picture is round and ringed, the
+// numbers sit beside the name rather than under it, and the page below is a
+// grid rather than a feed. Giving it the LinkedIn frame with different corners
+// would have been a worse lie than no preview.
+function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenPost, onOpenHighlight, editable, de }) {
+  const handle = (brand?.name || "brand").toLowerCase().replace(/[^a-z0-9._]/g, "");
+  const grey = "#EFEFEF";
+  const tile = (src, onClick, extra = {}) => (
+    <div onClick={onClick}
+      style={{ position: "relative", background: src ? `center/cover no-repeat url(${src})` : grey,
+        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", ...extra }}>
+      {!src && (
+        <span style={{ fontSize: 11.5, fontFamily: FONT, color: "#8A8A82", textAlign: "center", padding: 8 }}>
+          {de ? "Bild hinzufügen" : "Add an image"}
+        </span>
+      )}
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth: 900, margin: "0 auto", background: "#fff", borderRadius: 12,
+      border: "1px solid rgba(0,0,0,0.08)", overflow: "hidden" }}>
+      <div style={{ display: "flex", gap: 44, padding: "34px 34px 22px" }}>
+        {/* The ring is Instagram's, not the brand's — it is part of what the
+            page looks like there, so leaving it out would flatter the mock. */}
+        <div onClick={onOpenAvatar} style={{ flexShrink: 0, width: 150, height: 150, borderRadius: "50%",
+          padding: 4, cursor: "pointer",
+          background: "linear-gradient(45deg,#F9CE34,#EE2A7B,#6228D7)" }}>
+          <div style={{ width: "100%", height: "100%", borderRadius: "50%", border: "3px solid #fff",
+            overflow: "hidden", background: avatar ? `center/cover no-repeat url(${avatar})` : grey,
+            display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {!avatar && (
+              <span style={{ fontSize: 11.5, fontFamily: FONT, color: "#8A8A82", textAlign: "center", padding: 10 }}>
+                {de ? "Profilbild hinzufügen" : "Add a profile picture"}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 20, fontFamily: FONT, color: "#111" }}>{handle || "brand"}</span>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="#3897F0">
+              <path d="M12 2l2.4 2.1 3.2-.3.9 3.1 2.8 1.6-1.2 3 1.2 3-2.8 1.6-.9 3.1-3.2-.3L12 22l-2.4-2.1-3.2.3-.9-3.1L2.7 15.5l1.2-3-1.2-3 2.8-1.6.9-3.1 3.2.3z" />
+              <path d="M10.6 15.2l-2.9-2.9 1.3-1.3 1.6 1.6 4-4 1.3 1.3z" fill="#fff" />
+            </svg>
+            <span style={{ fontSize: 17, color: "#8A8A82" }}>···</span>
+          </div>
+
+          <div style={{ display: "flex", gap: 26, marginTop: 16, fontSize: 15, fontFamily: FONT, color: "#111" }}>
+            {[[de ? "Beiträge" : "posts", posts.filter(Boolean).length],
+              [de ? "Follower" : "followers", "—"],
+              [de ? "Gefolgt" : "following", "—"]].map(([label, n]) => (
+              <span key={label}><b>{n}</b> <span style={{ color: "#5B5B55" }}>{label}</span></span>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 16 }}>{editable.name}</div>
+          <div style={{ fontSize: 14, fontFamily: FONT, color: "#8A8A82", marginTop: 2 }}>
+            {brand?.industry || (de ? "Kategorie" : "Category")}
+          </div>
+          <div style={{ marginTop: 6 }}>{editable.claim}</div>
+          {brand?.website_url && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8,
+              fontSize: 14, fontFamily: FONT, color: "#00376B", fontWeight: 600 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+                <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" /></svg>
+              {String(brand.website_url).replace(/^https?:\/\//, "").replace(/\/$/, "")}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+            <div style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 10,
+              background: "#4F46E5", color: "#fff", fontFamily: FONT, fontSize: 14, fontWeight: 600 }}>
+              {de ? "Folgen" : "Follow"}
+            </div>
+            <div style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 10,
+              background: "#EFEFEF", color: "#111", fontFamily: FONT, fontSize: 14, fontWeight: 600 }}>
+              {de ? "Nachricht senden" : "Message"}
+            </div>
+            <div style={{ width: 44, borderRadius: 10, background: "#EFEFEF", display: "flex",
+              alignItems: "center", justifyContent: "center", color: "#111", fontSize: 15 }}>+</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Highlights */}
+      <div style={{ display: "flex", gap: 26, padding: "8px 34px 26px" }}>
+        {highlights.map((h, i) => (
+          <div key={i} style={{ textAlign: "center" }}>
+            <div onClick={() => onOpenHighlight(i)}
+              style={{ width: 86, height: 86, borderRadius: "50%", border: "1px solid #DBDBDB", padding: 3,
+                cursor: "pointer" }}>
+              <div style={{ width: "100%", height: "100%", borderRadius: "50%", overflow: "hidden",
+                background: h ? `center/cover no-repeat url(${h})` : grey,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 20, color: "#8A8A82" }}>{h ? "" : "+"}</div>
+            </div>
+            <div style={{ fontSize: 12.5, fontFamily: FONT, color: "#111", marginTop: 8 }}>
+              {de ? "Highlight" : "Highlight"}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "center", gap: 60, borderTop: "1px solid #DBDBDB" }}>
+        {["grid", "reels", "repost", "tagged"].map((k, i) => (
+          <div key={k} style={{ padding: "14px 0", borderTop: i === 0 ? "1.5px solid #111" : "1.5px solid transparent",
+            marginTop: -1, color: i === 0 ? "#111" : "#8A8A82" }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              {k === "grid" && <><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></>}
+              {k === "reels" && <><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M10 8l6 4-6 4z" /></>}
+              {k === "repost" && <><path d="M17 2l4 4-4 4" /><path d="M3 11V9a4 4 0 014-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v2a4 4 0 01-4 4H3" /></>}
+              {k === "tagged" && <><rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="12" cy="10" r="3" /><path d="M6 20a6 6 0 0112 0" /></>}
+            </svg>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, padding: 4 }}>
+        {posts.map((src, i) => tile(src, () => onOpenPost(i), { aspectRatio: "1" }))}
+      </div>
+    </div>
+  );
+}
+
 // How the brand would look on a channel, before anything is published there.
 // The layout follows the real profile closely enough to judge a banner and an
 // avatar against each other — that is the whole use of it. Per-platform
@@ -15951,6 +16079,8 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand
   const px = (d) => d ? `${d[0]} × ${d[1]} px` : null;
   const [banner, setBanner] = useState(saved?.banner || "");
   const [avatar, setAvatar] = useState(saved?.avatar || brand?.logo_url || "");
+  const [posts, setPosts] = useState(Array.isArray(saved?.posts) ? saved.posts : Array(6).fill(""));
+  const [highlights, setHighlights] = useState(Array.isArray(saved?.highlights) ? saved.highlights : Array(3).fill(""));
   const [busy, setBusy] = useState("");
   const [handle, setHandle] = useState(url || "");
   // Everything the workspace already has. Making somebody upload a logo a
@@ -15968,7 +16098,7 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand
   const bannerInput = useRef(null);
   const avatarInput = useRef(null);
 
-  const commit = (next) => { onSave({ banner, avatar, ...next }); };
+  const commit = (next) => { onSave({ banner, avatar, posts, highlights, ...next }); };
 
   const choose = async (which, file) => {
     if (!file) return;
@@ -15976,8 +16106,7 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand
     const url2 = await onUpload(file);
     setBusy("");
     if (!url2) return;
-    if (which === "banner") { setBanner(url2); commit({ banner: url2 }); }
-    else { setAvatar(url2); commit({ avatar: url2 }); }
+    applyImage(url2);
   };
 
   // Logos already in the brand, so the avatar does not have to be uploaded a
@@ -16002,11 +16131,32 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand
       <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
     </svg>
   );
-  const zoomTarget = zoom === "banner"
+  const slot = typeof zoom === "string" && zoom.includes(":") ? zoom.split(":") : null;
+  const zoomTarget = slot
+    ? { title: slot[0] === "post" ? (de ? "Beitrag" : "Post") : (de ? "Highlight" : "Highlight"),
+        value: (slot[0] === "post" ? posts : highlights)[Number(slot[1])] || "",
+        size: slot[0] === "post" ? [1080, 1080] : [1080, 1920], ratio: slot[0] === "post" ? 1 : 0.5625, radius: 12 }
+    : zoom === "banner"
     ? { title: de ? "Bannerbild" : "Banner image", value: banner, size: shape.bannerPx, ratio: bannerRatio, radius: 12 }
     : zoom === "avatar"
       ? { title: de ? "Profilbild" : "Profile image", value: avatar, size: shape.logoPx, ratio: 1, radius: shape.avatar }
       : null;
+
+  // One place that knows where a chosen image goes, so the upload button, the
+  // asset picker and the remove button cannot drift apart as slots are added.
+  const applyImage = (url2) => {
+    if (slot) {
+      const idx = Number(slot[1]);
+      if (slot[0] === "post") {
+        const next = posts.map((v, i) => i === idx ? url2 : v);
+        setPosts(next); commit({ posts: next });
+      } else {
+        const next = highlights.map((v, i) => i === idx ? url2 : v);
+        setHighlights(next); commit({ highlights: next });
+      }
+    } else if (zoom === "banner") { setBanner(url2); commit({ banner: url2 }); }
+    else { setAvatar(url2); commit({ avatar: url2 }); }
+  };
 
   const dropZone = (label) => ({
     display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
@@ -16070,6 +16220,45 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand
         {/* The mock itself, on its own light ground so it reads as a preview of
             somewhere else rather than as part of this app. */}
         <div style={{ padding: 22, background: darkMode ? "rgba(255,255,255,0.03)" : "#EFEFEA" }}>
+          {platform.key === "instagram" ? (
+            <InstagramMock
+              brand={brand} avatar={avatar} posts={posts} highlights={highlights} de={de}
+              onOpenAvatar={() => setZoom("avatar")}
+              onOpenPost={(i) => setZoom("post:" + i)}
+              onOpenHighlight={(i) => setZoom("highlight:" + i)}
+              editable={{
+                name: editField === "name" ? (
+                  <input autoFocus value={nameDraft} onChange={e => setNameDraft(e.target.value)}
+                    onBlur={() => { onSaveBrand({ name: nameDraft }); setEditField(null); }}
+                    onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditField(null); }}
+                    style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: "#111", width: "100%",
+                      border: "none", borderBottom: "1.5px solid #111", outline: "none", background: "none" }} />
+                ) : (
+                  <div onClick={() => { setNameDraft(brand?.name || ""); setEditField("name"); }}
+                    onMouseEnter={() => setHover("name")} onMouseLeave={() => setHover(null)}
+                    style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: "#111",
+                      display: "inline-flex", alignItems: "center", gap: 8, cursor: "text" }}>
+                    {brand?.name || (de ? "Euer Markenname" : "Your brand name")}
+                    {hover === "name" && pencil}
+                  </div>
+                ),
+                claim: editField === "claim" ? (
+                  <input autoFocus value={claimDraft} onChange={e => setClaimDraft(e.target.value)}
+                    onBlur={() => { onSaveBrand({ claim: claimDraft }); setEditField(null); }}
+                    onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditField(null); }}
+                    style={{ fontSize: 14, fontFamily: FONT, color: "#111", width: "100%",
+                      border: "none", borderBottom: "1.5px solid #999", outline: "none", background: "none" }} />
+                ) : (
+                  <div onClick={() => { setClaimDraft(brand?.claim || ""); setEditField("claim"); }}
+                    onMouseEnter={() => setHover("claim")} onMouseLeave={() => setHover(null)}
+                    style={{ fontSize: 14, fontFamily: FONT, color: brand?.claim ? "#111" : "#9A9A93",
+                      lineHeight: 1.45, display: "flex", alignItems: "center", gap: 8, cursor: "text" }}>
+                    {brand?.claim || (de ? "Bio hinzufügen" : "Add a bio")}
+                    {hover === "claim" && pencil}
+                  </div>
+                ),
+              }} />
+          ) : (
           <div style={{ maxWidth: 900, margin: "0 auto", borderRadius: 12, overflow: "hidden",
             background: "#fff", border: "1px solid rgba(0,0,0,0.08)" }}>
             <div onClick={() => setZoom("banner")}
@@ -16166,6 +16355,8 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand
             </div>
           </div>
 
+          )}
+
           {/* The page below the header, because a profile is not judged on its
               header alone. The post is the brand's own description, set the way
               the platform would set it — how the words look there is the point,
@@ -16253,7 +16444,7 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand
                 </motion.button>
                 {zoomTarget.value && (
                   <motion.button whileTap={{ scale: 0.97 }}
-                    onClick={() => { if (zoom === "banner") { setBanner(""); commit({ banner: "" }); } else { setAvatar(""); commit({ avatar: "" }); } }}
+                    onClick={() => applyImage("")}
                     style={{ padding: "9px 16px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`,
                       background: "transparent", color: theme.text, fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
                     {de ? "Entfernen" : "Remove"}
@@ -16276,7 +16467,7 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand
                     const on = zoomTarget.value === src;
                     return (
                       <div key={src}
-                        onClick={() => { if (zoom === "banner") { setBanner(src); commit({ banner: src }); } else { setAvatar(src); commit({ avatar: src }); } }}
+                        onClick={() => applyImage(src)}
                         style={{ width: 62, height: 62, borderRadius: 10, overflow: "hidden", cursor: "pointer",
                           border: on ? `2px solid ${platform.color}` : `1px solid ${theme.borderFaint}`,
                           background: darkMode ? "rgba(255,255,255,0.05)" : "#fff" }}>
