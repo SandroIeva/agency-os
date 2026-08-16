@@ -15948,10 +15948,13 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
     // avatar and the counts sat closer together than they ever do there.
     <div style={{ maxWidth: 1264, margin: "0 auto", background: "#fff", borderRadius: 12,
       border: "1px solid rgba(0,0,0,0.08)", overflow: "hidden" }}>
-      <div style={{ display: "flex", gap: 80, padding: "40px 60px 26px" }}>
+      {/* The header is narrower than the grid and centred in it — that is how
+          the real page is built, and stretching it to the full width was what
+          made everything above the tiles sit too far apart. */}
+      <div style={{ display: "flex", gap: 76, maxWidth: 935, margin: "0 auto", padding: "36px 0 20px" }}>
         {/* The ring is Instagram's, not the brand's — it is part of what the
             page looks like there, so leaving it out would flatter the mock. */}
-        <div onClick={onOpenAvatar} style={{ flexShrink: 0, width: 176, height: 176, borderRadius: "50%",
+        <div onClick={onOpenAvatar} style={{ flexShrink: 0, width: 150, height: 150, borderRadius: "50%",
           padding: 4, cursor: "pointer",
           background: "linear-gradient(45deg,#F9CE34,#EE2A7B,#6228D7)" }}>
           <div style={{ width: "100%", height: "100%", borderRadius: "50%", border: "3px solid #fff",
@@ -16005,7 +16008,7 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
             </div>
           )}
 
-          <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+          <div style={{ display: "flex", gap: 8, marginTop: 18, maxWidth: 560 }}>
             <div style={{ flex: 1, textAlign: "center", padding: "15px 0", borderRadius: 10,
               background: "#4F46E5", color: "#fff", fontFamily: FONT, fontSize: 14.5, fontWeight: 600 }}>
               {de ? "Folgen" : "Follow"}
@@ -16021,7 +16024,7 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
       </div>
 
       {/* Highlights */}
-      <div style={{ display: "flex", gap: 40, padding: "10px 60px 34px" }}>
+      <div style={{ display: "flex", gap: 40, maxWidth: 935, margin: "0 auto", padding: "6px 0 34px" }}>
         {highlights.map((h, i) => (
           <div key={i} style={{ textAlign: "center" }}>
             <div onClick={() => onOpenHighlight(i)}
