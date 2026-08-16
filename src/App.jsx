@@ -15948,98 +15948,92 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
     // avatar and the counts sat closer together than they ever do there.
     <div style={{ maxWidth: 1264, margin: "0 auto", background: "#fff", borderRadius: 12,
       border: "1px solid rgba(0,0,0,0.08)", overflow: "hidden" }}>
-      {/* The header is narrower than the grid and centred in it — that is how
-          the real page is built, and stretching it to the full width was what
-          made everything above the tiles sit too far apart. */}
-      <div style={{ display: "flex", gap: 76, maxWidth: 935, margin: "0 auto", padding: "36px 0 20px" }}>
-        {/* The ring is Instagram's, not the brand's — it is part of what the
-            page looks like there, so leaving it out would flatter the mock. */}
-        <div onClick={onOpenAvatar} style={{ flexShrink: 0, width: 150, height: 150, borderRadius: "50%",
-          padding: 4, cursor: "pointer",
-          background: "linear-gradient(45deg,#F9CE34,#EE2A7B,#6228D7)" }}>
-          <div style={{ width: "100%", height: "100%", borderRadius: "50%", border: "3px solid #fff",
-            overflow: "hidden", background: avatar ? `center/cover no-repeat url(${avatar})` : grey,
-            display: "flex", alignItems: "center", justifyContent: "center" }}>
-            {!avatar && (
-              <span style={{ fontSize: 11.5, fontFamily: FONT, color: "#8A8A82", textAlign: "center", padding: 10 }}>
-                {de ? "Profilbild hinzufügen" : "Add a profile picture"}
-              </span>
+      {/* Three rows, not two columns. The buttons are their own row under the
+          picture and the text, spanning the header column — and the avatar and
+          the highlights start at that same left edge. Putting the buttons inside
+          the right-hand column was the structural mistake: it pushed them away
+          from the edge everything else lines up on. */}
+      <div style={{ maxWidth: 860, margin: "0 auto", padding: "36px 0 26px" }}>
+        <div style={{ display: "flex", gap: 58 }}>
+          <div onClick={onOpenAvatar} style={{ flexShrink: 0, width: 150, height: 150, borderRadius: "50%",
+            padding: 4, cursor: "pointer",
+            background: "linear-gradient(45deg,#F9CE34,#EE2A7B,#6228D7)" }}>
+            <div style={{ width: "100%", height: "100%", borderRadius: "50%", border: "3px solid #fff",
+              overflow: "hidden", background: avatar ? `center/cover no-repeat url(${avatar})` : grey,
+              display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {!avatar && (
+                <span style={{ fontSize: 11.5, fontFamily: FONT, color: "#8A8A82", textAlign: "center", padding: 10 }}>
+                  {de ? "Profilbild hinzufügen" : "Add a profile picture"}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 20, fontFamily: FONT, fontWeight: 700, color: "#111" }}>{handle || "brand"}</span>
+              <svg width="22" height="22" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+                <path d="M12.00 0.80 L14.33 3.31 L17.60 2.30 L18.36 5.64 L21.70 6.40 L20.69 9.67 L23.20 12.00 L20.69 14.33 L21.70 17.60 L18.36 18.36 L17.60 21.70 L14.33 20.69 L12.00 23.20 L9.67 20.69 L6.40 21.70 L5.64 18.36 L2.30 17.60 L3.31 14.33 L0.80 12.00 L3.31 9.67 L2.30 6.40 L5.64 5.64 L6.40 2.30 L9.67 3.31 Z" fill="#3897F0" />
+                <polyline points="16.1 9.9 10.9 15.1 7.9 12.1" fill="none" stroke="#fff"
+                  strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span style={{ fontSize: 17, color: "#8A8A82" }}>···</span>
+            </div>
+
+            <div style={{ display: "flex", gap: 34, marginTop: 20, fontSize: 15.5, fontFamily: FONT, color: "#111" }}>
+              {[[de ? "Beiträge" : "Posts", posts.filter(Boolean).length || 128],
+                [de ? "Follower" : "Followers", "4.620"],
+                [de ? "Gefolgt" : "Following", "312"]].map(([label, n]) => (
+                <span key={label}><b>{n}</b> <span style={{ color: "#5B5B55" }}>{label}</span></span>
+              ))}
+            </div>
+
+            <div style={{ fontSize: 14, fontFamily: FONT, color: "#8A8A82", marginTop: 18 }}>
+              {brand?.industry || (de ? "Kategorie" : "Category")}
+            </div>
+            <div style={{ marginTop: 6 }}>{editable.claim}</div>
+            {brand?.website_url && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8,
+                fontSize: 14, fontFamily: FONT, color: "#00376B", fontWeight: 600 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                  strokeLinecap="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+                  <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" /></svg>
+                {String(brand.website_url).replace(/^https?:\/\//, "").replace(/\/$/, "")}
+              </div>
             )}
           </div>
         </div>
 
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 20, fontFamily: FONT, fontWeight: 700, color: "#111" }}>{handle || "brand"}</span>
-            {/* The scalloped badge, twelve lobes like the real one. A circle was
-                the wrong shape and read as a generic tick. */}
-            <svg width="22" height="22" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
-              <path d="M12.00 0.80 L14.33 3.31 L17.60 2.30 L18.36 5.64 L21.70 6.40 L20.69 9.67 L23.20 12.00 L20.69 14.33 L21.70 17.60 L18.36 18.36 L17.60 21.70 L14.33 20.69 L12.00 23.20 L9.67 20.69 L6.40 21.70 L5.64 18.36 L2.30 17.60 L3.31 14.33 L0.80 12.00 L3.31 9.67 L2.30 6.40 L5.64 5.64 L6.40 2.30 L9.67 3.31 Z" fill="#3897F0" />
-              <polyline points="16.1 9.9 10.9 15.1 7.9 12.1" fill="none" stroke="#fff"
-                strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span style={{ fontSize: 17, color: "#8A8A82" }}>···</span>
+        <div style={{ display: "flex", gap: 8, marginTop: 26 }}>
+          <div style={{ flex: 1, textAlign: "center", padding: "15px 0", borderRadius: 10,
+            background: "#4F46E5", color: "#fff", fontFamily: FONT, fontSize: 14.5, fontWeight: 600 }}>
+            {de ? "Folgen" : "Follow"}
           </div>
-
-          <div style={{ display: "flex", gap: 34, marginTop: 20, fontSize: 15.5, fontFamily: FONT, color: "#111" }}>
-            {/* Stand-in figures. A dash where a number belongs makes the mock
-                look broken; these are obviously placeholders and let the layout
-                be judged at the width it will really have. */}
-            {[[de ? "Beiträge" : "Posts", posts.filter(Boolean).length || 128],
-              [de ? "Follower" : "Followers", "4.620"],
-              [de ? "Gefolgt" : "Following", "312"]].map(([label, n]) => (
-              <span key={label}><b>{n}</b> <span style={{ color: "#5B5B55" }}>{label}</span></span>
-            ))}
+          <div style={{ flex: 1, textAlign: "center", padding: "15px 0", borderRadius: 10,
+            background: "#EFEFEF", color: "#111", fontFamily: FONT, fontSize: 14.5, fontWeight: 600 }}>
+            {de ? "Nachricht senden" : "Message"}
           </div>
-
-          {/* No second name here: it is already the handle above, and repeating
-              it wastes the only lines a bio gets. */}
-          <div style={{ fontSize: 14, fontFamily: FONT, color: "#8A8A82", marginTop: 16 }}>
-            {brand?.industry || (de ? "Kategorie" : "Category")}
-          </div>
-          <div style={{ marginTop: 6 }}>{editable.claim}</div>
-          {brand?.website_url && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8,
-              fontSize: 14, fontFamily: FONT, color: "#00376B", fontWeight: 600 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                strokeLinecap="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
-                <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" /></svg>
-              {String(brand.website_url).replace(/^https?:\/\//, "").replace(/\/$/, "")}
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: 8, marginTop: 18, maxWidth: 560 }}>
-            <div style={{ flex: 1, textAlign: "center", padding: "15px 0", borderRadius: 10,
-              background: "#4F46E5", color: "#fff", fontFamily: FONT, fontSize: 14.5, fontWeight: 600 }}>
-              {de ? "Folgen" : "Follow"}
-            </div>
-            <div style={{ flex: 1, textAlign: "center", padding: "15px 0", borderRadius: 10,
-              background: "#EFEFEF", color: "#111", fontFamily: FONT, fontSize: 14.5, fontWeight: 600 }}>
-              {de ? "Nachricht senden" : "Message"}
-            </div>
-            <div style={{ width: 54, borderRadius: 10, background: "#EFEFEF", display: "flex",
-              alignItems: "center", justifyContent: "center", color: "#111", fontSize: 16 }}>+</div>
-          </div>
+          <div style={{ width: 54, borderRadius: 10, background: "#EFEFEF", display: "flex",
+            alignItems: "center", justifyContent: "center", color: "#111", fontSize: 16 }}>+</div>
         </div>
-      </div>
 
-      {/* Highlights */}
-      <div style={{ display: "flex", gap: 40, maxWidth: 935, margin: "0 auto", padding: "6px 0 34px" }}>
-        {highlights.map((h, i) => (
-          <div key={i} style={{ textAlign: "center" }}>
-            <div onClick={() => onOpenHighlight(i)}
-              style={{ width: 86, height: 86, borderRadius: "50%", border: "1px solid #DBDBDB", padding: 3,
-                cursor: "pointer" }}>
-              <div style={{ width: "100%", height: "100%", borderRadius: "50%", overflow: "hidden",
-                background: h ? `center/cover no-repeat url(${h})` : grey,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 20, color: "#8A8A82" }}>{h ? "" : "+"}</div>
+        <div style={{ display: "flex", gap: 40, marginTop: 34 }}>
+          {highlights.map((h, i) => (
+            <div key={i} style={{ textAlign: "center" }}>
+              <div onClick={() => onOpenHighlight(i)}
+                style={{ width: 86, height: 86, borderRadius: "50%", border: "1px solid #DBDBDB", padding: 3,
+                  cursor: "pointer" }}>
+                <div style={{ width: "100%", height: "100%", borderRadius: "50%", overflow: "hidden",
+                  background: h ? `center/cover no-repeat url(${h})` : grey,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 20, color: "#8A8A82" }}>{h ? "" : "+"}</div>
+              </div>
+              <div style={{ fontSize: 12.5, fontFamily: FONT, color: "#111", marginTop: 8 }}>
+                {de ? "Highlight" : "Highlight"}
+              </div>
             </div>
-            <div style={{ fontSize: 12.5, fontFamily: FONT, color: "#111", marginTop: 8 }}>
-              {de ? "Highlight" : "Highlight"}
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       <div style={{ display: "flex", justifyContent: "center", gap: 150,
