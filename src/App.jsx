@@ -15951,7 +15951,7 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
       <div style={{ display: "flex", gap: 80, padding: "40px 60px 26px" }}>
         {/* The ring is Instagram's, not the brand's — it is part of what the
             page looks like there, so leaving it out would flatter the mock. */}
-        <div onClick={onOpenAvatar} style={{ flexShrink: 0, width: 150, height: 150, borderRadius: "50%",
+        <div onClick={onOpenAvatar} style={{ flexShrink: 0, width: 176, height: 176, borderRadius: "50%",
           padding: 4, cursor: "pointer",
           background: "linear-gradient(45deg,#F9CE34,#EE2A7B,#6228D7)" }}>
           <div style={{ width: "100%", height: "100%", borderRadius: "50%", border: "3px solid #fff",
@@ -15978,7 +15978,7 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
             <span style={{ fontSize: 17, color: "#8A8A82" }}>···</span>
           </div>
 
-          <div style={{ display: "flex", gap: 26, marginTop: 16, fontSize: 15, fontFamily: FONT, color: "#111" }}>
+          <div style={{ display: "flex", gap: 34, marginTop: 20, fontSize: 15.5, fontFamily: FONT, color: "#111" }}>
             {/* Stand-in figures. A dash where a number belongs makes the mock
                 look broken; these are obviously placeholders and let the layout
                 be judged at the width it will really have. */}
@@ -16021,7 +16021,7 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
       </div>
 
       {/* Highlights */}
-      <div style={{ display: "flex", gap: 34, padding: "8px 60px 30px" }}>
+      <div style={{ display: "flex", gap: 40, padding: "10px 60px 34px" }}>
         {highlights.map((h, i) => (
           <div key={i} style={{ textAlign: "center" }}>
             <div onClick={() => onOpenHighlight(i)}
