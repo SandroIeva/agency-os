@@ -15964,18 +15964,26 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
 
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 20, fontFamily: FONT, color: "#111" }}>{handle || "brand"}</span>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="#3897F0">
-              <path d="M12 2l2.4 2.1 3.2-.3.9 3.1 2.8 1.6-1.2 3 1.2 3-2.8 1.6-.9 3.1-3.2-.3L12 22l-2.4-2.1-3.2.3-.9-3.1L2.7 15.5l1.2-3-1.2-3 2.8-1.6.9-3.1 3.2.3z" />
-              <path d="M10.6 15.2l-2.9-2.9 1.3-1.3 1.6 1.6 4-4 1.3 1.3z" fill="#fff" />
-            </svg>
+            <span style={{ fontSize: 20, fontFamily: FONT, fontWeight: 700, color: "#111" }}>{handle || "brand"}</span>
+            {/* A plain round mark rather than the scalloped one: at this size the
+                scallops read as a smudge, and a circle is unmistakable. */}
+            <span style={{ width: 21, height: 21, borderRadius: "50%", background: "#3897F0", flexShrink: 0,
+              display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff"
+                strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </span>
             <span style={{ fontSize: 17, color: "#8A8A82" }}>···</span>
           </div>
 
           <div style={{ display: "flex", gap: 26, marginTop: 16, fontSize: 15, fontFamily: FONT, color: "#111" }}>
-            {[[de ? "Beiträge" : "posts", posts.filter(Boolean).length],
-              [de ? "Follower" : "followers", "—"],
-              [de ? "Gefolgt" : "following", "—"]].map(([label, n]) => (
+            {/* Stand-in figures. A dash where a number belongs makes the mock
+                look broken; these are obviously placeholders and let the layout
+                be judged at the width it will really have. */}
+            {[[de ? "Beiträge" : "posts", posts.filter(Boolean).length || 128],
+              [de ? "Follower" : "followers", "4.620"],
+              [de ? "Gefolgt" : "following", "312"]].map(([label, n]) => (
               <span key={label}><b>{n}</b> <span style={{ color: "#5B5B55" }}>{label}</span></span>
             ))}
           </div>
@@ -16029,11 +16037,11 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
         ))}
       </div>
 
-      <div style={{ display: "flex", justifyContent: "center", gap: 60, borderTop: "1px solid #DBDBDB" }}>
+      <div style={{ display: "flex", justifyContent: "center", gap: 76, borderTop: "1px solid #DBDBDB", marginTop: 8 }}>
         {["grid", "reels", "repost", "tagged"].map((k, i) => (
-          <div key={k} style={{ padding: "14px 0", borderTop: i === 0 ? "1.5px solid #111" : "1.5px solid transparent",
+          <div key={k} style={{ padding: "18px 0", borderTop: i === 0 ? "1.5px solid #111" : "1.5px solid transparent",
             marginTop: -1, color: i === 0 ? "#111" : "#8A8A82" }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
               {k === "grid" && <><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></>}
               {k === "reels" && <><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M10 8l6 4-6 4z" /></>}
               {k === "repost" && <><path d="M17 2l4 4-4 4" /><path d="M3 11V9a4 4 0 014-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v2a4 4 0 01-4 4H3" /></>}
@@ -16253,7 +16261,8 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand
                     onMouseEnter={() => setHover("claim")} onMouseLeave={() => setHover(null)}
                     style={{ fontSize: 14, fontFamily: FONT, color: brand?.claim ? "#111" : "#9A9A93",
                       lineHeight: 1.45, display: "flex", alignItems: "center", gap: 8, cursor: "text" }}>
-                    {brand?.claim || (de ? "Bio hinzufügen" : "Add a bio")}
+                    {brand?.claim || (de ? "Das ist die Platzhalter-Bio. Der Text lässt sich jederzeit ändern."
+                                          : "This is the placeholder bio. Change the text any time.")}
                     {hover === "claim" && pencil}
                   </div>
                 ),
