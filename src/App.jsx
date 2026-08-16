@@ -15971,8 +15971,8 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
 
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 26, fontFamily: FONT, fontWeight: 700, color: "#111" }}>{handle || "brand"}</span>
-              <svg width="27" height="27" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+              <span style={{ fontSize: 30, fontFamily: FONT, fontWeight: 700, color: "#111" }}>{handle || "brand"}</span>
+              <svg width="30" height="30" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
                 <path d="M12.00 0.80 L14.33 3.31 L17.60 2.30 L18.36 5.64 L21.70 6.40 L20.69 9.67 L23.20 12.00 L20.69 14.33 L21.70 17.60 L18.36 18.36 L17.60 21.70 L14.33 20.69 L12.00 23.20 L9.67 20.69 L6.40 21.70 L5.64 18.36 L2.30 17.60 L3.31 14.33 L0.80 12.00 L3.31 9.67 L2.30 6.40 L5.64 5.64 L6.40 2.30 L9.67 3.31 Z" fill="#3897F0" />
                 <polyline points="16.1 9.9 10.9 15.1 7.9 12.1" fill="none" stroke="#fff"
                   strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
@@ -15988,7 +15988,7 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
               ))}
             </div>
 
-            <div style={{ fontSize: 14, fontFamily: FONT, color: "#8A8A82", marginTop: 18 }}>
+            <div style={{ fontSize: 15.5, fontFamily: FONT, color: "#8A8A82", marginTop: 18 }}>
               {brand?.industry || (de ? "Kategorie" : "Category")}
             </div>
             <div style={{ marginTop: 6 }}>{editable.claim}</div>
@@ -16004,17 +16004,17 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 8, marginTop: 46 }}>
-          <div style={{ flex: 1, textAlign: "center", padding: "15px 0", borderRadius: 10,
-            background: "#4F46E5", color: "#fff", fontFamily: FONT, fontSize: 14.5, fontWeight: 600 }}>
+        <div style={{ display: "flex", gap: 10, marginTop: 46, maxWidth: 780 }}>
+          <div style={{ flex: 1, textAlign: "center", padding: "18px 0", borderRadius: 10,
+            background: "#4F46E5", color: "#fff", fontFamily: FONT, fontSize: 15, fontWeight: 600 }}>
             {de ? "Folgen" : "Follow"}
           </div>
-          <div style={{ flex: 1, textAlign: "center", padding: "15px 0", borderRadius: 10,
-            background: "#EFEFEF", color: "#111", fontFamily: FONT, fontSize: 14.5, fontWeight: 600 }}>
+          <div style={{ flex: 1, textAlign: "center", padding: "18px 0", borderRadius: 10,
+            background: "#EFEFEF", color: "#111", fontFamily: FONT, fontSize: 15, fontWeight: 600 }}>
             {de ? "Nachricht senden" : "Message"}
           </div>
-          <div style={{ width: 54, borderRadius: 10, background: "#EFEFEF", display: "flex",
-            alignItems: "center", justifyContent: "center", color: "#111", fontSize: 16 }}>+</div>
+          <div style={{ width: 60, borderRadius: 10, background: "#EFEFEF", display: "flex",
+            alignItems: "center", justifyContent: "center", color: "#111", fontSize: 17 }}>+</div>
         </div>
 
         <div style={{ display: "flex", gap: 40, marginTop: 34 }}>
@@ -16261,7 +16261,7 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand
                 ) : (
                   <div onClick={() => { setClaimDraft(brand?.claim || ""); setEditField("claim"); }}
                     onMouseEnter={() => setHover("claim")} onMouseLeave={() => setHover(null)}
-                    style={{ fontSize: 14, fontFamily: FONT, color: brand?.claim ? "#111" : "#9A9A93",
+                    style={{ fontSize: 15.5, fontFamily: FONT, color: "#111",
                       lineHeight: 1.45, display: "flex", alignItems: "center", gap: 8, cursor: "text" }}>
                     {brand?.claim || (de ? "Das ist die Platzhalter-Bio. Der Text lässt sich jederzeit ändern."
                                           : "This is the placeholder bio. Change the text any time.")}
