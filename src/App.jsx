@@ -15969,8 +15969,8 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
                 the wrong shape and read as a generic tick. */}
             <svg width="22" height="22" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
               <path d="M12.00 0.80 L14.33 3.31 L17.60 2.30 L18.36 5.64 L21.70 6.40 L20.69 9.67 L23.20 12.00 L20.69 14.33 L21.70 17.60 L18.36 18.36 L17.60 21.70 L14.33 20.69 L12.00 23.20 L9.67 20.69 L6.40 21.70 L5.64 18.36 L2.30 17.60 L3.31 14.33 L0.80 12.00 L3.31 9.67 L2.30 6.40 L5.64 5.64 L6.40 2.30 L9.67 3.31 Z" fill="#3897F0" />
-              <polyline points="17 9.4 10.6 15.8 7 12.2" fill="none" stroke="#fff"
-                strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+              <polyline points="16.1 9.9 10.9 15.1 7.9 12.1" fill="none" stroke="#fff"
+                strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             <span style={{ fontSize: 17, color: "#8A8A82" }}>···</span>
           </div>
@@ -16003,16 +16003,16 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
           )}
 
           <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
-            <div style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 10,
-              background: "#4F46E5", color: "#fff", fontFamily: FONT, fontSize: 14, fontWeight: 600 }}>
+            <div style={{ flex: 1, textAlign: "center", padding: "15px 0", borderRadius: 10,
+              background: "#4F46E5", color: "#fff", fontFamily: FONT, fontSize: 14.5, fontWeight: 600 }}>
               {de ? "Folgen" : "Follow"}
             </div>
-            <div style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 10,
-              background: "#EFEFEF", color: "#111", fontFamily: FONT, fontSize: 14, fontWeight: 600 }}>
+            <div style={{ flex: 1, textAlign: "center", padding: "15px 0", borderRadius: 10,
+              background: "#EFEFEF", color: "#111", fontFamily: FONT, fontSize: 14.5, fontWeight: 600 }}>
               {de ? "Nachricht senden" : "Message"}
             </div>
-            <div style={{ width: 44, borderRadius: 10, background: "#EFEFEF", display: "flex",
-              alignItems: "center", justifyContent: "center", color: "#111", fontSize: 15 }}>+</div>
+            <div style={{ width: 54, borderRadius: 10, background: "#EFEFEF", display: "flex",
+              alignItems: "center", justifyContent: "center", color: "#111", fontSize: 16 }}>+</div>
           </div>
         </div>
       </div>
@@ -16036,13 +16036,13 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
         ))}
       </div>
 
-      <div style={{ display: "flex", justifyContent: "center", gap: 76,
+      <div style={{ display: "flex", justifyContent: "center", gap: 104,
         borderBottom: "1px solid #DBDBDB", marginTop: 14 }}>
         {["grid", "reels", "repost", "tagged"].map((k, i) => (
           <div key={k} style={{ padding: "18px 0", marginBottom: -1,
             borderBottom: i === 0 ? "1.5px solid #111" : "1.5px solid transparent",
             color: i === 0 ? "#111" : "#8A8A82" }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
               {k === "grid" && <><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></>}
               {k === "reels" && <><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M10 8l6 4-6 4z" /></>}
               {k === "repost" && <><path d="M17 2l4 4-4 4" /><path d="M3 11V9a4 4 0 014-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v2a4 4 0 01-4 4H3" /></>}
