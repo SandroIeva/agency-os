@@ -15979,9 +15979,9 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
             {/* Stand-in figures. A dash where a number belongs makes the mock
                 look broken; these are obviously placeholders and let the layout
                 be judged at the width it will really have. */}
-            {[[de ? "Beiträge" : "posts", posts.filter(Boolean).length || 128],
-              [de ? "Follower" : "followers", "4.620"],
-              [de ? "Gefolgt" : "following", "312"]].map(([label, n]) => (
+            {[[de ? "Beiträge" : "Posts", posts.filter(Boolean).length || 128],
+              [de ? "Follower" : "Followers", "4.620"],
+              [de ? "Gefolgt" : "Following", "312"]].map(([label, n]) => (
               <span key={label}><b>{n}</b> <span style={{ color: "#5B5B55" }}>{label}</span></span>
             ))}
           </div>
@@ -16036,13 +16036,13 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
         ))}
       </div>
 
-      <div style={{ display: "flex", justifyContent: "center", gap: 104,
+      <div style={{ display: "flex", justifyContent: "center", gap: 150,
         borderBottom: "1px solid #DBDBDB", marginTop: 14 }}>
         {["grid", "reels", "repost", "tagged"].map((k, i) => (
           <div key={k} style={{ padding: "18px 0", marginBottom: -1,
             borderBottom: i === 0 ? "1.5px solid #111" : "1.5px solid transparent",
             color: i === 0 ? "#111" : "#8A8A82" }}>
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
               {k === "grid" && <><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></>}
               {k === "reels" && <><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M10 8l6 4-6 4z" /></>}
               {k === "repost" && <><path d="M17 2l4 4-4 4" /><path d="M3 11V9a4 4 0 014-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v2a4 4 0 01-4 4H3" /></>}
@@ -16053,7 +16053,7 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, padding: 4 }}>
-        {posts.map((src, i) => tile(src, () => onOpenPost(i), { aspectRatio: "1" }))}
+        {posts.map((src, i) => tile(src, () => onOpenPost(i), { aspectRatio: "4 / 5" }))}
       </div>
     </div>
   );
@@ -16144,7 +16144,8 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand
   const zoomTarget = slot
     ? { title: slot[0] === "post" ? (de ? "Beitrag" : "Post") : (de ? "Highlight" : "Highlight"),
         value: (slot[0] === "post" ? posts : highlights)[Number(slot[1])] || "",
-        size: slot[0] === "post" ? [1080, 1080] : [1080, 1920], ratio: slot[0] === "post" ? 1 : 0.5625, radius: 12 }
+        size: slot[0] === "post" ? [1080, 1350] : [1080, 1920],
+        ratio: slot[0] === "post" ? 0.8 : 0.5625, radius: 12 }
     : zoom === "banner"
     ? { title: de ? "Bannerbild" : "Banner image", value: banner, size: shape.bannerPx, ratio: bannerRatio, radius: 12 }
     : zoom === "avatar"
