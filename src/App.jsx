@@ -15965,15 +15965,13 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 20, fontFamily: FONT, fontWeight: 700, color: "#111" }}>{handle || "brand"}</span>
-            {/* A plain round mark rather than the scalloped one: at this size the
-                scallops read as a smudge, and a circle is unmistakable. */}
-            <span style={{ width: 21, height: 21, borderRadius: "50%", background: "#3897F0", flexShrink: 0,
-              display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff"
-                strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            </span>
+            {/* The scalloped badge, twelve lobes like the real one. A circle was
+                the wrong shape and read as a generic tick. */}
+            <svg width="22" height="22" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+              <path d="M12.00 0.80 L14.33 3.31 L17.60 2.30 L18.36 5.64 L21.70 6.40 L20.69 9.67 L23.20 12.00 L20.69 14.33 L21.70 17.60 L18.36 18.36 L17.60 21.70 L14.33 20.69 L12.00 23.20 L9.67 20.69 L6.40 21.70 L5.64 18.36 L2.30 17.60 L3.31 14.33 L0.80 12.00 L3.31 9.67 L2.30 6.40 L5.64 5.64 L6.40 2.30 L9.67 3.31 Z" fill="#3897F0" />
+              <polyline points="17 9.4 10.6 15.8 7 12.2" fill="none" stroke="#fff"
+                strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
             <span style={{ fontSize: 17, color: "#8A8A82" }}>···</span>
           </div>
 
@@ -15988,8 +15986,9 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
             ))}
           </div>
 
-          <div style={{ marginTop: 16 }}>{editable.name}</div>
-          <div style={{ fontSize: 14, fontFamily: FONT, color: "#8A8A82", marginTop: 2 }}>
+          {/* No second name here: it is already the handle above, and repeating
+              it wastes the only lines a bio gets. */}
+          <div style={{ fontSize: 14, fontFamily: FONT, color: "#8A8A82", marginTop: 16 }}>
             {brand?.industry || (de ? "Kategorie" : "Category")}
           </div>
           <div style={{ marginTop: 6 }}>{editable.claim}</div>
@@ -16037,10 +16036,12 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
         ))}
       </div>
 
-      <div style={{ display: "flex", justifyContent: "center", gap: 76, borderTop: "1px solid #DBDBDB", marginTop: 8 }}>
+      <div style={{ display: "flex", justifyContent: "center", gap: 76,
+        borderBottom: "1px solid #DBDBDB", marginTop: 14 }}>
         {["grid", "reels", "repost", "tagged"].map((k, i) => (
-          <div key={k} style={{ padding: "18px 0", borderTop: i === 0 ? "1.5px solid #111" : "1.5px solid transparent",
-            marginTop: -1, color: i === 0 ? "#111" : "#8A8A82" }}>
+          <div key={k} style={{ padding: "18px 0", marginBottom: -1,
+            borderBottom: i === 0 ? "1.5px solid #111" : "1.5px solid transparent",
+            color: i === 0 ? "#111" : "#8A8A82" }}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
               {k === "grid" && <><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></>}
               {k === "reels" && <><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M10 8l6 4-6 4z" /></>}
