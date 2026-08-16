@@ -15953,7 +15953,7 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
           the highlights start at that same left edge. Putting the buttons inside
           the right-hand column was the structural mistake: it pushed them away
           from the edge everything else lines up on. */}
-      <div style={{ maxWidth: 860, margin: "0 auto", padding: "72px 0 30px" }}>
+      <div style={{ maxWidth: 780, margin: "0 auto", padding: "72px 0 30px" }}>
         <div style={{ display: "flex", gap: 58 }}>
           <div onClick={onOpenAvatar} style={{ flexShrink: 0, width: 214, height: 214, borderRadius: "50%",
             padding: 4, cursor: "pointer",
@@ -16004,7 +16004,7 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, marginTop: 46, maxWidth: 780 }}>
+        <div style={{ display: "flex", gap: 10, marginTop: 46 }}>
           <div style={{ flex: 1, textAlign: "center", padding: "18px 0", borderRadius: 10,
             background: "#4F46E5", color: "#fff", fontFamily: FONT, fontSize: 15, fontWeight: 600 }}>
             {de ? "Folgen" : "Follow"}
