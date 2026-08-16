@@ -15943,9 +15943,12 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
   );
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", background: "#fff", borderRadius: 12,
+    // 1264 wide because that is what the three tiles measure on the real page.
+    // The header follows from it rather than the other way round: at 900 the
+    // avatar and the counts sat closer together than they ever do there.
+    <div style={{ maxWidth: 1264, margin: "0 auto", background: "#fff", borderRadius: 12,
       border: "1px solid rgba(0,0,0,0.08)", overflow: "hidden" }}>
-      <div style={{ display: "flex", gap: 44, padding: "34px 34px 22px" }}>
+      <div style={{ display: "flex", gap: 80, padding: "40px 60px 26px" }}>
         {/* The ring is Instagram's, not the brand's — it is part of what the
             page looks like there, so leaving it out would flatter the mock. */}
         <div onClick={onOpenAvatar} style={{ flexShrink: 0, width: 150, height: 150, borderRadius: "50%",
@@ -16018,7 +16021,7 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
       </div>
 
       {/* Highlights */}
-      <div style={{ display: "flex", gap: 26, padding: "8px 34px 26px" }}>
+      <div style={{ display: "flex", gap: 34, padding: "8px 60px 30px" }}>
         {highlights.map((h, i) => (
           <div key={i} style={{ textAlign: "center" }}>
             <div onClick={() => onOpenHighlight(i)}
@@ -16052,7 +16055,7 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, padding: 4 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 }}>
         {posts.map((src, i) => tile(src, () => onOpenPost(i), { aspectRatio: "4 / 5" }))}
       </div>
     </div>
