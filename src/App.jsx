@@ -16508,7 +16508,7 @@ const CHANNEL_PREVIEW_SHAPE = {
                tabs: ["Created", "Saved"], meta: () => "" },
 };
 
-function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand, onClose, onUpload, logos, orgId, theme, darkMode, appLanguage, url }) {
+function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, onUpload, logos, orgId, theme, darkMode, appLanguage, url }) {
   const de = appLanguage === "de";
   const shape = CHANNEL_PREVIEW_SHAPE[platform.key] || CHANNEL_PREVIEW_SHAPE.linkedin;
   const bannerRatio = shape.bannerPx ? shape.bannerPx[0] / shape.bannerPx[1] : 4;
@@ -16518,7 +16518,7 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand
   const [posts, setPosts] = useState(Array.isArray(saved?.posts) ? saved.posts : Array(6).fill(""));
   const [highlights, setHighlights] = useState(Array.isArray(saved?.highlights) ? saved.highlights : Array(3).fill(""));
   const [busy, setBusy] = useState("");
-  const [handle, setHandle] = useState(url || "");
+
   // Everything the workspace already has. Making somebody upload a logo a
   // second time because this view cannot see the first one is the opposite of
   // what one system is for.
@@ -16601,62 +16601,42 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand
     border: `1px dashed ${theme.borderFaint}`, cursor: "pointer",
   });
 
-  // Full bleed, over everything. Neither a card floating on a dimmed app nor a
-  // panel among tabs: while you are judging how a brand reads on a channel, the
-  // only thing on screen should be that channel.
+  // An overlay over a blurred app rather than a screen of its own. The mock is
+  // the only thing in focus, but you can still see where you are — and there is
+  // no bar competing with the page being judged.
   return createPortal(
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
       style={{ position: "fixed", inset: 0, zIndex: 100002, overflowY: "auto",
-        background: darkMode ? "#101016" : "#EFEFEA" }}>
+        background: darkMode ? "rgba(8,8,12,0.62)" : "rgba(40,40,44,0.38)",
+        backdropFilter: "blur(14px) saturate(1.1)", WebkitBackdropFilter: "blur(14px) saturate(1.1)" }}>
+      {/* Only a way out, floating over the corner. */}
+      <div style={{ position: "sticky", top: 0, zIndex: 3, display: "flex", justifyContent: "space-between",
+        alignItems: "center", padding: "18px 22px", pointerEvents: "none" }}>
+        <motion.div whileTap={{ scale: 0.94 }} onClick={onClose} title={de ? "Schließen" : "Close"}
+          style={{ pointerEvents: "auto", width: 38, height: 38, borderRadius: "50%", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: darkMode ? "rgba(22,22,30,0.9)" : "rgba(255,255,255,0.92)",
+            border: `1px solid ${theme.borderFaint}`, color: theme.text,
+            boxShadow: "0 4px 14px rgba(0,0,0,0.18)" }}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+        </motion.div>
+        {url && (
+          <motion.a whileTap={{ scale: 0.97 }} href={/^https?:\/\//.test(url) ? url : "https://" + url}
+            target="_blank" rel="noopener noreferrer"
+            style={{ pointerEvents: "auto", padding: "9px 16px", borderRadius: 999, textDecoration: "none",
+              background: darkMode ? "rgba(22,22,30,0.9)" : "rgba(255,255,255,0.92)",
+              border: `1px solid ${theme.borderFaint}`, color: theme.text,
+              fontFamily: FONT, fontSize: 12, fontWeight: 600,
+              boxShadow: "0 4px 14px rgba(0,0,0,0.18)" }}>
+            {de ? "Profil öffnen" : "Open profile"}
+          </motion.a>
+        )}
+      </div>
       <div>
-        {/* Three columns so the address sits in the true middle of the window
-            rather than wherever the back link happens to end. */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr minmax(0, 546px) 1fr", alignItems: "center",
-          gap: 12, padding: "14px 22px", borderBottom: `1px solid ${theme.borderFaint}`,
-          position: "sticky", top: 0, zIndex: 2, background: darkMode ? "#16161e" : "#fff" }}>
-          <motion.div whileTap={{ scale: 0.94 }} onClick={onClose} title={de ? "Zurück" : "Back"}
-            style={{ width: 34, height: 34, borderRadius: "50%", cursor: "pointer", justifySelf: "start",
-              display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim,
-              border: `1px solid ${theme.borderFaint}` }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
-          </motion.div>
-
-          <div style={{ minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8,
-              padding: "4px 4px 4px 14px", borderRadius: 999,
-              border: `1px solid ${theme.borderFaint}`,
-              background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }}>
-              <input value={handle} onChange={e => setHandle(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") onSaveUrl(handle); }}
-                placeholder={platform.hint}
-                style={{ flex: 1, minWidth: 0, padding: "6px 0", border: "none", outline: "none",
-                  background: "none", color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
-              <motion.button whileTap={{ scale: 0.97 }} onClick={() => onSaveUrl(handle)}
-                style={{ padding: "6px 15px", borderRadius: 999, border: "none", flexShrink: 0,
-                  background: "#15151c", color: "#fff", fontFamily: FONT, fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>
-                {de ? "Speichern" : "Save"}
-              </motion.button>
-            </div>
-
-          </div>
-
-          <div style={{ display: "flex", gap: 8, justifySelf: "end" }}>
-            {url && (
-              <motion.a whileTap={{ scale: 0.97 }} href={/^https?:\/\//.test(url) ? url : "https://" + url}
-                target="_blank" rel="noopener noreferrer"
-                style={{ padding: "8px 14px", borderRadius: 999, textDecoration: "none",
-                  border: `1px solid ${theme.borderFaint}`, color: theme.text,
-                  fontFamily: FONT, fontSize: 12, fontWeight: 600 }}>
-                {de ? "Profil öffnen" : "Open profile"}
-              </motion.a>
-            )}
-          </div>
-        </div>
-
         {/* The mock itself, on its own light ground so it reads as a preview of
             somewhere else rather than as part of this app. */}
-        <div style={{ padding: 22, background: darkMode ? "rgba(255,255,255,0.03)" : "#EFEFEA" }}>
+        <div style={{ padding: "0 22px 40px" }}>
           {platform.key === "x" ? (
             <XMock
               brand={brand} banner={banner} avatar={avatar} posts={posts} de={de}
@@ -18834,7 +18814,6 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
                 brand={profile} logos={profile?.logos} orgId={userOrg?.id}
                 saved={previews[previewKey]}
                 onSave={(v) => savePreview(previewKey, v)}
-                onSaveUrl={(v) => saveChannel(previewKey, v)}
                 onSaveBrand={saveBrandFields}
                 onUpload={uploadPreviewImage}
                 onClose={() => setPreviewKey(null)}
