@@ -16764,14 +16764,12 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
   );
 }
 
-// YouTube is the one channel where the file uploaded and the picture shown are
-// different shapes: you hand it 2048 x 1152 and a wide strip is cropped out of
-// the middle for the desktop page. So the frame shows the strip — that is what
-// a visitor sees — while the hint and the editor stay at 16:9, because sending
-// somebody away with a strip-shaped file means YouTube refuses it.
-const YT_BANNER_DISPLAY = 6.4;
-
+// 1546 x 423 is YouTube's always-visible area — what a viewer gets on a TV, a
+// computer and a phone alike. The desktop page crops a wider strip out of the
+// uploaded file, but previewing that strip would show more than most viewers
+// ever see, so the frame, the editor and the hint all sit at the safe area.
 function YouTubeMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onOpenAvatar, onOpenPost, editable, de }) {
+  const bannerRatio = bannerPx ? bannerPx[0] / bannerPx[1] : 1546 / 423;
   const grey = "#F2F2F2";
   const muted = "#606060";
   const handle = "@" + (brand?.name || "brand").toLowerCase().replace(/[^a-z0-9_]/g, "");
@@ -16783,7 +16781,7 @@ function YouTubeMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onO
     <div style={{ maxWidth: 1280, margin: "0 auto", background: "#fff", borderRadius: 12,
       border: "1px solid rgba(0,0,0,0.07)", padding: "18px 24px 26px" }}>
       <div onClick={onOpenBanner}
-        style={{ width: "100%", aspectRatio: String(YT_BANNER_DISPLAY), borderRadius: 12,
+        style={{ width: "100%", aspectRatio: String(bannerRatio), borderRadius: 12,
           overflow: "hidden", cursor: "pointer",
           background: banner ? `center/cover no-repeat url(${banner})` : grey,
           display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -16950,10 +16948,9 @@ const CHANNEL_PREVIEW_SHAPE = {
                tabs: ["Posts", "Reels", "Tagged"], meta: () => "" },
   pinterest: { avatar: 999, bannerPx: [1600, 900], logoPx: [280, 280], overlap: false,
                tabs: ["Created", "Saved"], meta: () => "" },
-  // 2048 × 1152 is the file YouTube accepts. The desktop page shows a strip cut
-  // out of the middle of it — see YT_BANNER_DISPLAY. Naming the strip here would
-  // produce a file YouTube rejects, so this stays at what gets uploaded.
-  youtube:   { avatar: 999, bannerPx: [2048, 1152], logoPx: [800, 800], overlap: false,
+  // The always-visible area, not the full canvas YouTube accepts: 1546 × 423 is
+  // what every device shows, so it is the only size worth designing against.
+  youtube:   { avatar: 999, bannerPx: [1546, 423], logoPx: [800, 800], overlap: false,
                tabs: ["Home", "Videos", "Shorts", "Playlists", "Posts"], meta: () => "" },
 };
 
