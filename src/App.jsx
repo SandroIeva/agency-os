@@ -16615,7 +16615,10 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
           A plain translucent scrim costs nothing, never invalidates, and still
           lets the app show through enough to say where you are. */}
       <div style={{ position: "absolute", inset: 0,
-        background: darkMode ? "rgba(8,8,12,0.86)" : "rgba(28,28,32,0.62)" }} />
+        // Light rather than dark: the mocks are white pages, and a dark scrim
+        // made them glare. Translucent white still separates them from the app
+        // behind without pushing the app out of sight.
+        background: darkMode ? "rgba(16,16,22,0.88)" : "rgba(255,255,255,0.86)" }} />
 
       {/* The way out is fixed too, so it is not repainted against a filtered
           backdrop while the content moves under it. */}
@@ -16625,8 +16628,8 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
           style={{ pointerEvents: "auto", width: 38, height: 38, borderRadius: "50%", cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
             background: darkMode ? "#1B1B23" : "#fff",
-            border: `1px solid ${theme.borderFaint}`, color: theme.text,
-            boxShadow: "0 4px 14px rgba(0,0,0,0.22)" }}>
+            border: `1px solid ${darkMode ? theme.borderFaint : "rgba(0,0,0,0.14)"}`, color: theme.text,
+            boxShadow: "0 2px 10px rgba(0,0,0,0.10)" }}>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
         </motion.div>
@@ -16635,9 +16638,9 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
             target="_blank" rel="noopener noreferrer"
             style={{ pointerEvents: "auto", padding: "9px 16px", borderRadius: 999, textDecoration: "none",
               background: darkMode ? "#1B1B23" : "#fff",
-              border: `1px solid ${theme.borderFaint}`, color: theme.text,
+              border: `1px solid ${darkMode ? theme.borderFaint : "rgba(0,0,0,0.14)"}`, color: theme.text,
               fontFamily: FONT, fontSize: 12, fontWeight: 600,
-              boxShadow: "0 4px 14px rgba(0,0,0,0.22)" }}>
+              boxShadow: "0 2px 10px rgba(0,0,0,0.10)" }}>
             {de ? "Profil öffnen" : "Open profile"}
           </motion.a>
         )}
