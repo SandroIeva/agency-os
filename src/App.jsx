@@ -16030,6 +16030,115 @@ async function extractColors(url, count = 5) {
 
 
 
+
+// TikTok has no cover at all: a ringed avatar, the name beside it, and then a
+// four-column wall of vertical video covers. The grid is the page — which is why
+// eight tiles are shown rather than the six the other two need.
+function TikTokMock({ brand, avatar, posts, onOpenAvatar, onOpenPost, editable, de }) {
+  const grey = "#F1F1F2";
+  const red = "#FE2C55";
+  const handle = (brand?.name || "brand").toLowerCase().replace(/[^a-z0-9._]/g, "");
+  const hint = (text) => (
+    <span style={{ fontSize: 12, fontFamily: FONT, color: "#8A8B91", textAlign: "center", padding: 8 }}>{text}</span>
+  );
+  const roundBtn = (child) => (
+    <div style={{ width: 44, height: 44, borderRadius: "50%", background: grey, flexShrink: 0,
+      display: "flex", alignItems: "center", justifyContent: "center", color: "#161823" }}>{child}</div>
+  );
+
+  return (
+    <div style={{ maxWidth: 1150, margin: "0 auto", background: "#fff", borderRadius: 12,
+      border: "1px solid #E9E9EB", padding: "34px 30px 30px" }}>
+      <div style={{ display: "flex", gap: 34 }}>
+        {/* The ring is TikTok's own, and it is what makes the avatar read as
+            TikTok rather than as any round picture. */}
+        <div onClick={onOpenAvatar} style={{ flexShrink: 0, width: 208, height: 208, borderRadius: "50%",
+          padding: 4, cursor: "pointer", background: "linear-gradient(45deg,#25F4EE,#25F4EE)" }}>
+          <div style={{ width: "100%", height: "100%", borderRadius: "50%", border: "3px solid #fff",
+            overflow: "hidden", background: avatar ? `center/cover no-repeat url(${avatar})` : grey,
+            display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {!avatar && hint(de ? "Profilbild hinzufügen" : "Add a profile picture")}
+          </div>
+        </div>
+
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
+            <span style={{ fontSize: 32, fontFamily: FONT, fontWeight: 700, color: "#161823" }}>
+              {brand?.name || (de ? "Euer Markenname" : "Your brand name")}
+            </span>
+            <span style={{ fontSize: 18, fontFamily: FONT, color: "#8A8B91" }}>{handle}</span>
+          </div>
+
+          <div style={{ display: "flex", gap: 22, marginTop: 12, fontSize: 17, fontFamily: FONT, color: "#161823" }}>
+            {[["10", de ? "Gefolgt" : "Following"],
+              ["808.8K", de ? "Follower" : "Followers"],
+              ["6.8M", "Likes"]].map(([n, label]) => (
+              <span key={label}><b>{n}</b> <span style={{ color: "#5B5C63" }}>{label}</span></span>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 18 }}>
+            <div style={{ padding: "13px 46px", borderRadius: 8, background: red, color: "#fff",
+              fontFamily: FONT, fontSize: 16, fontWeight: 700 }}>{de ? "Folgen" : "Follow"}</div>
+            <div style={{ padding: "13px 34px", borderRadius: 8, background: grey, color: "#161823",
+              fontFamily: FONT, fontSize: 16, fontWeight: 600 }}>{de ? "Nachricht" : "Message"}</div>
+            {roundBtn(
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
+                strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" />
+                <circle cx="9" cy="7" r="4" /><path d="M19 8v6M22 11h-6" /></svg>
+            )}
+            {roundBtn(
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 12l18-8-6 8 6 8z" /></svg>
+            )}
+            {roundBtn(<span style={{ fontSize: 17, lineHeight: 1 }}>···</span>)}
+          </div>
+
+          <div style={{ marginTop: 18 }}>{editable.claim}</div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 40, marginTop: 26,
+        borderBottom: "1px solid #E9E9EB" }}>
+        {[[de ? "Videos" : "Videos", true],
+          [de ? "Erneute Veröffentlichungen" : "Reposts", false],
+          [de ? "Gelikt" : "Liked", false]].map(([tab, on]) => (
+          <div key={tab} style={{ padding: "14px 0", marginBottom: -1, fontFamily: FONT, fontSize: 17,
+            fontWeight: on ? 700 : 500, color: on ? "#161823" : "#8A8B91",
+            borderBottom: on ? "2px solid #161823" : "2px solid transparent" }}>{tab}</div>
+        ))}
+        <div style={{ flex: 1 }} />
+        <div style={{ display: "flex", padding: 3, borderRadius: 8, background: grey, marginBottom: 8 }}>
+          {[de ? "Aktuelles" : "Latest", de ? "Beliebt" : "Popular", de ? "Älteste" : "Oldest"].map((k, i) => (
+            <div key={k} style={{ padding: "7px 14px", borderRadius: 6, fontFamily: FONT, fontSize: 14,
+              fontWeight: i === 0 ? 700 : 500, color: i === 0 ? "#161823" : "#8A8B91",
+              background: i === 0 ? "#fff" : "transparent" }}>{k}</div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 16 }}>
+        {posts.map((src, i) => (
+          <div key={i} onClick={() => onOpenPost(i)}
+            style={{ position: "relative", aspectRatio: "9 / 16", borderRadius: 6, overflow: "hidden",
+              cursor: "pointer", background: src ? `center/cover no-repeat url(${src})` : grey,
+              display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {!src && hint(de ? "Video-Cover hinzufügen" : "Add a video cover")}
+            {src && (
+              <span style={{ position: "absolute", left: 8, bottom: 8, display: "flex", alignItems: "center",
+                gap: 5, color: "#fff", fontFamily: FONT, fontSize: 13, fontWeight: 600,
+                textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5l11 7-11 7z" /></svg>
+                —
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // X is a single narrow column, not a page with sidebars: header image, avatar
 // overlapping its lower-left, then everything left-aligned underneath. Built at
 // 600 because that is the width the column actually has — a wider mock would
@@ -16502,6 +16611,8 @@ const CHANNEL_PREVIEW_SHAPE = {
                tabs: ["Posts", "Replies", "Media", "Likes"], meta: () => "" },
   facebook:  { avatar: 999, bannerPx: [851, 315], logoPx: [320, 320], overlap: true,
                tabs: ["Posts", "About", "Photos", "More"], meta: () => "" },
+  tiktok:    { avatar: 999, bannerPx: null,        logoPx: [200, 200], overlap: false,
+               tabs: ["Videos", "Reposts", "Liked"], meta: () => "" },
   instagram: { avatar: 999, bannerPx: null,        logoPx: [320, 320], overlap: false,
                tabs: ["Posts", "Reels", "Tagged"], meta: () => "" },
   pinterest: { avatar: 999, bannerPx: [1600, 900], logoPx: [280, 280], overlap: false,
@@ -16515,7 +16626,10 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
   const px = (d) => d ? `${d[0]} × ${d[1]} px` : null;
   const [banner, setBanner] = useState(saved?.banner || "");
   const [avatar, setAvatar] = useState(saved?.avatar || brand?.logo_url || "");
-  const [posts, setPosts] = useState(Array.isArray(saved?.posts) ? saved.posts : Array(6).fill(""));
+  // Eight, because TikTok's four-column grid needs two full rows. The other
+  // mocks show fewer of the same slots rather than keeping their own list.
+  const [posts, setPosts] = useState(
+    [...(Array.isArray(saved?.posts) ? saved.posts : []), ...Array(8).fill("")].slice(0, 8));
   const [highlights, setHighlights] = useState(Array.isArray(saved?.highlights) ? saved.highlights : Array(3).fill(""));
   const [busy, setBusy] = useState("");
 
@@ -16571,8 +16685,14 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
   const zoomTarget = slot
     ? { title: slot[0] === "post" ? (de ? "Beitrag" : "Post") : (de ? "Highlight" : "Highlight"),
         value: (slot[0] === "post" ? posts : highlights)[Number(slot[1])] || "",
-        size: slot[0] === "post" ? [1080, 1350] : [1080, 1920],
-        ratio: slot[0] === "post" ? 0.8 : 0.5625, radius: 12 }
+        // A post slot is not one shape across channels: Instagram and Facebook
+        // want 4:5, TikTok wants a 9:16 video cover. Naming one size for all of
+        // them would send somebody away with a file that gets cropped.
+        size: slot[0] !== "post" ? [1080, 1920]
+          : platform.key === "tiktok" ? [1080, 1920] : [1080, 1350],
+        ratio: slot[0] !== "post" ? 0.5625
+          : platform.key === "tiktok" ? 0.5625 : 0.8,
+        radius: 12 }
     : zoom === "banner"
     ? { title: de ? "Bannerbild" : "Banner image", value: banner, size: shape.bannerPx, ratio: bannerRatio, radius: 12 }
     : zoom === "avatar"
@@ -16652,7 +16772,30 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
         {/* The mock itself, on its own light ground so it reads as a preview of
             somewhere else rather than as part of this app. */}
         <div style={{ padding: "0 22px 48px" }}>
-          {platform.key === "x" ? (
+          {platform.key === "tiktok" ? (
+            <TikTokMock
+              brand={brand} avatar={avatar} posts={posts} de={de}
+              onOpenAvatar={() => setZoom("avatar")}
+              onOpenPost={(i) => setZoom("post:" + i)}
+              editable={{
+                claim: editField === "claim" ? (
+                  <input autoFocus value={claimDraft} onChange={e => setClaimDraft(e.target.value)}
+                    onBlur={() => { onSaveBrand({ claim: claimDraft }); setEditField(null); }}
+                    onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditField(null); }}
+                    style={{ fontSize: 16, fontFamily: FONT, color: "#161823", width: "100%",
+                      border: "none", borderBottom: "1.5px solid #C9C9CE", outline: "none", background: "none" }} />
+                ) : (
+                  <div onClick={() => { setClaimDraft(brand?.claim || ""); setEditField("claim"); }}
+                    onMouseEnter={() => setHover("claim")} onMouseLeave={() => setHover(null)}
+                    style={{ fontSize: 16, fontFamily: FONT, color: "#161823", lineHeight: 1.5,
+                      display: "flex", alignItems: "center", gap: 8, cursor: "text" }}>
+                    {brand?.claim || (de ? "Das ist die Platzhalter-Bio. Der Text lässt sich jederzeit ändern."
+                                        : "This is the placeholder bio. Change the text any time.")}
+                    {hover === "claim" && pencil}
+                  </div>
+                ),
+              }} />
+          ) : platform.key === "x" ? (
             <XMock
               brand={brand} banner={banner} avatar={avatar} posts={posts} de={de}
               bannerPx={shape.bannerPx}
