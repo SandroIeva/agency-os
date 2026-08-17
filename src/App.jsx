@@ -16127,8 +16127,11 @@ function ThreadsMock({ brand, avatar, posts, onOpenAvatar, onOpenPost, editable,
   );
 
   return (
+    // The outer frame is much lighter than the dividers inside. Both used the
+    // same grey, and at the outside edge that grey drew a box around the mock
+    // instead of just containing it.
     <div style={{ maxWidth: 640, margin: "0 auto", background: "#fff", borderRadius: 18,
-      border: `1px solid ${border}`, overflow: "hidden" }}>
+      border: "1px solid rgba(0,0,0,0.07)", overflow: "hidden" }}>
       <div style={{ padding: "26px 24px 20px" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20 }}>
           <div style={{ minWidth: 0 }}>
