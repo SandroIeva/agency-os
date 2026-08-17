@@ -21286,22 +21286,41 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
     </motion.div>
   );
 
+  // The same window as Touchpoints, Assets and CreatePost — panelWrap + a
+  // frosted card. This view had its own full-page layout, which is exactly the
+  // kind of one-off that makes an app feel assembled from parts.
+  const panelWrap = { position: "absolute", inset: 0, display: "flex", alignItems: "center",
+    justifyContent: "center", padding: "20px 40px 80px" };
+  const shell = { width: "100%", maxWidth: 1050, height: "100%", ...frostedPanelStyle(darkMode),
+    borderRadius: 26, overflow: "hidden", display: "flex", flexDirection: "column" };
+  const logo = brand?.logos?.find(l => l.key === "primary")?.url || brand?.logo_url;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-      <div style={{ padding: "22px 26px 0" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <motion.div whileTap={{ scale: 0.94 }} onClick={onBack}
-            style={{ width: 32, height: 32, borderRadius: 9, cursor: "pointer", display: "flex",
-              alignItems: "center", justifyContent: "center", color: theme.text }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
-          </motion.div>
-          <div style={{ fontSize: 21, fontFamily: FONT, fontWeight: 700, color: theme.text }}>Creations</div>
-          <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>
-            {de ? "Arbeitsdateien — die Canvas hinter den fertigen Bildern"
-                : "Working files — the canvas behind the finished images"}
+    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }}
+      transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
+      style={panelWrap}>
+      <div style={shell}>
+        {/* Header — brand logo + "<Brand> Creations", like every Brand view */}
+        <div style={{ padding: "16px 24px", display: "flex", alignItems: "center", gap: 12,
+          borderBottom: `1px solid ${theme.borderFaint}` }}>
+          {logo ? (
+            <img src={logo} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+          ) : (
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: theme.accent + "22",
+              color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 14, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>
+              {((brand?.name || userOrg?.name || "?"))[0]}
+            </div>
+          )}
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+            <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+              {brand?.name || userOrg?.name || ""}
+            </span>
+            <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim }}>Creations</span>
           </div>
           <div style={{ flex: 1 }} />
+          {/* Primary action in the top-right header slot, where this app keeps it */}
           {canEdit && (
             <motion.div whileTap={{ scale: 0.96 }} onClick={() => setNewOpen(true)}
               style={{ padding: "9px 18px", borderRadius: 999, background: "#15151c", color: "#fff",
@@ -21311,17 +21330,26 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
           )}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 18, flexWrap: "wrap" }}>
-          {CREATION_KINDS.map(k => (
-            <div key={k.key} onClick={() => { setKind(k.key); setFolderId(null); }}
-              style={{ padding: "8px 15px", borderRadius: 999, cursor: "pointer",
-                fontFamily: FONT, fontSize: 13, fontWeight: 600,
-                background: kind === k.key ? "#15151c" : "transparent",
-                color: kind === k.key ? "#fff" : theme.textDim,
-                border: `1px solid ${kind === k.key ? "#15151c" : theme.borderFaint}` }}>
-              {de ? k.de : k.en}
-            </div>
-          ))}
+        {/* Tabs, drawn like the Audience tabs rather than as pills */}
+        <div style={{ padding: "0 24px", display: "flex", alignItems: "center", gap: 22,
+          borderBottom: `1px solid ${theme.borderFaint}` }}>
+          {CREATION_KINDS.map(k => {
+            const on = kind === k.key;
+            return (
+              <div key={k.key} onClick={() => { setKind(k.key); setFolderId(null); }}
+                style={{ padding: "12px 2px", marginBottom: -1, cursor: "pointer", fontSize: 13.5,
+                  fontFamily: FONT, fontWeight: on ? 600 : 500,
+                  color: on ? theme.text : theme.textDim,
+                  borderBottom: `2px solid ${on ? theme.accent : "transparent"}`,
+                  transition: "color 0.15s ease" }}>
+                {de ? k.de : k.en}
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ padding: "14px 24px 0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <div style={{ flex: 1 }} />
           <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "0 12px", height: 34,
             borderRadius: 10, border: `1px solid ${theme.borderFaint}`, minWidth: 190 }}>
@@ -21364,7 +21392,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
         )}
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "18px 26px 30px" }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "18px 24px 26px" }}>
         {rows === null ? (
           <div style={{ color: theme.textDim, fontFamily: FONT, fontSize: 13 }}>{de ? "Lädt …" : "Loading …"}</div>
         ) : visible.length === 0 ? (
@@ -21496,7 +21524,8 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
           }}
           onClose={() => setEditing(null)} />
       )}
-    </div>
+      </div>
+    </motion.div>
   );
 }
 
