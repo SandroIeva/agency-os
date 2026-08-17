@@ -1,3 +1,34 @@
+              <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
+                {/* Two ways in, which is the whole point: bring a picture, or
+                    make one. The first opens the same four-tab modal Brainstorm
+                    and the documents use — Creations, Stock, Hochladen, URL. */}
+                <motion.button whileTap={{ scale: 0.97 }} onClick={() => setPickOpen(true)}
+                  style={{ padding: "9px 18px", borderRadius: 999, border: "none", background: "#15151c",
+                    color: "#fff", fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                  {de ? "Bild hinzufügen" : "Add an image"}
+                </motion.button>
+                {zoomTarget.size && (
+                <motion.button whileTap={{ scale: 0.97 }}
+                  onClick={() => { setEditorFrom(zoomImgRef.current?.getBoundingClientRect() || null); setEditorOpen(true); }}
+                  style={{ padding: "9px 18px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`,
+                    background: "transparent", color: theme.text, fontFamily: FONT, fontSize: 12.5,
+                    fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
+                  </svg>
+                  {de ? "Erstellen" : "Create"}
+                </motion.button>
+                )}
+                {zoomTarget.value && (
+                  <motion.button whileTap={{ scale: 0.97 }}
+                    onClick={() => applyImage("")}
+                    style={{ padding: "9px 16px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`,
+                      background: "transparent", color: theme.textDim, fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                    {de ? "Entfernen" : "Remove"}
+                  </motion.button>
+                )}
+              </div>
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Component } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16938,6 +16969,561 @@ function YouTubeMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onO
   );
 }
 
+// ── Canvas editor ────────────────────────────────────────────────────────────
+// Brainstorm is an endless surface; this is not. What comes out here is a file
+// of an exact size — 1546 x 423 for a YouTube banner, 1080 x 1350 for a post —
+// so the middle holds one fixed frame and the camera moves around it. Tools on
+// the left, templates on the right, the frame between them.
+//
+// Text does NOT wrap on its own, and that is deliberate. The display is DOM and
+// the export is canvas, and those two measure text differently — the whiteboard
+// lost days to exactly that. Lines break where somebody pressed Enter and
+// nowhere else, so both sides draw the same thing by construction.
+
+const CANVAS_LH = 1.2;               // line height, shared by display and export
+const CANVAS_FONT_STACK = "'Geist', -apple-system, sans-serif";
+
+const canvasFont = (it) => `${it.weight || 600} ${it.size}px ${CANVAS_FONT_STACK}`;
+
+// Every template is a function of the frame, so one entry works for a banner and
+// for a square profile picture without a second definition.
+const CANVAS_TEMPLATES = [
+  { key: "solid", label: { de: "Fläche", en: "Solid" },
+    build: (W, H, pal) => ({ bg: pal[0], items: [] }) },
+
+  { key: "split", label: { de: "Zweiteilung", en: "Split" },
+    build: (W, H, pal) => ({ bg: pal[1], items: [
+      { id: crypto.randomUUID(), type: "rect", x: 0, y: 0, w: Math.round(W * 0.42), h: H, fill: pal[0], radius: 0 },
+    ] }) },
+
+  { key: "logo", label: { de: "Logo mittig", en: "Logo centred" },
+    build: (W, H, pal, brand) => {
+      const d = Math.round(Math.min(W, H) * 0.46);
+      return { bg: pal[0], items: brand?.logo_url ? [
+        { id: crypto.randomUUID(), type: "image", x: Math.round((W - d) / 2), y: Math.round((H - d) / 2),
+          w: d, h: d, url: brand.logo_url, fit: "contain" },
+      ] : [] };
+    } },
+
+  { key: "headline", label: { de: "Schlagzeile", en: "Headline" },
+    build: (W, H, pal, brand) => {
+      const size = Math.round(H * 0.16);
+      return { bg: pal[0], items: [
+        { id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.08), y: Math.round(H / 2 - size * CANVAS_LH / 2),
+          w: Math.round(W * 0.84), text: brand?.claim || brand?.name || "Headline",
+          size, weight: 700, color: pal[1], align: "left" },
+      ] };
+    } },
+
+  { key: "bar", label: { de: "Textbalken", en: "Text bar" },
+    build: (W, H, pal, brand) => {
+      const barH = Math.round(H * 0.26);
+      const size = Math.round(barH * 0.42);
+      return { bg: pal[1], items: [
+        { id: crypto.randomUUID(), type: "rect", x: 0, y: H - barH, w: W, h: barH, fill: pal[0], radius: 0 },
+        { id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.06), y: Math.round(H - barH + (barH - size * CANVAS_LH) / 2),
+          w: Math.round(W * 0.88), text: brand?.name || "Name", size, weight: 600, color: pal[1], align: "left" },
+      ] };
+    } },
+];
+
+function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, userOrg,
+                        theme, darkMode, appLanguage, onUpload, onDone, onClose }) {
+  const de = appLanguage === "de";
+  const [W, H] = size;
+  const palette = (Array.isArray(brand?.colors) && brand.colors.length >= 2)
+    ? brand.colors : ["#15151c", "#F4F4F7", "#E60023", "#0A66C2", "#FFFFFF"];
+
+  const [bg, setBg] = useState(doc?.bg || palette[1] || "#FFFFFF");
+  const [items, setItems] = useState(() => (Array.isArray(doc?.items) ? doc.items : []));
+  const [sel, setSel] = useState(null);
+  const [tool, setTool] = useState("select");
+  const [cam, setCam] = useState(null);
+  const [flying, setFlying] = useState(!!originRect);
+  const [imgOpen, setImgOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [err, setErr] = useState("");
+  const stageRef = useRef(null);
+  const dragRef = useRef(null);
+
+  const selItem = items.find(i => i.id === sel) || null;
+  const patch = (id, p) => setItems(list => list.map(i => (i.id === id ? { ...i, ...p } : i)));
+  const addItem = (it) => { setItems(list => [...list, it]); setSel(it.id); setTool("select"); };
+
+  // Where the frame sits when nothing is being flown in: centred in what is left
+  // of the viewport once the two rails have taken their share.
+  const fitCam = () => {
+    const padL = 78, padR = 274, padT = 62, padB = 26;
+    const aw = Math.max(120, window.innerWidth - padL - padR);
+    const ah = Math.max(120, window.innerHeight - padT - padB);
+    const s = Math.min(aw / W, ah / H) * 0.92;
+    return { s, x: padL + (aw - W * s) / 2, y: padT + (ah - H * s) / 2 };
+  };
+
+  // The flight. The frame starts exactly over the picture that was clicked and
+  // grows into place, so it reads as moving INTO that image rather than as a
+  // dialog appearing over it. Two frames of delay: the first paints the start,
+  // the second changes the target with the transition switched on.
+  // Safe under StrictMode — the cleanup cancels both handles and a second run
+  // simply repeats the flight; there is no "already ran" ref to drop it.
+  useEffect(() => {
+    const target = fitCam();
+    if (!originRect || !originRect.width) { setCam(target); setFlying(false); return; }
+    setCam({ s: originRect.width / W, x: originRect.left, y: originRect.top });
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => { raf2 = requestAnimationFrame(() => setCam(target)); });
+    const done = setTimeout(() => setFlying(false), 640);
+    return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); clearTimeout(done); };
+  }, []);
+
+  useEffect(() => {
+    const onResize = () => { if (!flying) setCam(fitCam()); };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [flying]);
+
+  // Wheel has to be non-passive to be able to cancel the page's own scrolling,
+  // which React's onWheel cannot promise.
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      setCam(c => {
+        if (!c) return c;
+        if (e.ctrlKey || e.metaKey) {
+          const s2 = Math.min(8, Math.max(0.02, c.s * Math.exp(-e.deltaY * 0.0022)));
+          const k = s2 / c.s;
+          return { s: s2, x: e.clientX - (e.clientX - c.x) * k, y: e.clientY - (e.clientY - c.y) * k };
+        }
+        return { ...c, x: c.x - e.deltaX, y: c.y - e.deltaY };
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (editing) return;
+      if (e.key === "Escape") { sel ? setSel(null) : onClose(); }
+      if ((e.key === "Backspace" || e.key === "Delete") && sel) {
+        setItems(list => list.filter(i => i.id !== sel)); setSel(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sel, editing, onClose]);
+
+  const toArt = (e) => (cam ? { x: (e.clientX - cam.x) / cam.s, y: (e.clientY - cam.y) / cam.s } : { x: 0, y: 0 });
+
+  const onStageDown = (e) => {
+    if (editing) return;
+    if (tool === "select") {
+      setSel(null);
+      dragRef.current = { mode: "pan", sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y };
+      return;
+    }
+    const p = toArt(e);
+    if (tool === "text") {
+      const s = Math.max(12, Math.round(H * 0.09));
+      addItem({ id: crypto.randomUUID(), type: "text", x: Math.round(p.x), y: Math.round(p.y),
+        w: Math.round(Math.min(W * 0.7, W - p.x)), text: de ? "Text" : "Text",
+        size: s, weight: 600, color: palette[0], align: "left" });
+      return;
+    }
+    if (tool === "image") { setImgOpen(true); return; }
+    dragRef.current = { mode: "create", type: tool, ox: p.x, oy: p.y,
+      id: crypto.randomUUID(), started: false };
+  };
+
+  const onStageMove = (e) => {
+    const d = dragRef.current;
+    if (!d) return;
+    if (d.mode === "pan") {
+      setCam(c => ({ ...c, x: d.cx + (e.clientX - d.sx), y: d.cy + (e.clientY - d.sy) }));
+      return;
+    }
+    const p = toArt(e);
+    const box = { x: Math.round(Math.min(d.ox, p.x)), y: Math.round(Math.min(d.oy, p.y)),
+      w: Math.round(Math.abs(p.x - d.ox)), h: Math.round(Math.abs(p.y - d.oy)) };
+    if (d.mode === "create") {
+      if (box.w < 4 && box.h < 4) return;
+      if (!d.started) {
+        d.started = true;
+        setItems(list => [...list, { id: d.id, type: d.type, ...box, fill: palette[0],
+          radius: d.type === "rect" ? 0 : 0 }]);
+      } else patch(d.id, box);
+      return;
+    }
+    if (d.mode === "move") {
+      patch(d.id, { x: Math.round(d.ix + (e.clientX - d.sx) / cam.s),
+        y: Math.round(d.iy + (e.clientY - d.sy) / cam.s) });
+      return;
+    }
+    if (d.mode === "resize") {
+      const w = Math.max(8, Math.round(d.iw + (e.clientX - d.sx) / cam.s));
+      const h = Math.max(8, Math.round(d.ih + (e.clientY - d.sy) / cam.s));
+      patch(d.id, d.isText ? { w } : { w, h });
+    }
+  };
+
+  const onStageUp = () => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (d?.mode === "create") { if (d.started) { setSel(d.id); } setTool("select"); }
+  };
+
+  const onItemDown = (e, it) => {
+    if (tool !== "select" || editing) return;
+    e.stopPropagation();
+    setSel(it.id);
+    dragRef.current = { mode: "move", id: it.id, sx: e.clientX, sy: e.clientY, ix: it.x, iy: it.y };
+  };
+
+  const onHandleDown = (e, it) => {
+    e.stopPropagation();
+    dragRef.current = { mode: "resize", id: it.id, sx: e.clientX, sy: e.clientY,
+      iw: it.w, ih: it.h || 0, isText: it.type === "text" };
+  };
+
+  // ── export ────────────────────────────────────────────────────────────────
+  // Drawn item by item at the frame's real pixel size. Nothing is scaled from a
+  // screenshot, so the file is exactly W x H however far the camera is zoomed.
+  const loadImage = (src) => new Promise((res, rej) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => res(img);
+    img.onerror = () => rej(new Error(src));
+    img.src = src;
+  });
+
+  const drawFitted = (ctx, img, it) => {
+    const ir = img.naturalWidth / img.naturalHeight, br = it.w / it.h;
+    if (it.fit === "contain") {
+      const w = ir > br ? it.w : it.h * ir, h = ir > br ? it.w / ir : it.h;
+      ctx.drawImage(img, it.x + (it.w - w) / 2, it.y + (it.h - h) / 2, w, h);
+      return;
+    }
+    // cover: crop the overflowing axis rather than squashing it
+    const sw = ir > br ? img.naturalHeight * br : img.naturalWidth;
+    const sh = ir > br ? img.naturalHeight : img.naturalWidth / br;
+    ctx.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh,
+      it.x, it.y, it.w, it.h);
+  };
+
+  const exportBlob = async () => {
+    if (document.fonts?.ready) await document.fonts.ready;   // or the text draws in a fallback face
+    const cvs = document.createElement("canvas");
+    cvs.width = W; cvs.height = H;
+    const ctx = cvs.getContext("2d");
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+    for (const it of items) {
+      if (it.type === "image" && it.url) {
+        const img = await loadImage(it.url);
+        drawFitted(ctx, img, it);
+      } else if (it.type === "rect") {
+        ctx.fillStyle = it.fill; ctx.fillRect(it.x, it.y, it.w, it.h);
+      } else if (it.type === "ellipse") {
+        ctx.fillStyle = it.fill; ctx.beginPath();
+        ctx.ellipse(it.x + it.w / 2, it.y + it.h / 2, it.w / 2, it.h / 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (it.type === "text") {
+        ctx.fillStyle = it.color; ctx.font = canvasFont(it);
+        ctx.textAlign = it.align === "center" ? "center" : "left";
+        const tx = it.align === "center" ? it.x + it.w / 2 : it.x;
+        // textBaseline "top" puts the em box at y; CSS instead centres the glyph
+        // box inside the line box, so the two drift apart by the half-leading —
+        // measured at 1.4px for 26px text, and it grows with the size. Drawing
+        // on the alphabetic baseline with the same half-leading makes the export
+        // land where the editor showed it.
+        const m = ctx.measureText("Hg");
+        const L = it.size * CANVAS_LH;
+        const base = (L - (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent)) / 2
+          + m.fontBoundingBoxAscent;
+        ctx.textBaseline = "alphabetic";
+        String(it.text).split("\n").forEach((line, i) => {
+          ctx.fillText(line, tx, it.y + i * L + base);
+        });
+      }
+    }
+    return await new Promise((res, rej) =>
+      cvs.toBlob(b => (b ? res(b) : rej(new Error("toBlob"))), "image/png"));
+  };
+
+  const finish = async () => {
+    setBusy("export"); setErr("");
+    try {
+      const blob = await exportBlob();
+      const file = new File([blob], `${(title || "design").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`,
+        { type: "image/png" });
+      const url = await onUpload(file);
+      if (!url) throw new Error("upload");
+      onDone(url, { bg, items });
+    } catch (e) {
+      // A tainted canvas and a failed upload look identical to the user unless
+      // they are told apart, and both end with nothing saved.
+      setErr(String(e?.message || "").startsWith("http")
+        ? (de ? "Ein Bild ließ sich nicht lesen — es liegt auf einem fremden Server."
+              : "One image could not be read — it lives on another server.")
+        : (de ? "Der Export ist fehlgeschlagen." : "The export failed."));
+    }
+    setBusy("");
+  };
+
+  // ── chrome ────────────────────────────────────────────────────────────────
+  const TOOLS = [
+    ["select", de ? "Auswählen" : "Select", <><path d="M4 3l6.5 16 2.2-6.3 6.3-2.2z" /></>],
+    ["text", de ? "Text" : "Text", <><path d="M5 6.5V5h14v1.5" /><path d="M12 5v14" /><path d="M9.2 19h5.6" /></>],
+    ["rect", de ? "Rechteck" : "Rectangle", <><rect x="4" y="6" width="16" height="12" rx="1.6" /></>],
+    ["ellipse", de ? "Ellipse" : "Ellipse", <><ellipse cx="12" cy="12" rx="8" ry="6.4" /></>],
+    ["image", de ? "Bild" : "Image", <><rect x="3.5" y="5" width="17" height="14" rx="2.2" /><circle cx="9" cy="10" r="1.6" /><path d="M4.5 17l4.6-4.3 3.2 2.7 2.8-2.2 4.4 3.8" /></>],
+  ];
+
+  const panel = darkMode ? "#16161e" : "#fff";
+  const line = theme.borderFaint;
+
+  const swatch = (value, onPick) => (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+      {[...palette, "#FFFFFF", "#000000"].map(c => (
+        <div key={c} onClick={() => onPick(c)} title={c}
+          style={{ width: 24, height: 24, borderRadius: 7, background: c, cursor: "pointer",
+            border: value?.toLowerCase() === c.toLowerCase()
+              ? "2px solid #15151c" : `1px solid ${line}` }} />
+      ))}
+      <label style={{ width: 24, height: 24, borderRadius: 7, cursor: "pointer", border: `1px solid ${line}`,
+        display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+        <input type="color" value={value || "#000000"} onChange={e => onPick(e.target.value)}
+          style={{ opacity: 0, width: 1, height: 1 }} />
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2"
+          strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+      </label>
+    </div>
+  );
+
+  const label = (s) => (
+    <div style={{ fontSize: 10.5, fontFamily: FONT, letterSpacing: 0.6, textTransform: "uppercase",
+      color: theme.textFaint, margin: "18px 0 2px" }}>{s}</div>
+  );
+
+  return createPortal(
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+      style={{ position: "fixed", inset: 0, zIndex: 100004,
+        background: darkMode ? "#0E0E13" : "#F1F1F4", fontFamily: FONT }}>
+
+      {/* the stage */}
+      <div ref={stageRef}
+        onPointerDown={onStageDown} onPointerMove={onStageMove}
+        onPointerUp={onStageUp} onPointerLeave={onStageUp}
+        style={{ position: "absolute", inset: 0, overflow: "hidden",
+          cursor: tool === "select" ? (dragRef.current?.mode === "pan" ? "grabbing" : "default") : "crosshair",
+          backgroundImage: `radial-gradient(${darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)"} 1px, transparent 1px)`,
+          backgroundSize: "22px 22px" }}>
+        {cam && (
+          <div style={{ position: "absolute", left: 0, top: 0, width: W, height: H, background: bg,
+            transformOrigin: "0 0",
+            transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`,
+            transition: flying ? "transform 620ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
+            boxShadow: "0 18px 60px rgba(0,0,0,0.28)" }}>
+            {items.map(it => {
+              const on = it.id === sel;
+              const common = {
+                position: "absolute", left: it.x, top: it.y,
+                outline: on ? `${Math.max(1, 1.5 / cam.s)}px solid #15151c` : "none",
+                outlineOffset: 0, cursor: tool === "select" ? "move" : "inherit",
+              };
+              if (it.type === "text") {
+                return (
+                  <div key={it.id} onPointerDown={e => onItemDown(e, it)}
+                    onDoubleClick={() => { setEditing(it.id); setSel(it.id); }}
+                    style={{ ...common, width: it.w, font: canvasFont(it), color: it.color,
+                      lineHeight: `${it.size * CANVAS_LH}px`, textAlign: it.align || "left",
+                      whiteSpace: "pre", overflow: "visible" }}>
+                    {editing === it.id ? (
+                      <textarea autoFocus value={it.text}
+                        onChange={e => patch(it.id, { text: e.target.value })}
+                        onBlur={() => setEditing(null)}
+                        onKeyDown={e => { if (e.key === "Escape") setEditing(null); }}
+                        style={{ width: "100%", background: "transparent", border: "none", outline: "none",
+                          resize: "none", font: "inherit", color: "inherit", lineHeight: "inherit",
+                          textAlign: "inherit", padding: 0, margin: 0, overflow: "hidden",
+                          height: `${(String(it.text).split("\n").length || 1) * it.size * CANVAS_LH}px` }} />
+                    ) : String(it.text)}
+                    {on && !editing && (
+                      <div onPointerDown={e => onHandleDown(e, it)}
+                        style={{ position: "absolute", right: -5 / cam.s, bottom: -5 / cam.s,
+                          width: 10 / cam.s, height: 10 / cam.s, borderRadius: 2 / cam.s,
+                          background: "#fff", border: `${1.5 / cam.s}px solid #15151c`, cursor: "ew-resize" }} />
+                    )}
+                  </div>
+                );
+              }
+              return (
+                <div key={it.id} onPointerDown={e => onItemDown(e, it)}
+                  style={{ ...common, width: it.w, height: it.h,
+                    borderRadius: it.type === "ellipse" ? "50%" : (it.radius || 0),
+                    background: it.type === "image"
+                      ? `center/${it.fit === "contain" ? "contain" : "cover"} no-repeat url(${it.url})`
+                      : it.fill }}>
+                  {on && (
+                    <div onPointerDown={e => onHandleDown(e, it)}
+                      style={{ position: "absolute", right: -5 / cam.s, bottom: -5 / cam.s,
+                        width: 10 / cam.s, height: 10 / cam.s, borderRadius: 2 / cam.s,
+                        background: "#fff", border: `${1.5 / cam.s}px solid #15151c`, cursor: "nwse-resize" }} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* top bar */}
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 52, display: "flex",
+        alignItems: "center", gap: 12, padding: "0 14px", background: panel,
+        borderBottom: `1px solid ${line}` }}>
+        <motion.div whileTap={{ scale: 0.94 }} onClick={onClose} title={de ? "Schließen" : "Close"}
+          style={{ width: 32, height: 32, borderRadius: 9, cursor: "pointer", display: "flex",
+            alignItems: "center", justifyContent: "center", color: theme.text }}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+        </motion.div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: theme.text }}>{title}</div>
+        <div style={{ fontSize: 11.5, color: theme.textDim }}>{W} × {H} px</div>
+        <div style={{ flex: 1 }} />
+        {err && <div style={{ fontSize: 11.5, color: "#D9342B" }}>{err}</div>}
+        <div style={{ fontSize: 11.5, color: theme.textDim, minWidth: 46, textAlign: "right" }}>
+          {cam ? Math.round(cam.s * 100) : 0} %
+        </div>
+        <motion.div whileTap={{ scale: 0.96 }} onClick={() => { setCam(fitCam()); }}
+          style={{ padding: "7px 12px", borderRadius: 999, border: `1px solid ${line}`,
+            fontSize: 12, fontWeight: 600, color: theme.text, cursor: "pointer" }}>
+          {de ? "Einpassen" : "Fit"}
+        </motion.div>
+        <motion.div whileTap={{ scale: 0.96 }} onClick={busy ? undefined : finish}
+          style={{ padding: "8px 18px", borderRadius: 999, background: "#15151c", color: "#fff",
+            fontSize: 12.5, fontWeight: 600, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}>
+          {busy ? (de ? "Speichert …" : "Saving …") : (de ? "Übernehmen" : "Apply")}
+        </motion.div>
+      </div>
+
+      {/* left rail */}
+      <div style={{ position: "absolute", left: 14, top: 68, width: 50, padding: 6, borderRadius: 14,
+        background: panel, border: `1px solid ${line}`, display: "flex", flexDirection: "column", gap: 4 }}>
+        {TOOLS.map(([key, tip, glyph]) => (
+          <motion.div key={key} whileTap={{ scale: 0.92 }} title={tip}
+            onClick={() => { setTool(key); if (key === "image") setImgOpen(true); }}
+            style={{ width: 38, height: 38, borderRadius: 10, display: "flex", alignItems: "center",
+              justifyContent: "center", cursor: "pointer",
+              background: tool === key ? "#15151c" : "transparent",
+              color: tool === key ? "#fff" : theme.text }}>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{glyph}</svg>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* right panel */}
+      <div style={{ position: "absolute", right: 0, top: 52, bottom: 0, width: 258, padding: "4px 16px 20px",
+        background: panel, borderLeft: `1px solid ${line}`, overflowY: "auto" }}>
+        {label(de ? "Vorlagen" : "Templates")}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+          {CANVAS_TEMPLATES.map(tpl => {
+            const p = tpl.build(W, H, palette, brand);
+            return (
+              <div key={tpl.key}
+                onClick={() => { setBg(p.bg); setItems(p.items); setSel(null); }}
+                style={{ cursor: "pointer" }}>
+                <div style={{ position: "relative", width: "100%", aspectRatio: String(W / H),
+                  borderRadius: 7, overflow: "hidden", background: p.bg, border: `1px solid ${line}` }}>
+                  {p.items.map(it => (
+                    <div key={it.id} style={{ position: "absolute",
+                      left: `${(it.x / W) * 100}%`, top: `${(it.y / H) * 100}%`,
+                      width: `${(it.w / W) * 100}%`,
+                      height: it.type === "text" ? `${(it.size * CANVAS_LH / H) * 100}%` : `${(it.h / H) * 100}%`,
+                      borderRadius: it.type === "ellipse" ? "50%" : 0,
+                      background: it.type === "image" ? `center/contain no-repeat url(${it.url})`
+                        : it.type === "text" ? it.color : it.fill,
+                      opacity: it.type === "text" ? 0.85 : 1 }} />
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: theme.textDim, marginTop: 4 }}>{de ? tpl.label.de : tpl.label.en}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        {label(de ? "Hintergrund" : "Background")}
+        {swatch(bg, setBg)}
+
+        {selItem && (
+          <>
+            {label(de ? "Auswahl" : "Selection")}
+            {selItem.type === "text" ? (
+              <>
+                <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
+                  <input type="number" value={selItem.size} min={6} max={Math.round(H)}
+                    onChange={e => patch(selItem.id, { size: Math.max(6, Number(e.target.value) || 6) })}
+                    style={{ width: 72, padding: "7px 9px", borderRadius: 8, border: `1px solid ${line}`,
+                      background: "transparent", color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
+                  {["left", "center"].map(a => (
+                    <div key={a} onClick={() => patch(selItem.id, { align: a })}
+                      style={{ padding: "7px 10px", borderRadius: 8, cursor: "pointer", fontSize: 11.5,
+                        border: `1px solid ${selItem.align === a ? "#15151c" : line}`, color: theme.text }}>
+                      {a === "left" ? (de ? "Links" : "Left") : (de ? "Mitte" : "Centre")}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  {[400, 600, 700].map(wt => (
+                    <div key={wt} onClick={() => patch(selItem.id, { weight: wt })}
+                      style={{ padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontSize: 11.5,
+                        fontWeight: wt, border: `1px solid ${selItem.weight === wt ? "#15151c" : line}`,
+                        color: theme.text }}>Aa</div>
+                  ))}
+                </div>
+                {swatch(selItem.color, c => patch(selItem.id, { color: c }))}
+              </>
+            ) : selItem.type === "image" ? (
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                {["cover", "contain"].map(f => (
+                  <div key={f} onClick={() => patch(selItem.id, { fit: f })}
+                    style={{ padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontSize: 11.5,
+                      border: `1px solid ${(selItem.fit || "cover") === f ? "#15151c" : line}`, color: theme.text }}>
+                    {f === "cover" ? (de ? "Füllend" : "Cover") : (de ? "Ganz sichtbar" : "Contain")}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              swatch(selItem.fill, c => patch(selItem.id, { fill: c }))
+            )}
+            <div onClick={() => { setItems(list => list.filter(i => i.id !== selItem.id)); setSel(null); }}
+              style={{ marginTop: 14, padding: "8px 12px", borderRadius: 9, textAlign: "center",
+                border: `1px solid ${line}`, color: theme.textDim, fontSize: 12, cursor: "pointer" }}>
+              {de ? "Element löschen" : "Delete element"}
+            </div>
+          </>
+        )}
+      </div>
+
+      {imgOpen && (
+        <ImageInsertModal
+          orgId={orgId} session={session} userOrg={userOrg} appLanguage={appLanguage}
+          uploadFile={onUpload} theme={theme} darkMode={darkMode} accent={theme.accent}
+          onPick={(url) => {
+            const w = Math.round(W * 0.5), h = Math.round(w * 0.66);
+            addItem({ id: crypto.randomUUID(), type: "image", url, fit: "cover",
+              x: Math.round((W - w) / 2), y: Math.round((H - h) / 2), w, h });
+            setImgOpen(false);
+          }}
+          onClose={() => { setImgOpen(false); setTool("select"); }} />
+      )}
+    </motion.div>,
+    document.body
+  );
+}
+
 // Two Pinterest files, each shaped for one job — both supplied by the owner.
 // PINTEREST_MARK is the complete mark with its own disc: the P inside is sized
 // FOR that disc, which is why it must be used whole. Composing the disc myself
@@ -17155,7 +17741,7 @@ const CHANNEL_PREVIEW_SHAPE = {
                tabs: ["Home", "Videos", "Shorts", "Playlists", "Posts"], meta: () => "" },
 };
 
-function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, onUpload, logos, orgId, theme, darkMode, appLanguage, url }) {
+function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, onUpload, logos, orgId, session, userOrg, theme, darkMode, appLanguage, url }) {
   const de = appLanguage === "de";
   const shape = CHANNEL_PREVIEW_SHAPE[platform.key] || CHANNEL_PREVIEW_SHAPE.linkedin;
   const bannerRatio = shape.bannerPx ? shape.bannerPx[0] / shape.bannerPx[1] : 4;
@@ -17184,7 +17770,10 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
   const bannerInput = useRef(null);
   const avatarInput = useRef(null);
 
-  const commit = (next) => { onSave({ banner, avatar, posts, highlights, ...next }); };
+  // Designs ride along in the same saved blob as the images. Without this a
+  // banner made here could be seen but never edited again.
+  const [designs, setDesigns] = useState(() => (saved?.designs && typeof saved.designs === "object") ? saved.designs : {});
+  const commit = (next) => { onSave({ banner, avatar, posts, highlights, designs, ...next }); };
 
   const choose = async (which, file) => {
     if (!file) return;
@@ -17207,6 +17796,12 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
   // logo is a job on its own, and doing it at 92 pixels inside a page that is
   // also being judged is doing two things badly at once.
   const [zoom, setZoom] = useState(null);   // "banner" | "avatar" | null
+  // The picture inside the zoom overlay. Its rect is where the canvas editor
+  // flies in from, so opening the editor reads as moving INTO that image.
+  const zoomImgRef = useRef(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorFrom, setEditorFrom] = useState(null);  // DOMRect | null → null just skips the flight
+  const [pickOpen, setPickOpen] = useState(false);
   const [hover, setHover] = useState(null);       // "name" | "claim"
   const [editField, setEditField] = useState(null);
   const [nameDraft, setNameDraft] = useState("");
@@ -17242,18 +17837,21 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
 
   // One place that knows where a chosen image goes, so the upload button, the
   // asset picker and the remove button cannot drift apart as slots are added.
-  const applyImage = (url2) => {
+  // `extra` lets the caller fold another field into the SAME write. The canvas
+  // editor saves an image and its design together; two commits would race on the
+  // one blob and one of them would lose.
+  const applyImage = (url2, extra = null) => {
     if (slot) {
       const idx = Number(slot[1]);
       if (slot[0] === "post") {
         const next = posts.map((v, i) => i === idx ? url2 : v);
-        setPosts(next); commit({ posts: next });
+        setPosts(next); commit({ posts: next, ...extra });
       } else {
         const next = highlights.map((v, i) => i === idx ? url2 : v);
-        setHighlights(next); commit({ highlights: next });
+        setHighlights(next); commit({ highlights: next, ...extra });
       }
-    } else if (zoom === "banner") { setBanner(url2); commit({ banner: url2 }); }
-    else { setAvatar(url2); commit({ avatar: url2 }); }
+    } else if (zoom === "banner") { setBanner(url2); commit({ banner: url2, ...extra }); }
+    else { setAvatar(url2); commit({ avatar: url2, ...extra }); }
   };
 
   const dropZone = (label) => ({
@@ -17643,6 +18241,34 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
       {/* The focused editor, inside this panel rather than over the app: the
           thing being changed stays where it is, only larger and alone. */}
       <AnimatePresence>
+        {/* Bring a picture: the shared four-tab modal, so this view does not
+            invent a fifth way of choosing an image. */}
+        {pickOpen && (
+          <ImageInsertModal
+            orgId={orgId} session={session} userOrg={userOrg} appLanguage={appLanguage}
+            uploadFile={onUpload} theme={theme} darkMode={darkMode} accent={theme.accent}
+            onPick={(u) => { applyImage(u); setPickOpen(false); }}
+            onClose={() => setPickOpen(false)} />
+        )}
+
+        {/* Make one. The frame is the slot's real target size, so what comes back
+            fits without being resampled. */}
+        {editorOpen && zoomTarget?.size && (
+          <CanvasEditor
+            size={zoomTarget.size} title={zoomTarget.title}
+            doc={designs[zoom] || null} originRect={editorFrom}
+            brand={brand} orgId={orgId} session={session} userOrg={userOrg}
+            theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+            onUpload={onUpload}
+            onDone={(u, docOut) => {
+              const nextDesigns = { ...designs, [zoom]: docOut };
+              setDesigns(nextDesigns);
+              setEditorOpen(false); setEditorFrom(null);
+              applyImage(u, { designs: nextDesigns });
+            }}
+            onClose={() => { setEditorOpen(false); setEditorFrom(null); }} />
+        )}
+
         {zoomTarget && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={() => setZoom(null)}
@@ -17662,7 +18288,8 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
                 )}
               </div>
 
-              <div style={{ borderRadius: zoomTarget.radius === 999 ? 999 : 12, overflow: "hidden",
+              <div ref={zoomImgRef}
+                style={{ borderRadius: zoomTarget.radius === 999 ? 999 : 12, overflow: "hidden",
                 aspectRatio: String(zoomTarget.ratio),
                 width: zoomTarget.ratio === 1 ? 200 : "auto",
                 margin: zoomTarget.ratio === 1 ? "16px auto 0" : "16px 0 0",
@@ -19591,6 +20218,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
                 onSave={(v) => savePreview(previewKey, v)}
                 onSaveBrand={saveBrandFields}
                 onUpload={uploadPreviewImage}
+                session={session} userOrg={userOrg}
                 onClose={() => setPreviewKey(null)}
                 theme={theme} darkMode={darkMode} appLanguage={appLanguage} />
             );
