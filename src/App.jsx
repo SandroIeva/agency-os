@@ -1,34 +1,3 @@
-              <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
-                {/* Two ways in, which is the whole point: bring a picture, or
-                    make one. The first opens the same four-tab modal Brainstorm
-                    and the documents use — Creations, Stock, Hochladen, URL. */}
-                <motion.button whileTap={{ scale: 0.97 }} onClick={() => setPickOpen(true)}
-                  style={{ padding: "9px 18px", borderRadius: 999, border: "none", background: "#15151c",
-                    color: "#fff", fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
-                  {de ? "Bild hinzufügen" : "Add an image"}
-                </motion.button>
-                {zoomTarget.size && (
-                <motion.button whileTap={{ scale: 0.97 }}
-                  onClick={() => { setEditorFrom(zoomImgRef.current?.getBoundingClientRect() || null); setEditorOpen(true); }}
-                  style={{ padding: "9px 18px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`,
-                    background: "transparent", color: theme.text, fontFamily: FONT, fontSize: 12.5,
-                    fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
-                  </svg>
-                  {de ? "Erstellen" : "Create"}
-                </motion.button>
-                )}
-                {zoomTarget.value && (
-                  <motion.button whileTap={{ scale: 0.97 }}
-                    onClick={() => applyImage("")}
-                    style={{ padding: "9px 16px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`,
-                      background: "transparent", color: theme.textDim, fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
-                    {de ? "Entfernen" : "Remove"}
-                  </motion.button>
-                )}
-              </div>
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Component } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16125,7 +16094,7 @@ function ThreadsMock({ brand, avatar, posts, onOpenAvatar, onOpenPost, editable,
           {/* A link card, which is what a brand post on Threads usually is. */}
           <div style={{ marginTop: 14, borderRadius: 12, overflow: "hidden", border: `1px solid ${border}`,
             maxWidth: 420 }}>
-            <div onClick={() => onOpenPost(0)}
+            <div onClick={(e) => onOpenPost(0, e)}
               style={{ aspectRatio: "1.4", cursor: "pointer",
                 background: posts[0] ? `center/cover no-repeat url(${posts[0]})` : grey,
                 display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -16319,7 +16288,7 @@ function TikTokMock({ brand, avatar, posts, onOpenAvatar, onOpenPost, editable, 
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 16 }}>
         {posts.map((src, i) => (
-          <div key={i} onClick={() => onOpenPost(i)}
+          <div key={i} onClick={(e) => onOpenPost(i, e)}
             style={{ position: "relative", aspectRatio: "9 / 16", borderRadius: 6, overflow: "hidden",
               cursor: "pointer", background: src ? `center/cover no-repeat url(${src})` : grey,
               display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -16486,7 +16455,7 @@ function XMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onOpenAva
                 || (de ? "Hier stünde euer Beitrag. Der Text kommt aus eurer Brand-Beschreibung."
                       : "Your post would sit here. The words come from your brand description.")}
             </div>
-            <div onClick={() => onOpenPost(0)}
+            <div onClick={(e) => onOpenPost(0, e)}
               style={{ marginTop: 12, borderRadius: 16, overflow: "hidden", aspectRatio: "16 / 10",
                 cursor: "pointer", border: `1px solid ${line}`,
                 background: posts[0] ? `center/cover no-repeat url(${posts[0]})` : grey,
@@ -16601,7 +16570,7 @@ function FacebookMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, on
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, marginTop: 12 }}>
               {posts.map((src, i) => (
-                <div key={i} onClick={() => onOpenPost(i)}
+                <div key={i} onClick={(e) => onOpenPost(i, e)}
                   style={{ aspectRatio: "1", borderRadius: 8, cursor: "pointer", overflow: "hidden",
                     background: src ? `center/cover no-repeat url(${src})` : grey,
                     display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -16756,7 +16725,7 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
         <div style={{ display: "flex", gap: 40, marginTop: 34 }}>
           {highlights.map((h, i) => (
             <div key={i} style={{ textAlign: "center" }}>
-              <div onClick={() => onOpenHighlight(i)}
+              <div onClick={(e) => onOpenHighlight(i, e)}
                 style={{ width: 86, height: 86, borderRadius: "50%", border: "1px solid #DBDBDB", padding: 3,
                   cursor: "pointer" }}>
                 <div style={{ width: "100%", height: "100%", borderRadius: "50%", overflow: "hidden",
@@ -16789,7 +16758,7 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 }}>
-        {posts.map((src, i) => tile(src, () => onOpenPost(i), { aspectRatio: "4 / 5" }))}
+        {posts.map((src, i) => tile(src, (e) => onOpenPost(i, e), { aspectRatio: "4 / 5" }))}
       </div>
     </div>
   );
@@ -16918,7 +16887,7 @@ function YouTubeMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onO
         <div style={{ display: "flex", gap: 14, overflow: "hidden" }}>
           {posts.slice(0, YT_SHELF_META.length).map((src, i) => (
             <div key={i} style={{ flex: "0 0 calc((100% - 56px) / 4.35)", minWidth: 0 }}>
-              <div onClick={() => onOpenPost(i)}
+              <div onClick={(e) => onOpenPost(i, e)}
                 style={{ position: "relative", aspectRatio: "16 / 9", borderRadius: 9, overflow: "hidden",
                   cursor: "pointer", background: src ? `center/cover no-repeat url(${src})` : grey,
                   display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -17698,7 +17667,7 @@ function PinterestMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, o
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginTop: 26 }}>
           {posts.map((src, i) => (
-            <div key={i} onClick={() => onOpenPost(i)}
+            <div key={i} onClick={(e) => onOpenPost(i, e)}
               style={{ aspectRatio: "2 / 3", borderRadius: 16, overflow: "hidden", cursor: "pointer",
                 background: src ? `center/cover no-repeat url(${src})` : grey,
                 display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -17798,10 +17767,18 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
   const [zoom, setZoom] = useState(null);   // "banner" | "avatar" | null
   // The picture inside the zoom overlay. Its rect is where the canvas editor
   // flies in from, so opening the editor reads as moving INTO that image.
-  const zoomImgRef = useRef(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorFrom, setEditorFrom] = useState(null);  // DOMRect | null → null just skips the flight
   const [pickOpen, setPickOpen] = useState(false);
+  // A small menu beside the pointer, not a dialog over the page. It carries the
+  // rect of the picture that was clicked, because that is where the canvas
+  // editor flies in from.
+  const [menu, setMenu] = useState(null);   // { x, y, rect }
+  const openSlot = (slotKey, e) => {
+    setZoom(slotKey);
+    setMenu({ x: e?.clientX ?? 0, y: e?.clientY ?? 0,
+      rect: e?.currentTarget?.getBoundingClientRect?.() || null });
+  };
   const [hover, setHover] = useState(null);       // "name" | "claim"
   const [editField, setEditField] = useState(null);
   const [nameDraft, setNameDraft] = useState("");
@@ -17914,8 +17891,8 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
           {platform.key === "threads" ? (
             <ThreadsMock
               brand={brand} avatar={avatar} posts={posts} de={de}
-              onOpenAvatar={() => setZoom("avatar")}
-              onOpenPost={(i) => setZoom("post:" + i)}
+              onOpenAvatar={(e) => openSlot("avatar", e)}
+              onOpenPost={(i, e) => openSlot("post:" + i, e)}
               editable={{
                 claim: editField === "claim" ? (
                   <input autoFocus value={claimDraft} onChange={e => setClaimDraft(e.target.value)}
@@ -17937,8 +17914,8 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
           ) : platform.key === "tiktok" ? (
             <TikTokMock
               brand={brand} avatar={avatar} posts={posts} de={de}
-              onOpenAvatar={() => setZoom("avatar")}
-              onOpenPost={(i) => setZoom("post:" + i)}
+              onOpenAvatar={(e) => openSlot("avatar", e)}
+              onOpenPost={(i, e) => openSlot("post:" + i, e)}
               editable={{
                 claim: editField === "claim" ? (
                   <input autoFocus value={claimDraft} onChange={e => setClaimDraft(e.target.value)}
@@ -17961,9 +17938,9 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
             <XMock
               brand={brand} banner={banner} avatar={avatar} posts={posts} de={de}
               bannerPx={shape.bannerPx}
-              onOpenBanner={() => setZoom("banner")}
-              onOpenAvatar={() => setZoom("avatar")}
-              onOpenPost={(i) => setZoom("post:" + i)}
+              onOpenBanner={(e) => openSlot("banner", e)}
+              onOpenAvatar={(e) => openSlot("avatar", e)}
+              onOpenPost={(i, e) => openSlot("post:" + i, e)}
               editable={{
                 claim: editField === "claim" ? (
                   <input autoFocus value={claimDraft} onChange={e => setClaimDraft(e.target.value)}
@@ -17986,9 +17963,9 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
             <FacebookMock
               brand={brand} banner={banner} avatar={avatar} posts={posts} de={de}
               bannerPx={shape.bannerPx}
-              onOpenBanner={() => setZoom("banner")}
-              onOpenAvatar={() => setZoom("avatar")}
-              onOpenPost={(i) => setZoom("post:" + i)}
+              onOpenBanner={(e) => openSlot("banner", e)}
+              onOpenAvatar={(e) => openSlot("avatar", e)}
+              onOpenPost={(i, e) => openSlot("post:" + i, e)}
               editable={{
                 claim: editField === "claim" ? (
                   <input autoFocus value={claimDraft} onChange={e => setClaimDraft(e.target.value)}
@@ -18011,9 +17988,9 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
             <PinterestMock
               brand={brand} banner={banner} avatar={avatar} posts={posts} de={de}
               bannerPx={shape.bannerPx}
-              onOpenBanner={() => setZoom("banner")}
-              onOpenAvatar={() => setZoom("avatar")}
-              onOpenPost={(i) => setZoom("post:" + i)}
+              onOpenBanner={(e) => openSlot("banner", e)}
+              onOpenAvatar={(e) => openSlot("avatar", e)}
+              onOpenPost={(i, e) => openSlot("post:" + i, e)}
               editable={{
                 claim: editField === "claim" ? (
                   <input autoFocus value={claimDraft} onChange={e => setClaimDraft(e.target.value)}
@@ -18036,9 +18013,9 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
             <YouTubeMock
               brand={brand} banner={banner} avatar={avatar} posts={posts} de={de}
               bannerPx={shape.bannerPx}
-              onOpenBanner={() => setZoom("banner")}
-              onOpenAvatar={() => setZoom("avatar")}
-              onOpenPost={(i) => setZoom("post:" + i)}
+              onOpenBanner={(e) => openSlot("banner", e)}
+              onOpenAvatar={(e) => openSlot("avatar", e)}
+              onOpenPost={(i, e) => openSlot("post:" + i, e)}
               editable={{
                 claim: editField === "claim" ? (
                   <input autoFocus value={claimDraft} onChange={e => setClaimDraft(e.target.value)}
@@ -18061,9 +18038,9 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
           ) : platform.key === "instagram" ? (
             <InstagramMock
               brand={brand} avatar={avatar} posts={posts} highlights={highlights} de={de}
-              onOpenAvatar={() => setZoom("avatar")}
-              onOpenPost={(i) => setZoom("post:" + i)}
-              onOpenHighlight={(i) => setZoom("highlight:" + i)}
+              onOpenAvatar={(e) => openSlot("avatar", e)}
+              onOpenPost={(i, e) => openSlot("post:" + i, e)}
+              onOpenHighlight={(i, e) => openSlot("highlight:" + i, e)}
               editable={{
                 name: editField === "name" ? (
                   <input autoFocus value={nameDraft} onChange={e => setNameDraft(e.target.value)}
@@ -18100,7 +18077,7 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
           ) : (
           <div style={{ maxWidth: 900, margin: "0 auto", borderRadius: 12, overflow: "hidden",
             background: "#fff", border: "1px solid rgba(0,0,0,0.08)" }}>
-            <div onClick={() => setZoom("banner")}
+            <div onClick={(e) => openSlot("banner", e)}
               style={{ position: "relative", width: "100%", aspectRatio: String(bannerRatio),
                 background: banner ? `center/cover no-repeat url(${banner})` : "#D9D9D4",
                 cursor: "pointer" }}>
@@ -18116,7 +18093,7 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
             </div>
 
             <div style={{ padding: "0 20px 20px", position: "relative" }}>
-              <div onClick={() => setZoom("avatar")}
+              <div onClick={(e) => openSlot("avatar", e)}
                 style={{ width: 92, height: 92, borderRadius: shape.avatar, overflow: "hidden",
                   marginTop: shape.overlap ? -34 : 14, border: "3px solid #fff", background: "#15151c",
                   cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -18247,8 +18224,8 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
           <ImageInsertModal
             orgId={orgId} session={session} userOrg={userOrg} appLanguage={appLanguage}
             uploadFile={onUpload} theme={theme} darkMode={darkMode} accent={theme.accent}
-            onPick={(u) => { applyImage(u); setPickOpen(false); }}
-            onClose={() => setPickOpen(false)} />
+            onPick={(u) => { applyImage(u); setPickOpen(false); setZoom(null); }}
+            onClose={() => { setPickOpen(false); setZoom(null); }} />
         )}
 
         {/* Make one. The frame is the slot's real target size, so what comes back
@@ -18263,90 +18240,43 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
             onDone={(u, docOut) => {
               const nextDesigns = { ...designs, [zoom]: docOut };
               setDesigns(nextDesigns);
-              setEditorOpen(false); setEditorFrom(null);
+              setEditorOpen(false); setEditorFrom(null); setZoom(null);
               applyImage(u, { designs: nextDesigns });
             }}
-            onClose={() => { setEditorOpen(false); setEditorFrom(null); }} />
+            onClose={() => { setEditorOpen(false); setEditorFrom(null); setZoom(null); }} />
         )}
 
-        {zoomTarget && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={() => setZoom(null)}
-            style={{ position: "absolute", inset: 0, zIndex: 10, background: "rgba(0,0,0,0.55)",
-              backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-            <motion.div initial={{ scale: 0.97, y: 8 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.98 }}
-              onClick={e => e.stopPropagation()}
-              style={{ width: "min(680px, 100%)", maxHeight: "100%", overflowY: "auto",
-                background: darkMode ? "#16161e" : "#fff", borderRadius: 18, padding: 22,
-                border: `1px solid ${theme.borderFaint}`, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}>
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-                <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{zoomTarget.title}</div>
-                {px(zoomTarget.size) && (
-                  <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>
-                    {(de ? "Zielgröße " : "Target size ") + px(zoomTarget.size)}
-                  </div>
-                )}
-              </div>
-
-              <div ref={zoomImgRef}
-                style={{ borderRadius: zoomTarget.radius === 999 ? 999 : 12, overflow: "hidden",
-                aspectRatio: String(zoomTarget.ratio),
-                width: zoomTarget.ratio === 1 ? 200 : "auto",
-                margin: zoomTarget.ratio === 1 ? "16px auto 0" : "16px 0 0",
-                background: zoomTarget.value ? `center/cover no-repeat url(${zoomTarget.value})`
-                  : (darkMode ? "rgba(255,255,255,0.06)" : "#EDEDE8"),
-                display: "flex", alignItems: "center", justifyContent: "center" }}>
-                {!zoomTarget.value && (
-                  <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>
-                    {de ? "Noch kein Bild" : "No image yet"}
-                  </span>
-                )}
-              </div>
-
-              <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
-                <motion.button whileTap={{ scale: 0.97 }}
-                  onClick={() => (zoom === "banner" ? bannerInput : avatarInput).current?.click()}
-                  style={{ padding: "9px 18px", borderRadius: 999, border: "none", background: "#15151c",
-                    color: "#fff", fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
-                  {busy ? (de ? "Lädt …" : "Uploading …") : (de ? "Bild hochladen" : "Upload an image")}
-                </motion.button>
-                {zoomTarget.value && (
-                  <motion.button whileTap={{ scale: 0.97 }}
-                    onClick={() => applyImage("")}
-                    style={{ padding: "9px 16px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`,
-                      background: "transparent", color: theme.text, fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
-                    {de ? "Entfernen" : "Remove"}
-                  </motion.button>
-                )}
-              </div>
-
-              <div style={{ fontSize: 10.5, fontFamily: FONT, letterSpacing: 0.6, textTransform: "uppercase",
-                color: theme.textFaint, margin: "20px 0 9px" }}>
-                {de ? "Aus deinen Assets" : "From your assets"}
-              </div>
-              {library.length === 0 ? (
-                <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
-                  {de ? "In diesem Workspace liegen noch keine Bilder. Was du hier hochlädst, steht danach auch in den Assets."
-                      : "No images in this workspace yet. Whatever you upload here appears in your assets afterwards."}
-                </div>
-              ) : (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {library.map(src => {
-                    const on = zoomTarget.value === src;
-                    return (
-                      <div key={src}
-                        onClick={() => applyImage(src)}
-                        style={{ width: 62, height: 62, borderRadius: 10, overflow: "hidden", cursor: "pointer",
-                          border: on ? `2px solid ${platform.color}` : `1px solid ${theme.borderFaint}`,
-                          background: darkMode ? "rgba(255,255,255,0.05)" : "#fff" }}>
-                        <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+        {/* The menu. Beside the pointer, two choices, nothing else — the big
+            dialog that used to sit here made picking a picture feel like a
+            detour. It closes on any click outside, so it never traps anyone. */}
+        {menu && (
+          <>
+            <div onClick={() => { setMenu(null); setZoom(null); }}
+              style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+            <motion.div initial={{ opacity: 0, scale: 0.96, x: -6 }} animate={{ opacity: 1, scale: 1, x: 0 }}
+              transition={{ duration: 0.16 }}
+              style={{ position: "fixed", zIndex: 41,
+                left: Math.min(menu.x + 10, window.innerWidth - 240),
+                top: Math.min(menu.y - 12, window.innerHeight - 130),
+                width: 226, padding: 10, borderRadius: 20,
+                background: darkMode ? "rgba(32,32,40,0.96)" : "rgba(238,240,239,0.97)",
+                border: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.06)"}`,
+                boxShadow: "0 18px 44px rgba(0,0,0,0.20)",
+                display: "flex", flexDirection: "column", gap: 8 }}>
+              {[[de ? "Bild auswählen" : "Select image",
+                 () => { setMenu(null); setPickOpen(true); }],
+                [de ? "Visual erstellen" : "Create visual",
+                 () => { setEditorFrom(menu.rect); setMenu(null); setEditorOpen(true); }, true],
+              ].filter(([, , needsSize]) => !needsSize || zoomTarget?.size).map(([label, act]) => (
+                <motion.div key={label} whileTap={{ scale: 0.97 }} onClick={act}
+                  style={{ padding: "13px 16px", borderRadius: 13, textAlign: "center", cursor: "pointer",
+                    background: darkMode ? "#16161e" : "#fff", color: theme.text,
+                    fontFamily: FONT, fontSize: 14, fontWeight: 500 }}>
+                  {label}
+                </motion.div>
+              ))}
             </motion.div>
-          </motion.div>
+          </>
         )}
       </AnimatePresence>
     </motion.div>, document.body);
