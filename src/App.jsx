@@ -16164,7 +16164,7 @@ function ThreadsMock({ brand, avatar, posts, onOpenAvatar, onOpenPost, editable,
             {de ? "12.158 Follower · 265.930 kürzliche Aufrufe" : "12,158 followers · 265,930 recent views"}
           </span>
           <div style={{ flex: 1 }} />
-          {[<><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.2" cy="6.8" r="0.9" fill="currentColor" stroke="none" /></>,
+          {[<><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4.6" /><circle cx="17.2" cy="6.8" r="0.9" fill="currentColor" stroke="none" /></>,
             <><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 01-3.4 0" /></>,
             <><circle cx="12" cy="12" r="9" /><circle cx="8.2" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="15.8" cy="12" r="1" fill="currentColor" stroke="none" /></>,
           ].map((glyph, i) => (
@@ -16191,7 +16191,7 @@ function ThreadsMock({ brand, avatar, posts, onOpenAvatar, onOpenPost, editable,
           de ? "Medien" : "Media", "Reposts"].map((tab, i) => (
           <div key={tab} style={{ flex: 1, textAlign: "center", padding: "14px 0", fontFamily: FONT,
             fontSize: 15, fontWeight: i === 0 ? 700 : 500, color: i === 0 ? "#161823" : muted,
-            borderBottom: i === 0 ? "2px solid #161823" : `1px solid ${border}` }}>{tab}</div>
+            borderBottom: i === 0 ? "1.5px solid #161823" : "1px solid rgba(0,0,0,0.07)" }}>{tab}</div>
         ))}
       </div>
 
