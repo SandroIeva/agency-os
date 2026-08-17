@@ -17109,6 +17109,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [lastLineTool, setLastLineTool] = useState("arrow");
   const [lineToolOpen, setLineToolOpen] = useState(false);
   const [mediaOpen, setMediaOpen] = useState(false);
+  const [mediaTab, setMediaTab] = useState("emoji");
   const [zoomMenu, setZoomMenu] = useState(false);
   const [barPop, setBarPop] = useState(null);   // "color" | null
   const [frameTab, setFrameTab] = useState("design");   // "design" | "templates"
@@ -17128,6 +17129,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // One bounding box for every item type. The selection bar and the snapping
   // both need it, and two versions would eventually disagree about where a
   // stroke ends.
+  // One radius, or four. Figma's arrangement: a single field until you ask for
+  // the corners separately. Both the display and the export read this, so they
+  // cannot end up rounding different corners.
+  const radiiOf = (it) => Array.isArray(it.radii) && it.radii.length === 4
+    ? it.radii.map(v => Math.max(0, Number(v) || 0))
+    : [0, 1, 2, 3].map(() => Math.max(0, Number(it.radius) || 0));
+
   const boxOf = (it) =>
     (it.type === "arrow" || it.type === "line")
       ? { x: Math.min(it.x1, it.x2), y: Math.min(it.y1, it.y2),
@@ -17270,6 +17278,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       return;
     }
     const p = toArt(e);
+    if (tool === "comment") {
+      // A note ABOUT the design, not part of it — see the export, which skips
+      // these. Anything else would print a review remark onto the banner.
+      const it = { id: crypto.randomUUID(), type: "comment", x: Math.round(p.x), y: Math.round(p.y),
+        w: Math.round(Math.min(W, H) * 0.22), h: Math.round(Math.min(W, H) * 0.13), text: "" };
+      addItem(it); setEditing(it.id);
+      return;
+    }
     if (tool === "sticky") {
       const w = Math.round(Math.min(W, H) * 0.28);
       addItem({ id: crypto.randomUUID(), type: "sticky", x: Math.round(p.x), y: Math.round(p.y),
@@ -17507,6 +17523,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     // export a white rectangle that only looks like nothing on a white page.
     if (bg !== "transparent") { ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H); }
     for (const it of items) {
+      // Comments are notes ABOUT the design. Exporting one would print a review
+      // remark onto the banner, which is the one thing a comment must never do.
+      if (it.type === "comment") continue;
       ctx.globalAlpha = it.opacity == null ? 1 : it.opacity;
       const spun = it.rot || it.flipX || it.flipY;
       if (spun) {
@@ -17532,9 +17551,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         ctx.restore();
       } else if (it.type === "rect") {
         ctx.fillStyle = it.fill;
-        const r = Math.min(it.radius || 0, it.w / 2, it.h / 2);
-        if (r > 0 && ctx.roundRect) { ctx.beginPath(); ctx.roundRect(it.x, it.y, it.w, it.h, r); ctx.fill(); }
-        else ctx.fillRect(it.x, it.y, it.w, it.h);
+        const cap = Math.min(it.w, it.h) / 2;
+        const rr = radiiOf(it).map(v => Math.min(v, cap));
+        if (rr.some(v => v > 0) && ctx.roundRect) {
+          ctx.beginPath(); ctx.roundRect(it.x, it.y, it.w, it.h, rr); ctx.fill();
+        } else ctx.fillRect(it.x, it.y, it.w, it.h);
       } else if (it.type === "ellipse") {
         ctx.fillStyle = it.fill; ctx.beginPath();
         ctx.ellipse(it.x + it.w / 2, it.y + it.h / 2, it.w / 2, it.h / 2, 0, 0, Math.PI * 2);
@@ -17706,6 +17727,40 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 outline: on ? `${Math.max(1, 1.5 / cam.s)}px solid #15151c` : "none",
                 outlineOffset: 0, cursor: tool === "select" ? "move" : "inherit",
               };
+              if (it.type === "comment") {
+                return (
+                  <div key={it.id} onPointerDown={e => onItemDown(e, it)}
+                    onDoubleClick={() => { setEditing(it.id); setSel(it.id); }}
+                    style={{ ...common, width: it.w, minHeight: it.h, background: "#FFF6D6",
+                      border: `${1.5 / cam.s}px solid #E8C35A`, borderRadius: 10 / cam.s,
+                      padding: 10 / cam.s, boxSizing: "border-box",
+                      fontFamily: FONT, fontSize: Math.max(10, Math.min(W, H) * 0.035),
+                      color: "#5A4A12", boxShadow: "0 2px 10px rgba(0,0,0,0.14)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5,
+                      fontSize: Math.max(8, Math.min(W, H) * 0.024), opacity: 0.75, marginBottom: 4 }}>
+                      <svg width={Math.max(9, Math.min(W, H) * 0.028)} height={Math.max(9, Math.min(W, H) * 0.028)}
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 11.5a8.4 8.4 0 01-9 8.4 9 9 0 01-4-.9L3 21l1.9-4.6A8.4 8.4 0 013 11.5 8.5 8.5 0 0112 3a8.5 8.5 0 019 8.5z" />
+                      </svg>
+                      {de ? "Kommentar · nicht im Export" : "Comment · not exported"}
+                    </div>
+                    {editing === it.id ? (
+                      <textarea autoFocus value={it.text}
+                        onChange={e => patch(it.id, { text: e.target.value })}
+                        onBlur={() => setEditing(null)}
+                        onKeyDown={e => { if (e.key === "Escape") setEditing(null); }}
+                        placeholder={de ? "Anmerkung …" : "Note …"}
+                        style={{ width: "100%", minHeight: it.h * 0.5, background: "transparent",
+                          border: "none", outline: "none", resize: "none", font: "inherit",
+                          color: "inherit", padding: 0 }} />
+                    ) : (
+                      <div style={{ whiteSpace: "pre-wrap" }}>
+                        {it.text || (de ? "Anmerkung …" : "Note …")}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
               if (it.type === "sticky") {
                 return (
                   <div key={it.id} onPointerDown={e => onItemDown(e, it)}
@@ -17853,7 +17908,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 <div key={it.id} onPointerDown={e => onItemDown(e, it)}
                   style={{ ...common, width: it.w, height: it.h, clipPath: polyClip(it.type),
                     opacity: it.opacity == null ? 1 : it.opacity,
-                    borderRadius: it.type === "ellipse" ? "50%" : (it.radius || 0),
+                    borderRadius: it.type === "ellipse" ? "50%" : radiiOf(it).map(v => `${v}px`).join(" "),
                     background: it.type === "image"
                       ? `center/${it.fit === "contain" ? "contain" : "cover"} no-repeat url(${it.url})`
                       : it.fill }}>
@@ -18059,7 +18114,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           zoomPct={cam ? Math.round(cam.s * 100) : 100}
           onZoom={(d) => setCam(c => c && ({ ...c, s: Math.min(8, Math.max(0.02, c.s * (d > 0 ? 1.2 : 1 / 1.2))) }))}
           onResetZoom={() => setCam(fitCam())}
-          hide={["comment", "media", "zoom"]}
+          hide={["zoom"]}
           theme={theme} darkMode={darkMode} de={de} />
       </div>
 
@@ -18269,9 +18324,48 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               {num(Math.round((selItem.opacity == null ? 1 : selItem.opacity) * 100),
                 v => set("opacity", Math.min(100, Math.max(0, Number(v) || 0)) / 100), "◍", "%")}
               {selItem.type === "rect"
-                ? num(selItem.radius || 0, v => set("radius", Math.max(0, Number(v) || 0)), "⌐")
+                ? (Array.isArray(selItem.radii)
+                    ? <div />
+                    : num(selItem.radius || 0, v => set("radius", Math.max(0, Number(v) || 0)), "⌐"))
                 : <div />}
             </div>
+            {selItem.type === "rect" && (<>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+                marginTop: 10 }}>
+                <span style={{ fontSize: 11, color: theme.textFaint }}>
+                  {de ? "Eckenradius" : "Corner radius"}
+                </span>
+                <div title={de ? "Ecken einzeln" : "Corners individually"}
+                  onClick={() => set2(Array.isArray(selItem.radii)
+                    ? { radii: undefined, radius: selItem.radii[0] || 0 }
+                    : { radii: radiiOf(selItem) })}
+                  style={{ width: 28, height: 24, borderRadius: 7, display: "flex", alignItems: "center",
+                    justifyContent: "center", cursor: "pointer", color: theme.text,
+                    background: Array.isArray(selItem.radii)
+                      ? (darkMode ? "rgba(255,255,255,0.14)" : "#E3E3E8") : "transparent" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 9V6a2 2 0 012-2h3"/><path d="M15 4h3a2 2 0 012 2v3"/>
+                    <path d="M20 15v3a2 2 0 01-2 2h-3"/><path d="M9 20H6a2 2 0 01-2-2v-3"/>
+                  </svg>
+                </div>
+              </div>
+              {Array.isArray(selItem.radii) && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 6 }}>
+                  {[[0, de ? "Oben links" : "Top left", "◜"], [1, de ? "Oben rechts" : "Top right", "◝"],
+                    [3, de ? "Unten links" : "Bottom left", "◟"], [2, de ? "Unten rechts" : "Bottom right", "◞"],
+                  ].map(([i2, ttl, glyph]) => (
+                    <div key={i2} title={ttl}>
+                      {num(selItem.radii[i2], v => {
+                        const next = [...radiiOf(selItem)];
+                        next[i2] = Math.max(0, Number(v) || 0);
+                        set2({ radii: next });
+                      }, glyph)}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>)}
 
             {isText && (<>
               {label(de ? "Typografie" : "Typography")}
@@ -18336,6 +18430,70 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           </>);
         })()}
       </div>
+
+      {/* Emoji and stickers, from the same two module-level lists Brainstorm
+          draws on — WB_STICKERS ships with the app, so a sticker is a local file
+          and the export never has to reach across an origin for it. */}
+      {mediaOpen && (
+        <div style={{ position: "absolute", left: RAIL_W + 6, top: 68, zIndex: 8, width: 286,
+          borderRadius: 14, background: panel, border: `1px solid ${line}`,
+          boxShadow: "0 18px 44px rgba(0,0,0,0.22)", padding: 10 }}
+          onPointerDown={e => e.stopPropagation()}>
+          <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+            {[["emoji", "Emoji"], ["sticker", "Sticker"]].map(([k, l]) => (
+              <div key={k} onClick={() => setMediaTab(k)}
+                style={{ padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontSize: 12.5,
+                  fontWeight: 600, color: mediaTab === k ? "#fff" : theme.textDim,
+                  background: mediaTab === k ? "#15151c" : "transparent" }}>{l}</div>
+            ))}
+            <div style={{ flex: 1 }} />
+            <div onClick={() => setMediaOpen(false)} style={{ cursor: "pointer", color: theme.textDim,
+              padding: "6px 8px", fontSize: 13 }}>✕</div>
+          </div>
+          <div style={{ maxHeight: 300, overflowY: "auto" }}>
+            {mediaTab === "emoji" ? Object.entries(EMOJI_GROUPS).map(([g, list]) => (
+              <div key={g} style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6,
+                  color: theme.textFaint, margin: "4px 0 4px" }}>{g}</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
+                  {list.map((ch, i2) => (
+                    <div key={g + i2} onClick={() => {
+                        const sz = Math.round(Math.min(W, H) * 0.22);
+                        addItem({ id: crypto.randomUUID(), type: "text", text: ch, size: sz,
+                          weight: 400, color: "#000", align: "left",
+                          x: Math.round(W / 2 - sz * 0.6), y: Math.round(H / 2 - sz * 0.6),
+                          w: Math.round(sz * 1.3) });
+                        setMediaOpen(false);
+                      }}
+                      style={{ width: 28, height: 28, display: "flex", alignItems: "center",
+                        justifyContent: "center", fontSize: 19, cursor: "pointer", borderRadius: 6 }}>
+                      {ch}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )) : Object.entries(WB_STICKERS).map(([cat, files]) => (
+              <div key={cat} style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6,
+                  color: theme.textFaint, margin: "4px 0 4px" }}>{cat}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4 }}>
+                  {files.map(f => (
+                    <div key={f} onClick={() => {
+                        const sz = Math.round(Math.min(W, H) * 0.3);
+                        addItem({ id: crypto.randomUUID(), type: "image", url: wbStickerUrl(cat, f),
+                          fit: "contain", x: Math.round((W - sz) / 2), y: Math.round((H - sz) / 2),
+                          w: sz, h: sz });
+                        setMediaOpen(false);
+                      }}
+                      style={{ aspectRatio: "1", borderRadius: 7, cursor: "pointer",
+                        background: `center/contain no-repeat url(${wbStickerUrl(cat, f)})` }} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {imgMenuOpen && (
         <ImageInsertModal
