@@ -6152,6 +6152,191 @@ function wbSnapBox(box, targets, tol) {
   return { dx, dy, guides };
 }
 
+// ── The board toolbar ────────────────────────────────────────────────────────
+// One definition, two places: Brainstorm renders it lying down at the bottom,
+// the canvas editor stands it on end at the left. Everything else — which tools,
+// what they look like, how the flyouts behave — is the same by construction,
+// because a second copy would answer "do they behave the same?" with "for now".
+function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
+  lastShape, setLastShape, shapesOpen, setShapesOpen,
+  lastLineTool, setLastLineTool, lineToolOpen, setLineToolOpen,
+  mediaOpen, setMediaOpen, mediaBtnRef, imgMenuOpen, setImgMenuOpen, imgBtnRef,
+  fileRef, onFiles, zoomPct, onZoom, onResetZoom,
+  hide = [], theme, darkMode, de }) {
+
+  const vertical = orientation === "vertical";
+  const sw = 1.9;
+  const skip = (k) => hide.includes(k);
+
+  const toolBtn = (id, title, icon) => {
+    const on = tool === id;
+    return (
+      <motion.div key={id} whileTap={{ scale: 0.9 }} onClick={() => { setTool(id); setEditing?.(null); }} title={title}
+        style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+          background: on ? "#15151c" : "transparent", color: on ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
+        {icon}
+      </motion.div>
+    );
+  };
+
+  const shapeIcon = (st) =>
+    st === "ellipse" ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw}><circle cx="12" cy="12" r="9"/></svg>
+    : st === "diamond" ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinejoin="round"><path d="M12 2.5l9.5 9.5-9.5 9.5L2.5 12z"/></svg>
+    : st === "triangle" ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinejoin="round"><path d="M12 3.5L21.5 20.5h-19z"/></svg>
+    : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw}><rect x="3" y="3" width="18" height="18" rx="2.5"/></svg>;
+
+  const sep = (
+    <div style={vertical
+      ? { height: 1, width: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "3px auto" }
+      : { width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
+  );
+
+  // The flyout hangs above a lying bar and beside a standing one. A plain wrapper
+  // owns the offset because the motion.div animates scale/y, and Framer would
+  // overwrite a positioning transform put on the same element.
+  const flyoutWrap = vertical
+    ? { position: "absolute", left: "calc(100% + 12px)", top: "50%", transform: "translateY(-50%)", zIndex: 31 }
+    : { position: "absolute", bottom: "calc(100% + 14px)", left: "50%", transform: "translateX(-50%)", zIndex: 31 };
+
+  const flyoutPanel = {
+    display: "flex", flexDirection: vertical ? "column" : "row", alignItems: "center", gap: 4, padding: 6, borderRadius: 14,
+    background: darkMode ? "rgba(22,22,30,0.95)" : "rgba(255,255,255,0.98)",
+    border: `1px solid ${theme.borderFaint}`, boxShadow: "0 14px 40px rgba(0,0,0,0.18)",
+  };
+  const flyIn = vertical ? { opacity: 0, x: -8, scale: 0.96 } : { opacity: 0, y: 8, scale: 0.96 };
+  const flyTo = vertical ? { opacity: 1, x: 0, scale: 1 } : { opacity: 1, y: 0, scale: 1 };
+
+  // A button that opens a flyout carries a chevron; on the standing bar the
+  // chevron points right rather than down, since that is where the panel appears.
+  const chev = (
+    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6"
+      strokeLinecap="round" strokeLinejoin="round"
+      style={{ opacity: 0.7, transform: vertical ? "rotate(-90deg)" : "none" }}>
+      <polyline points="6 9 12 15 18 9"/>
+    </svg>
+  );
+  const dropBtn = { height: 38, padding: vertical ? "0 4px 0 6px" : "0 7px 0 10px", borderRadius: 11,
+    display: "flex", alignItems: "center", justifyContent: "center", gap: 3, cursor: "pointer",
+    transition: "background 0.15s ease" };
+
+  const lineIcon = (kind) => kind === "line"
+    ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="18" x2="18" y2="6"/></svg>
+    : kind === "pen"
+    ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+    : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>;
+  const lineActive = tool === "arrow" || tool === "line" || tool === "pen";
+  const lineTitle = (k) => k === "arrow" ? (de ? "Pfeil" : "Arrow") : k === "line" ? (de ? "Linie" : "Line") : (de ? "Freihand" : "Free-hand");
+
+  return (
+    <div style={{ display: "flex", flexDirection: vertical ? "column" : "row", alignItems: "center", gap: 4, padding: 6, borderRadius: 16,
+      background: darkMode ? "rgba(22,22,30,0.9)" : "rgba(255,255,255,0.95)", border: `1px solid ${theme.borderFaint}`,
+      // Subtle, short shadow on purpose: the old 14/40px one reached past the
+      // container's bottom edge and got visibly clipped by overflow:hidden.
+      boxShadow: "0 5px 16px rgba(0,0,0,0.10)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
+
+      {toolBtn("select", de ? "Auswählen" : "Select", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M5 3l7.5 16 2-6.5L21 10.5z"/></svg>)}
+      {toolBtn("hand", de ? "Verschieben" : "Hand", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>)}
+      {sep}
+      {!skip("sticky") && toolBtn("sticky", "Sticky Note", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5z"/><path d="M15 3v6h6"/></svg>)}
+
+      {/* Shapes — one button, Figma-style flyout with all shapes */}
+      <div style={{ position: "relative" }}>
+        <motion.div whileTap={{ scale: 0.9 }} onClick={() => setShapesOpen(o => !o)} title={de ? "Formen" : "Shapes"}
+          style={{ ...dropBtn, background: WB_SHAPE_TYPES.includes(tool) ? "#15151c" : "transparent",
+            color: WB_SHAPE_TYPES.includes(tool) ? "#fff" : theme.text }}>
+          {shapeIcon(lastShape)}{chev}
+        </motion.div>
+        <AnimatePresence>
+          {shapesOpen && (<>
+            <div onClick={() => setShapesOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
+            <div style={flyoutWrap}>
+              <motion.div initial={flyIn} animate={flyTo} exit={flyIn}
+                transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }} style={flyoutPanel}>
+                {WB_SHAPE_TYPES.map(st => (
+                  <motion.div key={st} whileTap={{ scale: 0.9 }}
+                    onClick={() => { setTool(st); setLastShape(st); setShapesOpen(false); setEditing?.(null); }}
+                    title={st === "rect" ? (de ? "Rechteck" : "Rectangle") : st === "ellipse" ? (de ? "Kreis" : "Circle") : st === "diamond" ? (de ? "Raute" : "Diamond") : (de ? "Dreieck" : "Triangle")}
+                    style={{ width: 38, height: 38, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                      background: tool === st ? "#15151c" : "transparent", color: tool === st ? "#fff" : theme.text }}>
+                    {shapeIcon(st)}
+                  </motion.div>
+                ))}
+              </motion.div>
+            </div>
+          </>)}
+        </AnimatePresence>
+      </div>
+
+      {/* Arrow / line / free-hand — one button with a Figma-style flyout */}
+      <div style={{ position: "relative" }}>
+        <motion.div whileTap={{ scale: 0.9 }} onClick={() => setLineToolOpen(o => !o)} title={de ? "Pfeil / Linie / Freihand" : "Arrow / line / free-hand"}
+          style={{ ...dropBtn, background: lineActive ? "#15151c" : "transparent", color: lineActive ? "#fff" : theme.text }}>
+          {lineIcon(lastLineTool)}{chev}
+        </motion.div>
+        <AnimatePresence>
+          {lineToolOpen && (<>
+            <div onClick={() => setLineToolOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
+            <div style={flyoutWrap}>
+              <motion.div initial={flyIn} animate={flyTo} exit={flyIn}
+                transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }} style={flyoutPanel}>
+                {["arrow", "line", "pen"].map(k => (
+                  <motion.div key={k} whileTap={{ scale: 0.9 }}
+                    onClick={() => { setTool(k); setLastLineTool(k); setLineToolOpen(false); setEditing?.(null); }}
+                    title={lineTitle(k)}
+                    style={{ width: 38, height: 38, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                      background: tool === k ? "#15151c" : "transparent", color: tool === k ? "#fff" : theme.text }}>
+                    {lineIcon(k)}
+                  </motion.div>
+                ))}
+              </motion.div>
+            </div>
+          </>)}
+        </AnimatePresence>
+      </div>
+
+      {toolBtn("text", "Text", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>)}
+      {sep}
+
+      {/* Emoji + Sticker — one button (with a dropdown chevron, like shapes/arrow);
+          the picker toggles between the two inside */}
+      {!skip("media") && (
+        <motion.div ref={mediaBtnRef} whileTap={{ scale: 0.9 }} onClick={() => setMediaOpen(o => !o)} title={de ? "Emoji / Sticker" : "Emoji / sticker"}
+          style={{ ...dropBtn, background: mediaOpen ? "#15151c" : "transparent", color: mediaOpen ? "#fff" : theme.text }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><line x1="9" y1="9.5" x2="9.01" y2="9.5"/><line x1="15" y1="9.5" x2="15.01" y2="9.5"/></svg>
+          {chev}
+        </motion.div>
+      )}
+      <motion.div ref={imgBtnRef} whileTap={{ scale: 0.9 }} onClick={() => setImgMenuOpen(o => !o)} title={de ? "Bild einfügen" : "Insert image"}
+        style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+          background: imgMenuOpen ? "#15151c" : "transparent", color: imgMenuOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      </motion.div>
+      {fileRef && (
+        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
+          onChange={(e) => { onFiles?.(e.target.files); e.target.value = ""; }} />
+      )}
+
+      {!skip("comment") && <>
+        {sep}
+        {toolBtn("comment", de ? "Kommentar" : "Comment", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>)}
+      </>}
+
+      {/* Zoom — part of the bar, so the frame's scale is never somewhere else */}
+      {sep}
+      <motion.div whileTap={{ scale: 0.9 }} onClick={() => onZoom(-1)} title={de ? "Verkleinern" : "Zoom out"}
+        style={{ width: vertical ? 38 : 30, height: vertical ? 30 : 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </motion.div>
+      <div onClick={onResetZoom} title={de ? "Zoom zurücksetzen" : "Reset zoom"}
+        style={{ minWidth: 40, textAlign: "center", fontSize: vertical ? 10.5 : 12, fontFamily: FONT, fontWeight: 600, color: theme.text, cursor: "pointer", fontVariantNumeric: "tabular-nums" }}>{zoomPct}%</div>
+      <motion.div whileTap={{ scale: 0.9 }} onClick={() => onZoom(1)} title={de ? "Vergrößern" : "Zoom in"}
+        style={{ width: vertical ? 38 : 30, height: vertical ? 30 : 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </motion.div>
+    </div>
+  );
+}
+
 function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage = "de", orgMembers = [], boardId = null, createNotification }) {
   const de = appLanguage === "de";
   const [boards, setBoards] = useState([]);
@@ -8007,22 +8192,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   })();
 
   // ── Toolbar definition ──
-  const toolBtn = (id, title, icon) => {
-    const on = tool === id;
-    return (
-      <motion.div key={id} whileTap={{ scale: 0.9 }} onClick={() => { setTool(id); setEditing(null); }} title={title}
-        style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-          background: on ? "#15151c" : "transparent", color: on ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
-        {icon}
-      </motion.div>
-    );
-  };
   const sw = 1.9;
-  const shapeIcon = (st) =>
-    st === "ellipse" ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw}><circle cx="12" cy="12" r="9"/></svg>
-    : st === "diamond" ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinejoin="round"><path d="M12 2.5l9.5 9.5-9.5 9.5L2.5 12z"/></svg>
-    : st === "triangle" ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinejoin="round"><path d="M12 3.5L21.5 20.5h-19z"/></svg>
-    : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw}><rect x="3" y="3" width="18" height="18" rx="2.5"/></svg>;
   const cursorForTool = tool === "hand" ? "grab" : tool === "select" ? "default" : "crosshair";
   const avatars = (orgMembers || []).slice(0, 3);
 
@@ -8481,122 +8651,20 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         </div>
       </div>
 
-      {/* Bottom toolbar */}
+      {/* Bottom toolbar — the shared BoardToolbar, lying down. The canvas editor
+          stands the same component on end, so the two cannot drift apart. */}
       <div ref={toolbarRef} style={{ position: "absolute", left: "50%", bottom: 22, transform: "translateX(-50%)", pointerEvents: "auto" }} onPointerDown={e => e.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "center", gap: 4, padding: 6, borderRadius: 16,
-          background: darkMode ? "rgba(22,22,30,0.9)" : "rgba(255,255,255,0.95)", border: `1px solid ${theme.borderFaint}`,
-          // Subtle, short shadow on purpose: the old 14/40px one reached past the
-          // container's bottom edge and got visibly clipped by overflow:hidden.
-          boxShadow: "0 5px 16px rgba(0,0,0,0.10)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
-          {toolBtn("select", de ? "Auswählen" : "Select", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M5 3l7.5 16 2-6.5L21 10.5z"/></svg>)}
-          {toolBtn("hand", de ? "Verschieben" : "Hand", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>)}
-          <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
-          {toolBtn("sticky", "Sticky Note", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5z"/><path d="M15 3v6h6"/></svg>)}
-          {/* Shapes — one button, Figma-style flyout with all shapes */}
-          <div style={{ position: "relative" }}>
-            <motion.div whileTap={{ scale: 0.9 }} onClick={() => setShapesOpen(o => !o)} title={de ? "Formen" : "Shapes"}
-              style={{ height: 38, padding: "0 7px 0 10px", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", gap: 3, cursor: "pointer",
-                background: WB_SHAPE_TYPES.includes(tool) ? "#15151c" : "transparent", color: WB_SHAPE_TYPES.includes(tool) ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
-              {shapeIcon(lastShape)}
-              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}><polyline points="6 9 12 15 18 9"/></svg>
-            </motion.div>
-            <AnimatePresence>
-              {shapesOpen && (<>
-                <div onClick={() => setShapesOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
-                {/* Plain wrapper owns the centering (left:50% + translateX(-50%)) — the
-                    motion.div animates scale/y, which would otherwise clobber that
-                    transform and shove the flyout to the right (Framer transform trap). */}
-                <div style={{ position: "absolute", bottom: "calc(100% + 14px)", left: "50%", transform: "translateX(-50%)", zIndex: 31 }}>
-                <motion.div initial={{ opacity: 0, y: 8, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.96 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
-                  style={{ display: "flex", alignItems: "center", gap: 4, padding: 6, borderRadius: 14,
-                    background: darkMode ? "rgba(22,22,30,0.95)" : "rgba(255,255,255,0.98)", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 14px 40px rgba(0,0,0,0.18)" }}>
-                  {WB_SHAPE_TYPES.map(st => (
-                    <motion.div key={st} whileTap={{ scale: 0.9 }}
-                      onClick={() => { setTool(st); setLastShape(st); setShapesOpen(false); setEditing(null); }}
-                      title={st === "rect" ? (de ? "Rechteck" : "Rectangle") : st === "ellipse" ? (de ? "Kreis" : "Circle") : st === "diamond" ? (de ? "Raute" : "Diamond") : (de ? "Dreieck" : "Triangle")}
-                      style={{ width: 38, height: 38, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-                        background: tool === st ? "#15151c" : "transparent", color: tool === st ? "#fff" : theme.text }}>
-                      {shapeIcon(st)}
-                    </motion.div>
-                  ))}
-                </motion.div>
-                </div>
-              </>)}
-            </AnimatePresence>
-          </div>
-          {/* Arrow / line / free-hand — one button with a Figma-style flyout */}
-          {(() => {
-            const lineIcon = (kind) => kind === "line"
-              ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="18" x2="18" y2="6"/></svg>
-              : kind === "pen"
-              ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
-              : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>;
-            const active = tool === "arrow" || tool === "line" || tool === "pen";
-            const lineTitle = (k) => k === "arrow" ? (de ? "Pfeil" : "Arrow") : k === "line" ? (de ? "Linie" : "Line") : (de ? "Freihand" : "Free-hand");
-            return (
-            <div style={{ position: "relative" }}>
-              <motion.div whileTap={{ scale: 0.9 }} onClick={() => setLineToolOpen(o => !o)} title={de ? "Pfeil / Linie / Freihand" : "Arrow / line / free-hand"}
-                style={{ height: 38, padding: "0 7px 0 10px", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", gap: 3, cursor: "pointer",
-                  background: active ? "#15151c" : "transparent", color: active ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
-                {lineIcon(lastLineTool)}
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}><polyline points="6 9 12 15 18 9"/></svg>
-              </motion.div>
-              <AnimatePresence>
-                {lineToolOpen && (<>
-                  <div onClick={() => setLineToolOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
-                  {/* Plain wrapper owns the centering; motion.div only animates (see shapes flyout). */}
-                  <div style={{ position: "absolute", bottom: "calc(100% + 14px)", left: "50%", transform: "translateX(-50%)", zIndex: 31 }}>
-                  <motion.div initial={{ opacity: 0, y: 8, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.96 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
-                    style={{ display: "flex", alignItems: "center", gap: 4, padding: 6, borderRadius: 14,
-                      background: darkMode ? "rgba(22,22,30,0.95)" : "rgba(255,255,255,0.98)", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 14px 40px rgba(0,0,0,0.18)" }}>
-                    {["arrow", "line", "pen"].map(k => (
-                      <motion.div key={k} whileTap={{ scale: 0.9 }}
-                        onClick={() => { setTool(k); setLastLineTool(k); setLineToolOpen(false); setEditing(null); }}
-                        title={lineTitle(k)}
-                        style={{ width: 38, height: 38, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-                          background: tool === k ? "#15151c" : "transparent", color: tool === k ? "#fff" : theme.text }}>
-                        {lineIcon(k)}
-                      </motion.div>
-                    ))}
-                  </motion.div>
-                  </div>
-                </>)}
-              </AnimatePresence>
-            </div>
-            );
-          })()}
-          {toolBtn("text", "Text", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>)}
-          <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
-          {/* Emoji + Sticker — one button (with a dropdown chevron, like shapes/arrow);
-              the picker toggles between the two inside */}
-          <motion.div ref={mediaBtnRef} whileTap={{ scale: 0.9 }} onClick={() => setMediaOpen(o => !o)} title={de ? "Emoji / Sticker" : "Emoji / sticker"}
-            style={{ height: 38, padding: "0 7px 0 10px", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", gap: 3, cursor: "pointer",
-              background: mediaOpen ? "#15151c" : "transparent", color: mediaOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><line x1="9" y1="9.5" x2="9.01" y2="9.5"/><line x1="15" y1="9.5" x2="15.01" y2="9.5"/></svg>
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}><polyline points="6 9 12 15 18 9"/></svg>
-          </motion.div>
-          <motion.div ref={imgBtnRef} whileTap={{ scale: 0.9 }} onClick={() => setImgMenuOpen(o => !o)} title={de ? "Bild einfügen" : "Insert image"}
-            style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-              background: imgMenuOpen ? "#15151c" : "transparent", color: imgMenuOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-          </motion.div>
-          <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { handleImageFiles(e.target.files); e.target.value = ""; }} />
-          <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
-          {toolBtn("comment", de ? "Kommentar" : "Comment", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>)}
-          {/* Zoom — integrated into the toolbar, right of the comment tool:
-              − · current % (click resets) · + */}
-          <div style={{ width: 1, height: 22, background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)", margin: "0 3px" }} />
-          <motion.div whileTap={{ scale: 0.9 }} onClick={() => zoomBy(-1)} title={de ? "Verkleinern" : "Zoom out"}
-            style={{ width: 30, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </motion.div>
-          <div onClick={() => setCam({ x: 0, y: 0, s: 1 })} title={de ? "Zoom zurücksetzen" : "Reset zoom"}
-            style={{ minWidth: 40, textAlign: "center", fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.text, cursor: "pointer", fontVariantNumeric: "tabular-nums" }}>{Math.round(cam.s * 100)}%</div>
-          <motion.div whileTap={{ scale: 0.9 }} onClick={() => zoomBy(1)} title={de ? "Vergrößern" : "Zoom in"}
-            style={{ width: 30, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </motion.div>
-        </div>
+        <BoardToolbar orientation="horizontal"
+          tool={tool} setTool={setTool} setEditing={setEditing}
+          lastShape={lastShape} setLastShape={setLastShape}
+          shapesOpen={shapesOpen} setShapesOpen={setShapesOpen}
+          lastLineTool={lastLineTool} setLastLineTool={setLastLineTool}
+          lineToolOpen={lineToolOpen} setLineToolOpen={setLineToolOpen}
+          mediaOpen={mediaOpen} setMediaOpen={setMediaOpen} mediaBtnRef={mediaBtnRef}
+          imgMenuOpen={imgMenuOpen} setImgMenuOpen={setImgMenuOpen} imgBtnRef={imgBtnRef}
+          fileRef={fileRef} onFiles={handleImageFiles}
+          zoomPct={Math.round(cam.s * 100)} onZoom={zoomBy} onResetZoom={() => setCam({ x: 0, y: 0, s: 1 })}
+          theme={theme} darkMode={darkMode} de={de} />
       </div>
 
       {/* Combined Emoji / Sticker picker — one panel, top toggle switches between the
@@ -17018,9 +17086,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [items, setItems] = useState(() => (Array.isArray(doc?.items) ? doc.items : []));
   const [sel, setSel] = useState(null);
   const [tool, setTool] = useState("select");
+  // The same state the shared toolbar drives in Brainstorm, under the same names.
+  const [lastShape, setLastShape] = useState("rect");
+  const [shapesOpen, setShapesOpen] = useState(false);
+  const [lastLineTool, setLastLineTool] = useState("arrow");
+  const [lineToolOpen, setLineToolOpen] = useState(false);
+  const [mediaOpen, setMediaOpen] = useState(false);
   const [cam, setCam] = useState(null);
   const [flying, setFlying] = useState(!!originRect);
-  const [imgOpen, setImgOpen] = useState(false);
+  const [imgMenuOpen, setImgMenuOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
@@ -17100,12 +17174,22 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   const onStageDown = (e) => {
     if (editing) return;
-    if (tool === "select") {
-      setSel(null);
+    if (tool === "select" || tool === "hand") {
+      // Clicking the frame itself selects the FRAME, so its background and size
+      // get a context panel of their own rather than living in a fixed corner
+      // of the sidebar.
+      if (tool === "select") setSel(e.target === e.currentTarget ? null : "frame");
       dragRef.current = { mode: "pan", sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y };
       return;
     }
     const p = toArt(e);
+    if (tool === "sticky") {
+      const w = Math.round(Math.min(W, H) * 0.28);
+      addItem({ id: crypto.randomUUID(), type: "sticky", x: Math.round(p.x), y: Math.round(p.y),
+        w, h: w, fill: "#FFE27A", text: de ? "Notiz" : "Note",
+        size: Math.max(11, Math.round(w * 0.13)), color: "#15151c", weight: 500, align: "left" });
+      return;
+    }
     if (tool === "text") {
       const s = Math.max(12, Math.round(H * 0.09));
       addItem({ id: crypto.randomUUID(), type: "text", x: Math.round(p.x), y: Math.round(p.y),
@@ -17113,8 +17197,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         size: s, weight: 600, color: palette[0], align: "left" });
       return;
     }
-    if (tool === "image") { setImgOpen(true); return; }
-    if (tool === "draw") {
+    if (tool === "image") { setImgMenuOpen(true); return; }
+    if (tool === "pen") {
       // Points in artboard units behind one offset, the way the whiteboard keeps
       // pen paths: moving the stroke then costs one number, not a rewrite of
       // every point it holds.
@@ -17124,8 +17208,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       dragRef.current = { mode: "draw", id: it.id };
       return;
     }
-    if (tool === "arrow") {
-      const it = { id: crypto.randomUUID(), type: "arrow", x1: p.x, y1: p.y, x2: p.x, y2: p.y,
+    if (tool === "arrow" || tool === "line") {
+      const it = { id: crypto.randomUUID(), type: tool, x1: p.x, y1: p.y, x2: p.x, y2: p.y,
         color: palette[0], width: Math.max(2, Math.round(H / 120)) };
       setItems(list => [...list, it]);
       dragRef.current = { mode: "arrow", id: it.id };
@@ -17185,7 +17269,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     e.stopPropagation();
     setSel(it.id);
     dragRef.current = { mode: "move", id: it.id, sx: e.clientX, sy: e.clientY,
-      kind: it.type === "draw" ? "draw" : it.type === "arrow" ? "arrow" : "box",
+      kind: it.type === "draw" ? "draw" : (it.type === "arrow" || it.type === "line") ? "arrow" : "box",
       ix: it.type === "draw" ? (it.ox || 0) : it.type === "arrow" ? it.x1 : it.x,
       iy: it.type === "draw" ? (it.oy || 0) : it.type === "arrow" ? it.y1 : it.y,
       ax: it.x2, ay: it.y2 };
@@ -17232,6 +17316,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       if (it.type === "image" && it.url) {
         const img = await loadImage(it.url);
         drawFitted(ctx, img, it);
+      } else if (it.type === "sticky") {
+        ctx.fillStyle = it.fill; ctx.fillRect(it.x, it.y, it.w, it.h);
+        const pad = Math.round(it.w * 0.08);
+        ctx.fillStyle = it.color; ctx.font = canvasFont(it);
+        const ms = ctx.measureText("Hg"), Ls = it.size * CANVAS_LH;
+        const bs = (Ls - (ms.fontBoundingBoxAscent + ms.fontBoundingBoxDescent)) / 2 + ms.fontBoundingBoxAscent;
+        ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
+        ctx.save(); ctx.beginPath(); ctx.rect(it.x, it.y, it.w, it.h); ctx.clip();
+        String(it.text).split("\n").forEach((line, i2) =>
+          ctx.fillText(line, it.x + pad, it.y + pad + i2 * Ls + bs));
+        ctx.restore();
       } else if (it.type === "rect") {
         ctx.fillStyle = it.fill; ctx.fillRect(it.x, it.y, it.w, it.h);
       } else if (it.type === "ellipse") {
@@ -17254,10 +17349,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           i ? ctx.lineTo(px2, py2) : ctx.moveTo(px2, py2);
         });
         ctx.stroke();
-      } else if (it.type === "arrow") {
+      } else if (it.type === "arrow" || it.type === "line") {
         ctx.strokeStyle = it.color; ctx.fillStyle = it.color;
         ctx.lineWidth = it.width; ctx.lineCap = "round";
         ctx.beginPath(); ctx.moveTo(it.x1, it.y1); ctx.lineTo(it.x2, it.y2); ctx.stroke();
+        if (it.type === "line") continue;   // a line is an arrow without the head
         const a = Math.atan2(it.y2 - it.y1, it.x2 - it.x1), L = it.width * 4.5;
         ctx.beginPath(); ctx.moveTo(it.x2, it.y2);
         ctx.lineTo(it.x2 - L * Math.cos(a - 0.42), it.y2 - L * Math.sin(a - 0.42));
@@ -17307,17 +17403,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   };
 
   // ── chrome ────────────────────────────────────────────────────────────────
-  const TOOLS = [
-    ["select", de ? "Auswählen" : "Select", <><path d="M4 3l6.5 16 2.2-6.3 6.3-2.2z" /></>],
-    ["text", de ? "Text" : "Text", <><path d="M5 6.5V5h14v1.5" /><path d="M12 5v14" /><path d="M9.2 19h5.6" /></>],
-    ["rect", de ? "Rechteck" : "Rectangle", <><rect x="4" y="6" width="16" height="12" rx="1.6" /></>],
-    ["ellipse", de ? "Ellipse" : "Ellipse", <><ellipse cx="12" cy="12" rx="8" ry="6.4" /></>],
-    ["diamond", de ? "Raute" : "Diamond", <><path d="M12 3.2l8.8 8.8-8.8 8.8L3.2 12z" /></>],
-    ["triangle", de ? "Dreieck" : "Triangle", <><path d="M12 4.2L20.6 19.4H3.4z" /></>],
-    ["arrow", de ? "Pfeil" : "Arrow", <><path d="M4 20L19.4 4.6" /><path d="M12.4 4.6h7v7" /></>],
-    ["draw", de ? "Stift" : "Pen", <><path d="M15.6 3.6a2.1 2.1 0 013 3L7.2 18 3 19.2 4.2 15z" /></>],
-    ["image", de ? "Bild" : "Image", <><rect x="3.5" y="5" width="17" height="14" rx="2.2" /><circle cx="9" cy="10" r="1.6" /><path d="M4.5 17l4.6-4.3 3.2 2.7 2.8-2.2 4.4 3.8" /></>],
-  ];
 
   const panel = darkMode ? "#16161e" : "#fff";
   const line = theme.borderFaint;
@@ -17371,6 +17456,32 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 outline: on ? `${Math.max(1, 1.5 / cam.s)}px solid #15151c` : "none",
                 outlineOffset: 0, cursor: tool === "select" ? "move" : "inherit",
               };
+              if (it.type === "sticky") {
+                return (
+                  <div key={it.id} onPointerDown={e => onItemDown(e, it)}
+                    onDoubleClick={() => { setEditing(it.id); setSel(it.id); }}
+                    style={{ ...common, width: it.w, height: it.h, background: it.fill,
+                      padding: Math.round(it.w * 0.08), boxSizing: "border-box",
+                      boxShadow: "0 2px 8px rgba(0,0,0,0.12)", font: canvasFont(it), color: it.color,
+                      lineHeight: `${it.size * CANVAS_LH}px`, whiteSpace: "pre", overflow: "hidden" }}>
+                    {editing === it.id ? (
+                      <textarea autoFocus value={it.text}
+                        onChange={e => patch(it.id, { text: e.target.value })}
+                        onBlur={() => setEditing(null)}
+                        onKeyDown={e => { if (e.key === "Escape") setEditing(null); }}
+                        style={{ width: "100%", height: "100%", background: "transparent", border: "none",
+                          outline: "none", resize: "none", font: "inherit", color: "inherit",
+                          lineHeight: "inherit", padding: 0, margin: 0 }} />
+                    ) : String(it.text)}
+                    {on && (
+                      <div onPointerDown={e => onHandleDown(e, it)}
+                        style={{ position: "absolute", right: -5 / cam.s, bottom: -5 / cam.s,
+                          width: 10 / cam.s, height: 10 / cam.s, borderRadius: 2 / cam.s,
+                          background: "#fff", border: `${1.5 / cam.s}px solid #15151c`, cursor: "nwse-resize" }} />
+                    )}
+                  </div>
+                );
+              }
               if (it.type === "text") {
                 return (
                   <div key={it.id} onPointerDown={e => onItemDown(e, it)}
@@ -17397,7 +17508,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   </div>
                 );
               }
-              if (it.type === "draw" || it.type === "arrow") {
+              if (it.type === "draw" || it.type === "arrow" || it.type === "line") {
                 // One SVG layer per stroke, the size of the whole frame, with hits
                 // only on the ink — a bounding box would swallow clicks meant for
                 // whatever sits under the stroke's empty corner.
@@ -17482,20 +17593,23 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         </motion.div>
       </div>
 
-      {/* left rail */}
-      <div style={{ position: "absolute", left: 14, top: 68, width: 50, padding: 6, borderRadius: 14,
-        background: panel, border: `1px solid ${line}`, display: "flex", flexDirection: "column", gap: 4 }}>
-        {TOOLS.map(([key, tip, glyph]) => (
-          <motion.div key={key} whileTap={{ scale: 0.92 }} title={tip}
-            onClick={() => { setTool(key); if (key === "image") setImgOpen(true); }}
-            style={{ width: 38, height: 38, borderRadius: 10, display: "flex", alignItems: "center",
-              justifyContent: "center", cursor: "pointer",
-              background: tool === key ? "#15151c" : "transparent",
-              color: tool === key ? "#fff" : theme.text }}>
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{glyph}</svg>
-          </motion.div>
-        ))}
+      {/* Left rail — the same BoardToolbar Brainstorm uses, stood on end. Same
+          tools, same flyouts, same behaviour; only the direction differs. */}
+      <div style={{ position: "absolute", left: 14, top: 68, zIndex: 5 }}
+        onPointerDown={e => e.stopPropagation()}>
+        <BoardToolbar orientation="vertical"
+          tool={tool} setTool={setTool} setEditing={setEditing}
+          lastShape={lastShape} setLastShape={setLastShape}
+          shapesOpen={shapesOpen} setShapesOpen={setShapesOpen}
+          lastLineTool={lastLineTool} setLastLineTool={setLastLineTool}
+          lineToolOpen={lineToolOpen} setLineToolOpen={setLineToolOpen}
+          mediaOpen={mediaOpen} setMediaOpen={setMediaOpen}
+          imgMenuOpen={imgMenuOpen} setImgMenuOpen={setImgMenuOpen}
+          zoomPct={cam ? Math.round(cam.s * 100) : 100}
+          onZoom={(d) => setCam(c => c && ({ ...c, s: Math.min(8, Math.max(0.02, c.s * (d > 0 ? 1.2 : 1 / 1.2))) }))}
+          onResetZoom={() => setCam(fitCam())}
+          hide={["comment", "media"]}
+          theme={theme} darkMode={darkMode} de={de} />
       </div>
 
       {/* right panel */}
@@ -17528,8 +17642,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           })}
         </div>
 
-        {label(de ? "Hintergrund" : "Background")}
-        {swatch(bg, setBg)}
+        {(!selItem || sel === "frame") && (
+          <>
+            {label(de ? "Frame" : "Frame")}
+            <div style={{ fontSize: 12, color: theme.textDim, marginTop: 6 }}>{title}</div>
+            <div style={{ fontSize: 12, color: theme.textDim }}>{W} × {H} px</div>
+            {label(de ? "Hintergrund" : "Background")}
+            {swatch(bg, setBg)}
+          </>
+        )}
 
         {selItem && (
           <>
@@ -17583,7 +17704,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         )}
       </div>
 
-      {imgOpen && (
+      {imgMenuOpen && (
         <ImageInsertModal
           orgId={orgId} session={session} userOrg={userOrg} appLanguage={appLanguage}
           uploadFile={onUpload} theme={theme} darkMode={darkMode} accent={theme.accent}
@@ -17591,9 +17712,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             const w = Math.round(W * 0.5), h = Math.round(w * 0.66);
             addItem({ id: crypto.randomUUID(), type: "image", url, fit: "cover",
               x: Math.round((W - w) / 2), y: Math.round((H - h) / 2), w, h });
-            setImgOpen(false);
+            setImgMenuOpen(false);
           }}
-          onClose={() => { setImgOpen(false); setTool("select"); }} />
+          onClose={() => { setImgMenuOpen(false); setTool("select"); }} />
       )}
     </motion.div>,
     document.body
