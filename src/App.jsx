@@ -16060,39 +16060,64 @@ function ThreadsMock({ brand, avatar, posts, onOpenAvatar, onOpenPost, editable,
     </span>
   );
 
-  const post = (text, imageIndex) => (
-    <div style={{ padding: "18px 24px", borderTop: `1px solid ${border}` }}>
-      <div style={{ display: "flex", gap: 12 }}>
-        <div style={{ position: "relative", flexShrink: 0 }}>
-          <div style={{ width: 38, height: 38, borderRadius: "50%", overflow: "hidden",
-            background: avatar ? `center/cover no-repeat url(${avatar})` : grey }} />
-          <div style={{ position: "absolute", right: -3, bottom: -3, width: 17, height: 17, borderRadius: "50%",
-            background: "#161823", color: "#fff", border: "2px solid #fff", fontSize: 11,
-            display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>+</div>
-        </div>
+  // One pinned post, laid out the way the reference has it: the pin row, the
+  // author line, the text, a link card, then the actions. No extras — a badge or
+  // a second post is furniture that says nothing about how the brand reads.
+  const pinnedPost = (
+    <div style={{ padding: "18px 24px 22px", borderTop: `1px solid ${border}` }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: 4,
+        fontSize: 15, fontFamily: FONT, color: muted }}>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+          strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 17v5" /><path d="M9 10.8V4h6v6.8l2 2.2H7z" />
+        </svg>
+        {de ? "Fixiert" : "Pinned"}
+      </div>
+
+      <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
+        <div style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0, overflow: "hidden",
+          background: avatar ? `center/cover no-repeat url(${avatar})` : grey }} />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <b style={{ fontSize: 15, fontFamily: FONT, color: "#161823" }}>{handle}</b>
-            {verified(15)}
-            <span style={{ fontSize: 15, fontFamily: FONT, color: muted }}>{de ? "1 Std." : "1h"}</span>
+            <span style={{ fontSize: 15, fontFamily: FONT, color: muted }}>30.06.2026</span>
             <div style={{ flex: 1 }} />
-            <span style={{ color: muted, fontSize: 15 }}>···</span>
+            <span style={{ color: muted, fontSize: 15, letterSpacing: 1 }}>···</span>
           </div>
-          <div style={{ fontSize: 15, fontFamily: FONT, color: "#161823", marginTop: 4, lineHeight: 1.45 }}>
-            {text}
+
+          <div style={{ fontSize: 15, fontFamily: FONT, color: "#161823", marginTop: 4, lineHeight: 1.5 }}>
+            {brand?.description || brand?.claim
+              || (de ? "Hier stünde euer Beitrag. Der Text kommt aus eurer Brand-Beschreibung."
+                    : "Your post would sit here. The words come from your brand description.")}
           </div>
-          {imageIndex != null && (
-            <div onClick={() => onOpenPost(imageIndex)}
-              style={{ marginTop: 12, borderRadius: 12, overflow: "hidden", aspectRatio: "4 / 5",
-                maxWidth: 320, cursor: "pointer", border: `1px solid ${border}`,
-                background: posts[imageIndex] ? `center/cover no-repeat url(${posts[imageIndex]})` : grey,
+
+          {/* A link card, which is what a brand post on Threads usually is. */}
+          <div style={{ marginTop: 14, borderRadius: 12, overflow: "hidden", border: `1px solid ${border}`,
+            maxWidth: 420 }}>
+            <div onClick={() => onOpenPost(0)}
+              style={{ aspectRatio: "1.4", cursor: "pointer",
+                background: posts[0] ? `center/cover no-repeat url(${posts[0]})` : grey,
                 display: "flex", alignItems: "center", justifyContent: "center" }}>
-              {!posts[imageIndex] && hint(de ? "Bild hinzufügen" : "Add an image")}
+              {!posts[0] && hint(de ? "Bild hinzufügen" : "Add an image")}
             </div>
-          )}
-          <div style={{ display: "flex", gap: 20, marginTop: 14 }}>
-            {action(<path d="M20.8 6.6a5 5 0 00-7.1 0L12 8.3l-1.7-1.7a5 5 0 10-7.1 7.1L12 21.6l8.8-8.9a5 5 0 000-7.1z" />, 14)}
-            {action(<path d="M21 11.5a8.4 8.4 0 01-9 8.4 9 9 0 01-4-.9L3 21l1.9-4.6A8.4 8.4 0 013 11.5 8.5 8.5 0 0112 3a8.5 8.5 0 019 8.5z" />, 10)}
+            <div style={{ padding: "12px 14px", borderTop: `1px solid ${border}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 18, height: 18, borderRadius: 4, background: "#161823", flexShrink: 0 }} />
+                <span style={{ fontSize: 14, fontFamily: FONT, color: muted }}>
+                  {brand?.website_url
+                    ? String(brand.website_url).replace(/^https?:\/\//, "").replace(/\/$/, "")
+                    : (de ? "eure-website.de" : "your-website.com")}
+                </span>
+              </div>
+              <div style={{ fontSize: 15, fontFamily: FONT, color: "#161823", marginTop: 6 }}>
+                {brand?.name || (de ? "Titel der Seite" : "Page title")}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 22, marginTop: 16 }}>
+            {action(<path d="M20.8 6.6a5 5 0 00-7.1 0L12 8.3l-1.7-1.7a5 5 0 10-7.1 7.1L12 21.6l8.8-8.9a5 5 0 000-7.1z" />, 15)}
+            {action(<path d="M21 11.5a8.4 8.4 0 01-9 8.4 9 9 0 01-4-.9L3 21l1.9-4.6A8.4 8.4 0 013 11.5 8.5 8.5 0 0112 3a8.5 8.5 0 019 8.5z" />, "")}
             {action(<><path d="M17 2l4 4-4 4" /><path d="M3 11V9a4 4 0 014-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v2a4 4 0 01-4 4H3" /></>, "")}
             {action(<path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" />, "")}
           </div>
@@ -16136,9 +16161,9 @@ function ThreadsMock({ brand, avatar, posts, onOpenAvatar, onOpenPost, editable,
             {de ? "12.158 Follower · 265.930 kürzliche Aufrufe" : "12,158 followers · 265,930 recent views"}
           </span>
           <div style={{ flex: 1 }} />
-          {[<><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" /></>,
+          {[<><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.2" cy="6.8" r="0.9" fill="currentColor" stroke="none" /></>,
             <><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 01-3.4 0" /></>,
-            <><circle cx="12" cy="12" r="9" /><circle cx="8" cy="12" r="1" fill="currentColor" /><circle cx="12" cy="12" r="1" fill="currentColor" /><circle cx="16" cy="12" r="1" fill="currentColor" /></>,
+            <><circle cx="12" cy="12" r="9" /><circle cx="8.2" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="15.8" cy="12" r="1" fill="currentColor" stroke="none" /></>,
           ].map((glyph, i) => (
             <svg key={i} width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#161823"
               strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{glyph}</svg>
@@ -16167,10 +16192,7 @@ function ThreadsMock({ brand, avatar, posts, onOpenAvatar, onOpenPost, editable,
         ))}
       </div>
 
-      {post(brand?.description || brand?.claim
-        || (de ? "Hier stünde euer Beitrag. Der Text kommt aus eurer Brand-Beschreibung."
-              : "Your post would sit here. The words come from your brand description."), null)}
-      {post(de ? "Ein zweiter Beitrag, diesmal mit Bild." : "A second post, this one with an image.", 0)}
+      {pinnedPost}
     </div>
   );
 }
