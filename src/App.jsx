@@ -16828,15 +16828,26 @@ function YouTubeMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onO
             </div>
           )}
 
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 16,
-            padding: "9px 16px", borderRadius: 999, background: grey,
-            fontFamily: FONT, fontSize: 14, fontWeight: 500, color: "#0F0F0F" }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
-              strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.7 21a2 2 0 01-3.4 0" /></svg>
-            {de ? "Abonniert" : "Subscribed"}
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-              strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+          {/* Two, not one: a visitor who has not subscribed sees a black
+              Abonnieren and a grey Community beside it. Showing the subscribed
+              state instead would preview the wrong side of the page. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 16 }}>
+            <div style={{ padding: "10px 20px", borderRadius: 999, background: "#0F0F0F",
+              color: "#fff", fontFamily: FONT, fontSize: 14, fontWeight: 600 }}>
+              {de ? "Abonnieren" : "Subscribe"}
+            </div>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8,
+              padding: "10px 18px", borderRadius: 999, background: grey,
+              fontFamily: FONT, fontSize: 14, fontWeight: 500, color: "#0F0F0F" }}>
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9.5" cy="8.4" r="3.1" />
+                <path d="M3.6 19v-1.2a3.6 3.6 0 013.6-3.6h4.6a3.6 3.6 0 013.6 3.6V19" />
+                <path d="M16.4 5.6a3.1 3.1 0 010 5.6" />
+                <path d="M18 14.4a3.6 3.6 0 012.4 3.4V19" />
+              </svg>
+              Community
+            </div>
           </div>
         </div>
       </div>
@@ -16895,10 +16906,14 @@ function YouTubeMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onO
           ))}
         </div>
 
-        {/* Anchored to the thumbnail band rather than the whole shelf, so it
-            stays centred on the images and not on the text under them. */}
-        <div style={{ position: "absolute", top: 0, bottom: 84, right: -14,
-          display: "flex", alignItems: "center", pointerEvents: "none" }}>
+        {/* A box exactly one tile wide with the tile's own aspect ratio, so its
+            height IS the thumbnail height and the arrow centres on the images by
+            construction. Percentages in `top`/`bottom` would resolve against the
+            shelf's height, which includes the captions — hence the width-derived
+            box rather than an offset. */}
+        <div style={{ position: "absolute", top: 0, right: -14,
+          width: "calc((100% - 56px) / 4.35)", aspectRatio: "16 / 9",
+          display: "flex", alignItems: "center", justifyContent: "flex-end", pointerEvents: "none" }}>
           <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#fff",
             border: "1px solid rgba(0,0,0,0.08)", boxShadow: "0 1px 6px rgba(0,0,0,0.16)",
             display: "flex", alignItems: "center", justifyContent: "center" }}>
