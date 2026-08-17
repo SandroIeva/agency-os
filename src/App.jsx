@@ -16615,10 +16615,10 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
           A plain translucent scrim costs nothing, never invalidates, and still
           lets the app show through enough to say where you are. */}
       <div style={{ position: "absolute", inset: 0,
-        // Light rather than dark: the mocks are white pages, and a dark scrim
-        // made them glare. Translucent white still separates them from the app
-        // behind without pushing the app out of sight.
-        background: darkMode ? "rgba(16,16,22,0.88)" : "rgba(255,255,255,0.86)" }} />
+        // Light grey rather than white: the mocks are white pages, so a white
+        // scrim gave them no edge to sit against. Grey separates them without
+        // the glare a dark scrim produced.
+        background: darkMode ? "rgba(16,16,22,0.88)" : "rgba(232,232,229,0.92)" }} />
 
       {/* The way out is fixed too, so it is not repainted against a filtered
           backdrop while the content moves under it. */}
