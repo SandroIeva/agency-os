@@ -16165,10 +16165,10 @@ function XMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onOpenAva
   );
 
   return (
-    <div style={{ maxWidth: 600, margin: "0 auto", background: "#fff",
+    <div style={{ maxWidth: 660, margin: "0 auto", background: "#fff",
       border: `1px solid ${line}`, borderRadius: 12, overflow: "hidden" }}>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 22, padding: "8px 16px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 22, padding: "16px 26px" }}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0F1419" strokeWidth="2.2"
           strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
         <div>
@@ -16192,7 +16192,7 @@ function XMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onOpenAva
           + (bannerPx ? ` · ${bannerPx[0]} × ${bannerPx[1]} px` : ""))}
       </div>
 
-      <div style={{ padding: "0 16px 16px" }}>
+      <div style={{ padding: "0 26px 22px" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
           <div onClick={onOpenAvatar}
             style={{ width: 133, height: 133, borderRadius: "50%", marginTop: -66, cursor: "pointer",
@@ -16263,7 +16263,7 @@ function XMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onOpenAva
         ))}
       </div>
 
-      <div style={{ padding: 16 }}>
+      <div style={{ padding: 26 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 26,
           fontSize: 13, fontFamily: FONT, fontWeight: 700, color: "#536471" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
