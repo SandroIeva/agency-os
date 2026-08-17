@@ -17029,7 +17029,12 @@ const CANVAS_MIN_EDIT = 700;
 const CANVAS_LH = 1.2;               // line height, shared by display and export
 const CANVAS_FONT_STACK = "'Geist', -apple-system, sans-serif";
 
-const canvasFont = (it) => `${it.weight || 600} ${it.size}px ${CANVAS_FONT_STACK}`;
+const canvasFont = (it) => `${it.weight || 600} ${it.size}px ${it.font ? `'${it.font}', ` : ""}${CANVAS_FONT_STACK}`;
+// "Auto" is 1.2, the value the frame was built with. Letter spacing is a
+// percentage of the size, the way type tools express it, so it survives a
+// change of size.
+const canvasLH = (it) => it.size * (it.lh || CANVAS_LH);
+const canvasLS = (it) => ((it.ls || 0) / 100) * it.size;
 
 // The polygon shapes, in fractions of the item's box. The editor turns these
 // into a CSS clip-path and the export into a canvas path — one source, so the
@@ -17114,6 +17119,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const dragRef = useRef(null);
 
   const selItem = items.find(i => i.id === sel) || null;
+
+  // The brand's own faces first — setting a banner in a font the brand does not
+  // own is the mistake this whole preview exists to catch. They are Google fonts,
+  // so the editor links them itself: the export waits on document.fonts.ready,
+  // and a face nobody loaded would silently fall back to Geist in the file.
+  const brandFonts = Array.isArray(brand?.intelligence?.fonts?.google_fonts)
+    ? brand.intelligence.fonts.google_fonts.filter(Boolean) : [];
+  const FONT_CHOICES = [...new Set([...brandFonts, "Geist", "Helvetica", "Georgia", "Courier New"])];
+  const WEIGHTS = [[300, "Light"], [400, "Regular"], [500, "Medium"], [600, "Semibold"], [700, "Bold"], [800, "Black"]];
   const patch = (id, p) => setItems(list => list.map(i => (i.id === id ? { ...i, ...p } : i)));
   const addItem = (it) => { setItems(list => [...list, it]); setSel(it.id); setTool("select"); };
 
@@ -17411,6 +17425,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     // export a white rectangle that only looks like nothing on a white page.
     if (bg !== "transparent") { ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H); }
     for (const it of items) {
+      ctx.globalAlpha = it.opacity == null ? 1 : it.opacity;
       if (it.type === "image" && it.url) {
         const img = await loadImage(it.url);
         drawFitted(ctx, img, it);
@@ -17418,7 +17433,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         ctx.fillStyle = it.fill; ctx.fillRect(it.x, it.y, it.w, it.h);
         const pad = Math.round(it.w * 0.08);
         ctx.fillStyle = it.color; ctx.font = canvasFont(it);
-        const ms = ctx.measureText("Hg"), Ls = it.size * CANVAS_LH;
+        const ms = ctx.measureText("Hg"), Ls = canvasLH(it);
         const bs = (Ls - (ms.fontBoundingBoxAscent + ms.fontBoundingBoxDescent)) / 2 + ms.fontBoundingBoxAscent;
         ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
         ctx.save(); ctx.beginPath(); ctx.rect(it.x, it.y, it.w, it.h); ctx.clip();
@@ -17426,7 +17441,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           ctx.fillText(line, it.x + pad, it.y + pad + i2 * Ls + bs));
         ctx.restore();
       } else if (it.type === "rect") {
-        ctx.fillStyle = it.fill; ctx.fillRect(it.x, it.y, it.w, it.h);
+        ctx.fillStyle = it.fill;
+        const r = Math.min(it.radius || 0, it.w / 2, it.h / 2);
+        if (r > 0 && ctx.roundRect) { ctx.beginPath(); ctx.roundRect(it.x, it.y, it.w, it.h, r); ctx.fill(); }
+        else ctx.fillRect(it.x, it.y, it.w, it.h);
       } else if (it.type === "ellipse") {
         ctx.fillStyle = it.fill; ctx.beginPath();
         ctx.ellipse(it.x + it.w / 2, it.y + it.h / 2, it.w / 2, it.h / 2, 0, 0, Math.PI * 2);
@@ -17459,23 +17477,39 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         ctx.closePath(); ctx.fill();
       } else if (it.type === "text") {
         ctx.fillStyle = it.color; ctx.font = canvasFont(it);
-        ctx.textAlign = it.align === "center" ? "center" : "left";
-        const tx = it.align === "center" ? it.x + it.w / 2 : it.x;
+        ctx.textAlign = it.align === "center" ? "center" : it.align === "right" ? "right" : "left";
+        const tx = it.align === "center" ? it.x + it.w / 2
+          : it.align === "right" ? it.x + it.w : it.x;
         // textBaseline "top" puts the em box at y; CSS instead centres the glyph
         // box inside the line box, so the two drift apart by the half-leading —
         // measured at 1.4px for 26px text, and it grows with the size. Drawing
         // on the alphabetic baseline with the same half-leading makes the export
         // land where the editor showed it.
+        // Letter spacing: the canvas property where the browser has it, and a
+        // per-character walk where it does not — otherwise the export would
+        // quietly ignore a setting the editor is showing.
+        const ls = canvasLS(it);
+        const canSpace = "letterSpacing" in ctx;
+        if (canSpace) ctx.letterSpacing = `${ls}px`;
         const m = ctx.measureText("Hg");
-        const L = it.size * CANVAS_LH;
+        const L = canvasLH(it);
         const base = (L - (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent)) / 2
           + m.fontBoundingBoxAscent;
         ctx.textBaseline = "alphabetic";
         String(it.text).split("\n").forEach((line, i) => {
-          ctx.fillText(line, tx, it.y + i * L + base);
+          const y = it.y + i * L + base;
+          if (canSpace || !ls) { ctx.fillText(line, tx, y); return; }
+          const wLine = [...line].reduce((a2, ch) => a2 + ctx.measureText(ch).width + ls, 0) - ls;
+          let x = it.align === "center" ? it.x + it.w / 2 - wLine / 2
+                : it.align === "right" ? it.x + it.w - wLine : it.x;
+          const prev = ctx.textAlign; ctx.textAlign = "left";
+          for (const ch of line) { ctx.fillText(ch, x, y); x += ctx.measureText(ch).width + ls; }
+          ctx.textAlign = prev;
         });
+        if (canSpace) ctx.letterSpacing = "0px";
       }
     }
+    ctx.globalAlpha = 1;
     return await new Promise((res, rej) =>
       cvs.toBlob(b => (b ? res(b) : rej(new Error("toBlob"))), "image/png"));
   };
@@ -17533,6 +17567,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       style={{ position: "fixed", inset: 0, zIndex: 100004,
         background: darkMode ? "#0E0E13" : "#F1F1F4", fontFamily: FONT }}>
 
+      {brandFonts.length > 0 && (
+        <link rel="stylesheet"
+          href={`https://fonts.googleapis.com/css2?${brandFonts.map(f => `family=${encodeURIComponent(f).replace(/%20/g, "+")}:wght@300;400;500;600;700;800`).join("&")}&display=swap`} />
+      )}
+
       {/* the stage */}
       <div ref={stageRef}
         onPointerDown={onStageDown} onPointerMove={onStageMove}
@@ -17568,7 +17607,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     style={{ ...common, width: it.w, height: it.h, background: it.fill,
                       padding: Math.round(it.w * 0.08), boxSizing: "border-box",
                       boxShadow: "0 2px 8px rgba(0,0,0,0.12)", font: canvasFont(it), color: it.color,
-                      lineHeight: `${it.size * CANVAS_LH}px`, whiteSpace: "pre", overflow: "hidden" }}>
+                      lineHeight: `${canvasLH(it)}px`, whiteSpace: "pre", overflow: "hidden" }}>
                     {editing === it.id ? (
                       <textarea autoFocus value={it.text}
                         onChange={e => patch(it.id, { text: e.target.value })}
@@ -17592,7 +17631,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   <div key={it.id} onPointerDown={e => onItemDown(e, it)}
                     onDoubleClick={() => { setEditing(it.id); setSel(it.id); }}
                     style={{ ...common, width: it.w, font: canvasFont(it), color: it.color,
-                      lineHeight: `${it.size * CANVAS_LH}px`, textAlign: it.align || "left",
+                      lineHeight: `${canvasLH(it)}px`, textAlign: it.align || "left",
+                      letterSpacing: `${canvasLS(it)}px`, opacity: it.opacity == null ? 1 : it.opacity,
                       whiteSpace: "pre", overflow: "visible" }}>
                     {editing === it.id ? (
                       <textarea autoFocus value={it.text}
@@ -17652,6 +17692,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               return (
                 <div key={it.id} onPointerDown={e => onItemDown(e, it)}
                   style={{ ...common, width: it.w, height: it.h, clipPath: polyClip(it.type),
+                    opacity: it.opacity == null ? 1 : it.opacity,
                     borderRadius: it.type === "ellipse" ? "50%" : (it.radius || 0),
                     background: it.type === "image"
                       ? `center/${it.fit === "contain" ? "contain" : "cover"} no-repeat url(${it.url})`
@@ -17895,56 +17936,122 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           </>
         )}
 
-        {selItem && (
+        {selItem && (() => {
+          const isText = selItem.type === "text" || selItem.type === "sticky";
+          const set = (k, v) => patch(selItem.id, { [k]: v });
+          const num = (value, onChange, glyph, suffix = "") => (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
+              borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+              <span style={{ fontSize: 11, color: theme.textFaint, minWidth: 13 }}>{glyph}</span>
+              <input value={value} onChange={e => onChange(e.target.value)}
+                style={{ width: "100%", border: "none", outline: "none", background: "transparent",
+                  color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
+              {suffix && <span style={{ fontSize: 11.5, color: theme.textFaint }}>{suffix}</span>}
+            </div>
+          );
+          const pick = (value, options, onChange) => (
+            <div style={{ position: "relative", display: "flex", alignItems: "center",
+              padding: "8px 10px", borderRadius: 9,
+              background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+              <select value={value} onChange={e => onChange(e.target.value)}
+                style={{ width: "100%", border: "none", outline: "none", background: "transparent",
+                  color: theme.text, fontFamily: FONT, fontSize: 12.5, appearance: "none", cursor: "pointer" }}>
+                {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme.textFaint}
+                strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                <polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+          );
+          const segment = (value, options, onChange) => (
+            <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
+              {options.map(([v, glyph, title]) => (
+                <div key={v} title={title} onClick={() => onChange(v)}
+                  style={{ flex: 1, height: 32, borderRadius: 8, display: "flex", alignItems: "center",
+                    justifyContent: "center", cursor: "pointer", color: theme.text,
+                    border: `1px solid ${value === v ? "#15151c" : "transparent"}`,
+                    background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinecap="round">{glyph}</svg>
+                </div>
+              ))}
+            </div>
+          );
+          const two = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 6 };
+
+          return (
           <>
-            {label(de ? "Auswahl" : "Selection")}
-            {selItem.type === "text" ? (
-              <>
-                <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
-                  <input type="number" value={selItem.size} min={6} max={Math.round(H)}
-                    onChange={e => patch(selItem.id, { size: Math.max(6, Number(e.target.value) || 6) })}
-                    style={{ width: 72, padding: "7px 9px", borderRadius: 8, border: `1px solid ${line}`,
-                      background: "transparent", color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
-                  {["left", "center"].map(a => (
-                    <div key={a} onClick={() => patch(selItem.id, { align: a })}
-                      style={{ padding: "7px 10px", borderRadius: 8, cursor: "pointer", fontSize: 11.5,
-                        border: `1px solid ${selItem.align === a ? "#15151c" : line}`, color: theme.text }}>
-                      {a === "left" ? (de ? "Links" : "Left") : (de ? "Mitte" : "Centre")}
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                  {[400, 600, 700].map(wt => (
-                    <div key={wt} onClick={() => patch(selItem.id, { weight: wt })}
-                      style={{ padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontSize: 11.5,
-                        fontWeight: wt, border: `1px solid ${selItem.weight === wt ? "#15151c" : line}`,
-                        color: theme.text }}>Aa</div>
-                  ))}
-                </div>
-                {swatch(selItem.color, c => patch(selItem.id, { color: c }))}
-              </>
-            ) : selItem.type === "image" ? (
-              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            {label(de ? "Darstellung" : "Appearance")}
+            <div style={two}>
+              {num(Math.round((selItem.opacity == null ? 1 : selItem.opacity) * 100),
+                v => set("opacity", Math.min(100, Math.max(0, Number(v) || 0)) / 100), "◍", "%")}
+              {selItem.type === "rect"
+                ? num(selItem.radius || 0, v => set("radius", Math.max(0, Number(v) || 0)), "⌐")
+                : <div />}
+            </div>
+
+            {isText && (<>
+              {label(de ? "Typografie" : "Typography")}
+              <div style={{ marginTop: 6 }}>
+                {pick(selItem.font || "Geist", FONT_CHOICES.map(f => [f, f]), v => set("font", v))}
+              </div>
+              <div style={two}>
+                {pick(String(selItem.weight || 600), WEIGHTS.map(([v, l]) => [String(v), l]),
+                  v => set("weight", Number(v)))}
+                {num(selItem.size, v => set("size", Math.max(6, Number(v) || 6)), "T")}
+              </div>
+              <div style={two}>
+                {num(selItem.lh ? selItem.lh.toFixed(2) : "Auto",
+                  v => set("lh", /^[\d.]+$/.test(v) ? Number(v) : undefined), "↕")}
+                {num(selItem.ls || 0, v => set("ls", Number(v) || 0), "|A|", "%")}
+              </div>
+              <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 12 }}>
+                {de ? "Ausrichtung" : "Alignment"}
+              </div>
+              {segment(selItem.align || "left", [
+                ["left", <><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h16"/></>, de ? "Linksbündig" : "Left"],
+                ["center", <><path d="M4 6h16"/><path d="M7 12h10"/><path d="M4 18h16"/></>, de ? "Zentriert" : "Centre"],
+                ["right", <><path d="M4 6h16"/><path d="M10 12h10"/><path d="M4 18h16"/></>, de ? "Rechtsbündig" : "Right"],
+              ], v => set("align", v))}
+            </>)}
+
+            {label(selItem.type === "image" ? (de ? "Bild" : "Image") : de ? "Füllung" : "Fill")}
+            {selItem.type === "image" ? (
+              <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
                 {["cover", "contain"].map(f => (
-                  <div key={f} onClick={() => patch(selItem.id, { fit: f })}
+                  <div key={f} onClick={() => set("fit", f)}
                     style={{ padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontSize: 11.5,
                       border: `1px solid ${(selItem.fit || "cover") === f ? "#15151c" : line}`, color: theme.text }}>
                     {f === "cover" ? (de ? "Füllend" : "Cover") : (de ? "Ganz sichtbar" : "Contain")}
                   </div>
                 ))}
               </div>
-            ) : (selItem.type === "draw" || selItem.type === "arrow") ? (
-              swatch(selItem.color, c => patch(selItem.id, { color: c }))
-            ) : (
-              swatch(selItem.fill, c => patch(selItem.id, { fill: c }))
-            )}
-            <div onClick={() => { setItems(list => list.filter(i => i.id !== selItem.id)); setSel(null); }}
-              style={{ marginTop: 14, padding: "8px 12px", borderRadius: 9, textAlign: "center",
+            ) : (() => {
+              const key = (selItem.type === "draw" || selItem.type === "arrow" || selItem.type === "line")
+                ? "color" : selItem.type === "text" ? "color" : "fill";
+              const cur = selItem[key] || "#000000";
+              return (<>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, padding: "8px 10px",
+                  borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                  <div style={{ width: 20, height: 20, borderRadius: 5, background: cur,
+                    border: `1px solid ${line}`, flexShrink: 0 }} />
+                  <input value={cur.replace("#", "").toUpperCase()}
+                    onChange={e => { const v = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
+                      if (v.length === 6) set(key, "#" + v); }}
+                    style={{ width: "100%", border: "none", outline: "none", background: "transparent",
+                      color: theme.text, fontFamily: FONT, fontSize: 12.5, letterSpacing: 0.4 }} />
+                </div>
+                {swatch(cur, c => set(key, c))}
+              </>);
+            })()}
+
+            <div onClick={() => { setItems(list => list.filter(i2 => i2.id !== selItem.id)); setSel(null); }}
+              style={{ marginTop: 16, padding: "8px 12px", borderRadius: 9, textAlign: "center",
                 border: `1px solid ${line}`, color: theme.textDim, fontSize: 12, cursor: "pointer" }}>
               {de ? "Element löschen" : "Delete element"}
             </div>
-          </>
-        )}
+          </>);
+        })()}
       </div>
 
       {imgMenuOpen && (
