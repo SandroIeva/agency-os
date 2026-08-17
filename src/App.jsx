@@ -16938,6 +16938,166 @@ function YouTubeMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onO
   );
 }
 
+// The real mark, not a letter P. Everywhere else in the app Pinterest is drawn
+// as the character "P" in a red disc, which is not the logo — the logo is a
+// white script P knocked out of the disc, and at header size the difference is
+// the whole recognition.
+const PINTEREST_MARK = "M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.936 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 01.083.345l-.333 1.36c-.053.22-.008.246-.22.148-1.235-.577-2.005-2.386-2.005-3.84 0-3.127 2.271-5.998 6.547-5.998 3.437 0 6.108 2.449 6.108 5.72 0 3.417-2.153 6.168-5.14 6.168-1.004 0-1.947-.522-2.269-1.139l-.616 2.35c-.223.858-.827 1.933-1.231 2.588A12 12 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0";
+
+// Pinterest is the only one of these profiles built as two columns side by side:
+// the facts on the left, a wide cover on the right, and the tabs centred under
+// both. The pins sit below at 2:3, the shape Pinterest asks for — a preview that
+// showed them in mixed ratios would suggest any ratio is fine.
+function PinterestMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onOpenAvatar, onOpenPost, editable, de }) {
+  const coverRatio = bannerPx ? bannerPx[0] / bannerPx[1] : 16 / 9;
+  const grey = "#EFEFEF";
+  const muted = "#767676";
+  const red = "#E60023";
+  const name = brand?.name || (de ? "Euer Markenname" : "Your brand name");
+  const handle = (brand?.name || "brand").toLowerCase().replace(/[^a-z0-9._]/g, "");
+  const hint = (text) => (
+    <span style={{ fontSize: 12, fontFamily: FONT, color: "#8A8A8A", textAlign: "center", padding: 8 }}>{text}</span>
+  );
+  const icon = (path, size = 22) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#111"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{path}</svg>
+  );
+
+  return (
+    <div style={{ maxWidth: 1280, margin: "0 auto", background: "#fff", borderRadius: 12,
+      border: "1px solid rgba(0,0,0,0.07)", overflow: "hidden" }}>
+
+      {/* The site's own bar. It carries the mark, and without it the two-column
+          body could be almost any profile. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 18px",
+        borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+        <svg width="30" height="30" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+          <path fill={red} d={PINTEREST_MARK} />
+        </svg>
+        <span style={{ fontFamily: FONT, fontSize: 21, fontWeight: 700, color: "#111", letterSpacing: -0.3 }}>
+          Pinterest
+        </span>
+        {icon(<><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h16" /></>, 19)}
+        <div style={{ flex: 1 }} />
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px 6px 8px",
+          borderRadius: 999, border: "1px solid rgba(0,0,0,0.12)" }}>
+          <div style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0,
+            background: avatar ? `center/cover no-repeat url(${avatar})` : grey }} />
+          <div style={{ lineHeight: 1.2 }}>
+            <div style={{ fontFamily: FONT, fontSize: 11, color: muted }}>{name}</div>
+            <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: "#111" }}>
+              {de ? "Eigenes Profil" : "Your profile"}
+            </div>
+          </div>
+          {icon(<path d="M6 9l6 6 6-6" />, 15)}
+        </div>
+
+        {icon(<><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.3-4.3" /></>)}
+        <div style={{ position: "relative", display: "flex" }}>
+          {icon(<><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 01-3.4 0" /></>)}
+          <span style={{ position: "absolute", top: -6, right: -7, minWidth: 17, height: 17, padding: "0 4px",
+            borderRadius: 999, background: red, color: "#fff", fontFamily: FONT, fontSize: 10, fontWeight: 700,
+            display: "flex", alignItems: "center", justifyContent: "center" }}>15</span>
+        </div>
+        {icon(<path d="M21 11.5a8.4 8.4 0 01-9 8.4 9 9 0 01-4-.9L3 21l1.9-4.6A8.4 8.4 0 013 11.5 8.5 8.5 0 0112 3a8.5 8.5 0 019 8.5z" />)}
+        {icon(<><path d="M3 11v2a1 1 0 001 1h2l4 4V6L6 10H4a1 1 0 00-1 1z" /><path d="M15 8.5a4 4 0 010 7" /></>)}
+        <div style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
+          background: avatar ? `center/cover no-repeat url(${avatar})` : grey }} />
+        {icon(<path d="M6 9l6 6 6-6" />, 15)}
+      </div>
+
+      <div style={{ padding: "34px 30px 30px" }}>
+        {/* Left column and cover, in the proportion the real page uses: the
+            cover takes a little over half the content width. */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.18fr", gap: 66, alignItems: "start" }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 25 }}>
+              <div onClick={onOpenAvatar}
+                style={{ width: 118, height: 118, borderRadius: "50%", flexShrink: 0, cursor: "pointer",
+                  overflow: "hidden", background: avatar ? `center/cover no-repeat url(${avatar})` : grey,
+                  display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {!avatar && hint(de ? "Profilbild" : "Profile")}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 31, fontFamily: FONT, fontWeight: 700, color: "#111", letterSpacing: -0.4 }}>
+                  {name}
+                </div>
+                <div style={{ fontSize: 16, fontFamily: FONT, color: muted, marginTop: 3 }}>{handle}</div>
+              </div>
+            </div>
+
+            <div style={{ fontSize: 15, fontFamily: FONT, color: muted, marginTop: 24 }}>
+              <b style={{ color: "#111" }}>{de ? "1 Follower" : "1 follower"}</b>
+              {de ? " · 0 gefolgt · 9,6 Tsd. monatliche Aufrufe" : " · 0 following · 9.6k monthly views"}
+            </div>
+
+            <div style={{ marginTop: 16 }}>{editable.claim}</div>
+
+            {brand?.website_url && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 18,
+                fontSize: 15, fontFamily: FONT, fontWeight: 600, color: "#111" }}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+                  <circle cx="12" cy="12" r="9" /><path d="M3 12h18" />
+                  <path d="M12 3a14 14 0 000 18 14 14 0 000-18" />
+                </svg>
+                {String(brand.website_url).replace(/^https?:\/\//, "").replace(/\/$/, "")}
+              </div>
+            )}
+
+            <div style={{ display: "inline-block", marginTop: 22, padding: "12px 18px", borderRadius: 999,
+              background: grey, fontFamily: FONT, fontSize: 15, fontWeight: 600, color: "#111" }}>
+              {de ? "Profil bearbeiten" : "Edit profile"}
+            </div>
+          </div>
+
+          <div onClick={onOpenBanner}
+            style={{ position: "relative", width: "100%", aspectRatio: String(coverRatio),
+              borderRadius: 16, overflow: "hidden", cursor: "pointer",
+              background: banner ? `center/cover no-repeat url(${banner})` : grey,
+              display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {!banner && hint(`${de ? "Titelbild hinzufügen" : "Add a cover image"}`
+              + (bannerPx ? ` · ${bannerPx[0]} × ${bannerPx[1]} px` : ""))}
+            <div style={{ position: "absolute", top: 14, right: 14, display: "flex", gap: 10,
+              pointerEvents: "none" }}>
+              {[<><path d="M12 16V4" /><path d="M7 9l5-5 5 5" /><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" /></>,
+                <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" /></>,
+              ].map((glyph, i) => (
+                <div key={i} style={{ width: 37, height: 37, borderRadius: "50%", background: "#fff",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  boxShadow: "0 1px 5px rgba(0,0,0,0.16)" }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#111"
+                    strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{glyph}</svg>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Centred under both columns, which is where Pinterest puts them. */}
+        <div style={{ display: "flex", justifyContent: "center", gap: 26, marginTop: 42 }}>
+          {[de ? "Erstellt" : "Created", de ? "Gemerkt" : "Saved"].map((tab, i) => (
+            <div key={tab} style={{ padding: "6px 2px", fontFamily: FONT, fontSize: 16,
+              fontWeight: 600, color: i === 0 ? "#111" : muted,
+              borderBottom: i === 0 ? "2px solid #111" : "2px solid transparent" }}>{tab}</div>
+          ))}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginTop: 26 }}>
+          {posts.map((src, i) => (
+            <div key={i} onClick={() => onOpenPost(i)}
+              style={{ aspectRatio: "2 / 3", borderRadius: 16, overflow: "hidden", cursor: "pointer",
+                background: src ? `center/cover no-repeat url(${src})` : grey,
+                display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {!src && hint(de ? "Pin hinzufügen" : "Add a pin")}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // How the brand would look on a channel, before anything is published there.
 // The layout follows the real profile closely enough to judge a banner and an
 // avatar against each other — that is the whole use of it. Per-platform
@@ -17040,10 +17200,12 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
         // them would send somebody away with a file that gets cropped.
         size: slot[0] !== "post" ? [1080, 1920]
           : platform.key === "tiktok" ? [1080, 1920]
-          : platform.key === "youtube" ? [1280, 720] : [1080, 1350],
+          : platform.key === "youtube" ? [1280, 720]
+          : platform.key === "pinterest" ? [1000, 1500] : [1080, 1350],
         ratio: slot[0] !== "post" ? 0.5625
           : platform.key === "tiktok" ? 0.5625
-          : platform.key === "youtube" ? 16 / 9 : 0.8,
+          : platform.key === "youtube" ? 16 / 9
+          : platform.key === "pinterest" ? 2 / 3 : 0.8,
         radius: 12 }
     : zoom === "banner"
     ? { title: de ? "Bannerbild" : "Banner image", value: banner, size: shape.bannerPx, ratio: bannerRatio, radius: 12 }
@@ -17216,6 +17378,31 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
                       display: "flex", alignItems: "center", justifyContent: "center", gap: 8, cursor: "text" }}>
                     {brand?.claim || (de ? "Das ist die Platzhalter-Beschreibung. Der Text lässt sich jederzeit ändern."
                                         : "This is the placeholder description. Change the text any time.")}
+                    {hover === "claim" && pencil}
+                  </div>
+                ),
+              }} />
+          ) : platform.key === "pinterest" ? (
+            <PinterestMock
+              brand={brand} banner={banner} avatar={avatar} posts={posts} de={de}
+              bannerPx={shape.bannerPx}
+              onOpenBanner={() => setZoom("banner")}
+              onOpenAvatar={() => setZoom("avatar")}
+              onOpenPost={(i) => setZoom("post:" + i)}
+              editable={{
+                claim: editField === "claim" ? (
+                  <input autoFocus value={claimDraft} onChange={e => setClaimDraft(e.target.value)}
+                    onBlur={() => { onSaveBrand({ claim: claimDraft }); setEditField(null); }}
+                    onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditField(null); }}
+                    style={{ fontSize: 15, fontFamily: FONT, color: "#111", width: "100%",
+                      border: "none", borderBottom: "1.5px solid #767676", outline: "none", background: "none" }} />
+                ) : (
+                  <div onClick={() => { setClaimDraft(brand?.claim || ""); setEditField("claim"); }}
+                    onMouseEnter={() => setHover("claim")} onMouseLeave={() => setHover(null)}
+                    style={{ fontSize: 15, fontFamily: FONT, color: "#111", lineHeight: 1.5,
+                      display: "flex", alignItems: "center", gap: 8, cursor: "text" }}>
+                    {brand?.claim || (de ? "Das ist die Platzhalter-Bio. Der Text lässt sich jederzeit ändern."
+                                        : "This is the placeholder bio. Change the text any time.")}
                     {hover === "claim" && pencil}
                   </div>
                 ),
@@ -17532,7 +17719,7 @@ const TOUCHPOINT_PLATFORMS = [
 // Compact white glyph per platform (letters via <text> where a logo would be fiddly).
 // Per-platform optical-size correction — each glyph fills its 24×24 box
 // differently, so we nudge the rendered size to make them look balanced.
-const TP_GLYPH_SCALE = { x: 0.72, tiktok: 1.3, facebook: 1.65, youtube: 1.12, instagram: 1.0, website: 1.0 };
+const TP_GLYPH_SCALE = { x: 0.72, tiktok: 1.3, facebook: 1.65, youtube: 1.12, instagram: 1.0, website: 1.0, pinterest: 1.55 };
 const tpGlyphSize = (key, base) => Math.round(base * (TP_GLYPH_SCALE[key] || 1));
 
 function touchpointGlyph(key) {
@@ -17545,7 +17732,10 @@ function touchpointGlyph(key) {
     case "x":         return <path fill="#fff" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>;
     case "linkedin":  return L("in");
     case "facebook":  return <text x="12" y="17.7" textAnchor="middle" fontSize="15" fontWeight="700" fill="#fff" fontFamily="sans-serif">f</text>;
-    case "pinterest": return L("P", 14);
+    // The mark, not the letter. The white circle underneath guarantees the P
+    // stays white whatever the chip colour is: the path itself is "disc minus
+    // P", so on its own the P would show the background through.
+    case "pinterest": return <g><circle cx="12" cy="12" r="12" fill="#fff"/><path fill="#E60023" d={PINTEREST_MARK}/></g>;
     case "threads":   return L("@", 15);
     case "newsletter":return <g fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M4 7l8 6 8-6"/></g>;
     default:          return L((key[0] || "?").toUpperCase());
