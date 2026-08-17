@@ -16029,6 +16029,133 @@ async function extractColors(url, count = 5) {
 
 
 
+
+// X is a single narrow column, not a page with sidebars: header image, avatar
+// overlapping its lower-left, then everything left-aligned underneath. Built at
+// 600 because that is the width the column actually has — a wider mock would
+// make the bio look shorter and the header calmer than they are.
+function XMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onOpenAvatar, onOpenPost, editable, de }) {
+  const bannerRatio = bannerPx ? bannerPx[0] / bannerPx[1] : 3;
+  const grey = "#CFD9DE";
+  const line = "#EFF3F4";
+  const blue = "#1D9BF0";
+  const handle = "@" + (brand?.name || "brand").toLowerCase().replace(/[^a-z0-9_]/g, "");
+  const hint = (text) => (
+    <span style={{ fontSize: 12, fontFamily: FONT, color: "#536471", textAlign: "center", padding: 8 }}>{text}</span>
+  );
+
+  return (
+    <div style={{ maxWidth: 600, margin: "0 auto", background: "#fff",
+      border: `1px solid ${line}`, borderRadius: 12, overflow: "hidden" }}>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 22, padding: "8px 16px" }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0F1419" strokeWidth="2.2"
+          strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+        <div>
+          <div style={{ fontSize: 19, fontFamily: FONT, fontWeight: 800, color: "#0F1419" }}>
+            {brand?.name || (de ? "Euer Markenname" : "Your brand name")}
+          </div>
+          <div style={{ fontSize: 13, fontFamily: FONT, color: "#536471" }}>
+            {de ? "5.371 Beiträge" : "5,371 posts"}
+          </div>
+        </div>
+      </div>
+
+      <div onClick={onOpenBanner}
+        style={{ width: "100%", aspectRatio: String(bannerRatio), cursor: "pointer",
+          background: banner ? `center/cover no-repeat url(${banner})` : grey,
+          display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {!banner && hint(`${de ? "Kopfbild hinzufügen" : "Add a header image"}`
+          + (bannerPx ? ` · ${bannerPx[0]} × ${bannerPx[1]} px` : ""))}
+      </div>
+
+      <div style={{ padding: "0 16px 16px" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+          <div onClick={onOpenAvatar}
+            style={{ width: 133, height: 133, borderRadius: "50%", marginTop: -66, cursor: "pointer",
+              border: "4px solid #fff", overflow: "hidden", flexShrink: 0,
+              background: avatar ? `center/cover no-repeat url(${avatar})` : grey,
+              display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {!avatar && hint(de ? "Profilbild" : "Profile")}
+          </div>
+          <div style={{ marginTop: 12, padding: "8px 16px", borderRadius: 999,
+            border: "1px solid #CFD9DE", fontFamily: FONT, fontSize: 14.5, fontWeight: 700, color: "#0F1419" }}>
+            {de ? "Profil bearbeiten" : "Edit profile"}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 12, fontSize: 20, fontFamily: FONT, fontWeight: 800, color: "#0F1419" }}>
+          {brand?.name || (de ? "Euer Markenname" : "Your brand name")}
+        </div>
+        <div style={{ fontSize: 15, fontFamily: FONT, color: "#536471" }}>{handle}</div>
+
+        <div style={{ marginTop: 12 }}>{editable.claim}</div>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 12,
+          fontSize: 15, fontFamily: FONT, color: "#536471" }}>
+          {brand?.website_url && (
+            <span style={{ color: blue }}>
+              {String(brand.website_url).replace(/^https?:\/\//, "").replace(/\/$/, "")}
+            </span>
+          )}
+          <span>{de ? "Dabei seit Februar 2015" : "Joined February 2015"}</span>
+        </div>
+
+        <div style={{ display: "flex", gap: 20, marginTop: 12, fontSize: 15, fontFamily: FONT, color: "#536471" }}>
+          <span><b style={{ color: "#0F1419" }}>2.631</b> {de ? "Folge ich" : "Following"}</span>
+          <span><b style={{ color: "#0F1419" }}>1.874</b> {de ? "Follower" : "Followers"}</span>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", borderBottom: `1px solid ${line}` }}>
+        {[de ? "Beiträge" : "Posts", de ? "Antworten" : "Replies", "Reposts", de ? "Medien" : "Media"].map((tab, i) => (
+          <div key={tab} style={{ flex: 1, textAlign: "center", padding: "16px 0",
+            fontFamily: FONT, fontSize: 15, fontWeight: i === 0 ? 700 : 500,
+            color: i === 0 ? "#0F1419" : "#536471", position: "relative" }}>
+            {tab}
+            {i === 0 && (
+              <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: 0,
+                width: 56, height: 4, borderRadius: 999, background: blue }} />
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ padding: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 26,
+          fontSize: 13, fontFamily: FONT, fontWeight: 700, color: "#536471" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M7 4h10v2l-3 3v5l3 3v2H7v-2l3-3V9L7 6z" />
+          </svg>
+          {de ? "Angeheftet" : "Pinned"}
+        </div>
+
+        <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0, overflow: "hidden",
+            background: avatar ? `center/cover no-repeat url(${avatar})` : grey }} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 15, fontFamily: FONT, color: "#536471" }}>
+              <b style={{ color: "#0F1419" }}>{brand?.name || (de ? "Marke" : "Brand")}</b> {handle} · Jul 9
+            </div>
+            <div style={{ fontSize: 15, fontFamily: FONT, color: "#0F1419", marginTop: 4, lineHeight: 1.4 }}>
+              {brand?.description || brand?.claim
+                || (de ? "Hier stünde euer Beitrag. Der Text kommt aus eurer Brand-Beschreibung."
+                      : "Your post would sit here. The words come from your brand description.")}
+            </div>
+            <div onClick={() => onOpenPost(0)}
+              style={{ marginTop: 12, borderRadius: 16, overflow: "hidden", aspectRatio: "16 / 10",
+                cursor: "pointer", border: `1px solid ${line}`,
+                background: posts[0] ? `center/cover no-repeat url(${posts[0]})` : grey,
+                display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {!posts[0] && hint(de ? "Beitragsbild hinzufügen" : "Add a post image")}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Facebook is a third shape again: a wide cover with rounded lower corners, the
 // avatar overlapping its bottom-left rather than sitting beside it, and the page
 // below split into a narrow left column of facts and a wide right column of
@@ -16495,7 +16622,32 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand
         {/* The mock itself, on its own light ground so it reads as a preview of
             somewhere else rather than as part of this app. */}
         <div style={{ padding: 22, background: darkMode ? "rgba(255,255,255,0.03)" : "#EFEFEA" }}>
-          {platform.key === "facebook" ? (
+          {platform.key === "x" ? (
+            <XMock
+              brand={brand} banner={banner} avatar={avatar} posts={posts} de={de}
+              bannerPx={shape.bannerPx}
+              onOpenBanner={() => setZoom("banner")}
+              onOpenAvatar={() => setZoom("avatar")}
+              onOpenPost={(i) => setZoom("post:" + i)}
+              editable={{
+                claim: editField === "claim" ? (
+                  <input autoFocus value={claimDraft} onChange={e => setClaimDraft(e.target.value)}
+                    onBlur={() => { onSaveBrand({ claim: claimDraft }); setEditField(null); }}
+                    onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditField(null); }}
+                    style={{ fontSize: 15, fontFamily: FONT, color: "#0F1419", width: "100%",
+                      border: "none", borderBottom: "1.5px solid #CFD9DE", outline: "none", background: "none" }} />
+                ) : (
+                  <div onClick={() => { setClaimDraft(brand?.claim || ""); setEditField("claim"); }}
+                    onMouseEnter={() => setHover("claim")} onMouseLeave={() => setHover(null)}
+                    style={{ fontSize: 15, fontFamily: FONT, color: "#0F1419", lineHeight: 1.4,
+                      display: "flex", alignItems: "center", gap: 8, cursor: "text" }}>
+                    {brand?.claim || (de ? "Das ist die Platzhalter-Bio. Der Text lässt sich jederzeit ändern."
+                                        : "This is the placeholder bio. Change the text any time.")}
+                    {hover === "claim" && pencil}
+                  </div>
+                ),
+              }} />
+          ) : platform.key === "facebook" ? (
             <FacebookMock
               brand={brand} banner={banner} avatar={avatar} posts={posts} de={de}
               bannerPx={shape.bannerPx}
