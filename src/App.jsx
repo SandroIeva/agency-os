@@ -99,6 +99,7 @@ const LINEAR_MENU_ITEMS_DEF = [
     { id: "identity",    labelKey: "linearMenu.identity" },
     { id: "design",      labelKey: "linearMenu.designSystem" },
     { id: "touchpoints", labelKey: "linearMenu.touchpoints" },
+    { id: "creations",   labelKey: "linearMenu.creations" },
   ]},
   { id: "create",    labelKey: "linearMenu.create",    sub: [
     { id: "social-post", labelKey: "linearMenu.socialPost" },
@@ -21148,6 +21149,357 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   );
 }
 
+// ── Brand → Creations ────────────────────────────────────────────────────────
+// Assets holds finished files; this holds the working ones. A banner exported to
+// Assets is a PNG and nothing more — the canvas it was built on lives here, so it
+// can be opened and changed a month later instead of rebuilt from scratch.
+const CREATION_KINDS = [
+  { key: "social", de: "Social Media", en: "Social media" },
+  { key: "ads",    de: "Anzeigen",     en: "Ads" },
+  { key: "deck",   de: "Präsentation", en: "Presentation" },
+  { key: "other",  de: "Sonstiges",    en: "Other" },
+];
+
+// The formats offered when starting something new. The channel ones are read
+// from the same table the previews use, so a format cannot be right in one place
+// and stale in the other.
+const creationFormats = (de) => {
+  const ch = Object.entries(CHANNEL_PREVIEW_SHAPE).flatMap(([key, sh]) => {
+    const label = key.charAt(0).toUpperCase() + key.slice(1);
+    const out = [];
+    if (sh.bannerPx) out.push({ kind: "social", name: `${label} — ${de ? "Banner" : "banner"}`, w: sh.bannerPx[0], h: sh.bannerPx[1] });
+    if (sh.logoPx) out.push({ kind: "social", name: `${label} — ${de ? "Profilbild" : "profile picture"}`,
+      w: Math.max(CANVAS_MIN_EDIT, sh.logoPx[0]), h: Math.max(CANVAS_MIN_EDIT, sh.logoPx[1]) });
+    return out;
+  });
+  return [
+    { kind: "social", name: de ? "Beitrag hoch (4:5)" : "Post portrait (4:5)", w: 1080, h: 1350 },
+    { kind: "social", name: de ? "Beitrag quadratisch" : "Post square", w: 1080, h: 1080 },
+    { kind: "social", name: "Story / Reel (9:16)", w: 1080, h: 1920 },
+    ...ch,
+    { kind: "ads",  name: de ? "Anzeige quer (16:9)" : "Ad landscape (16:9)", w: 1920, h: 1080 },
+    { kind: "ads",  name: "Leaderboard 728 × 90", w: 728, h: 90 },
+    { kind: "deck", name: de ? "Folie (16:9)" : "Slide (16:9)", w: 1920, h: 1080 },
+    { kind: "other", name: "A4 300 dpi", w: 2480, h: 3508 },
+  ];
+};
+
+function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, appLanguage = "de",
+                         canEdit = true, projectId = null }) {
+  const de = appLanguage === "de";
+  const [kind, setKind] = useState("social");
+  const [rows, setRows] = useState(null);          // null = loading
+  const [folders, setFolders] = useState([]);
+  const [folderId, setFolderId] = useState(null);
+  const [q, setQ] = useState("");
+  const [layout, setLayout] = useState("grid");    // "grid" | "list"
+  const [newOpen, setNewOpen] = useState(false);
+  const [editing, setEditing] = useState(null);    // the canvas row open in the editor
+  const [renaming, setRenaming] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const scope = (query) => projectId ? query.eq("project_id", projectId) : query.is("project_id", null);
+
+  const load = async () => {
+    if (!userOrg?.id) return;
+    const [{ data: cs }, { data: fs }] = await Promise.all([
+      scope(supabase.from("brand_canvases").select("*").eq("org_id", userOrg.id))
+        .order("updated_at", { ascending: false }),
+      scope(supabase.from("canvas_folders").select("*").eq("org_id", userOrg.id))
+        .order("created_at", { ascending: true }),
+    ]);
+    setRows(cs || []); setFolders(fs || []);
+  };
+  useEffect(() => { load(); }, [userOrg?.id, projectId]);
+
+  // Working files and their exports go to the same bucket the rest of the brand
+  // uses, so a thumbnail can be shown without signing anything.
+  const upload = async (file, prefix) => {
+    if (!file || !userOrg?.id) return null;
+    const ext = (file.name?.split(".").pop() || "png").toLowerCase();
+    const path = `creations/${userOrg.id}/${prefix}-${crypto.randomUUID()}.${ext}`;
+    const { error } = await uploadTracked({ bucket: "brand-assets", path, file, orgId: userOrg.id });
+    if (error) return null;
+    return supabase.storage.from("brand-assets").getPublicUrl(path).data.publicUrl;
+  };
+
+  const createCanvas = async (fmt) => {
+    if (!userOrg?.id) return;
+    setBusy(true);
+    const { data, error } = await supabase.from("brand_canvases").insert({
+      org_id: userOrg.id, project_id: projectId, folder_id: folderId,
+      name: fmt.name, kind: fmt.kind || kind, w: fmt.w, h: fmt.h,
+      doc: { bg: "#FFFFFF", items: [] }, created_by: session?.user?.id || null,
+    }).select().single();
+    setBusy(false); setNewOpen(false);
+    if (error) return;
+    setRows(r => [data, ...(r || [])]);
+    setEditing(data);
+  };
+
+  const saveCanvas = async (row, doc, exportUrl, thumbUrl) => {
+    const patch = { doc, updated_at: new Date().toISOString() };
+    if (exportUrl) patch.export_url = exportUrl;
+    if (thumbUrl) patch.thumb_url = thumbUrl;
+    setRows(list => (list || []).map(r => r.id === row.id ? { ...r, ...patch } : r));
+    await supabase.from("brand_canvases").update(patch).eq("id", row.id);
+  };
+
+  const removeCanvas = async (row) => {
+    setRows(list => (list || []).filter(r => r.id !== row.id));
+    await supabase.from("brand_canvases").delete().eq("id", row.id);
+  };
+
+  const rename = async (row, name) => {
+    setRows(list => (list || []).map(r => r.id === row.id ? { ...r, name } : r));
+    setRenaming(null);
+    await supabase.from("brand_canvases").update({ name }).eq("id", row.id);
+  };
+
+  const addFolder = async () => {
+    const name = (window.prompt(de ? "Name des Ordners" : "Folder name") || "").trim();
+    if (!name || !userOrg?.id) return;
+    const { data } = await supabase.from("canvas_folders").insert({
+      org_id: userOrg.id, project_id: projectId, name, created_by: session?.user?.id || null,
+    }).select().single();
+    if (data) setFolders(f => [...f, data]);
+  };
+
+  const visible = (rows || [])
+    .filter(r => r.kind === kind)
+    .filter(r => (folderId ? r.folder_id === folderId : !r.folder_id))
+    .filter(r => !q.trim() || (r.name || "").toLowerCase().includes(q.trim().toLowerCase()));
+
+  const card = { background: darkMode ? "rgba(255,255,255,0.04)" : "#fff",
+    border: `1px solid ${theme.borderFaint}`, borderRadius: 14 };
+  const fmtDate = (s) => new Date(s).toLocaleDateString(de ? "de-DE" : "en-GB",
+    { day: "2-digit", month: "short", year: "numeric" });
+
+  const iconBtn = (glyph, act, on, title) => (
+    <motion.div whileTap={{ scale: 0.94 }} onClick={act} title={title}
+      style={{ width: 34, height: 34, borderRadius: 10, display: "flex", alignItems: "center",
+        justifyContent: "center", cursor: "pointer",
+        background: on ? "#15151c" : "transparent", color: on ? "#fff" : theme.text,
+        border: `1px solid ${on ? "#15151c" : theme.borderFaint}` }}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{glyph}</svg>
+    </motion.div>
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+      <div style={{ padding: "22px 26px 0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <motion.div whileTap={{ scale: 0.94 }} onClick={onBack}
+            style={{ width: 32, height: 32, borderRadius: 9, cursor: "pointer", display: "flex",
+              alignItems: "center", justifyContent: "center", color: theme.text }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+          </motion.div>
+          <div style={{ fontSize: 21, fontFamily: FONT, fontWeight: 700, color: theme.text }}>Creations</div>
+          <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>
+            {de ? "Arbeitsdateien — die Canvas hinter den fertigen Bildern"
+                : "Working files — the canvas behind the finished images"}
+          </div>
+          <div style={{ flex: 1 }} />
+          {canEdit && (
+            <motion.div whileTap={{ scale: 0.96 }} onClick={() => setNewOpen(true)}
+              style={{ padding: "9px 18px", borderRadius: 999, background: "#15151c", color: "#fff",
+                fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+              {de ? "Neu erstellen" : "Create new"}
+            </motion.div>
+          )}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 18, flexWrap: "wrap" }}>
+          {CREATION_KINDS.map(k => (
+            <div key={k.key} onClick={() => { setKind(k.key); setFolderId(null); }}
+              style={{ padding: "8px 15px", borderRadius: 999, cursor: "pointer",
+                fontFamily: FONT, fontSize: 13, fontWeight: 600,
+                background: kind === k.key ? "#15151c" : "transparent",
+                color: kind === k.key ? "#fff" : theme.textDim,
+                border: `1px solid ${kind === k.key ? "#15151c" : theme.borderFaint}` }}>
+              {de ? k.de : k.en}
+            </div>
+          ))}
+          <div style={{ flex: 1 }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "0 12px", height: 34,
+            borderRadius: 10, border: `1px solid ${theme.borderFaint}`, minWidth: 190 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.textDim}
+              strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.3-4.3" /></svg>
+            <input value={q} onChange={e => setQ(e.target.value)}
+              placeholder={de ? "Suchen …" : "Search …"}
+              style={{ width: "100%", border: "none", outline: "none", background: "transparent",
+                color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
+          </div>
+          {iconBtn(<><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+            <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></>,
+            () => setLayout("grid"), layout === "grid", de ? "Kacheln" : "Grid")}
+          {iconBtn(<><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" />
+            <path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" /></>,
+            () => setLayout("list"), layout === "list", de ? "Liste" : "List")}
+          {canEdit && iconBtn(<><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+            <path d="M12 11v4M10 13h4" /></>, addFolder, false, de ? "Neuer Ordner" : "New folder")}
+        </div>
+
+        {(folderId || folders.length > 0) && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+            <div onClick={() => setFolderId(null)}
+              style={{ fontSize: 12.5, fontFamily: FONT, cursor: "pointer",
+                color: folderId ? theme.textDim : theme.text, fontWeight: folderId ? 400 : 600 }}>
+              {de ? "Alle" : "All"}
+            </div>
+            {folders.map(f => (
+              <div key={f.id} onClick={() => setFolderId(f.id)}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px",
+                  borderRadius: 999, cursor: "pointer", fontFamily: FONT, fontSize: 12.5,
+                  background: folderId === f.id ? (darkMode ? "rgba(255,255,255,0.10)" : "#EDEDF0") : "transparent",
+                  color: theme.text, border: `1px solid ${theme.borderFaint}` }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
+                {f.name}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "18px 26px 30px" }}>
+        {rows === null ? (
+          <div style={{ color: theme.textDim, fontFamily: FONT, fontSize: 13 }}>{de ? "Lädt …" : "Loading …"}</div>
+        ) : visible.length === 0 ? (
+          <div style={{ ...card, padding: "40px 22px", textAlign: "center", color: theme.textDim,
+            fontFamily: FONT, fontSize: 13, lineHeight: 1.6 }}>
+            {q.trim()
+              ? (de ? "Keine Treffer." : "No matches.")
+              : (de ? "Noch nichts angelegt. „Neu erstellen“ öffnet eine Canvas im gewünschten Format."
+                    : "Nothing here yet. “Create new” opens a canvas at the size you pick.")}
+          </div>
+        ) : layout === "grid" ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
+            {visible.map(r => (
+              <div key={r.id} style={{ ...card, overflow: "hidden" }}>
+                <div onClick={() => setEditing(r)}
+                  style={{ aspectRatio: "4 / 3", cursor: "pointer",
+                    background: r.thumb_url
+                      ? `center/contain no-repeat ${darkMode ? "#111117" : "#F3F3F5"} url(${r.thumb_url})`
+                      : (darkMode ? "#111117" : "#F3F3F5"),
+                    display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {!r.thumb_url && (
+                    <span style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textFaint }}>
+                      {r.w} × {r.h}
+                    </span>
+                  )}
+                </div>
+                <div style={{ padding: "10px 12px 12px" }}>
+                  {renaming === r.id ? (
+                    <input autoFocus defaultValue={r.name}
+                      onBlur={e => rename(r, e.target.value.trim() || r.name)}
+                      onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur();
+                        if (e.key === "Escape") setRenaming(null); }}
+                      style={{ width: "100%", border: "none", outline: "none", background: "transparent",
+                        color: theme.text, fontFamily: FONT, fontSize: 13.5, fontWeight: 600,
+                        borderBottom: `1.5px solid ${theme.borderFaint}` }} />
+                  ) : (
+                    <div onDoubleClick={() => canEdit && setRenaming(r.id)}
+                      style={{ fontFamily: FONT, fontSize: 13.5, fontWeight: 600, color: theme.text,
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {r.name || (de ? "Ohne Titel" : "Untitled")}
+                    </div>
+                  )}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3 }}>
+                    <span style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textDim }}>
+                      {r.w} × {r.h} · {fmtDate(r.updated_at)}
+                    </span>
+                    <div style={{ flex: 1 }} />
+                    {canEdit && (
+                      <span onClick={() => removeCanvas(r)} title={de ? "Löschen" : "Delete"}
+                        style={{ cursor: "pointer", color: theme.textFaint, fontSize: 12 }}>✕</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ ...card, overflow: "hidden" }}>
+            {visible.map((r, i) => (
+              <div key={r.id} onClick={() => setEditing(r)}
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", cursor: "pointer",
+                  borderTop: i ? `1px solid ${theme.borderFaint}` : "none" }}>
+                <div style={{ width: 52, height: 38, borderRadius: 7, flexShrink: 0,
+                  background: r.thumb_url
+                    ? `center/contain no-repeat ${darkMode ? "#111117" : "#F3F3F5"} url(${r.thumb_url})`
+                    : (darkMode ? "#111117" : "#F3F3F5") }} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontFamily: FONT, fontSize: 13.5, fontWeight: 600, color: theme.text,
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {r.name || (de ? "Ohne Titel" : "Untitled")}
+                  </div>
+                  <div style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textDim }}>
+                    {r.w} × {r.h} px
+                  </div>
+                </div>
+                <span style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textDim }}>{fmtDate(r.updated_at)}</span>
+                {canEdit && (
+                  <span onClick={e => { e.stopPropagation(); removeCanvas(r); }}
+                    style={{ cursor: "pointer", color: theme.textFaint, fontSize: 12, padding: "0 4px" }}>✕</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Format picker */}
+      <AnimatePresence>
+        {newOpen && createPortal(
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setNewOpen(false)}
+            style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.45)",
+              display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <motion.div initial={{ scale: 0.97, y: 8 }} animate={{ scale: 1, y: 0 }}
+              onClick={e => e.stopPropagation()}
+              style={{ width: "min(560px, 100%)", maxHeight: "80vh", overflowY: "auto",
+                background: darkMode ? "#16161e" : "#fff", borderRadius: 18, padding: 22,
+                border: `1px solid ${theme.borderFaint}` }}>
+              <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 600, color: theme.text }}>
+                {de ? "Format wählen" : "Pick a size"}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 14 }}>
+                {creationFormats(de).map((f, i) => (
+                  <div key={i} onClick={() => !busy && createCanvas(f)}
+                    style={{ padding: "11px 13px", borderRadius: 11, cursor: "pointer",
+                      border: `1px solid ${theme.borderFaint}` }}>
+                    <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: theme.text }}>{f.name}</div>
+                    <div style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textDim }}>{f.w} × {f.h} px</div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>, document.body)}
+      </AnimatePresence>
+
+      {editing && (
+        <CanvasEditor
+          size={[editing.w, editing.h]} title={editing.name || "Canvas"}
+          doc={editing.doc} originRect={null}
+          brand={brand} orgId={userOrg?.id} session={session} userOrg={userOrg}
+          theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+          onUpload={(file) => upload(file, "export")}
+          onDone={async (url, docOut) => {
+            // The export is a finished file and belongs in Assets; the doc is the
+            // working file and stays here. Both are written in one update so a
+            // thumbnail can never point at a design it does not show.
+            await saveCanvas(editing, docOut, url, url);
+            setEditing(null);
+          }}
+          onClose={() => setEditing(null)} />
+      )}
+    </div>
+  );
+}
+
 function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", canEdit = true, projectId = null, projectName = "", embedded = false, initialTab = "touchpoints" }) {
   const tpScope = (q) => projectId ? q.eq("project_id", projectId) : q.is("project_id", null);
   const [audTab, setAudTab] = useState(initialTab); // "touchpoints" | "people" | "analytics"
@@ -36964,7 +37316,7 @@ export default function CircularMenu() {
     }
 
     // Let views with their own scrolling handle scroll natively
-    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "timeline" || currentView === "settings" || currentView === "notes" || currentView === "projects" || currentView === "brand" || currentView === "assets" || currentView === "touchpoints" || currentView === "whiteboard" || currentView === "createpost") {
+    if (currentView === "files" || currentView === "chat" || currentView === "kanban" || currentView === "calendar" || currentView === "timeline" || currentView === "settings" || currentView === "notes" || currentView === "projects" || currentView === "brand" || currentView === "assets" || currentView === "touchpoints" || currentView === "creations" || currentView === "whiteboard" || currentView === "createpost") {
       return;
     }
 
@@ -38030,6 +38382,11 @@ export default function CircularMenu() {
             <TouchpointsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} canEdit={canEditBrand} initialTab={audienceInitialTab}
               onBack={() => { setAudienceInitialTab("touchpoints"); setCurrentView("dashboard"); }} />
           )}
+          {currentView === "creations" && (
+            <CreationsView session={session} userOrg={userOrg} brand={brandProfile} theme={theme} darkMode={darkMode}
+              t={t} appLanguage={appLanguage} canEdit={canEditBrand}
+              onBack={() => setCurrentView("dashboard")} />
+          )}
         </AnimatePresence>
 
         {/* CREATE SOCIAL MEDIA POST */}
@@ -38829,6 +39186,7 @@ export default function CircularMenu() {
                 // links and stored pillars still arrive here asking for "assets".
                 if (subId === "assets") { setCurrentView("assets"); return; }
                 if (subId === "touchpoints") { setCurrentView("touchpoints"); return; }
+                if (subId === "creations") { setCurrentView("creations"); return; }
                 // Open BrandView on the matching pillar tab (strategy/identity/design).
                 if (["strategy", "identity", "design"].includes(subId)) setBrandTab(subId);
                 setCurrentView("brand");
