@@ -1331,6 +1331,19 @@ async function seedStarterTasks(orgId, userId, de) {
   if (error) console.warn("[onboarding] starter tasks not created:", error.message);
 }
 
+// The model keys stored on a generated file, in the words people saw when they
+// picked one. Falling back to the raw key is fine: an unknown model is better
+// named badly than not named.
+const AGENT_FREE_MODEL_LABELS = {
+  "gpt-image-2": "GPT Image 2",
+  "nano-banana-2": "Nano Banana 2",
+  "flux-1-schnell": "Flux Schnell",
+  "flux-2-klein": "Flux 2 Klein",
+  "flux-2-dev": "Flux 2 Dev",
+  "flux-dev": "Flux Dev",
+  "flux-pro": "Flux Pro",
+};
+
 // Kanban board data
 const priColors = { high: "#EF4444", medium: "#F59E0B", low: "#999999" };
 const ASSIGNEE_COLORS = ["#8B7AFF", "#E84393", "#00B894", "#F59E0B", "#5B8DEF", "#E88D67", "#6C5CE7", "#FD79A8"];
@@ -20540,6 +20553,12 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     type: (f.mime_type || "").startsWith("video/") ? "video" : "image",
     url: f.public_url,
     folder_id: f.folder_id ?? null,
+    // Carried through for the details panel: without them the large view knows
+    // what a file is called and nothing about where it came from.
+    created_at: f.created_at || null,
+    size_bytes: f.size_bytes ?? null,
+    mime_type: f.mime_type || null,
+    user_id: f.user_id || null,
   });
   const allFiles = files || [];
   const searching = !!search.trim();
@@ -21281,6 +21300,27 @@ function MoodboardGridTile({ item, i, theme, darkMode, accent, onOpen }) {
 function MoodboardItemDetail({ item, items = [], containers = [], currentContainerId, containerLabel = "Moodboard", allowClear = false, theme, darkMode, accent, t, appLanguage = "de", llmProvider, llmKeys, ensureValidToken, onUploadDrive, onClose, onDelete, onSelect, onSave, onMove }) {
   const de = appLanguage === "de";
   const [name, setName] = useState(item.name || "");
+
+  // What the picture is, beyond its name. Read where each fact actually lives:
+  // the pixel size from the image itself, since nothing stores it; the author
+  // from profiles, since the row only carries an id.
+  const [dims, setDims] = useState(null);
+  const [author, setAuthor] = useState(null);
+  useEffect(() => {
+    setDims(null);
+    if (!item.url || item.type !== "image") return;
+    const img = new Image();
+    img.onload = () => setDims({ w: img.naturalWidth, h: img.naturalHeight });
+    img.src = item.url;
+  }, [item.url, item.type]);
+  useEffect(() => {
+    setAuthor(null);
+    if (!item.user_id) return;
+    let alive = true;
+    supabase.from("profiles").select("display_name").eq("id", item.user_id).maybeSingle()
+      .then(({ data }) => { if (alive) setAuthor(data?.display_name || null); });
+    return () => { alive = false; };
+  }, [item.user_id]);
   const [note, setNote] = useState(item.note || "");
   const [tagInput, setTagInput] = useState("");
   const [moveOpen, setMoveOpen] = useState(false);
@@ -21727,6 +21767,40 @@ function MoodboardItemDetail({ item, items = [], containers = [], currentContain
               )}
             </div>
           )}
+
+          {/* What this file is. Above the tags because it answers questions
+              nobody has to type: which model made it, how big it is, when it
+              arrived and through whom. */}
+          {(() => {
+            const gen = item.metadata?.generated ? item.metadata : null;
+            const modelLabel = gen?.model ? (AGENT_FREE_MODEL_LABELS[gen.model] || gen.model) : null;
+            const bytes = item.size_bytes;
+            const rows = [
+              modelLabel && [de ? "Modell" : "Model", modelLabel],
+              dims && [de ? "Maße" : "Dimensions", `${dims.w} × ${dims.h}`],
+              bytes && [de ? "Dateigröße" : "File size",
+                bytes > 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`],
+              item.created_at && [de ? "Erstellt" : "Created",
+                new Date(item.created_at).toLocaleString(de ? "de-DE" : "en-US",
+                  { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })],
+              author && [de ? "Von" : "By", author],
+            ].filter(Boolean);
+            if (!rows.length) return null;
+            return (
+              <div>
+                {label(de ? "Details" : "Details")}
+                <div style={{ padding: "4px 2px", display: "flex", flexDirection: "column", gap: 8 }}>
+                  {rows.map(([k, v]) => (
+                    <div key={k} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 14 }}>
+                      <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, flexShrink: 0 }}>{k}</span>
+                      <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text, textAlign: "right",
+                        wordBreak: "break-word" }}>{v}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Tags as chips */}
           <div>
