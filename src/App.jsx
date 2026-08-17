@@ -6321,7 +6321,10 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
         {toolBtn("comment", de ? "Kommentar" : "Comment", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>)}
       </>}
 
-      {/* Zoom — part of the bar, so the frame's scale is never somewhere else */}
+      {/* Zoom — Brainstorm carries it in the bar. The canvas editor has its own
+          zoom menu in the header, so it passes hide={["zoom"]} rather than
+          showing the same control twice. */}
+      {!skip("zoom") && <>
       {sep}
       <motion.div whileTap={{ scale: 0.9 }} onClick={() => onZoom(-1)} title={de ? "Verkleinern" : "Zoom out"}
         style={{ width: vertical ? 38 : 30, height: vertical ? 30 : 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text }}>
@@ -6333,6 +6336,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
         style={{ width: vertical ? 38 : 30, height: vertical ? 30 : 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text }}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       </motion.div>
+      </>}
     </div>
   );
 }
@@ -17092,6 +17096,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [lastLineTool, setLastLineTool] = useState("arrow");
   const [lineToolOpen, setLineToolOpen] = useState(false);
   const [mediaOpen, setMediaOpen] = useState(false);
+  const [zoomMenu, setZoomMenu] = useState(false);
+  const [showGrid, setShowGrid] = useState(true);
   const [cam, setCam] = useState(null);
   const [flying, setFlying] = useState(!!originRect);
   const [imgMenuOpen, setImgMenuOpen] = useState(false);
@@ -17170,6 +17176,27 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     return () => window.removeEventListener("keydown", onKey);
   }, [sel, editing, onClose]);
 
+  // Zoom about the middle of the working area, so the frame does not slide off
+  // when the percentage is set from the menu rather than the wheel.
+  const zoomTo = (s2) => setCam(c => {
+    if (!c) return c;
+    const cx = (window.innerWidth - 274 + 78) / 2, cy = window.innerHeight / 2;
+    const k = s2 / c.s;
+    return { s: s2, x: cx - (cx - c.x) * k, y: cy - (cy - c.y) * k };
+  });
+  const zoomStep = (dir) => setCam(c => (c ? (zoomTo(Math.min(8, Math.max(0.02, c.s * (dir > 0 ? 1.2 : 1 / 1.2)))), c) : c));
+  const zoomToSel = () => {
+    const it = items.find(i => i.id === sel);
+    if (!it) return;
+    const bx = it.type === "arrow" || it.type === "line"
+      ? { x: Math.min(it.x1, it.x2), y: Math.min(it.y1, it.y2),
+          w: Math.abs(it.x2 - it.x1) || 1, h: Math.abs(it.y2 - it.y1) || 1 }
+      : { x: it.x || 0, y: it.y || 0, w: it.w || 1, h: (it.h || it.size * CANVAS_LH) || 1 };
+    const aw = Math.max(120, window.innerWidth - 78 - 274), ah = Math.max(120, window.innerHeight - 88);
+    const s2 = Math.min(8, Math.min(aw / bx.w, ah / bx.h) * 0.7);
+    setCam({ s: s2, x: 78 + aw / 2 - (bx.x + bx.w / 2) * s2, y: 62 + ah / 2 - (bx.y + bx.h / 2) * s2 });
+  };
+
   const toArt = (e) => (cam ? { x: (e.clientX - cam.x) / cam.s, y: (e.clientY - cam.y) / cam.s } : { x: 0, y: 0 });
 
   const onStageDown = (e) => {
@@ -17227,17 +17254,25 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       return;
     }
     const p = toArt(e);
-    const box = { x: Math.round(Math.min(d.ox, p.x)), y: Math.round(Math.min(d.oy, p.y)),
-      w: Math.round(Math.abs(p.x - d.ox)), h: Math.round(Math.abs(p.y - d.oy)) };
     if (d.mode === "create") {
-      if (box.w < 4 && box.h < 4) return;
+      // Brainstorm's contract, not an approximation of it: proportional by
+      // default so an ellipse drags out as a real circle, Shift to deform, and
+      // anchored at the point the drag started so pulling up or left grows away
+      // from it instead of sliding the shape around.
+      const dx = p.x - d.ox, dy = p.y - d.oy;
+      let w = Math.abs(dx), h = Math.abs(dy);
+      if (!e.shiftKey) w = h = Math.max(w, h);
+      const box = { w: Math.round(w), h: Math.round(h),
+        x: Math.round(dx >= 0 ? d.ox : d.ox - w), y: Math.round(dy >= 0 ? d.oy : d.oy - h) };
+      d.live = box;
       if (!d.started) {
         d.started = true;
-        setItems(list => [...list, { id: d.id, type: d.type, ...box, fill: palette[0],
-          radius: d.type === "rect" ? 0 : 0 }]);
+        setItems(list => [...list, { id: d.id, type: d.type, ...box, fill: palette[0] }]);
       } else patch(d.id, box);
       return;
     }
+    const box = { x: Math.round(Math.min(d.ox, p.x)), y: Math.round(Math.min(d.oy, p.y)),
+      w: Math.round(Math.abs(p.x - d.ox)), h: Math.round(Math.abs(p.y - d.oy)) };
     if (d.mode === "draw") {
       setItems(list => list.map(i => (i.id === d.id ? { ...i, pts: [...i.pts, [p.x, p.y]] } : i)));
       return;
@@ -17260,8 +17295,46 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const onStageUp = () => {
     const d = dragRef.current;
     dragRef.current = null;
-    if (d?.mode === "create") { if (d.started) { setSel(d.id); } setTool("select"); }
-    if (d?.mode === "arrow" || d?.mode === "draw") { setSel(d.id); setTool("select"); }
+    if (d?.mode === "create") {
+      // A plain click drops a comfortably sized square centred on the cursor —
+      // ellipse becomes a real circle, rect a real square — exactly as it does
+      // in Brainstorm. A genuine drag keeps its size, minimum 48. The 300 there
+      // is capped against the frame here, because 300px on a 320px avatar would
+      // be the whole picture.
+      const live = d.live || { w: 0, h: 0 };
+      const dragged = live.w > 12 || live.h > 12;
+      if (dragged) {
+        const w = Math.max(48, live.w), h = Math.max(48, live.h);
+        patch(d.id, { w, h });
+        setSel(d.id);
+      } else {
+        if (d.started) setItems(list => list.filter(i => i.id !== d.id));
+        const side = Math.min(300, Math.round(Math.min(W, H) * 0.6));
+        const it = { id: crypto.randomUUID(), type: d.type, w: side, h: side,
+          x: Math.round(d.ox - side / 2), y: Math.round(d.oy - side / 2), fill: palette[0] };
+        setItems(list => [...list, it]);
+        setSel(it.id);
+      }
+      setTool("select");
+    }
+    // Too short to have been meant: Brainstorm drops these rather than leaving a
+    // dot behind, and a stray 2px arrow is impossible to select and delete.
+    if (d?.mode === "arrow") {
+      setItems(list => {
+        const it = list.find(i => i.id === d.id);
+        if (it && Math.hypot(it.x2 - it.x1, it.y2 - it.y1) <= 12) return list.filter(i => i.id !== d.id);
+        return list;
+      });
+      setSel(d.id); setTool("select");
+    }
+    if (d?.mode === "draw") {
+      setItems(list => {
+        const it = list.find(i => i.id === d.id);
+        if (it && it.pts.length < 2) return list.filter(i => i.id !== d.id);
+        return list;
+      });
+      setSel(d.id); setTool("select");
+    }
   };
 
   const onItemDown = (e, it) => {
@@ -17311,7 +17384,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const cvs = document.createElement("canvas");
     cvs.width = W; cvs.height = H;
     const ctx = cvs.getContext("2d");
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+    // "transparent" must leave the alpha channel alone — painting white would
+    // export a white rectangle that only looks like nothing on a white page.
+    if (bg !== "transparent") { ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H); }
     for (const it of items) {
       if (it.type === "image" && it.url) {
         const img = await loadImage(it.url);
@@ -17441,10 +17516,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         onPointerUp={onStageUp} onPointerLeave={onStageUp}
         style={{ position: "absolute", inset: 0, overflow: "hidden",
           cursor: tool === "select" ? (dragRef.current?.mode === "pan" ? "grabbing" : "default") : "crosshair",
-          backgroundImage: `radial-gradient(${darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)"} 1px, transparent 1px)`,
+          backgroundImage: showGrid
+            ? `radial-gradient(${darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)"} 1px, transparent 1px)`
+            : "none",
           backgroundSize: "22px 22px" }}>
         {cam && (
-          <div style={{ position: "absolute", left: 0, top: 0, width: W, height: H, background: bg,
+          <div style={{ position: "absolute", left: 0, top: 0, width: W, height: H,
+            ...(bg === "transparent"
+              ? { backgroundColor: "#fff",
+                  backgroundImage: "conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)",
+                  backgroundSize: "18px 18px" }
+              : { background: bg }),
             transformOrigin: "0 0",
             transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`,
             transition: flying ? "transform 620ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
@@ -17578,14 +17660,59 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         <div style={{ fontSize: 11.5, color: theme.textDim }}>{W} × {H} px</div>
         <div style={{ flex: 1 }} />
         {err && <div style={{ fontSize: 11.5, color: "#D9342B" }}>{err}</div>}
-        <div style={{ fontSize: 11.5, color: theme.textDim, minWidth: 46, textAlign: "right" }}>
-          {cam ? Math.round(cam.s * 100) : 0} %
+        <div style={{ position: "relative" }}>
+          <motion.div whileTap={{ scale: 0.96 }} onClick={() => setZoomMenu(o => !o)}
+            style={{ padding: "7px 10px 7px 13px", borderRadius: 999, border: `1px solid ${line}`,
+              display: "flex", alignItems: "center", gap: 6,
+              fontSize: 12, fontWeight: 600, color: theme.text, cursor: "pointer" }}>
+            {cam ? Math.round(cam.s * 100) : 0} %
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </motion.div>
+          <AnimatePresence>
+            {zoomMenu && (<>
+              <div onClick={() => setZoomMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
+              <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.14 }}
+                style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 31, width: 246,
+                  padding: 6, borderRadius: 14, background: panel, border: `1px solid ${line}`,
+                  boxShadow: "0 16px 40px rgba(0,0,0,0.22)" }}>
+                {[[de ? "Auf Auswahl zoomen" : "Zoom to selection", "⌘0", () => zoomToSel(), !!selItem],
+                  [de ? "Gesamten Inhalt anpassen" : "Fit all content", "⌥⌘0", () => setCam(fitCam()), true],
+                  ["sep"],
+                  [de ? "Einzoomen" : "Zoom in", "⌘+", () => zoomStep(1), true],
+                  [de ? "Auszoomen" : "Zoom out", "⌘−", () => zoomStep(-1), true],
+                  ["50 %", "", () => zoomTo(0.5), true],
+                  ["100 %", "⌘1", () => zoomTo(1), true],
+                  ["150 %", "", () => zoomTo(1.5), true],
+                  ["200 %", "⌘2", () => zoomTo(2), true],
+                  ["sep"],
+                ].map(([label, key, act, on], i2) => label === "sep" ? (
+                  <div key={"s" + i2} style={{ height: 1, background: line, margin: "6px 8px" }} />
+                ) : (
+                  <div key={label} onClick={on ? () => { act(); setZoomMenu(false); } : undefined}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+                      padding: "9px 12px", borderRadius: 9, cursor: on ? "pointer" : "default",
+                      color: on ? theme.text : theme.textFaint, fontSize: 13 }}>
+                    <span>{label}</span>
+                    <span style={{ color: theme.textFaint, fontSize: 12 }}>{key}</span>
+                  </div>
+                ))}
+                <div onClick={() => setShowGrid(g => !g)}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "9px 12px", borderRadius: 9, cursor: "pointer", color: theme.text, fontSize: 13 }}>
+                  <span>{de ? "Punktraster anzeigen" : "Show dot grid"}</span>
+                  <div style={{ width: 34, height: 20, borderRadius: 999, padding: 2,
+                    background: showGrid ? "#15151c" : (darkMode ? "#3A3A44" : "#D3D3DA"),
+                    display: "flex", justifyContent: showGrid ? "flex-end" : "flex-start",
+                    transition: "background 0.15s" }}>
+                    <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff" }} />
+                  </div>
+                </div>
+              </motion.div>
+            </>)}
+          </AnimatePresence>
         </div>
-        <motion.div whileTap={{ scale: 0.96 }} onClick={() => { setCam(fitCam()); }}
-          style={{ padding: "7px 12px", borderRadius: 999, border: `1px solid ${line}`,
-            fontSize: 12, fontWeight: 600, color: theme.text, cursor: "pointer" }}>
-          {de ? "Einpassen" : "Fit"}
-        </motion.div>
         <motion.div whileTap={{ scale: 0.96 }} onClick={busy ? undefined : finish}
           style={{ padding: "8px 18px", borderRadius: 999, background: "#15151c", color: "#fff",
             fontSize: 12.5, fontWeight: 600, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}>
@@ -17608,7 +17735,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           zoomPct={cam ? Math.round(cam.s * 100) : 100}
           onZoom={(d) => setCam(c => c && ({ ...c, s: Math.min(8, Math.max(0.02, c.s * (d > 0 ? 1.2 : 1 / 1.2))) }))}
           onResetZoom={() => setCam(fitCam())}
-          hide={["comment", "media"]}
+          hide={["comment", "media", "zoom"]}
           theme={theme} darkMode={darkMode} de={de} />
       </div>
 
@@ -17648,6 +17775,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             <div style={{ fontSize: 12, color: theme.textDim, marginTop: 6 }}>{title}</div>
             <div style={{ fontSize: 12, color: theme.textDim }}>{W} × {H} px</div>
             {label(de ? "Hintergrund" : "Background")}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+              {/* Transparent is a real choice, not the absence of one, so it gets
+                  a swatch of its own — the chequerboard every editor uses to mean
+                  "nothing here". */}
+              <div onClick={() => setBg("transparent")} title={de ? "Transparent" : "Transparent"}
+                style={{ width: 24, height: 24, borderRadius: 7, cursor: "pointer",
+                  backgroundColor: "#fff",
+                  backgroundImage: "conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)",
+                  backgroundSize: "8px 8px",
+                  border: bg === "transparent" ? "2px solid #15151c" : `1px solid ${line}` }} />
+            </div>
             {swatch(bg, setBg)}
           </>
         )}
