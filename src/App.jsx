@@ -16954,6 +16954,17 @@ const CANVAS_FONT_STACK = "'Geist', -apple-system, sans-serif";
 
 const canvasFont = (it) => `${it.weight || 600} ${it.size}px ${CANVAS_FONT_STACK}`;
 
+// The polygon shapes, in fractions of the item's box. The editor turns these
+// into a CSS clip-path and the export into a canvas path — one source, so the
+// two cannot disagree about where a corner sits.
+const CANVAS_POLY = {
+  diamond:  [[0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]],
+  triangle: [[0.5, 0], [1, 1], [0, 1]],
+};
+const polyClip = (type) => CANVAS_POLY[type]
+  ? `polygon(${CANVAS_POLY[type].map(([x, y]) => `${x * 100}% ${y * 100}%`).join(", ")})`
+  : undefined;
+
 // Every template is a function of the frame, so one entry works for a banner and
 // for a square profile picture without a second definition.
 const CANVAS_TEMPLATES = [
@@ -17103,6 +17114,23 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       return;
     }
     if (tool === "image") { setImgOpen(true); return; }
+    if (tool === "draw") {
+      // Points in artboard units behind one offset, the way the whiteboard keeps
+      // pen paths: moving the stroke then costs one number, not a rewrite of
+      // every point it holds.
+      const it = { id: crypto.randomUUID(), type: "draw", ox: 0, oy: 0,
+        pts: [[p.x, p.y]], color: palette[0], width: Math.max(2, Math.round(H / 120)) };
+      setItems(list => [...list, it]);
+      dragRef.current = { mode: "draw", id: it.id };
+      return;
+    }
+    if (tool === "arrow") {
+      const it = { id: crypto.randomUUID(), type: "arrow", x1: p.x, y1: p.y, x2: p.x, y2: p.y,
+        color: palette[0], width: Math.max(2, Math.round(H / 120)) };
+      setItems(list => [...list, it]);
+      dragRef.current = { mode: "arrow", id: it.id };
+      return;
+    }
     dragRef.current = { mode: "create", type: tool, ox: p.x, oy: p.y,
       id: crypto.randomUUID(), started: false };
   };
@@ -17126,9 +17154,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       } else patch(d.id, box);
       return;
     }
+    if (d.mode === "draw") {
+      setItems(list => list.map(i => (i.id === d.id ? { ...i, pts: [...i.pts, [p.x, p.y]] } : i)));
+      return;
+    }
+    if (d.mode === "arrow") { patch(d.id, { x2: p.x, y2: p.y }); return; }
     if (d.mode === "move") {
-      patch(d.id, { x: Math.round(d.ix + (e.clientX - d.sx) / cam.s),
-        y: Math.round(d.iy + (e.clientY - d.sy) / cam.s) });
+      const dx = (e.clientX - d.sx) / cam.s, dy = (e.clientY - d.sy) / cam.s;
+      if (d.kind === "draw") patch(d.id, { ox: d.ix + dx, oy: d.iy + dy });
+      else if (d.kind === "arrow") patch(d.id, { x1: d.ix + dx, y1: d.iy + dy, x2: d.ax + dx, y2: d.ay + dy });
+      else patch(d.id, { x: Math.round(d.ix + dx), y: Math.round(d.iy + dy) });
       return;
     }
     if (d.mode === "resize") {
@@ -17142,13 +17177,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const d = dragRef.current;
     dragRef.current = null;
     if (d?.mode === "create") { if (d.started) { setSel(d.id); } setTool("select"); }
+    if (d?.mode === "arrow" || d?.mode === "draw") { setSel(d.id); setTool("select"); }
   };
 
   const onItemDown = (e, it) => {
     if (tool !== "select" || editing) return;
     e.stopPropagation();
     setSel(it.id);
-    dragRef.current = { mode: "move", id: it.id, sx: e.clientX, sy: e.clientY, ix: it.x, iy: it.y };
+    dragRef.current = { mode: "move", id: it.id, sx: e.clientX, sy: e.clientY,
+      kind: it.type === "draw" ? "draw" : it.type === "arrow" ? "arrow" : "box",
+      ix: it.type === "draw" ? (it.ox || 0) : it.type === "arrow" ? it.x1 : it.x,
+      iy: it.type === "draw" ? (it.oy || 0) : it.type === "arrow" ? it.y1 : it.y,
+      ax: it.x2, ay: it.y2 };
   };
 
   const onHandleDown = (e, it) => {
@@ -17198,6 +17238,31 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         ctx.fillStyle = it.fill; ctx.beginPath();
         ctx.ellipse(it.x + it.w / 2, it.y + it.h / 2, it.w / 2, it.h / 2, 0, 0, Math.PI * 2);
         ctx.fill();
+      } else if (CANVAS_POLY[it.type]) {
+        ctx.fillStyle = it.fill; ctx.beginPath();
+        CANVAS_POLY[it.type].forEach(([fx, fy], i) => {
+          const x = it.x + fx * it.w, y = it.y + fy * it.h;
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        });
+        ctx.closePath(); ctx.fill();
+      } else if (it.type === "draw") {
+        ctx.strokeStyle = it.color; ctx.lineWidth = it.width;
+        ctx.lineCap = "round"; ctx.lineJoin = "round";
+        ctx.beginPath();
+        it.pts.forEach(([x, y], i) => {
+          const px2 = x + (it.ox || 0), py2 = y + (it.oy || 0);
+          i ? ctx.lineTo(px2, py2) : ctx.moveTo(px2, py2);
+        });
+        ctx.stroke();
+      } else if (it.type === "arrow") {
+        ctx.strokeStyle = it.color; ctx.fillStyle = it.color;
+        ctx.lineWidth = it.width; ctx.lineCap = "round";
+        ctx.beginPath(); ctx.moveTo(it.x1, it.y1); ctx.lineTo(it.x2, it.y2); ctx.stroke();
+        const a = Math.atan2(it.y2 - it.y1, it.x2 - it.x1), L = it.width * 4.5;
+        ctx.beginPath(); ctx.moveTo(it.x2, it.y2);
+        ctx.lineTo(it.x2 - L * Math.cos(a - 0.42), it.y2 - L * Math.sin(a - 0.42));
+        ctx.lineTo(it.x2 - L * Math.cos(a + 0.42), it.y2 - L * Math.sin(a + 0.42));
+        ctx.closePath(); ctx.fill();
       } else if (it.type === "text") {
         ctx.fillStyle = it.color; ctx.font = canvasFont(it);
         ctx.textAlign = it.align === "center" ? "center" : "left";
@@ -17247,6 +17312,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     ["text", de ? "Text" : "Text", <><path d="M5 6.5V5h14v1.5" /><path d="M12 5v14" /><path d="M9.2 19h5.6" /></>],
     ["rect", de ? "Rechteck" : "Rectangle", <><rect x="4" y="6" width="16" height="12" rx="1.6" /></>],
     ["ellipse", de ? "Ellipse" : "Ellipse", <><ellipse cx="12" cy="12" rx="8" ry="6.4" /></>],
+    ["diamond", de ? "Raute" : "Diamond", <><path d="M12 3.2l8.8 8.8-8.8 8.8L3.2 12z" /></>],
+    ["triangle", de ? "Dreieck" : "Triangle", <><path d="M12 4.2L20.6 19.4H3.4z" /></>],
+    ["arrow", de ? "Pfeil" : "Arrow", <><path d="M4 20L19.4 4.6" /><path d="M12.4 4.6h7v7" /></>],
+    ["draw", de ? "Stift" : "Pen", <><path d="M15.6 3.6a2.1 2.1 0 013 3L7.2 18 3 19.2 4.2 15z" /></>],
     ["image", de ? "Bild" : "Image", <><rect x="3.5" y="5" width="17" height="14" rx="2.2" /><circle cx="9" cy="10" r="1.6" /><path d="M4.5 17l4.6-4.3 3.2 2.7 2.8-2.2 4.4 3.8" /></>],
   ];
 
@@ -17328,9 +17397,45 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   </div>
                 );
               }
+              if (it.type === "draw" || it.type === "arrow") {
+                // One SVG layer per stroke, the size of the whole frame, with hits
+                // only on the ink — a bounding box would swallow clicks meant for
+                // whatever sits under the stroke's empty corner.
+                const pts = it.type === "draw"
+                  ? it.pts.map(([x, y]) => `${x + (it.ox || 0)},${y + (it.oy || 0)}`).join(" ")
+                  : "";
+                const head = it.type === "arrow" ? (() => {
+                  const a = Math.atan2(it.y2 - it.y1, it.x2 - it.x1), L = it.width * 4.5;
+                  return [[it.x2, it.y2],
+                    [it.x2 - L * Math.cos(a - 0.42), it.y2 - L * Math.sin(a - 0.42)],
+                    [it.x2 - L * Math.cos(a + 0.42), it.y2 - L * Math.sin(a + 0.42)]]
+                    .map(q => q.join(",")).join(" ");
+                })() : "";
+                return (
+                  <svg key={it.id} width={W} height={H} viewBox={`0 0 ${W} ${H}`}
+                    style={{ position: "absolute", left: 0, top: 0, overflow: "visible",
+                      pointerEvents: "none" }}>
+                    {it.type === "draw" ? (
+                      <polyline points={pts} fill="none" stroke={it.color} strokeWidth={it.width}
+                        strokeLinecap="round" strokeLinejoin="round"
+                        onPointerDown={e => onItemDown(e, it)}
+                        style={{ pointerEvents: tool === "select" ? "stroke" : "none",
+                          cursor: "move", filter: on ? "drop-shadow(0 0 2px #15151c)" : "none" }} />
+                    ) : (
+                      <g onPointerDown={e => onItemDown(e, it)}
+                        style={{ pointerEvents: tool === "select" ? "visiblePainted" : "none",
+                          cursor: "move", filter: on ? "drop-shadow(0 0 2px #15151c)" : "none" }}>
+                        <line x1={it.x1} y1={it.y1} x2={it.x2} y2={it.y2} stroke={it.color}
+                          strokeWidth={it.width} strokeLinecap="round" />
+                        <polygon points={head} fill={it.color} />
+                      </g>
+                    )}
+                  </svg>
+                );
+              }
               return (
                 <div key={it.id} onPointerDown={e => onItemDown(e, it)}
-                  style={{ ...common, width: it.w, height: it.h,
+                  style={{ ...common, width: it.w, height: it.h, clipPath: polyClip(it.type),
                     borderRadius: it.type === "ellipse" ? "50%" : (it.radius || 0),
                     background: it.type === "image"
                       ? `center/${it.fit === "contain" ? "contain" : "cover"} no-repeat url(${it.url})`
@@ -17464,6 +17569,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   </div>
                 ))}
               </div>
+            ) : (selItem.type === "draw" || selItem.type === "arrow") ? (
+              swatch(selItem.color, c => patch(selItem.id, { color: c }))
             ) : (
               swatch(selItem.fill, c => patch(selItem.id, { fill: c }))
             )}
@@ -18232,7 +18339,7 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
             fits without being resampled. */}
         {editorOpen && zoomTarget?.size && (
           <CanvasEditor
-            size={zoomTarget.size} title={zoomTarget.title}
+            size={zoomTarget.size} title={`${zoomTarget.title} · ${platform.label}`}
             doc={designs[zoom] || null} originRect={editorFrom}
             brand={brand} orgId={orgId} session={session} userOrg={userOrg}
             theme={theme} darkMode={darkMode} appLanguage={appLanguage}
@@ -24031,7 +24138,7 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
       // No backdrop blur: this dialog opens over a canvas the user is working
       // on, and blurring the board underneath loses the context they picked the
       // image for. A plain dim is enough to mark it as modal.
-      style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      style={{ position: "fixed", inset: 0, zIndex: 100010, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} onClick={e => e.stopPropagation()}
         style={{ width: "100%", maxWidth: 640, height: "min(620px, 82vh)", display: "flex", flexDirection: "column", borderRadius: 20, overflow: "hidden", background: darkMode ? "rgba(22,22,30,0.99)" : "#ffffff", border: `1px solid ${theme.border}`, boxShadow: "0 24px 70px rgba(0,0,0,0.4)" }}>
         <div style={{ padding: "18px 20px 14px", borderBottom: `1px solid ${theme.borderFaint}` }}>
