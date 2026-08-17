@@ -16938,12 +16938,16 @@ function YouTubeMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onO
   );
 }
 
-// The official Pinterest P, supplied by the owner. Its own box is 640 wide, so
-// anything drawing it inside a 24-unit viewBox has to scale by PINTEREST_P_SCALE.
-// An earlier attempt drew a combined disc-and-P path and cut the P out of it; the
-// P is not a fillable region on its own there, and it collapsed. This is the glyph
-// itself, so no cutting is needed.
+// Two Pinterest files, each shaped for one job — both supplied by the owner.
+// PINTEREST_MARK is the complete mark with its own disc: the P inside is sized
+// FOR that disc, which is why it must be used whole. Composing the disc myself
+// and dropping the standalone P into it made the P far too heavy: a standalone
+// icon is drawn to fill its box, so centred in a disc of the same box it comes
+// out oversized. PINTEREST_P is that standalone glyph, correct where there is
+// no disc — the channel chips, which paint their own coloured circle.
+const PINTEREST_MARK = "M568 320C568 457 457 568 320 568C294.4 568 269.8 564.1 246.6 556.9C256.7 540.4 271.8 513.4 277.4 491.9C280.4 480.3 292.8 432.9 292.8 432.9C300.9 448.3 324.5 461.4 349.6 461.4C424.4 461.4 478.3 392.6 478.3 307.1C478.3 225.2 411.4 163.9 325.4 163.9C218.4 163.9 161.5 235.7 161.5 314C161.5 350.4 180.9 395.7 211.8 410.1C216.5 412.3 219 411.3 220.1 406.8C220.9 403.4 225.1 386.5 227 378.7C227.6 376.2 227.3 374 225.3 371.6C215.2 359.1 207 336.3 207 315C207 260.3 248.4 207.4 319 207.4C379.9 207.4 422.6 248.9 422.6 308.3C422.6 375.4 388.7 421.9 344.6 421.9C320.3 421.9 302 401.8 307.9 377.1C314.9 347.6 328.4 315.8 328.4 294.5C328.4 275.5 318.2 259.6 297 259.6C272.1 259.6 252.1 285.3 252.1 319.8C252.1 341.8 259.5 356.6 259.5 356.6C259.5 356.6 235 460.4 230.5 479.8C225.5 501.2 227.5 531.4 229.6 551C137.4 514.9 72 425.1 72 320C72 183 183 72 320 72C457 72 568 183 568 320z";
 const PINTEREST_P = "M332 70.5C229.4 70.5 128 138.9 128 249.6C128 320 167.6 360 191.6 360C201.5 360 207.2 332.4 207.2 324.6C207.2 315.3 183.5 295.5 183.5 256.8C183.5 176.4 244.7 119.4 323.9 119.4C392 119.4 442.4 158.1 442.4 229.2C442.4 282.3 421.1 381.9 352.1 381.9C327.2 381.9 305.9 363.9 305.9 338.1C305.9 300.3 332.3 263.7 332.3 224.7C332.3 158.5 238.4 170.5 238.4 250.5C238.4 267.3 240.5 285.9 248 301.2C234.2 360.6 206 449.1 206 510.3C206 529.2 208.7 547.8 210.5 566.7C213.9 570.5 212.2 570.1 217.4 568.2C267.8 499.2 266 485.7 288.8 395.4C301.1 418.8 332.9 431.4 358.1 431.4C464.3 431.4 512 327.9 512 234.6C512 135.3 426.2 70.5 332 70.5z";
+// The chips draw into a 24-unit viewBox; the glyph carries its own 640 box.
 const PINTEREST_P_SCALE = 24 / 640;
 
 // Pinterest is the only one of these profiles built as two columns side by side:
@@ -16973,9 +16977,8 @@ function PinterestMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, o
           body could be almost any profile. */}
       <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 18px",
         borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
-        <svg width="30" height="30" viewBox="0 0 640 640" style={{ flexShrink: 0 }}>
-          <circle cx="320" cy="320" r="320" fill={red} />
-          <path fill="#fff" d={PINTEREST_P} />
+        <svg width="34" height="34" viewBox="0 0 640 640" style={{ flexShrink: 0 }}>
+          <path fill={red} d={PINTEREST_MARK} />
         </svg>
         <span style={{ fontFamily: FONT, fontSize: 21, fontWeight: 700, color: "#111", letterSpacing: -0.3 }}>
           Pinterest
@@ -17031,8 +17034,10 @@ function PinterestMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, o
             </div>
 
             <div style={{ fontSize: 15, fontFamily: FONT, color: muted, marginTop: 24 }}>
-              <b style={{ color: "#111" }}>{de ? "1 Follower" : "1 follower"}</b>
-              {de ? " · 0 gefolgt · 9,6 Tsd. monatliche Aufrufe" : " · 0 following · 9.6k monthly views"}
+              <b style={{ color: "#111" }}>
+                {de ? "5 Follower · 7 gefolgt" : "5 followers · 7 following"}
+              </b>
+              {de ? " · 388,3 Tsd. monatliche Aufrufe" : " · 388.3k monthly views"}
             </div>
 
             <div style={{ marginTop: 16 }}>{editable.claim}</div>
@@ -17048,9 +17053,15 @@ function PinterestMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, o
               </div>
             )}
 
-            <div style={{ display: "inline-block", marginTop: 22, padding: "12px 18px", borderRadius: 999,
-              background: grey, fontFamily: FONT, fontSize: 15, fontWeight: 600, color: "#111" }}>
-              {de ? "Profil bearbeiten" : "Edit profile"}
+            <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+              <div style={{ padding: "13px 26px", borderRadius: 14, background: red, color: "#fff",
+                fontFamily: FONT, fontSize: 15, fontWeight: 600 }}>
+                {de ? "Folgen" : "Follow"}
+              </div>
+              <div style={{ padding: "13px 26px", borderRadius: 14, background: grey, color: "#111",
+                fontFamily: FONT, fontSize: 15, fontWeight: 600 }}>
+                {de ? "Kontakt" : "Contact"}
+              </div>
             </div>
           </div>
 
