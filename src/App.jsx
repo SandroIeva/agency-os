@@ -17123,6 +17123,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const stageRef = useRef(null);
   const dragRef = useRef(null);
 
+  const [ctxMenu, setCtxMenu] = useState(null);   // { x, y, id }
+  const [ctxHover, setCtxHover] = useState(null);
+  const clipRef = useRef([]);
   const [guides, setGuides] = useState([]);
   const guidesKeyRef = useRef("");
 
@@ -17236,9 +17239,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const onKey = (e) => {
       if (editing) return;
       if (e.key === "Escape") { sel ? setSel(null) : onClose(); }
-      if ((e.key === "Backspace" || e.key === "Delete") && sel) {
-        setItems(list => list.filter(i => i.id !== sel)); setSel(null);
-      }
+      if ((e.key === "Backspace" || e.key === "Delete") && sel) deleteSel();
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      const k = e.key.toLowerCase();
+      if (k === "c" && sel) { e.preventDefault(); copySel(); }
+      if (k === "d" && sel) { e.preventDefault(); duplicateSel(); }
+      if (k === "v") { e.preventDefault(); pasteClip(null); }
+      if (e.key === "]" && sel) { e.preventDefault(); restack("front"); }
+      if (e.key === "[" && sel) { e.preventDefault(); restack("back"); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -17263,6 +17272,52 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const aw = Math.max(120, window.innerWidth - RAIL_W - (PANEL_W + 16)), ah = Math.max(120, window.innerHeight - 88);
     const s2 = Math.min(8, Math.min(aw / bx.w, ah / bx.h) * 0.7);
     setCam({ s: s2, x: RAIL_W + aw / 2 - (bx.x + bx.w / 2) * s2, y: 62 + ah / 2 - (bx.y + bx.h / 2) * s2 });
+  };
+
+  // Array order IS the stacking order — later is on top — so restacking is a
+  // move within the list rather than a z-index to keep in sync with it.
+  const restack = (dir, id = sel) => setItems(list => {
+    const it = list.find(i => i.id === id);
+    if (!it) return list;
+    const rest = list.filter(i => i.id !== id);
+    return dir === "front" ? [...rest, it] : [it, ...rest];
+  });
+  const cloneOf = (it, dx = 0, dy = 0) => ({
+    ...it, id: crypto.randomUUID(),
+    ...(it.type === "draw" ? { ox: (it.ox || 0) + dx, oy: (it.oy || 0) + dy }
+      : it.type === "arrow" || it.type === "line"
+        ? { x1: it.x1 + dx, y1: it.y1 + dy, x2: it.x2 + dx, y2: it.y2 + dy }
+        : { x: it.x + dx, y: it.y + dy }),
+  });
+  const copySel = (id = sel) => {
+    const it = items.find(i => i.id === id);
+    if (it) clipRef.current = [it];
+  };
+  const duplicateSel = (id = sel) => {
+    const it = items.find(i => i.id === id);
+    if (!it) return;
+    const c = cloneOf(it, 20, 20);
+    setItems(list => [...list, c]); setSel(c.id);
+  };
+  const pasteClip = (at) => {
+    if (!clipRef.current.length) return;
+    const made = clipRef.current.map(it => {
+      if (!at) return cloneOf(it, 20, 20);
+      const b = boxOf(it);
+      return cloneOf(it, Math.round(at.x - b.x), Math.round(at.y - b.y));
+    });
+    setItems(list => [...list, ...made]);
+    setSel(made[made.length - 1].id);
+  };
+  const deleteSel = (id = sel) => { setItems(list => list.filter(i => i.id !== id)); setSel(null); };
+
+  // Topmost first, so a right-click hits what the eye sees on top.
+  const itemAt = (pt) => {
+    for (let i = items.length - 1; i >= 0; i--) {
+      const b = boxOf(items[i]);
+      if (pt.x >= b.x && pt.x <= b.x + b.w && pt.y >= b.y && pt.y <= b.y + b.h) return items[i];
+    }
+    return null;
   };
 
   const toArt = (e) => (cam ? { x: (e.clientX - cam.x) / cam.s, y: (e.clientY - cam.y) / cam.s } : { x: 0, y: 0 });
@@ -17688,6 +17743,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       <div ref={stageRef}
         onPointerDown={onStageDown} onPointerMove={onStageMove}
         onPointerUp={onStageUp} onPointerLeave={onStageUp}
+        onContextMenu={(e) => {
+          if (editing) return;               // let the browser's own menu handle text
+          e.preventDefault();
+          const hit = cam ? itemAt(toArt(e)) : null;
+          if (hit) setSel(hit.id);
+          setCtxMenu({ x: e.clientX, y: e.clientY, id: hit?.id || null,
+            at: cam ? toArt(e) : null });
+        }}
         style={{ position: "absolute", inset: 0, overflow: "hidden",
           cursor: tool === "select" ? (dragRef.current?.mode === "pan" ? "grabbing" : "default") : "crosshair",
           backgroundImage: showGrid
@@ -18023,6 +18086,62 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             )}
           </div>
         );
+      })()}
+
+      {/* Right-click menu, the same rows Brainstorm offers. Both layers below
+          stop their pointer events, and that is not tidiness: a portal renders
+          into document.body but its React events still bubble along the REACT
+          tree — straight into the stage's pointerdown, which clears the
+          selection. Without this every entry acts on nothing. Brainstorm learned
+          that the hard way; there is no reason to learn it twice. */}
+      {ctxMenu && (() => {
+        const has = !!ctxMenu.id;
+        const row = (lbl, shortcut, fn, danger) => (
+          <div key={lbl} onClick={() => { setCtxMenu(null); fn(); }}
+            onMouseEnter={() => setCtxHover(lbl)} onMouseLeave={() => setCtxHover(h => h === lbl ? null : h)}
+            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24,
+              padding: "8px 12px", borderRadius: 8, cursor: "pointer", whiteSpace: "nowrap",
+              background: ctxHover === lbl ? (danger ? "rgba(248,113,113,0.14)" : "rgba(255,255,255,0.09)") : "transparent",
+              color: danger ? "#F87171" : "#fff", fontSize: 13, fontFamily: FONT }}>
+            <span>{lbl}</span>
+            {shortcut && <span style={{ color: "rgba(255,255,255,0.38)", fontSize: 12 }}>{shortcut}</span>}
+          </div>
+        );
+        const sep = (k) => <div key={k} style={{ height: 1, background: "rgba(255,255,255,0.1)", margin: "5px 0" }} />;
+        const mod = navigator.platform?.toLowerCase().includes("mac") ? "⌘" : "Ctrl+";
+        const rows = [];
+        if (has) {
+          rows.push(row(de ? "Kopieren" : "Copy", `${mod}C`, () => copySel(ctxMenu.id)));
+          rows.push(row(de ? "Duplizieren" : "Duplicate", `${mod}D`, () => duplicateSel(ctxMenu.id)));
+        }
+        if (clipRef.current.length) rows.push(row(de ? "Einfügen" : "Paste", `${mod}V`, () => pasteClip(ctxMenu.at)));
+        if (has) {
+          rows.push(sep("s1"));
+          rows.push(row(de ? "Nach vorn" : "Bring to front", `${mod}]`, () => restack("front", ctxMenu.id)));
+          rows.push(row(de ? "Nach hinten" : "Send to back", `${mod}[`, () => restack("back", ctxMenu.id)));
+          rows.push(sep("s2"));
+          rows.push(row(de ? "Löschen" : "Delete", "⌫", () => deleteSel(ctxMenu.id), true));
+        }
+        if (!rows.length) return null;
+        // Flip the menu when it would run off the right or bottom edge.
+        const MW = 246, MH = rows.length * 34 + 16;
+        const left = Math.min(ctxMenu.x, window.innerWidth - MW - 8);
+        const top = Math.min(ctxMenu.y, window.innerHeight - MH - 8);
+        return createPortal(
+          <>
+            <div onPointerDown={(e) => { e.stopPropagation(); setCtxMenu(null); }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setCtxMenu(null); }}
+              style={{ position: "fixed", inset: 0, zIndex: 100006 }} />
+            <div onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              style={{ position: "fixed", left, top, width: MW, zIndex: 100007, padding: 8, borderRadius: 13,
+                background: "#1c1c24", border: "1px solid rgba(255,255,255,0.1)",
+                boxShadow: "0 18px 48px rgba(0,0,0,0.45)" }}>
+              {rows}
+            </div>
+          </>, document.body);
       })()}
 
       {/* top bar */}
