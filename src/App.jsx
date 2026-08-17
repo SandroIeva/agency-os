@@ -16031,6 +16031,150 @@ async function extractColors(url, count = 5) {
 
 
 
+
+// Threads inverts the arrangement the others share: the name sits at the top
+// left and the picture at the top right, not the other way round. Below it the
+// two actions are equal halves rather than one primary and one secondary, and
+// the feed is text first with an image only when there is one.
+function ThreadsMock({ brand, avatar, posts, onOpenAvatar, onOpenPost, editable, de }) {
+  const grey = "#F0F0F0";
+  const border = "#DBDBDB";
+  const muted = "#999999";
+  const handle = (brand?.name || "brand").toLowerCase().replace(/[^a-z0-9._]/g, "");
+  const hint = (text) => (
+    <span style={{ fontSize: 12, fontFamily: FONT, color: "#8A8A8A", textAlign: "center", padding: 8 }}>{text}</span>
+  );
+  const verified = (size) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+      <path d="M12.00 0.80 L14.33 3.31 L17.60 2.30 L18.36 5.64 L21.70 6.40 L20.69 9.67 L23.20 12.00 L20.69 14.33 L21.70 17.60 L18.36 18.36 L17.60 21.70 L14.33 20.69 L12.00 23.20 L9.67 20.69 L6.40 21.70 L5.64 18.36 L2.30 17.60 L3.31 14.33 L0.80 12.00 L3.31 9.67 L2.30 6.40 L5.64 5.64 L6.40 2.30 L9.67 3.31 Z" fill="#0095F6" />
+      <polyline points="16.1 9.9 10.9 15.1 7.9 12.1" fill="none" stroke="#fff"
+        strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+  const action = (path, count) => (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#161823",
+      fontFamily: FONT, fontSize: 14 }}>
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+        strokeLinecap="round" strokeLinejoin="round">{path}</svg>
+      {count}
+    </span>
+  );
+
+  const post = (text, imageIndex) => (
+    <div style={{ padding: "18px 24px", borderTop: `1px solid ${border}` }}>
+      <div style={{ display: "flex", gap: 12 }}>
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <div style={{ width: 38, height: 38, borderRadius: "50%", overflow: "hidden",
+            background: avatar ? `center/cover no-repeat url(${avatar})` : grey }} />
+          <div style={{ position: "absolute", right: -3, bottom: -3, width: 17, height: 17, borderRadius: "50%",
+            background: "#161823", color: "#fff", border: "2px solid #fff", fontSize: 11,
+            display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>+</div>
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <b style={{ fontSize: 15, fontFamily: FONT, color: "#161823" }}>{handle}</b>
+            {verified(15)}
+            <span style={{ fontSize: 15, fontFamily: FONT, color: muted }}>{de ? "1 Std." : "1h"}</span>
+            <div style={{ flex: 1 }} />
+            <span style={{ color: muted, fontSize: 15 }}>···</span>
+          </div>
+          <div style={{ fontSize: 15, fontFamily: FONT, color: "#161823", marginTop: 4, lineHeight: 1.45 }}>
+            {text}
+          </div>
+          {imageIndex != null && (
+            <div onClick={() => onOpenPost(imageIndex)}
+              style={{ marginTop: 12, borderRadius: 12, overflow: "hidden", aspectRatio: "4 / 5",
+                maxWidth: 320, cursor: "pointer", border: `1px solid ${border}`,
+                background: posts[imageIndex] ? `center/cover no-repeat url(${posts[imageIndex]})` : grey,
+                display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {!posts[imageIndex] && hint(de ? "Bild hinzufügen" : "Add an image")}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 20, marginTop: 14 }}>
+            {action(<path d="M20.8 6.6a5 5 0 00-7.1 0L12 8.3l-1.7-1.7a5 5 0 10-7.1 7.1L12 21.6l8.8-8.9a5 5 0 000-7.1z" />, 14)}
+            {action(<path d="M21 11.5a8.4 8.4 0 01-9 8.4 9 9 0 01-4-.9L3 21l1.9-4.6A8.4 8.4 0 013 11.5 8.5 8.5 0 0112 3a8.5 8.5 0 019 8.5z" />, 10)}
+            {action(<><path d="M17 2l4 4-4 4" /><path d="M3 11V9a4 4 0 014-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v2a4 4 0 01-4 4H3" /></>, "")}
+            {action(<path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" />, "")}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth: 640, margin: "0 auto", background: "#fff", borderRadius: 18,
+      border: `1px solid ${border}`, overflow: "hidden" }}>
+      <div style={{ padding: "26px 24px 20px" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 26, fontFamily: FONT, fontWeight: 700, color: "#161823" }}>
+              {brand?.name || (de ? "Euer Markenname" : "Your brand name")}
+            </div>
+            <div style={{ fontSize: 15, fontFamily: FONT, color: "#161823", marginTop: 2 }}>{handle}</div>
+          </div>
+          {/* Picture on the right, which is the arrangement Threads uses. */}
+          <div onClick={onOpenAvatar} style={{ position: "relative", flexShrink: 0, cursor: "pointer" }}>
+            <div style={{ width: 84, height: 84, borderRadius: "50%", overflow: "hidden",
+              background: avatar ? `center/cover no-repeat url(${avatar})` : grey,
+              display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {!avatar && hint(de ? "Bild" : "Photo")}
+            </div>
+            <div style={{ position: "absolute", left: -2, bottom: -2 }}>{verified(20)}</div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 18 }}>{editable.claim}</div>
+
+        {brand?.website_url && (
+          <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 700, color: "#161823", marginTop: 14 }}>
+            {String(brand.website_url).replace(/^https?:\/\//, "").replace(/\/$/, "")}
+          </div>
+        )}
+
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>
+          <span style={{ fontSize: 15, fontFamily: FONT, color: muted }}>
+            {de ? "12.158 Follower · 265.930 kürzliche Aufrufe" : "12,158 followers · 265,930 recent views"}
+          </span>
+          <div style={{ flex: 1 }} />
+          {[<><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" /></>,
+            <><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 01-3.4 0" /></>,
+            <><circle cx="12" cy="12" r="9" /><circle cx="8" cy="12" r="1" fill="currentColor" /><circle cx="12" cy="12" r="1" fill="currentColor" /><circle cx="16" cy="12" r="1" fill="currentColor" /></>,
+          ].map((glyph, i) => (
+            <svg key={i} width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#161823"
+              strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{glyph}</svg>
+          ))}
+        </div>
+
+        {/* Equal halves, not a primary and a secondary. */}
+        <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+          <div style={{ flex: 1, textAlign: "center", padding: "13px 0", borderRadius: 10,
+            background: "#161823", color: "#fff", fontFamily: FONT, fontSize: 15, fontWeight: 700 }}>
+            {de ? "Folgen" : "Follow"}
+          </div>
+          <div style={{ flex: 1, textAlign: "center", padding: "13px 0", borderRadius: 10,
+            border: `1px solid ${border}`, color: "#161823", fontFamily: FONT, fontSize: 15, fontWeight: 700 }}>
+            {de ? "Nachricht senden" : "Send message"}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex" }}>
+        {[de ? "Threads" : "Threads", de ? "Antworten" : "Replies",
+          de ? "Medien" : "Media", "Reposts"].map((tab, i) => (
+          <div key={tab} style={{ flex: 1, textAlign: "center", padding: "14px 0", fontFamily: FONT,
+            fontSize: 15, fontWeight: i === 0 ? 700 : 500, color: i === 0 ? "#161823" : muted,
+            borderBottom: i === 0 ? "2px solid #161823" : `1px solid ${border}` }}>{tab}</div>
+        ))}
+      </div>
+
+      {post(brand?.description || brand?.claim
+        || (de ? "Hier stünde euer Beitrag. Der Text kommt aus eurer Brand-Beschreibung."
+              : "Your post would sit here. The words come from your brand description."), null)}
+      {post(de ? "Ein zweiter Beitrag, diesmal mit Bild." : "A second post, this one with an image.", 0)}
+    </div>
+  );
+}
+
 // TikTok has no cover at all: a ringed avatar, the name beside it, and then a
 // four-column wall of vertical video covers. The grid is the page — which is why
 // eight tiles are shown rather than the six the other two need.
@@ -16611,6 +16755,8 @@ const CHANNEL_PREVIEW_SHAPE = {
                tabs: ["Posts", "Replies", "Media", "Likes"], meta: () => "" },
   facebook:  { avatar: 999, bannerPx: [851, 315], logoPx: [320, 320], overlap: true,
                tabs: ["Posts", "About", "Photos", "More"], meta: () => "" },
+  threads:   { avatar: 999, bannerPx: null,        logoPx: [320, 320], overlap: false,
+               tabs: ["Threads", "Replies", "Media", "Reposts"], meta: () => "" },
   tiktok:    { avatar: 999, bannerPx: null,        logoPx: [200, 200], overlap: false,
                tabs: ["Videos", "Reposts", "Liked"], meta: () => "" },
   instagram: { avatar: 999, bannerPx: null,        logoPx: [320, 320], overlap: false,
@@ -16772,7 +16918,30 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
         {/* The mock itself, on its own light ground so it reads as a preview of
             somewhere else rather than as part of this app. */}
         <div style={{ padding: "0 22px 48px" }}>
-          {platform.key === "tiktok" ? (
+          {platform.key === "threads" ? (
+            <ThreadsMock
+              brand={brand} avatar={avatar} posts={posts} de={de}
+              onOpenAvatar={() => setZoom("avatar")}
+              onOpenPost={(i) => setZoom("post:" + i)}
+              editable={{
+                claim: editField === "claim" ? (
+                  <input autoFocus value={claimDraft} onChange={e => setClaimDraft(e.target.value)}
+                    onBlur={() => { onSaveBrand({ claim: claimDraft }); setEditField(null); }}
+                    onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditField(null); }}
+                    style={{ fontSize: 15, fontFamily: FONT, color: "#161823", width: "100%",
+                      border: "none", borderBottom: "1.5px solid #DBDBDB", outline: "none", background: "none" }} />
+                ) : (
+                  <div onClick={() => { setClaimDraft(brand?.claim || ""); setEditField("claim"); }}
+                    onMouseEnter={() => setHover("claim")} onMouseLeave={() => setHover(null)}
+                    style={{ fontSize: 15, fontFamily: FONT, color: "#161823", lineHeight: 1.45,
+                      display: "flex", alignItems: "center", gap: 8, cursor: "text" }}>
+                    {brand?.claim || (de ? "Das ist die Platzhalter-Bio. Der Text lässt sich jederzeit ändern."
+                                        : "This is the placeholder bio. Change the text any time.")}
+                    {hover === "claim" && pencil}
+                  </div>
+                ),
+              }} />
+          ) : platform.key === "tiktok" ? (
             <TikTokMock
               brand={brand} avatar={avatar} posts={posts} de={de}
               onOpenAvatar={() => setZoom("avatar")}
