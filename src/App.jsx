@@ -17102,6 +17102,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [lineToolOpen, setLineToolOpen] = useState(false);
   const [mediaOpen, setMediaOpen] = useState(false);
   const [zoomMenu, setZoomMenu] = useState(false);
+  const [barPop, setBarPop] = useState(null);   // "color" | null
   const [showGrid, setShowGrid] = useState(true);
   const [cam, setCam] = useState(null);
   const [flying, setFlying] = useState(!!originRect);
@@ -17299,9 +17300,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       return;
     }
     if (d.mode === "resize") {
-      const w = Math.max(8, Math.round(d.iw + (e.clientX - d.sx) / cam.s));
-      const h = Math.max(8, Math.round(d.ih + (e.clientY - d.sy) / cam.s));
-      patch(d.id, d.isText ? { w } : { w, h });
+      let w = Math.max(8, d.iw + (e.clientX - d.sx) / cam.s);
+      let h = Math.max(8, d.ih + (e.clientY - d.sy) / cam.s);
+      // A text box only ever changes width — its height follows the lines in it.
+      if (d.isText) { patch(d.id, { w: Math.round(w) }); return; }
+      // The same contract as dragging a shape out: proportional by default,
+      // Shift to deform. Whichever axis was pulled further drives the other, so
+      // the shape follows the hand rather than one fixed edge.
+      if (!e.shiftKey && d.ih > 0) {
+        const r = d.iw / d.ih;
+        if (Math.abs(w - d.iw) >= Math.abs(h - d.ih)) h = w / r; else w = h * r;
+      }
+      patch(d.id, { w: Math.round(w), h: Math.round(h) });
     }
   };
 
@@ -17658,6 +17668,88 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           </div>
         )}
       </div>
+
+      {/* The bar that sits over the selection, the way Brainstorm puts one over
+          a selected element: dark pill, white icons, anchored above the item and
+          following the camera. It carries what THIS text model has — one size,
+          one weight, one alignment, one colour. Brainstorm's version drives a
+          rich-text run model with per-word marks, links and mind-map branches;
+          none of that exists on a canvas text field, and faking the buttons
+          would be worse than not showing them. */}
+      {cam && selItem && sel !== "frame" && !editing && (() => {
+        const b = selItem.type === "arrow" || selItem.type === "line"
+          ? { x: Math.min(selItem.x1, selItem.x2), y: Math.min(selItem.y1, selItem.y2),
+              w: Math.abs(selItem.x2 - selItem.x1), h: Math.abs(selItem.y2 - selItem.y1) }
+          : selItem.type === "draw"
+          ? (() => { const xs = selItem.pts.map(q => q[0] + (selItem.ox || 0));
+                     const ys = selItem.pts.map(q => q[1] + (selItem.oy || 0));
+                     return { x: Math.min(...xs), y: Math.min(...ys),
+                       w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) }; })()
+          : { x: selItem.x, y: selItem.y, w: selItem.w,
+              h: selItem.h || (selItem.size * CANVAS_LH) };
+        const left = cam.x + (b.x + b.w / 2) * cam.s;
+        const top = cam.y + b.y * cam.s - 46;
+        const isText = selItem.type === "text" || selItem.type === "sticky";
+        const isStroke = selItem.type === "draw" || selItem.type === "arrow" || selItem.type === "line";
+        const colourKey = isStroke ? "color" : selItem.type === "sticky" ? "fill" : isText ? "color" : "fill";
+        const iconBtn = { width: 26, height: 26, borderRadius: 7, display: "flex", alignItems: "center",
+          justifyContent: "center", cursor: "pointer", color: "#fff" };
+        const div2 = <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.16)", margin: "0 3px" }} />;
+        return (
+          <div style={{ position: "fixed", left, top, transform: "translateX(-50%)", zIndex: 6 }}
+            onPointerDown={e => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", gap: 3, padding: 5, borderRadius: 11,
+              background: "#15151c", boxShadow: "0 8px 24px rgba(0,0,0,0.28)" }}>
+              {isText && (<>
+                <input type="number" value={selItem.size} min={6}
+                  onChange={e => patch(selItem.id, { size: Math.max(6, Number(e.target.value) || 6) })}
+                  style={{ width: 52, height: 26, borderRadius: 7, border: "none", outline: "none",
+                    background: "rgba(255,255,255,0.12)", color: "#fff", fontFamily: FONT, fontSize: 12,
+                    textAlign: "center" }} />
+                <div onClick={() => patch(selItem.id, { weight: selItem.weight >= 700 ? 400 : 700 })} title="Bold"
+                  style={{ ...iconBtn, fontFamily: FONT, fontWeight: 800, fontSize: 13,
+                    background: selItem.weight >= 700 ? "rgba(255,255,255,0.22)" : "transparent" }}>B</div>
+                <div onClick={() => patch(selItem.id, { align: (selItem.align === "center") ? "left" : "center" })}
+                  title={de ? "Ausrichtung" : "Alignment"} style={iconBtn}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M4 6h16" />
+                    <path d={selItem.align === "center" ? "M7 12h10" : "M4 12h10"} />
+                    <path d="M4 18h16" />
+                  </svg>
+                </div>
+                {div2}
+              </>)}
+              <div onClick={() => setBarPop(pp => pp ? null : "color")} title={de ? "Farbe" : "Colour"}
+                style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 6px 3px 4px",
+                  borderRadius: 8, cursor: "pointer",
+                  background: barPop ? "rgba(255,255,255,0.16)" : "transparent" }}>
+                <div style={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
+                  background: selItem[colourKey] || "#fff",
+                  border: "2px solid rgba(255,255,255,0.5)", boxSizing: "border-box" }} />
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4"
+                  strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+              {div2}
+              <div onClick={() => { setItems(list => list.filter(i2 => i2.id !== selItem.id)); setSel(null); }}
+                title={de ? "Löschen" : "Delete"} style={{ ...iconBtn, color: "#ff8589" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
+                  strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+              </div>
+            </div>
+            {barPop === "color" && (
+              <div style={{ marginTop: 6, padding: 8, borderRadius: 11, background: "#15151c",
+                boxShadow: "0 8px 24px rgba(0,0,0,0.28)", display: "flex", flexWrap: "wrap", gap: 6, width: 172 }}>
+                {[...palette, "#FFFFFF", "#000000"].map(c => (
+                  <div key={c} onClick={() => { patch(selItem.id, { [colourKey]: c }); setBarPop(null); }}
+                    style={{ width: 22, height: 22, borderRadius: 6, background: c, cursor: "pointer",
+                      border: (selItem[colourKey] || "").toLowerCase() === c.toLowerCase()
+                        ? "2px solid #fff" : "1px solid rgba(255,255,255,0.25)" }} />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* top bar */}
       <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 52, display: "flex",
