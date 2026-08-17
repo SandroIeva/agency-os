@@ -16033,7 +16033,8 @@ async function extractColors(url, count = 5) {
 // avatar overlapping its bottom-left rather than sitting beside it, and the page
 // below split into a narrow left column of facts and a wide right column of
 // posts. Neither the LinkedIn frame nor the Instagram one would carry it.
-function FacebookMock({ brand, banner, avatar, posts, onOpenBanner, onOpenAvatar, onOpenPost, editable, de }) {
+function FacebookMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onOpenAvatar, onOpenPost, editable, de }) {
+  const bannerRatio = bannerPx ? bannerPx[0] / bannerPx[1] : 2.7;
   const grey = "#E4E6EB";
   const line = "#DDE0E4";
   const card = { background: "#fff", borderRadius: 10, border: `1px solid ${line}` };
@@ -16049,11 +16050,12 @@ function FacebookMock({ brand, banner, avatar, posts, onOpenBanner, onOpenAvatar
     <div style={{ maxWidth: 1250, margin: "0 auto" }}>
       <div style={{ ...card, overflow: "hidden", paddingBottom: 0 }}>
         <div onClick={onOpenBanner}
-          style={{ width: "100%", aspectRatio: "1640 / 664", cursor: "pointer",
+          style={{ width: "100%", aspectRatio: String(bannerRatio), cursor: "pointer",
             borderRadius: "10px 10px 12px 12px", overflow: "hidden",
             background: banner ? `center/cover no-repeat url(${banner})` : grey,
             display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {!banner && placeholder(`${de ? "Titelbild hinzufügen" : "Add a cover image"} · 1640 × 664 px`)}
+          {!banner && placeholder(`${de ? "Titelbild hinzufügen" : "Add a cover image"}`
+            + (bannerPx ? ` · ${bannerPx[0]} × ${bannerPx[1]} px` : ""))}
         </div>
 
         {/* The avatar sits over the lower-left of the cover, which is what makes
@@ -16336,7 +16338,7 @@ const CHANNEL_PREVIEW_SHAPE = {
                meta: (de) => de ? "Branche · 2–10 Mitarbeitende" : "Industry · 2–10 employees" },
   x:         { avatar: 999, bannerPx: [1500, 500], logoPx: [400, 400], overlap: true,
                tabs: ["Posts", "Replies", "Media", "Likes"], meta: () => "" },
-  facebook:  { avatar: 999, bannerPx: [1640, 664], logoPx: [320, 320], overlap: true,
+  facebook:  { avatar: 999, bannerPx: [851, 315], logoPx: [320, 320], overlap: true,
                tabs: ["Posts", "About", "Photos", "More"], meta: () => "" },
   instagram: { avatar: 999, bannerPx: null,        logoPx: [320, 320], overlap: false,
                tabs: ["Posts", "Reels", "Tagged"], meta: () => "" },
@@ -16496,6 +16498,7 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand
           {platform.key === "facebook" ? (
             <FacebookMock
               brand={brand} banner={banner} avatar={avatar} posts={posts} de={de}
+              bannerPx={shape.bannerPx}
               onOpenBanner={() => setZoom("banner")}
               onOpenAvatar={() => setZoom("avatar")}
               onOpenPost={(i) => setZoom("post:" + i)}
