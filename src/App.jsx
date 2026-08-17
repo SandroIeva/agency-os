@@ -1344,6 +1344,98 @@ const AGENT_FREE_MODEL_LABELS = {
   "flux-pro": "Flux Pro",
 };
 
+
+// ── Content Credentials (C2PA) ──────────────────────────────────────────────
+//
+// Files from Firefly, ChatGPT, Photoshop and others carry a signed manifest
+// saying what made them. It is worth reading because it names the actual
+// generator rather than the tool the person used: a file called "Firefly.png"
+// turned out to be recorded as gpt-image 2.0, because Firefly ran a partner
+// model behind its own interface.
+//
+// Read by scanning rather than by parsing the whole manifest. A full C2PA
+// implementation means CBOR, JUMBF boxes and certificate validation — a
+// dependency and a lot of surface for four facts. What is wanted here is what
+// the file claims, and those claims sit in plain CBOR text strings that can be
+// found and read directly. We do not verify the signature, so this is what the
+// file says, not proof; it is labelled that way in the UI.
+const C2PA_SCAN_BYTES = 600000;   // manifests sit near the front; enough for both formats
+
+// A CBOR text string at `i`, or null. Major type 3: 0x60 + length for short
+// strings, 0x78 with a following length byte for longer ones.
+function cborText(bytes, i) {
+  const b = bytes[i];
+  if (b === undefined) return null;
+  let len, start;
+  if (b >= 0x60 && b <= 0x77) { len = b - 0x60; start = i + 1; }
+  else if (b === 0x78) { len = bytes[i + 1]; start = i + 2; }
+  else return null;
+  if (len == null || start + len > bytes.length) return null;
+  let out = "";
+  for (let k = start; k < start + len; k++) out += String.fromCharCode(bytes[k]);
+  return { value: out, end: start + len };
+}
+
+// Where does `needle` appear in `bytes`? Plain scan; the haystack is small.
+function findAscii(bytes, needle, from = 0) {
+  const n = needle.length;
+  outer: for (let i = from; i <= bytes.length - n; i++) {
+    for (let k = 0; k < n; k++) if (bytes[i + k] !== needle.charCodeAt(k)) continue outer;
+    return i;
+  }
+  return -1;
+}
+
+// The value of the CBOR key `key`, looked for within `window` bytes after it.
+function valueAfterKey(bytes, key, from = 0, window = 400) {
+  const at = findAscii(bytes, key, from);
+  if (at < 0) return null;
+  for (let i = at + key.length; i < Math.min(bytes.length, at + key.length + window); i++) {
+    const t = cborText(bytes, i);
+    if (t && t.value.length > 0) return t.value;
+  }
+  return null;
+}
+
+async function readContentCredentials(file) {
+  try {
+    if (!file || !file.slice) return null;
+    const buf = await file.slice(0, C2PA_SCAN_BYTES).arrayBuffer();
+    const bytes = new Uint8Array(buf);
+
+    // No manifest at all is the common case, and it is not an error.
+    if (findAscii(bytes, "c2pa") < 0) return null;
+
+    const agent = valueAfterKey(bytes, "softwareAgent");
+    const source = valueAfterKey(bytes, "digitalSourceType", 0, 200);
+    const createdAt = findAscii(bytes, "c2pa.created");
+    const when = createdAt >= 0 ? valueAfterKey(bytes, "when", createdAt, 120) : null;
+
+    // "name" and "version" follow softwareAgent as its own little map, so they
+    // are looked for after it rather than anywhere in the file.
+    const agentAt = findAscii(bytes, "softwareAgent");
+    let name = null, version = null;
+    if (agentAt >= 0) {
+      name = valueAfterKey(bytes, "name", agentAt, 80);
+      version = valueAfterKey(bytes, "version", agentAt, 120);
+    }
+
+    const generator = [name || agent, version].filter(Boolean).join(" ") || null;
+    const aiGenerated = typeof source === "string" && /trainedAlgorithmicMedia/i.test(source);
+    if (!generator && !aiGenerated && !when) return null;
+
+    return {
+      generator,                                    // "gpt-image 2.0"
+      aiGenerated,                                  // the IPTC claim, not our judgement
+      sourceType: source ? String(source).split("/").pop() : null,
+      createdAt: when && /^\d{4}-\d{2}/.test(when) ? when : null,
+    };
+  } catch (_) {
+    // Never fatal: a file whose credentials cannot be read is still a file.
+    return null;
+  }
+}
+
 // Kanban board data
 const priColors = { high: "#EF4444", medium: "#F59E0B", low: "#999999" };
 const ASSIGNEE_COLORS = ["#8B7AFF", "#E84393", "#00B894", "#F59E0B", "#5B8DEF", "#E88D67", "#6C5CE7", "#FD79A8"];
@@ -20395,10 +20487,15 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
       if (upErr) continue;
       trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "user-files", path, sizeBytes: file.size });
       const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(path, 60 * 60 * 24 * 365);
+      // What the file says about its own origin, read once on the way in. Doing
+      // it here rather than on display means it costs nothing per view and is
+      // still there when the credentials are later stripped by something else.
+      const credentials = await readContentCredentials(file);
       const { data, error } = await supabase.from("user_files").insert({
         user_id: session.user.id, org_id: userOrg.id, project_id: projectId || null, name: file.name,
         mime_type: file.type, size_bytes: file.size, storage_path: path,
         storage_provider: "supabase", public_url: signed?.signedUrl || null,
+        metadata: credentials ? { credentials } : null,
         folder_id: folderId || null,
       }).select(FILE_COLS).single();
       if (!error && data) added.push(data);
@@ -21775,8 +21872,17 @@ function MoodboardItemDetail({ item, items = [], containers = [], currentContain
             const gen = item.metadata?.generated ? item.metadata : null;
             const modelLabel = gen?.model ? (AGENT_FREE_MODEL_LABELS[gen.model] || gen.model) : null;
             const bytes = item.size_bytes;
+            // Two different kinds of statement, kept apart. "Modell" is what we
+            // know because we generated it. "Laut Datei" is what the file claims
+            // about itself — a signed claim, but still the file's word, and a
+            // strong one worth showing: the Firefly export that started this was
+            // recorded as gpt-image 2.0, not as Firefly.
+            const cred = item.metadata?.credentials || null;
             const rows = [
               modelLabel && [de ? "Modell" : "Model", modelLabel],
+              !modelLabel && cred?.generator && [de ? "Laut Datei" : "Per the file", cred.generator],
+              !modelLabel && cred?.aiGenerated && !cred?.generator
+                && [de ? "Laut Datei" : "Per the file", de ? "KI-generiert" : "AI generated"],
               dims && [de ? "Maße" : "Dimensions", `${dims.w} × ${dims.h}`],
               bytes && [de ? "Dateigröße" : "File size",
                 bytes > 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`],
