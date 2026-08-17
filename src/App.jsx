@@ -16607,13 +16607,15 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
   return createPortal(
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
       style={{ position: "fixed", inset: 0, zIndex: 100002 }}>
-      {/* The blur sits on a layer that never moves. On the scrolling element it
-          had to be recomputed for every frame, which is what produced the
-          flashing — the effect is expensive and scroll is the worst place to
-          pay for it. */}
+      {/* No backdrop-filter. Moving it to its own static layer was not enough,
+          because the problem is not the scrolling — it is what sits behind: the
+          voice orb, the dot grid and the view transitions animate continuously,
+          and a backdrop filter re-samples whatever is behind it every frame. It
+          never settles, and the result is the flashing.
+          A plain translucent scrim costs nothing, never invalidates, and still
+          lets the app show through enough to say where you are. */}
       <div style={{ position: "absolute", inset: 0,
-        background: darkMode ? "rgba(8,8,12,0.62)" : "rgba(40,40,44,0.38)",
-        backdropFilter: "blur(14px) saturate(1.1)", WebkitBackdropFilter: "blur(14px) saturate(1.1)" }} />
+        background: darkMode ? "rgba(8,8,12,0.86)" : "rgba(28,28,32,0.62)" }} />
 
       {/* The way out is fixed too, so it is not repainted against a filtered
           backdrop while the content moves under it. */}
@@ -16622,9 +16624,9 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
         <motion.div whileTap={{ scale: 0.94 }} onClick={onClose} title={de ? "Schließen" : "Close"}
           style={{ pointerEvents: "auto", width: 38, height: 38, borderRadius: "50%", cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
-            background: darkMode ? "rgba(22,22,30,0.9)" : "rgba(255,255,255,0.92)",
+            background: darkMode ? "#1B1B23" : "#fff",
             border: `1px solid ${theme.borderFaint}`, color: theme.text,
-            boxShadow: "0 4px 14px rgba(0,0,0,0.18)" }}>
+            boxShadow: "0 4px 14px rgba(0,0,0,0.22)" }}>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
         </motion.div>
@@ -16632,10 +16634,10 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
           <motion.a whileTap={{ scale: 0.97 }} href={/^https?:\/\//.test(url) ? url : "https://" + url}
             target="_blank" rel="noopener noreferrer"
             style={{ pointerEvents: "auto", padding: "9px 16px", borderRadius: 999, textDecoration: "none",
-              background: darkMode ? "rgba(22,22,30,0.9)" : "rgba(255,255,255,0.92)",
+              background: darkMode ? "#1B1B23" : "#fff",
               border: `1px solid ${theme.borderFaint}`, color: theme.text,
               fontFamily: FONT, fontSize: 12, fontWeight: 600,
-              boxShadow: "0 4px 14px rgba(0,0,0,0.18)" }}>
+              boxShadow: "0 4px 14px rgba(0,0,0,0.22)" }}>
             {de ? "Profil öffnen" : "Open profile"}
           </motion.a>
         )}
