@@ -17092,6 +17092,9 @@ const CANVAS_TEMPLATES = [
 function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, userOrg,
                         theme, darkMode, appLanguage, onUpload, onDone, onClose }) {
   const de = appLanguage === "de";
+  // The panel width sits in the camera arithmetic as well as in the panel, so it
+  // is a name rather than a number in four places waiting to drift apart.
+  const PANEL_W = 300, RAIL_W = 78;
   const [W, H] = size;
   const palette = (Array.isArray(brand?.colors) && brand.colors.length >= 2)
     ? brand.colors : ["#15151c", "#F4F4F7", "#E60023", "#0A66C2", "#FFFFFF"];
@@ -17108,6 +17111,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [mediaOpen, setMediaOpen] = useState(false);
   const [zoomMenu, setZoomMenu] = useState(false);
   const [barPop, setBarPop] = useState(null);   // "color" | null
+  const [frameTab, setFrameTab] = useState("design");   // "design" | "templates"
   const [showGrid, setShowGrid] = useState(true);
   const [cam, setCam] = useState(null);
   const [flying, setFlying] = useState(!!originRect);
@@ -17153,7 +17157,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // Where the frame sits when nothing is being flown in: centred in what is left
   // of the viewport once the two rails have taken their share.
   const fitCam = () => {
-    const padL = 78, padR = 274, padT = 62, padB = 26;
+    const padL = RAIL_W, padR = PANEL_W + 16, padT = 62, padB = 26;
     const aw = Math.max(120, window.innerWidth - padL - padR);
     const ah = Math.max(120, window.innerHeight - padT - padB);
     // Capped at 1: a frame that fits opens at exactly 100%, which is what
@@ -17227,7 +17231,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // when the percentage is set from the menu rather than the wheel.
   const zoomTo = (s2) => setCam(c => {
     if (!c) return c;
-    const cx = (window.innerWidth - 274 + 78) / 2, cy = window.innerHeight / 2;
+    const cx = (window.innerWidth - (PANEL_W + 16) + RAIL_W) / 2, cy = window.innerHeight / 2;
     const k = s2 / c.s;
     return { s: s2, x: cx - (cx - c.x) * k, y: cy - (cy - c.y) * k };
   });
@@ -17239,9 +17243,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       ? { x: Math.min(it.x1, it.x2), y: Math.min(it.y1, it.y2),
           w: Math.abs(it.x2 - it.x1) || 1, h: Math.abs(it.y2 - it.y1) || 1 }
       : { x: it.x || 0, y: it.y || 0, w: it.w || 1, h: (it.h || it.size * CANVAS_LH) || 1 };
-    const aw = Math.max(120, window.innerWidth - 78 - 274), ah = Math.max(120, window.innerHeight - 88);
+    const aw = Math.max(120, window.innerWidth - RAIL_W - (PANEL_W + 16)), ah = Math.max(120, window.innerHeight - 88);
     const s2 = Math.min(8, Math.min(aw / bx.w, ah / bx.h) * 0.7);
-    setCam({ s: s2, x: 78 + aw / 2 - (bx.x + bx.w / 2) * s2, y: 62 + ah / 2 - (bx.y + bx.h / 2) * s2 });
+    setCam({ s: s2, x: RAIL_W + aw / 2 - (bx.x + bx.w / 2) * s2, y: 62 + ah / 2 - (bx.y + bx.h / 2) * s2 });
   };
 
   const toArt = (e) => (cam ? { x: (e.clientX - cam.x) / cam.s, y: (e.clientY - cam.y) / cam.s } : { x: 0, y: 0 });
@@ -17636,7 +17640,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             outlineOffset: 0,
             boxShadow: "0 18px 60px rgba(0,0,0,0.28)" }}>
             {guides.map((g, gi) => (
-              <div key={gi} style={{ position: "absolute", background: "#E8347F", pointerEvents: "none",
+              <div key={gi} style={{ position: "absolute", background: "#2F6BFF", pointerEvents: "none",
                 ...(g.axis === "x"
                   ? { left: g.pos, top: Math.min(g.a, g.b), width: Math.max(1, 1 / cam.s),
                       height: Math.abs(g.b - g.a) }
@@ -17927,14 +17931,28 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       </div>
 
       {/* right panel */}
-      <div style={{ position: "absolute", right: 0, top: 52, bottom: 0, width: 258, padding: "4px 16px 20px",
+      <div style={{ position: "absolute", right: 0, top: 52, bottom: 0, width: PANEL_W, padding: "4px 16px 20px",
         background: panel, borderLeft: `1px solid ${line}`, overflowY: "auto" }}>
-        {/* Templates replace the whole frame, so they only make sense while the
-            frame is what you are looking at. With a text or a shape selected the
-            panel is about that element, and a grid of layouts underneath it is
-            an offer to throw the work away. */}
-        {!selItem && <>
-        {label(de ? "Vorlagen" : "Templates")}
+        {/* With the frame in view the panel has two jobs — set it up, or replace
+            it with a layout — so they get a tab each instead of stacking. With an
+            element selected the panel is about that element, and a grid of
+            layouts underneath it would be an offer to throw the work away. */}
+        {!selItem && (
+          <div style={{ display: "flex", gap: 4, margin: "8px 0 2px" }}>
+            {[["design", de ? "Design" : "Design"], ["templates", de ? "Vorlagen" : "Templates"]].map(([k, l]) => (
+              <div key={k} onClick={() => setFrameTab(k)}
+                style={{ padding: "7px 14px", borderRadius: 9, cursor: "pointer",
+                  fontFamily: FONT, fontSize: 13, fontWeight: 600,
+                  color: frameTab === k ? theme.text : theme.textDim,
+                  background: frameTab === k
+                    ? (darkMode ? "rgba(255,255,255,0.10)" : "#EDEDF0") : "transparent" }}>
+                {l}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!selItem && frameTab === "templates" && <>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
           {CANVAS_TEMPLATES.map(tpl => {
             const p = tpl.build(W, H, palette, brand);
@@ -17962,7 +17980,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         </div>
         </>}
 
-        {(!selItem || sel === "frame") && (
+        {!selItem && frameTab === "design" && (
           <>
             {label(sel === "frame" ? (de ? "Frame · ausgewählt" : "Frame · selected") : "Frame")}
             <div style={{ fontSize: 12, color: theme.textDim, marginTop: 6 }}>{title}</div>
