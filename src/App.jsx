@@ -16966,7 +16966,7 @@ function PinterestMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, o
   );
   const icon = (path, size = 22) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#111"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{path}</svg>
+      strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{path}</svg>
   );
 
   return (
@@ -16999,15 +16999,28 @@ function PinterestMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, o
           {icon(<path d="M6 9l6 6 6-6" />, 15)}
         </div>
 
-        {icon(<><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.3-4.3" /></>)}
+        {icon(<><circle cx="10.3" cy="10.3" r="6.6" /><path d="M15.2 15.2l5 5" /></>)}
         <div style={{ position: "relative", display: "flex" }}>
-          {icon(<><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 01-3.4 0" /></>)}
+          {icon(<>
+            <path d="M12 3.6V2.1" />
+            <path d="M12 3.6c-3.2 0-5.4 2.4-5.4 5.6 0 4.3-1.1 6.2-2.2 7.4-.3.3-.1.8.3.8h14.6c.4 0 .6-.5.3-.8-1.1-1.2-2.2-3.1-2.2-7.4 0-3.2-2.2-5.6-5.4-5.6z" />
+            <circle cx="12" cy="20.3" r="1.7" />
+          </>)}
           <span style={{ position: "absolute", top: -6, right: -7, minWidth: 17, height: 17, padding: "0 4px",
             borderRadius: 999, background: red, color: "#fff", fontFamily: FONT, fontSize: 10, fontWeight: 700,
             display: "flex", alignItems: "center", justifyContent: "center" }}>15</span>
         </div>
-        {icon(<path d="M21 11.5a8.4 8.4 0 01-9 8.4 9 9 0 01-4-.9L3 21l1.9-4.6A8.4 8.4 0 013 11.5 8.5 8.5 0 0112 3a8.5 8.5 0 019 8.5z" />)}
-        {icon(<><path d="M3 11v2a1 1 0 001 1h2l4 4V6L6 10H4a1 1 0 00-1 1z" /><path d="M15 8.5a4 4 0 010 7" /></>)}
+        {icon(<>
+          <path d="M21 11.6c0 4.5-4 8.1-9 8.1-.7 0-1.4-.1-2.1-.2l-4.6 2 1.3-3.9A7.8 7.8 0 013 11.6c0-4.5 4-8.1 9-8.1s9 3.6 9 8.1z" />
+          <circle cx="8.5" cy="11.6" r=".95" fill="#111" stroke="none" />
+          <circle cx="12" cy="11.6" r=".95" fill="#111" stroke="none" />
+          <circle cx="15.5" cy="11.6" r=".95" fill="#111" stroke="none" />
+        </>)}
+        {icon(<>
+          <path d="M17.4 5.6v12.8c0 .8-.9 1.3-1.6.9l-6.3-3.6H5.9A1.9 1.9 0 014 13.8v-3.6c0-1 .8-1.9 1.9-1.9h3.6l6.3-3.6c.7-.4 1.6.1 1.6.9z" />
+          <path d="M20.3 9v6" />
+          <path d="M8 15.7v2.4c0 .7.6 1.3 1.3 1.3h.6c.7 0 1.3-.6 1.3-1.3v-1.4" />
+        </>)}
         <div style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
           background: avatar ? `center/cover no-repeat url(${avatar})` : grey }} />
         {icon(<path d="M6 9l6 6 6-6" />, 15)}
