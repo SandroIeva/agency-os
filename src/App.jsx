@@ -16764,6 +16764,20 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
   );
 }
 
+// Plausible numbers instead of dashes. A shelf reading "— Aufrufe · vor —
+// Monaten" looks like software that is not finished, and the whole point of the
+// mock is to look like the page it stands in for. Ordered the way a channel
+// actually reads: newest first, and the newest has the fewest views. Keys are
+// named deMeta/enMeta rather than de/en so nothing here can be mistaken for the
+// `de` language flag.
+const YT_SHELF_META = [
+  { dur: "12:04",   deMeta: "12.480 Aufrufe · vor 1 Tag",      enMeta: "12K views · 1 day ago" },
+  { dur: "8:37",    deMeta: "47.902 Aufrufe · vor 5 Tagen",    enMeta: "47K views · 5 days ago" },
+  { dur: "1:02:19", deMeta: "128.415 Aufrufe · vor 2 Wochen",  enMeta: "128K views · 2 weeks ago" },
+  { dur: "24:51",   deMeta: "86.230 Aufrufe · vor 1 Monat",    enMeta: "86K views · 1 month ago" },
+  { dur: "15:46",   deMeta: "336.086 Aufrufe · vor 4 Monaten", enMeta: "336K views · 4 months ago" },
+];
+
 // 1546 x 423 is YouTube's always-visible area — what a viewer gets on a TV, a
 // computer and a phone alike. The desktop page crops a wider strip out of the
 // uploaded file, but previewing that strip would show more than most viewers
@@ -16871,7 +16885,7 @@ function YouTubeMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onO
           read as YouTube. */}
       <div style={{ position: "relative", marginTop: 14 }}>
         <div style={{ display: "flex", gap: 14, overflow: "hidden" }}>
-          {posts.slice(0, 5).map((src, i) => (
+          {posts.slice(0, YT_SHELF_META.length).map((src, i) => (
             <div key={i} style={{ flex: "0 0 calc((100% - 56px) / 4.35)", minWidth: 0 }}>
               <div onClick={() => onOpenPost(i)}
                 style={{ position: "relative", aspectRatio: "16 / 9", borderRadius: 9, overflow: "hidden",
@@ -16881,7 +16895,7 @@ function YouTubeMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onO
                 {src && (
                   <span style={{ position: "absolute", right: 7, bottom: 7, padding: "1px 5px", borderRadius: 4,
                     background: "rgba(0,0,0,0.8)", color: "#fff", fontFamily: FONT, fontSize: 12, fontWeight: 600 }}>
-                    —:—
+                    {YT_SHELF_META[i].dur}
                   </span>
                 )}
               </div>
@@ -16898,7 +16912,7 @@ function YouTubeMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onO
                 {brand?.name || (de ? "Kanal" : "Channel")}
               </div>
               <div style={{ fontSize: 13, fontFamily: FONT, color: muted }}>
-                {de ? "— Aufrufe · vor — Monaten" : "— views · — months ago"}
+                {de ? YT_SHELF_META[i].deMeta : YT_SHELF_META[i].enMeta}
               </div>
             </div>
           ))}
