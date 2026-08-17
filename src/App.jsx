@@ -17118,6 +17118,25 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const stageRef = useRef(null);
   const dragRef = useRef(null);
 
+  const [guides, setGuides] = useState([]);
+  const guidesKeyRef = useRef("");
+
+  // One bounding box for every item type. The selection bar and the snapping
+  // both need it, and two versions would eventually disagree about where a
+  // stroke ends.
+  const boxOf = (it) =>
+    (it.type === "arrow" || it.type === "line")
+      ? { x: Math.min(it.x1, it.x2), y: Math.min(it.y1, it.y2),
+          w: Math.abs(it.x2 - it.x1), h: Math.abs(it.y2 - it.y1) }
+      : it.type === "draw"
+      ? (() => {
+          const xs = it.pts.map(q => q[0] + (it.ox || 0)), ys = it.pts.map(q => q[1] + (it.oy || 0));
+          return { x: Math.min(...xs), y: Math.min(...ys),
+            w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+        })()
+      : { x: it.x, y: it.y, w: it.w,
+          h: it.h || (String(it.text ?? "").split("\n").length || 1) * canvasLH(it) };
+
   const selItem = items.find(i => i.id === sel) || null;
 
   // The brand's own faces first — setting a banner in a font the brand does not
@@ -17307,7 +17326,21 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     }
     if (d.mode === "arrow") { patch(d.id, { x2: p.x, y2: p.y }); return; }
     if (d.mode === "move") {
-      const dx = (e.clientX - d.sx) / cam.s, dy = (e.clientY - d.sy) / cam.s;
+      let dx = (e.clientX - d.sx) / cam.s, dy = (e.clientY - d.sy) / cam.s;
+      // Brainstorm's own wbSnapBox, not a second implementation: nine candidates
+      // per axis, closest match inside the tolerance wins, and the guide spans
+      // everything it describes. Tolerance is a SCREEN distance, so it is divided
+      // by the zoom. Alt suspends it — the escape hatch for placing something
+      // deliberately out of line.
+      if (d.baseBox && !e.altKey) {
+        const r = wbSnapBox({ ...d.baseBox, x: d.baseBox.x + dx, y: d.baseBox.y + dy },
+          d.targets, WB_SNAP_PX / (cam.s || 1));
+        dx += r.dx; dy += r.dy;
+        // A pointermove fires far more often than the guides change; only
+        // re-render when they actually do.
+        const key = r.guides.map(g => `${g.axis}${Math.round(g.pos)}:${Math.round(g.a)}:${Math.round(g.b)}`).join("|");
+        if (key !== guidesKeyRef.current) { guidesKeyRef.current = key; setGuides(r.guides); }
+      } else if (guidesKeyRef.current) { guidesKeyRef.current = ""; setGuides([]); }
       if (d.kind === "draw") patch(d.id, { ox: d.ix + dx, oy: d.iy + dy });
       else if (d.kind === "arrow") patch(d.id, { x1: d.ix + dx, y1: d.iy + dy, x2: d.ax + dx, y2: d.ay + dy });
       else patch(d.id, { x: Math.round(d.ix + dx), y: Math.round(d.iy + dy) });
@@ -17330,6 +17363,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   };
 
   const onStageUp = () => {
+    if (guidesKeyRef.current) { guidesKeyRef.current = ""; setGuides([]); }
     const d = dragRef.current;
     dragRef.current = null;
     if (d?.mode === "create") {
@@ -17379,6 +17413,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     e.stopPropagation();
     setSel(it.id);
     dragRef.current = { mode: "move", id: it.id, sx: e.clientX, sy: e.clientY,
+      // The frame is a target like any other, which is what makes an element
+      // centre itself in the banner instead of only against its neighbours.
+      baseBox: boxOf(it),
+      targets: [{ x: 0, y: 0, w: W, h: H }, ...items.filter(o => o.id !== it.id).map(boxOf)],
       kind: it.type === "draw" ? "draw" : (it.type === "arrow" || it.type === "line") ? "arrow" : "box",
       ix: it.type === "draw" ? (it.ox || 0) : it.type === "arrow" ? it.x1 : it.x,
       iy: it.type === "draw" ? (it.oy || 0) : it.type === "arrow" ? it.y1 : it.y,
@@ -17593,6 +17631,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`,
             transition: flying ? "transform 620ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
             boxShadow: "0 18px 60px rgba(0,0,0,0.28)" }}>
+            {guides.map((g, gi) => (
+              <div key={gi} style={{ position: "absolute", background: "#E8347F", pointerEvents: "none",
+                ...(g.axis === "x"
+                  ? { left: g.pos, top: Math.min(g.a, g.b), width: Math.max(1, 1 / cam.s),
+                      height: Math.abs(g.b - g.a) }
+                  : { top: g.pos, left: Math.min(g.a, g.b), height: Math.max(1, 1 / cam.s),
+                      width: Math.abs(g.b - g.a) }) }} />
+            ))}
             {items.map(it => {
               const on = it.id === sel;
               const common = {
@@ -17718,16 +17764,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           none of that exists on a canvas text field, and faking the buttons
           would be worse than not showing them. */}
       {cam && selItem && sel !== "frame" && !editing && (() => {
-        const b = selItem.type === "arrow" || selItem.type === "line"
-          ? { x: Math.min(selItem.x1, selItem.x2), y: Math.min(selItem.y1, selItem.y2),
-              w: Math.abs(selItem.x2 - selItem.x1), h: Math.abs(selItem.y2 - selItem.y1) }
-          : selItem.type === "draw"
-          ? (() => { const xs = selItem.pts.map(q => q[0] + (selItem.ox || 0));
-                     const ys = selItem.pts.map(q => q[1] + (selItem.oy || 0));
-                     return { x: Math.min(...xs), y: Math.min(...ys),
-                       w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) }; })()
-          : { x: selItem.x, y: selItem.y, w: selItem.w,
-              h: selItem.h || (selItem.size * CANVAS_LH) };
+        const b = boxOf(selItem);
         const left = cam.x + (b.x + b.w / 2) * cam.s;
         const top = cam.y + b.y * cam.s - 46;
         const isText = selItem.type === "text" || selItem.type === "sticky";
