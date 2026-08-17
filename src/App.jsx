@@ -16938,11 +16938,13 @@ function YouTubeMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onO
   );
 }
 
-// The real mark, not a letter P. Everywhere else in the app Pinterest is drawn
-// as the character "P" in a red disc, which is not the logo — the logo is a
-// white script P knocked out of the disc, and at header size the difference is
-// the whole recognition.
-const PINTEREST_MARK = "M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.936 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 01.083.345l-.333 1.36c-.053.22-.008.246-.22.148-1.235-.577-2.005-2.386-2.005-3.84 0-3.127 2.271-5.998 6.547-5.998 3.437 0 6.108 2.449 6.108 5.72 0 3.417-2.153 6.168-5.14 6.168-1.004 0-1.947-.522-2.269-1.139l-.616 2.35c-.223.858-.827 1.933-1.231 2.588A12 12 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0";
+// The official Pinterest P, supplied by the owner. Its own box is 640 wide, so
+// anything drawing it inside a 24-unit viewBox has to scale by PINTEREST_P_SCALE.
+// An earlier attempt drew a combined disc-and-P path and cut the P out of it; the
+// P is not a fillable region on its own there, and it collapsed. This is the glyph
+// itself, so no cutting is needed.
+const PINTEREST_P = "M332 70.5C229.4 70.5 128 138.9 128 249.6C128 320 167.6 360 191.6 360C201.5 360 207.2 332.4 207.2 324.6C207.2 315.3 183.5 295.5 183.5 256.8C183.5 176.4 244.7 119.4 323.9 119.4C392 119.4 442.4 158.1 442.4 229.2C442.4 282.3 421.1 381.9 352.1 381.9C327.2 381.9 305.9 363.9 305.9 338.1C305.9 300.3 332.3 263.7 332.3 224.7C332.3 158.5 238.4 170.5 238.4 250.5C238.4 267.3 240.5 285.9 248 301.2C234.2 360.6 206 449.1 206 510.3C206 529.2 208.7 547.8 210.5 566.7C213.9 570.5 212.2 570.1 217.4 568.2C267.8 499.2 266 485.7 288.8 395.4C301.1 418.8 332.9 431.4 358.1 431.4C464.3 431.4 512 327.9 512 234.6C512 135.3 426.2 70.5 332 70.5z";
+const PINTEREST_P_SCALE = 24 / 640;
 
 // Pinterest is the only one of these profiles built as two columns side by side:
 // the facts on the left, a wide cover on the right, and the tabs centred under
@@ -16971,8 +16973,9 @@ function PinterestMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, o
           body could be almost any profile. */}
       <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 18px",
         borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
-        <svg width="30" height="30" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
-          <path fill={red} d={PINTEREST_MARK} />
+        <svg width="30" height="30" viewBox="0 0 640 640" style={{ flexShrink: 0 }}>
+          <circle cx="320" cy="320" r="320" fill={red} />
+          <path fill="#fff" d={PINTEREST_P} />
         </svg>
         <span style={{ fontFamily: FONT, fontSize: 21, fontWeight: 700, color: "#111", letterSpacing: -0.3 }}>
           Pinterest
@@ -17719,7 +17722,7 @@ const TOUCHPOINT_PLATFORMS = [
 // Compact white glyph per platform (letters via <text> where a logo would be fiddly).
 // Per-platform optical-size correction — each glyph fills its 24×24 box
 // differently, so we nudge the rendered size to make them look balanced.
-const TP_GLYPH_SCALE = { x: 0.72, tiktok: 1.3, facebook: 1.65, youtube: 1.12, instagram: 1.0, website: 1.0, pinterest: 1.55 };
+const TP_GLYPH_SCALE = { x: 0.72, tiktok: 1.3, facebook: 1.65, youtube: 1.12, instagram: 1.0, website: 1.0, pinterest: 1.2 };
 const tpGlyphSize = (key, base) => Math.round(base * (TP_GLYPH_SCALE[key] || 1));
 
 function touchpointGlyph(key) {
@@ -17732,10 +17735,9 @@ function touchpointGlyph(key) {
     case "x":         return <path fill="#fff" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>;
     case "linkedin":  return L("in");
     case "facebook":  return <text x="12" y="17.7" textAnchor="middle" fontSize="15" fontWeight="700" fill="#fff" fontFamily="sans-serif">f</text>;
-    // The mark, not the letter. The white circle underneath guarantees the P
-    // stays white whatever the chip colour is: the path itself is "disc minus
-    // P", so on its own the P would show the background through.
-    case "pinterest": return <g><circle cx="12" cy="12" r="12" fill="#fff"/><path fill="#E60023" d={PINTEREST_MARK}/></g>;
+    // The glyph alone in white, the way every other chip is drawn. It carries
+    // its own 640 box, hence the scale into this 24-unit one.
+    case "pinterest": return <g transform={`scale(${PINTEREST_P_SCALE})`}><path fill="#fff" d={PINTEREST_P}/></g>;
     case "threads":   return L("@", 15);
     case "newsletter":return <g fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M4 7l8 6 8-6"/></g>;
     default:          return L((key[0] || "?").toUpperCase());
