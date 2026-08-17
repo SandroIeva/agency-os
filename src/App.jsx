@@ -17143,6 +17143,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   const selItem = items.find(i => i.id === sel) || null;
 
+  // Figma's arrangement: square grips on the corners, thin ones at the middle of
+  // each edge for a single axis, and a round grip just outside each corner to
+  // rotate. Sizes are divided by the zoom so they stay the same on screen
+  // however far in you are.
+  const HANDLES = [["nw", 0, 0], ["n", .5, 0], ["ne", 1, 0], ["e", 1, .5],
+                   ["se", 1, 1], ["s", .5, 1], ["sw", 0, 1], ["w", 0, .5]];
+  const CURSORS = { nw: "nwse-resize", se: "nwse-resize", ne: "nesw-resize", sw: "nesw-resize",
+                    n: "ns-resize", s: "ns-resize", e: "ew-resize", w: "ew-resize" };
+
   // The brand's own faces first — setting a banner in a font the brand does not
   // own is the mistake this whole preview exists to catch. They are Google fonts,
   // so the editor links them itself: the export waits on document.fonts.ready,
@@ -17350,19 +17359,40 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       else patch(d.id, { x: Math.round(d.ix + dx), y: Math.round(d.iy + dy) });
       return;
     }
+    if (d.mode === "rotate") {
+      let deg = d.rot0 + (Math.atan2(e.clientY - d.cy, e.clientX - d.cx) - d.a0) * 180 / Math.PI;
+      if (e.shiftKey) deg = Math.round(deg / 15) * 15;   // Shift snaps to 15°
+      patch(d.id, { rot: Math.round(deg * 10) / 10 });
+      return;
+    }
     if (d.mode === "resize") {
-      let w = Math.max(8, d.iw + (e.clientX - d.sx) / cam.s);
-      let h = Math.max(8, d.ih + (e.clientY - d.sy) / cam.s);
-      // A text box only ever changes width — its height follows the lines in it.
-      if (d.isText) { patch(d.id, { w: Math.round(w) }); return; }
-      // The same contract as dragging a shape out: proportional by default,
-      // Shift to deform. Whichever axis was pulled further drives the other, so
-      // the shape follows the hand rather than one fixed edge.
-      if (!e.shiftKey && d.ih > 0) {
-        const r = d.iw / d.ih;
-        if (Math.abs(w - d.iw) >= Math.abs(h - d.ih)) h = w / r; else w = h * r;
+      // Free by default, proportional with Shift — the way a design tool works.
+      // The delta is rotated into the shape's OWN frame first, or dragging the
+      // right edge of a tilted rectangle would widen it along the screen instead
+      // of along the shape.
+      let dx = (e.clientX - d.sx) / cam.s, dy = (e.clientY - d.sy) / cam.s;
+      if (d.rot) {
+        const a = -d.rot * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a);
+        [dx, dy] = [dx * ca - dy * sa, dx * sa + dy * ca];
       }
-      patch(d.id, { w: Math.round(w), h: Math.round(h) });
+      const hd = d.handle || "se";
+      let { x, y, w, h } = d.base;
+      if (hd.includes("e")) w = d.base.w + dx;
+      if (hd.includes("w")) { w = d.base.w - dx; x = d.base.x + dx; }
+      if (hd.includes("s")) h = d.base.h + dy;
+      if (hd.includes("n")) { h = d.base.h - dy; y = d.base.y + dy; }
+      // A text box only ever changes width — its height follows the lines in it.
+      if (d.isText) { patch(d.id, { w: Math.round(Math.max(8, w)), x: Math.round(x) }); return; }
+      const corner = hd.length === 2;
+      if (e.shiftKey && corner && d.base.h > 0) {
+        const r = d.base.w / d.base.h;
+        if (Math.abs(w - d.base.w) >= Math.abs(h - d.base.h)) h = w / r; else w = h * r;
+        if (hd.includes("n")) y = d.base.y + d.base.h - h;
+        if (hd.includes("w")) x = d.base.x + d.base.w - w;
+      }
+      w = Math.max(8, w); h = Math.max(8, h);
+      patch(d.id, { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) });
+      return;
     }
   };
 
@@ -17427,10 +17457,20 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       ax: it.x2, ay: it.y2 };
   };
 
-  const onHandleDown = (e, it) => {
+  const onHandleDown = (e, it, handle) => {
     e.stopPropagation();
-    dragRef.current = { mode: "resize", id: it.id, sx: e.clientX, sy: e.clientY,
-      iw: it.w, ih: it.h || 0, isText: it.type === "text" };
+    dragRef.current = { mode: "resize", id: it.id, handle, sx: e.clientX, sy: e.clientY,
+      base: { x: it.x, y: it.y, w: it.w, h: it.h || 0 }, rot: it.rot || 0,
+      isText: it.type === "text" };
+  };
+
+  // Rotation reads the angle from the shape's centre to the pointer, so the
+  // corner stays under the finger instead of the shape lagging behind it.
+  const onRotateDown = (e, it) => {
+    e.stopPropagation();
+    const cx = cam.x + (it.x + it.w / 2) * cam.s, cy = cam.y + (it.y + (it.h || 0) / 2) * cam.s;
+    dragRef.current = { mode: "rotate", id: it.id, cx, cy, rot0: it.rot || 0,
+      a0: Math.atan2(e.clientY - cy, e.clientX - cx) };
   };
 
   // ── export ────────────────────────────────────────────────────────────────
@@ -17468,6 +17508,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     if (bg !== "transparent") { ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H); }
     for (const it of items) {
       ctx.globalAlpha = it.opacity == null ? 1 : it.opacity;
+      const spun = it.rot || it.flipX || it.flipY;
+      if (spun) {
+        const b = boxOf(it), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+        ctx.save(); ctx.translate(cx, cy);
+        if (it.rot) ctx.rotate(it.rot * Math.PI / 180);
+        if (it.flipX || it.flipY) ctx.scale(it.flipX ? -1 : 1, it.flipY ? -1 : 1);
+        ctx.translate(-cx, -cy);
+      }
       if (it.type === "image" && it.url) {
         const img = await loadImage(it.url);
         drawFitted(ctx, img, it);
@@ -17550,6 +17598,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         });
         if (canSpace) ctx.letterSpacing = "0px";
       }
+      if (spun) ctx.restore();
     }
     ctx.globalAlpha = 1;
     return await new Promise((res, rej) =>
@@ -17649,8 +17698,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             ))}
             {items.map(it => {
               const on = it.id === sel;
+              const xf = [it.rot ? `rotate(${it.rot}deg)` : "",
+                it.flipX ? "scaleX(-1)" : "", it.flipY ? "scaleY(-1)" : ""].filter(Boolean).join(" ");
               const common = {
                 position: "absolute", left: it.x, top: it.y,
+                ...(xf ? { transform: xf, transformOrigin: "center" } : {}),
                 outline: on ? `${Math.max(1, 1.5 / cam.s)}px solid #15151c` : "none",
                 outlineOffset: 0, cursor: tool === "select" ? "move" : "inherit",
               };
@@ -17671,12 +17723,39 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                           outline: "none", resize: "none", font: "inherit", color: "inherit",
                           lineHeight: "inherit", padding: 0, margin: 0 }} />
                     ) : String(it.text)}
-                    {on && (
-                      <div onPointerDown={e => onHandleDown(e, it)}
-                        style={{ position: "absolute", right: -5 / cam.s, bottom: -5 / cam.s,
-                          width: 10 / cam.s, height: 10 / cam.s, borderRadius: 2 / cam.s,
-                          background: "#fff", border: `${1.5 / cam.s}px solid #15151c`, cursor: "nwse-resize" }} />
-                    )}
+                    {on && !editing && (() => {
+                      const k = 1 / cam.s, hs = 9 * k, rs = 15 * k, bw = 1.6 * k;
+                      const bh = it.h || (String(it.text ?? "").split("\n").length || 1) * canvasLH(it);
+                      const edgeOnly = it.type === "text";
+                      return (
+                        <>
+                          <div style={{ position: "absolute", inset: 0, pointerEvents: "none",
+                            outline: `${bw}px solid #2F6BFF`, outlineOffset: 0 }} />
+                          {HANDLES.filter(([hd]) => !edgeOnly || hd === "e" || hd === "w").map(([hd, fx, fy]) => (
+                            <div key={hd} onPointerDown={e2 => onHandleDown(e2, it, hd)}
+                              style={{ position: "absolute", left: `calc(${fx * 100}% - ${hs / 2}px)`,
+                                top: `calc(${fy * 100}% - ${hs / 2}px)`, width: hs, height: hs,
+                                borderRadius: 1.5 * k, background: "#fff",
+                                border: `${bw}px solid #2F6BFF`, cursor: CURSORS[hd], zIndex: 2 }} />
+                          ))}
+                          {!edgeOnly && [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => (
+                            <div key={"r" + hd} onPointerDown={e2 => onRotateDown(e2, it)}
+                              title={de ? "Drehen" : "Rotate"}
+                              style={{ position: "absolute", left: `calc(${fx * 100}% - ${rs / 2}px)`,
+                                top: `calc(${fy * 100}% - ${rs / 2}px)`, width: rs, height: rs,
+                                transform: `translate(${(fx ? 1 : -1) * rs * 0.75}px, ${(fy ? 1 : -1) * rs * 0.75}px)`,
+                                borderRadius: "50%", cursor: "grab", zIndex: 1 }} />
+                          ))}
+                          <div style={{ position: "absolute", left: "50%", top: `calc(100% + ${9 * k}px)`,
+                            transform: "translateX(-50%)", padding: `${3 * k}px ${7 * k}px`,
+                            borderRadius: 4 * k, background: "#2F6BFF", color: "#fff",
+                            fontFamily: FONT, fontSize: 11 * k, fontWeight: 600, whiteSpace: "nowrap",
+                            pointerEvents: "none" }}>
+                            {Math.round(it.w)} × {Math.round(bh)}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 );
               }
@@ -17698,12 +17777,39 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                           textAlign: "inherit", padding: 0, margin: 0, overflow: "hidden",
                           height: `${(String(it.text).split("\n").length || 1) * it.size * CANVAS_LH}px` }} />
                     ) : String(it.text)}
-                    {on && !editing && (
-                      <div onPointerDown={e => onHandleDown(e, it)}
-                        style={{ position: "absolute", right: -5 / cam.s, bottom: -5 / cam.s,
-                          width: 10 / cam.s, height: 10 / cam.s, borderRadius: 2 / cam.s,
-                          background: "#fff", border: `${1.5 / cam.s}px solid #15151c`, cursor: "ew-resize" }} />
-                    )}
+                    {on && !editing && (() => {
+                      const k = 1 / cam.s, hs = 9 * k, rs = 15 * k, bw = 1.6 * k;
+                      const bh = it.h || (String(it.text ?? "").split("\n").length || 1) * canvasLH(it);
+                      const edgeOnly = it.type === "text";
+                      return (
+                        <>
+                          <div style={{ position: "absolute", inset: 0, pointerEvents: "none",
+                            outline: `${bw}px solid #2F6BFF`, outlineOffset: 0 }} />
+                          {HANDLES.filter(([hd]) => !edgeOnly || hd === "e" || hd === "w").map(([hd, fx, fy]) => (
+                            <div key={hd} onPointerDown={e2 => onHandleDown(e2, it, hd)}
+                              style={{ position: "absolute", left: `calc(${fx * 100}% - ${hs / 2}px)`,
+                                top: `calc(${fy * 100}% - ${hs / 2}px)`, width: hs, height: hs,
+                                borderRadius: 1.5 * k, background: "#fff",
+                                border: `${bw}px solid #2F6BFF`, cursor: CURSORS[hd], zIndex: 2 }} />
+                          ))}
+                          {!edgeOnly && [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => (
+                            <div key={"r" + hd} onPointerDown={e2 => onRotateDown(e2, it)}
+                              title={de ? "Drehen" : "Rotate"}
+                              style={{ position: "absolute", left: `calc(${fx * 100}% - ${rs / 2}px)`,
+                                top: `calc(${fy * 100}% - ${rs / 2}px)`, width: rs, height: rs,
+                                transform: `translate(${(fx ? 1 : -1) * rs * 0.75}px, ${(fy ? 1 : -1) * rs * 0.75}px)`,
+                                borderRadius: "50%", cursor: "grab", zIndex: 1 }} />
+                          ))}
+                          <div style={{ position: "absolute", left: "50%", top: `calc(100% + ${9 * k}px)`,
+                            transform: "translateX(-50%)", padding: `${3 * k}px ${7 * k}px`,
+                            borderRadius: 4 * k, background: "#2F6BFF", color: "#fff",
+                            fontFamily: FONT, fontSize: 11 * k, fontWeight: 600, whiteSpace: "nowrap",
+                            pointerEvents: "none" }}>
+                            {Math.round(it.w)} × {Math.round(bh)}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 );
               }
@@ -17751,12 +17857,39 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     background: it.type === "image"
                       ? `center/${it.fit === "contain" ? "contain" : "cover"} no-repeat url(${it.url})`
                       : it.fill }}>
-                  {on && (
-                    <div onPointerDown={e => onHandleDown(e, it)}
-                      style={{ position: "absolute", right: -5 / cam.s, bottom: -5 / cam.s,
-                        width: 10 / cam.s, height: 10 / cam.s, borderRadius: 2 / cam.s,
-                        background: "#fff", border: `${1.5 / cam.s}px solid #15151c`, cursor: "nwse-resize" }} />
-                  )}
+                  {on && !editing && (() => {
+                      const k = 1 / cam.s, hs = 9 * k, rs = 15 * k, bw = 1.6 * k;
+                      const bh = it.h || (String(it.text ?? "").split("\n").length || 1) * canvasLH(it);
+                      const edgeOnly = it.type === "text";
+                      return (
+                        <>
+                          <div style={{ position: "absolute", inset: 0, pointerEvents: "none",
+                            outline: `${bw}px solid #2F6BFF`, outlineOffset: 0 }} />
+                          {HANDLES.filter(([hd]) => !edgeOnly || hd === "e" || hd === "w").map(([hd, fx, fy]) => (
+                            <div key={hd} onPointerDown={e2 => onHandleDown(e2, it, hd)}
+                              style={{ position: "absolute", left: `calc(${fx * 100}% - ${hs / 2}px)`,
+                                top: `calc(${fy * 100}% - ${hs / 2}px)`, width: hs, height: hs,
+                                borderRadius: 1.5 * k, background: "#fff",
+                                border: `${bw}px solid #2F6BFF`, cursor: CURSORS[hd], zIndex: 2 }} />
+                          ))}
+                          {!edgeOnly && [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => (
+                            <div key={"r" + hd} onPointerDown={e2 => onRotateDown(e2, it)}
+                              title={de ? "Drehen" : "Rotate"}
+                              style={{ position: "absolute", left: `calc(${fx * 100}% - ${rs / 2}px)`,
+                                top: `calc(${fy * 100}% - ${rs / 2}px)`, width: rs, height: rs,
+                                transform: `translate(${(fx ? 1 : -1) * rs * 0.75}px, ${(fy ? 1 : -1) * rs * 0.75}px)`,
+                                borderRadius: "50%", cursor: "grab", zIndex: 1 }} />
+                          ))}
+                          <div style={{ position: "absolute", left: "50%", top: `calc(100% + ${9 * k}px)`,
+                            transform: "translateX(-50%)", padding: `${3 * k}px ${7 * k}px`,
+                            borderRadius: 4 * k, background: "#2F6BFF", color: "#fff",
+                            fontFamily: FONT, fontSize: 11 * k, fontWeight: 600, whiteSpace: "nowrap",
+                            pointerEvents: "none" }}>
+                            {Math.round(it.w)} × {Math.round(bh)}
+                          </div>
+                        </>
+                      );
+                    })()}
                 </div>
               );
             })}
@@ -18004,6 +18137,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         {selItem && (() => {
           const isText = selItem.type === "text" || selItem.type === "sticky";
           const set = (k, v) => patch(selItem.id, { [k]: v });
+          const set2 = (o) => patch(selItem.id, o);
           const num = (value, onChange, glyph, suffix = "") => (
             <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
               borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
@@ -18046,6 +18180,90 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
           return (
           <>
+            {/* Aligning is always against the FRAME here. On an unbounded board
+                there is nothing to align to; on a fixed banner the frame is the
+                only thing worth aligning to, and it is what people reach for. */}
+            {label(de ? "Position" : "Position")}
+            <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 10 }}>
+              {de ? "Ausrichten am Frame" : "Align to frame"}
+            </div>
+            {(() => {
+              const b = boxOf(selItem);
+              const move = (nx, ny) => {
+                const dx = nx == null ? 0 : nx - b.x, dy = ny == null ? 0 : ny - b.y;
+                if (selItem.type === "draw") set2({ ox: (selItem.ox || 0) + dx, oy: (selItem.oy || 0) + dy });
+                else if (selItem.type === "arrow" || selItem.type === "line")
+                  set2({ x1: selItem.x1 + dx, y1: selItem.y1 + dy, x2: selItem.x2 + dx, y2: selItem.y2 + dy });
+                else set2({ x: Math.round(selItem.x + dx), y: Math.round(selItem.y + dy) });
+              };
+              const rowA = [
+                ["l", () => move(0, null), <><path d="M4 4v16"/><path d="M8 9h9"/><path d="M8 15h6"/></>, de ? "Links" : "Left"],
+                ["cx", () => move((W - b.w) / 2, null), <><path d="M12 4v16"/><path d="M7 9h10"/><path d="M9 15h6"/></>, de ? "Horizontal zentrieren" : "Centre horizontally"],
+                ["r", () => move(W - b.w, null), <><path d="M20 4v16"/><path d="M7 9h9"/><path d="M10 15h6"/></>, de ? "Rechts" : "Right"],
+              ];
+              const rowB = [
+                ["t", () => move(null, 0), <><path d="M4 4h16"/><path d="M9 8v9"/><path d="M15 8v6"/></>, de ? "Oben" : "Top"],
+                ["cy", () => move(null, (H - b.h) / 2), <><path d="M4 12h16"/><path d="M9 7v10"/><path d="M15 9v6"/></>, de ? "Vertikal zentrieren" : "Centre vertically"],
+                ["b", () => move(null, H - b.h), <><path d="M4 20h16"/><path d="M9 7v9"/><path d="M15 10v6"/></>, de ? "Unten" : "Bottom"],
+              ];
+              const btn = (glyph, act, title) => (
+                <div key={title} title={title} onClick={act}
+                  style={{ flex: 1, height: 32, borderRadius: 8, display: "flex", alignItems: "center",
+                    justifyContent: "center", cursor: "pointer", color: theme.text,
+                    background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="1.9" strokeLinecap="round">{glyph}</svg>
+                </div>
+              );
+              return (
+                <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
+                  <div style={{ display: "flex", gap: 4, flex: 1 }}>{rowA.map(([, a, g, t]) => btn(g, a, t))}</div>
+                  <div style={{ display: "flex", gap: 4, flex: 1 }}>{rowB.map(([, a, g, t]) => btn(g, a, t))}</div>
+                </div>
+              );
+            })()}
+            <div style={two}>
+              {num(Math.round(boxOf(selItem).x), v => {
+                const b = boxOf(selItem), d2 = (Number(v) || 0) - b.x;
+                if (selItem.type === "draw") set2({ ox: (selItem.ox || 0) + d2 });
+                else if (selItem.type === "arrow" || selItem.type === "line") set2({ x1: selItem.x1 + d2, x2: selItem.x2 + d2 });
+                else set2({ x: Math.round(selItem.x + d2) });
+              }, "X")}
+              {num(Math.round(boxOf(selItem).y), v => {
+                const b = boxOf(selItem), d2 = (Number(v) || 0) - b.y;
+                if (selItem.type === "draw") set2({ oy: (selItem.oy || 0) + d2 });
+                else if (selItem.type === "arrow" || selItem.type === "line") set2({ y1: selItem.y1 + d2, y2: selItem.y2 + d2 });
+                else set2({ y: Math.round(selItem.y + d2) });
+              }, "Y")}
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+              <div style={{ flex: 1 }}>
+                {num(selItem.rot || 0, v => set2({ rot: Number(v) || 0 }), "∠", "°")}
+              </div>
+              {[["flipX", <><path d="M12 4v16"/><path d="M9 8L4 12l5 4z"/><path d="M15 8l5 4-5 4z"/></>, de ? "Horizontal spiegeln" : "Flip horizontal"],
+                ["flipY", <><path d="M4 12h16"/><path d="M8 9l4-5 4 5z"/><path d="M8 15l4 5 4-5z"/></>, de ? "Vertikal spiegeln" : "Flip vertical"],
+              ].map(([k, glyph, title]) => (
+                <div key={k} title={title} onClick={() => set2({ [k]: !selItem[k] })}
+                  style={{ width: 40, height: 34, borderRadius: 8, display: "flex", alignItems: "center",
+                    justifyContent: "center", cursor: "pointer", color: theme.text,
+                    border: `1px solid ${selItem[k] ? "#15151c" : "transparent"}`,
+                    background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{glyph}</svg>
+                </div>
+              ))}
+            </div>
+
+            {!["draw", "arrow", "line"].includes(selItem.type) && (<>
+              {label(de ? "Maße" : "Layout")}
+              <div style={two}>
+                {num(Math.round(selItem.w), v => set2({ w: Math.max(8, Number(v) || 8) }), "W")}
+                {selItem.type === "text"
+                  ? <div />
+                  : num(Math.round(selItem.h), v => set2({ h: Math.max(8, Number(v) || 8) }), "H")}
+              </div>
+            </>)}
+
             {label(de ? "Darstellung" : "Appearance")}
             <div style={two}>
               {num(Math.round((selItem.opacity == null ? 1 : selItem.opacity) * 100),
