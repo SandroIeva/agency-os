@@ -16606,12 +16606,19 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
   // no bar competing with the page being judged.
   return createPortal(
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-      style={{ position: "fixed", inset: 0, zIndex: 100002, overflowY: "auto",
+      style={{ position: "fixed", inset: 0, zIndex: 100002 }}>
+      {/* The blur sits on a layer that never moves. On the scrolling element it
+          had to be recomputed for every frame, which is what produced the
+          flashing — the effect is expensive and scroll is the worst place to
+          pay for it. */}
+      <div style={{ position: "absolute", inset: 0,
         background: darkMode ? "rgba(8,8,12,0.62)" : "rgba(40,40,44,0.38)",
-        backdropFilter: "blur(14px) saturate(1.1)", WebkitBackdropFilter: "blur(14px) saturate(1.1)" }}>
-      {/* Only a way out, floating over the corner. */}
-      <div style={{ position: "sticky", top: 0, zIndex: 3, display: "flex", justifyContent: "space-between",
-        alignItems: "center", padding: "18px 22px", pointerEvents: "none" }}>
+        backdropFilter: "blur(14px) saturate(1.1)", WebkitBackdropFilter: "blur(14px) saturate(1.1)" }} />
+
+      {/* The way out is fixed too, so it is not repainted against a filtered
+          backdrop while the content moves under it. */}
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 3, display: "flex",
+        justifyContent: "space-between", alignItems: "center", padding: "18px 22px", pointerEvents: "none" }}>
         <motion.div whileTap={{ scale: 0.94 }} onClick={onClose} title={de ? "Schließen" : "Close"}
           style={{ pointerEvents: "auto", width: 38, height: 38, borderRadius: "50%", cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
@@ -16633,10 +16640,13 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
           </motion.a>
         )}
       </div>
-      <div>
+      <div style={{ position: "absolute", inset: 0, overflowY: "auto",
+        // Its own compositing layer, so scrolling it does not invalidate the
+        // blurred layer behind.
+        transform: "translateZ(0)", paddingTop: 74 }}>
         {/* The mock itself, on its own light ground so it reads as a preview of
             somewhere else rather than as part of this app. */}
-        <div style={{ padding: "0 22px 40px" }}>
+        <div style={{ padding: "0 22px 48px" }}>
           {platform.key === "x" ? (
             <XMock
               brand={brand} banner={banner} avatar={avatar} posts={posts} de={de}
