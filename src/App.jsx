@@ -17630,6 +17630,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             transformOrigin: "0 0",
             transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`,
             transition: flying ? "transform 620ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
+            // Selected frames say so. Without this the sidebar changed and
+            // nothing on the canvas did, which reads as nothing having happened.
+            outline: sel === "frame" ? `${Math.max(1, 2 / cam.s)}px solid #15151c` : "none",
+            outlineOffset: 0,
             boxShadow: "0 18px 60px rgba(0,0,0,0.28)" }}>
             {guides.map((g, gi) => (
               <div key={gi} style={{ position: "absolute", background: "#E8347F", pointerEvents: "none",
@@ -17925,6 +17929,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       {/* right panel */}
       <div style={{ position: "absolute", right: 0, top: 52, bottom: 0, width: 258, padding: "4px 16px 20px",
         background: panel, borderLeft: `1px solid ${line}`, overflowY: "auto" }}>
+        {/* Templates replace the whole frame, so they only make sense while the
+            frame is what you are looking at. With a text or a shape selected the
+            panel is about that element, and a grid of layouts underneath it is
+            an offer to throw the work away. */}
+        {!selItem && <>
         {label(de ? "Vorlagen" : "Templates")}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
           {CANVAS_TEMPLATES.map(tpl => {
@@ -17951,10 +17960,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             );
           })}
         </div>
+        </>}
 
         {(!selItem || sel === "frame") && (
           <>
-            {label(de ? "Frame" : "Frame")}
+            {label(sel === "frame" ? (de ? "Frame · ausgewählt" : "Frame · selected") : "Frame")}
             <div style={{ fontSize: 12, color: theme.textDim, marginTop: 6 }}>{title}</div>
             <div style={{ fontSize: 12, color: theme.textDim }}>{W} × {H} px</div>
             {label(de ? "Hintergrund" : "Background")}
