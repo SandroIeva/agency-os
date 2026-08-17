@@ -16618,7 +16618,7 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
         // Light grey rather than white: the mocks are white pages, so a white
         // scrim gave them no edge to sit against. Grey separates them without
         // the glare a dark scrim produced.
-        background: darkMode ? "rgba(16,16,22,0.88)" : "rgba(232,232,229,0.92)" }} />
+        background: darkMode ? "rgba(16,16,22,0.88)" : "rgba(238,238,240,0.95)" }} />
 
       {/* The way out is fixed too, so it is not repainted against a filtered
           backdrop while the content moves under it. */}
