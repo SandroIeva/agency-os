@@ -16043,6 +16043,17 @@ function XMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onOpenAva
   const hint = (text) => (
     <span style={{ fontSize: 12, fontFamily: FONT, color: "#536471", textAlign: "center", padding: 8 }}>{text}</span>
   );
+  const verified = (size) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+      <path d="M12.00 0.80 L14.33 3.31 L17.60 2.30 L18.36 5.64 L21.70 6.40 L20.69 9.67 L23.20 12.00 L20.69 14.33 L21.70 17.60 L18.36 18.36 L17.60 21.70 L14.33 20.69 L12.00 23.20 L9.67 20.69 L6.40 21.70 L5.64 18.36 L2.30 17.60 L3.31 14.33 L0.80 12.00 L3.31 9.67 L2.30 6.40 L5.64 5.64 L6.40 2.30 L9.67 3.31 Z" fill="#1D9BF0" />
+      <polyline points="16.1 9.9 10.9 15.1 7.9 12.1" fill="none" stroke="#fff"
+        strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+  const roundBtn = (child) => (
+    <div style={{ width: 36, height: 36, borderRadius: "50%", border: "1px solid #CFD9DE",
+      display: "flex", alignItems: "center", justifyContent: "center", color: "#0F1419" }}>{child}</div>
+  );
 
   return (
     <div style={{ maxWidth: 600, margin: "0 auto", background: "#fff",
@@ -16052,8 +16063,11 @@ function XMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onOpenAva
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0F1419" strokeWidth="2.2"
           strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
         <div>
-          <div style={{ fontSize: 19, fontFamily: FONT, fontWeight: 800, color: "#0F1419" }}>
-            {brand?.name || (de ? "Euer Markenname" : "Your brand name")}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 19, fontFamily: FONT, fontWeight: 800, color: "#0F1419" }}>
+              {brand?.name || (de ? "Euer Markenname" : "Your brand name")}
+            </span>
+            {verified(17)}
           </div>
           <div style={{ fontSize: 13, fontFamily: FONT, color: "#536471" }}>
             {de ? "5.371 Beiträge" : "5,371 posts"}
@@ -16078,21 +16092,39 @@ function XMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onOpenAva
               display: "flex", alignItems: "center", justifyContent: "center" }}>
             {!avatar && hint(de ? "Profilbild" : "Profile")}
           </div>
-          <div style={{ marginTop: 12, padding: "8px 16px", borderRadius: 999,
-            border: "1px solid #CFD9DE", fontFamily: FONT, fontSize: 14.5, fontWeight: 700, color: "#0F1419" }}>
-            {de ? "Profil bearbeiten" : "Edit profile"}
+          {/* Somebody else's profile, not your own settings: the row is the one a
+              visitor sees, which is the row that matters for how a brand reads. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
+            {roundBtn(<span style={{ fontSize: 15, lineHeight: 1 }}>···</span>)}
+            {roundBtn(
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 11.5a8.4 8.4 0 01-9 8.4 9 9 0 01-4-.9L3 21l1.9-4.6A8.4 8.4 0 013 11.5 8.5 8.5 0 0112 3a8.5 8.5 0 019 8.5z" />
+              </svg>
+            )}
+            <div style={{ padding: "9px 22px", borderRadius: 999, background: "#0F1419", color: "#fff",
+              fontFamily: FONT, fontSize: 15, fontWeight: 700 }}>{de ? "Folgen" : "Follow"}</div>
           </div>
         </div>
 
-        <div style={{ marginTop: 12, fontSize: 20, fontFamily: FONT, fontWeight: 800, color: "#0F1419" }}>
-          {brand?.name || (de ? "Euer Markenname" : "Your brand name")}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 12 }}>
+          <span style={{ fontSize: 20, fontFamily: FONT, fontWeight: 800, color: "#0F1419" }}>
+            {brand?.name || (de ? "Euer Markenname" : "Your brand name")}
+          </span>
+          {verified(19)}
         </div>
         <div style={{ fontSize: 15, fontFamily: FONT, color: "#536471" }}>{handle}</div>
 
         <div style={{ marginTop: 12 }}>{editable.claim}</div>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 12,
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16, marginTop: 12,
           fontSize: 15, fontFamily: FONT, color: "#536471" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+              strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" />
+              <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" /></svg>
+            {brand?.industry || (de ? "Unternehmen" : "Business")}
+          </span>
           {brand?.website_url && (
             <span style={{ color: blue }}>
               {String(brand.website_url).replace(/^https?:\/\//, "").replace(/\/$/, "")}
@@ -16108,7 +16140,8 @@ function XMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onOpenAva
       </div>
 
       <div style={{ display: "flex", borderBottom: `1px solid ${line}` }}>
-        {[de ? "Beiträge" : "Posts", de ? "Antworten" : "Replies", "Reposts", de ? "Medien" : "Media"].map((tab, i) => (
+        {[de ? "Beiträge" : "Posts", de ? "Antworten" : "Replies", "Reposts",
+          de ? "Medien" : "Media", de ? "Artikel" : "Articles"].map((tab, i) => (
           <div key={tab} style={{ flex: 1, textAlign: "center", padding: "16px 0",
             fontFamily: FONT, fontSize: 15, fontWeight: i === 0 ? 700 : 500,
             color: i === 0 ? "#0F1419" : "#536471", position: "relative" }}>
@@ -16134,8 +16167,10 @@ function XMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onOpenAva
           <div style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0, overflow: "hidden",
             background: avatar ? `center/cover no-repeat url(${avatar})` : grey }} />
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 15, fontFamily: FONT, color: "#536471" }}>
-              <b style={{ color: "#0F1419" }}>{brand?.name || (de ? "Marke" : "Brand")}</b> {handle} · Jul 9
+            <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 15, fontFamily: FONT, color: "#536471" }}>
+              <b style={{ color: "#0F1419" }}>{brand?.name || (de ? "Marke" : "Brand")}</b>
+              {verified(16)}
+              <span>{handle} · Jul 9</span>
             </div>
             <div style={{ fontSize: 15, fontFamily: FONT, color: "#0F1419", marginTop: 4, lineHeight: 1.4 }}>
               {brand?.description || brand?.claim
