@@ -16764,6 +16764,153 @@ function InstagramMock({ brand, avatar, posts, highlights, onOpenAvatar, onOpenP
   );
 }
 
+// YouTube is the one channel where the file uploaded and the picture shown are
+// different shapes: you hand it 2048 x 1152 and a wide strip is cropped out of
+// the middle for the desktop page. So the frame shows the strip — that is what
+// a visitor sees — while the hint and the editor stay at 16:9, because sending
+// somebody away with a strip-shaped file means YouTube refuses it.
+const YT_BANNER_DISPLAY = 6.4;
+
+function YouTubeMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onOpenAvatar, onOpenPost, editable, de }) {
+  const grey = "#F2F2F2";
+  const muted = "#606060";
+  const handle = "@" + (brand?.name || "brand").toLowerCase().replace(/[^a-z0-9_]/g, "");
+  const hint = (text) => (
+    <span style={{ fontSize: 12, fontFamily: FONT, color: "#8A8A8A", textAlign: "center", padding: 8 }}>{text}</span>
+  );
+
+  return (
+    <div style={{ maxWidth: 1280, margin: "0 auto", background: "#fff", borderRadius: 12,
+      border: "1px solid rgba(0,0,0,0.07)", padding: "18px 24px 26px" }}>
+      <div onClick={onOpenBanner}
+        style={{ width: "100%", aspectRatio: String(YT_BANNER_DISPLAY), borderRadius: 12,
+          overflow: "hidden", cursor: "pointer",
+          background: banner ? `center/cover no-repeat url(${banner})` : grey,
+          display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {!banner && hint(`${de ? "Kanalbanner hinzufügen" : "Add channel art"}`
+          + (bannerPx ? ` · ${bannerPx[0]} × ${bannerPx[1]} px` : ""))}
+      </div>
+
+      {/* Beside the banner, not over it — YouTube is the one channel that does
+          not tuck the avatar into the cover. */}
+      <div style={{ display: "flex", gap: 16, marginTop: 34 }}>
+        <div onClick={onOpenAvatar}
+          style={{ width: 150, height: 150, borderRadius: "50%", flexShrink: 0, cursor: "pointer",
+            overflow: "hidden", background: avatar ? `center/cover no-repeat url(${avatar})` : grey,
+            display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {!avatar && hint(de ? "Kanalbild hinzufügen" : "Add a channel picture")}
+        </div>
+
+        <div style={{ minWidth: 0, flex: 1, marginTop: -8 }}>
+          <div style={{ fontSize: 36, fontFamily: FONT, fontWeight: 700, color: "#0F0F0F", letterSpacing: -0.4 }}>
+            {brand?.name || (de ? "Euer Markenname" : "Your brand name")}
+          </div>
+          <div style={{ fontSize: 14, fontFamily: FONT, color: muted, marginTop: 7 }}>
+            <span style={{ color: "#0F0F0F", fontWeight: 500 }}>{handle}</span>
+            {de ? " · 43.700 Abonnenten · 196 Videos" : " · 43.7K subscribers · 196 videos"}
+          </div>
+
+          {/* One line with "…mehr" after it, the way YouTube truncates a channel
+              description on the overview page. */}
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 9 }}>
+            <div style={{ minWidth: 0 }}>{editable.claim}</div>
+            <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 500,
+              color: "#0F0F0F", flexShrink: 0 }}>…{de ? "mehr" : "more"}</span>
+          </div>
+
+          {brand?.website_url && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 9,
+              fontSize: 14, fontFamily: FONT, color: "#065FD4", fontWeight: 500 }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+                <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" /></svg>
+              {String(brand.website_url).replace(/^https?:\/\//, "").replace(/\/$/, "")}
+            </div>
+          )}
+
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 16,
+            padding: "9px 16px", borderRadius: 999, background: grey,
+            fontFamily: FONT, fontSize: 14, fontWeight: 500, color: "#0F0F0F" }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+              strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.7 21a2 2 0 01-3.4 0" /></svg>
+            {de ? "Abonniert" : "Subscribed"}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 26, marginTop: 24,
+        borderBottom: "1px solid rgba(0,0,0,0.09)" }}>
+        {[de ? "Übersicht" : "Home", "Videos", "Shorts", "Playlists",
+          de ? "Beiträge" : "Posts"].map((tab, i) => (
+          <div key={tab} style={{ padding: "13px 0", marginBottom: -1, fontFamily: FONT, fontSize: 16,
+            fontWeight: i === 0 ? 600 : 500, color: i === 0 ? "#0F0F0F" : muted,
+            borderBottom: i === 0 ? "3px solid #0F0F0F" : "3px solid transparent" }}>{tab}</div>
+        ))}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0F0F0F" strokeWidth="2"
+          strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.3-4.3" /></svg>
+      </div>
+
+      <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 700, color: "#0F0F0F", marginTop: 24 }}>
+        {de ? "Für dich" : "For you"}
+      </div>
+
+      {/* A shelf, not a grid: four thumbnails fit, the fifth is clipped and an
+          arrow sits over it. That clipped edge is half of what makes the page
+          read as YouTube. */}
+      <div style={{ position: "relative", marginTop: 14 }}>
+        <div style={{ display: "flex", gap: 14, overflow: "hidden" }}>
+          {posts.slice(0, 5).map((src, i) => (
+            <div key={i} style={{ flex: "0 0 calc((100% - 56px) / 4.35)", minWidth: 0 }}>
+              <div onClick={() => onOpenPost(i)}
+                style={{ position: "relative", aspectRatio: "16 / 9", borderRadius: 9, overflow: "hidden",
+                  cursor: "pointer", background: src ? `center/cover no-repeat url(${src})` : grey,
+                  display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {!src && hint(de ? "Thumbnail hinzufügen" : "Add a thumbnail")}
+                {src && (
+                  <span style={{ position: "absolute", right: 7, bottom: 7, padding: "1px 5px", borderRadius: 4,
+                    background: "rgba(0,0,0,0.8)", color: "#fff", fontFamily: FONT, fontSize: 12, fontWeight: 600 }}>
+                    —:—
+                  </span>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <div style={{ minWidth: 0, flex: 1, fontSize: 14, fontFamily: FONT, fontWeight: 500,
+                  color: "#0F0F0F", lineHeight: 1.35, display: "-webkit-box", WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                  {de ? "Titel des Videos" : "Video title"}
+                </div>
+                <span style={{ color: "#0F0F0F", fontSize: 15, lineHeight: 1, flexShrink: 0 }}>⋮</span>
+              </div>
+              <div style={{ fontSize: 13, fontFamily: FONT, color: muted, marginTop: 4,
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {brand?.name || (de ? "Kanal" : "Channel")}
+              </div>
+              <div style={{ fontSize: 13, fontFamily: FONT, color: muted }}>
+                {de ? "— Aufrufe · vor — Monaten" : "— views · — months ago"}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Anchored to the thumbnail band rather than the whole shelf, so it
+            stays centred on the images and not on the text under them. */}
+        <div style={{ position: "absolute", top: 0, bottom: 84, right: -14,
+          display: "flex", alignItems: "center", pointerEvents: "none" }}>
+          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#fff",
+            border: "1px solid rgba(0,0,0,0.08)", boxShadow: "0 1px 6px rgba(0,0,0,0.16)",
+            display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#0F0F0F" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // How the brand would look on a channel, before anything is published there.
 // The layout follows the real profile closely enough to judge a banner and an
 // avatar against each other — that is the whole use of it. Per-platform
@@ -16788,6 +16935,11 @@ const CHANNEL_PREVIEW_SHAPE = {
                tabs: ["Posts", "Reels", "Tagged"], meta: () => "" },
   pinterest: { avatar: 999, bannerPx: [1600, 900], logoPx: [280, 280], overlap: false,
                tabs: ["Created", "Saved"], meta: () => "" },
+  // 2048 × 1152 is the file YouTube accepts. The desktop page shows a strip cut
+  // out of the middle of it — see YT_BANNER_DISPLAY. Naming the strip here would
+  // produce a file YouTube rejects, so this stays at what gets uploaded.
+  youtube:   { avatar: 999, bannerPx: [2048, 1152], logoPx: [800, 800], overlap: false,
+               tabs: ["Home", "Videos", "Shorts", "Playlists", "Posts"], meta: () => "" },
 };
 
 function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, onUpload, logos, orgId, theme, darkMode, appLanguage, url }) {
@@ -16854,15 +17006,18 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
   );
   const slot = typeof zoom === "string" && zoom.includes(":") ? zoom.split(":") : null;
   const zoomTarget = slot
-    ? { title: slot[0] === "post" ? (de ? "Beitrag" : "Post") : (de ? "Highlight" : "Highlight"),
+    ? { title: slot[0] !== "post" ? "Highlight"
+          : platform.key === "youtube" ? "Thumbnail" : (de ? "Beitrag" : "Post"),
         value: (slot[0] === "post" ? posts : highlights)[Number(slot[1])] || "",
         // A post slot is not one shape across channels: Instagram and Facebook
         // want 4:5, TikTok wants a 9:16 video cover. Naming one size for all of
         // them would send somebody away with a file that gets cropped.
         size: slot[0] !== "post" ? [1080, 1920]
-          : platform.key === "tiktok" ? [1080, 1920] : [1080, 1350],
+          : platform.key === "tiktok" ? [1080, 1920]
+          : platform.key === "youtube" ? [1280, 720] : [1080, 1350],
         ratio: slot[0] !== "post" ? 0.5625
-          : platform.key === "tiktok" ? 0.5625 : 0.8,
+          : platform.key === "tiktok" ? 0.5625
+          : platform.key === "youtube" ? 16 / 9 : 0.8,
         radius: 12 }
     : zoom === "banner"
     ? { title: de ? "Bannerbild" : "Banner image", value: banner, size: shape.bannerPx, ratio: bannerRatio, radius: 12 }
@@ -17033,6 +17188,32 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
                     onMouseEnter={() => setHover("claim")} onMouseLeave={() => setHover(null)}
                     style={{ fontSize: 15, fontFamily: FONT, color: "#080809", lineHeight: 1.45,
                       display: "flex", alignItems: "center", justifyContent: "center", gap: 8, cursor: "text" }}>
+                    {brand?.claim || (de ? "Das ist die Platzhalter-Beschreibung. Der Text lässt sich jederzeit ändern."
+                                        : "This is the placeholder description. Change the text any time.")}
+                    {hover === "claim" && pencil}
+                  </div>
+                ),
+              }} />
+          ) : platform.key === "youtube" ? (
+            <YouTubeMock
+              brand={brand} banner={banner} avatar={avatar} posts={posts} de={de}
+              bannerPx={shape.bannerPx}
+              onOpenBanner={() => setZoom("banner")}
+              onOpenAvatar={() => setZoom("avatar")}
+              onOpenPost={(i) => setZoom("post:" + i)}
+              editable={{
+                claim: editField === "claim" ? (
+                  <input autoFocus value={claimDraft} onChange={e => setClaimDraft(e.target.value)}
+                    onBlur={() => { onSaveBrand({ claim: claimDraft }); setEditField(null); }}
+                    onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditField(null); }}
+                    style={{ fontSize: 14, fontFamily: FONT, color: "#0F0F0F", width: "100%",
+                      border: "none", borderBottom: "1.5px solid #909090", outline: "none", background: "none" }} />
+                ) : (
+                  <div onClick={() => { setClaimDraft(brand?.claim || ""); setEditField("claim"); }}
+                    onMouseEnter={() => setHover("claim")} onMouseLeave={() => setHover(null)}
+                    style={{ fontSize: 14, fontFamily: FONT, color: "#0F0F0F", lineHeight: 1.4,
+                      display: "flex", alignItems: "center", gap: 8, cursor: "text",
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {brand?.claim || (de ? "Das ist die Platzhalter-Beschreibung. Der Text lässt sich jederzeit ändern."
                                         : "This is the placeholder description. Change the text any time.")}
                     {hover === "claim" && pencil}
