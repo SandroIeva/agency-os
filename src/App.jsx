@@ -16028,6 +16028,164 @@ async function extractColors(url, count = 5) {
 // you can connect/edit inline. Teases the upcoming Strategy/Analysis layer.
 
 
+
+// Facebook is a third shape again: a wide cover with rounded lower corners, the
+// avatar overlapping its bottom-left rather than sitting beside it, and the page
+// below split into a narrow left column of facts and a wide right column of
+// posts. Neither the LinkedIn frame nor the Instagram one would carry it.
+function FacebookMock({ brand, banner, avatar, posts, onOpenBanner, onOpenAvatar, onOpenPost, editable, de }) {
+  const grey = "#E4E6EB";
+  const line = "#DDE0E4";
+  const card = { background: "#fff", borderRadius: 10, border: `1px solid ${line}` };
+  const tabs = de
+    ? ["Beiträge", "Info", "Erwähnungen", "Bewertungen", "Reels", "Fotos"]
+    : ["Posts", "About", "Mentions", "Reviews", "Reels", "Photos"];
+
+  const placeholder = (text) => (
+    <span style={{ fontSize: 12, fontFamily: FONT, color: "#8A8D91", textAlign: "center", padding: 8 }}>{text}</span>
+  );
+
+  return (
+    <div style={{ maxWidth: 1250, margin: "0 auto" }}>
+      <div style={{ ...card, overflow: "hidden", paddingBottom: 0 }}>
+        <div onClick={onOpenBanner}
+          style={{ width: "100%", aspectRatio: "1640 / 664", cursor: "pointer",
+            borderRadius: "10px 10px 12px 12px", overflow: "hidden",
+            background: banner ? `center/cover no-repeat url(${banner})` : grey,
+            display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {!banner && placeholder(`${de ? "Titelbild hinzufügen" : "Add a cover image"} · 1640 × 664 px`)}
+        </div>
+
+        {/* The avatar sits over the lower-left of the cover, which is what makes
+            a Facebook page recognisable at a glance. */}
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 22, padding: "0 32px 20px", marginTop: -84 }}>
+          <div onClick={onOpenAvatar}
+            style={{ width: 168, height: 168, borderRadius: "50%", flexShrink: 0, cursor: "pointer",
+              border: "4px solid #fff", background: avatar ? `center/cover no-repeat url(${avatar})` : grey,
+              display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+            {!avatar && placeholder(de ? "Profilbild" : "Profile picture")}
+          </div>
+
+          <div style={{ flex: 1, minWidth: 0, paddingBottom: 6 }}>
+            <div style={{ fontSize: 32, fontFamily: FONT, fontWeight: 700, color: "#080809" }}>
+              {brand?.name || (de ? "Euer Markenname" : "Your brand name")}
+            </div>
+            <div style={{ fontSize: 15, fontFamily: FONT, color: "#65676B", marginTop: 4 }}>
+              {de ? "4.4 Tsd. Follower · 2 abonniert" : "4.4K followers · 2 following"}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, paddingBottom: 8, flexShrink: 0 }}>
+            <div style={{ padding: "10px 18px", borderRadius: 7, background: "#0866FF", color: "#fff",
+              fontFamily: FONT, fontSize: 15, fontWeight: 600 }}>{de ? "Mehr dazu" : "Learn more"}</div>
+            <div style={{ padding: "10px 18px", borderRadius: 7, background: "#E4E6EB", color: "#080809",
+              fontFamily: FONT, fontSize: 15, fontWeight: 600 }}>{de ? "Abonniert" : "Following"}</div>
+            <div style={{ padding: "10px 18px", borderRadius: 7, background: "#E4E6EB", color: "#080809",
+              fontFamily: FONT, fontSize: 15, fontWeight: 600 }}>{de ? "Nachricht" : "Message"}</div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 22px", borderTop: `1px solid ${line}` }}>
+          {tabs.map((tab, i) => (
+            <div key={tab} style={{ padding: "16px 14px", fontFamily: FONT, fontSize: 15,
+              fontWeight: i === 0 ? 600 : 500, color: i === 0 ? "#0866FF" : "#65676B",
+              borderBottom: i === 0 ? "3px solid #0866FF" : "3px solid transparent", marginBottom: -1 }}>
+              {tab}
+            </div>
+          ))}
+          <div style={{ flex: 1 }} />
+          <div style={{ width: 36, height: 36, borderRadius: 7, background: "#E4E6EB",
+            display: "flex", alignItems: "center", justifyContent: "center", color: "#080809" }}>···</div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 16, marginTop: 16, alignItems: "flex-start" }}>
+        <div style={{ width: 380, flexShrink: 0, display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ ...card, padding: 16 }}>
+            <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 700, color: "#080809" }}>
+              {de ? "Info" : "Intro"}
+            </div>
+            <div style={{ marginTop: 12, textAlign: "center" }}>{editable.claim}</div>
+            <div style={{ borderTop: `1px solid ${line}`, marginTop: 14, paddingTop: 14,
+              display: "flex", flexDirection: "column", gap: 12 }}>
+              {[[de ? "Seite · Produkt/Dienstleistung" : "Page · Product/service", true],
+                [brand?.website_url ? String(brand.website_url).replace(/^https?:\/\//, "").replace(/\/$/, "") : null, false],
+              ].filter(([v]) => v).map(([v, bold]) => (
+                <div key={v} style={{ fontSize: 15, fontFamily: FONT, color: "#080809",
+                  fontWeight: bold ? 600 : 400 }}>{v}</div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ ...card, padding: 16 }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+              <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 700, color: "#080809" }}>
+                {de ? "Fotos" : "Photos"}
+              </div>
+              <span style={{ fontSize: 15, fontFamily: FONT, color: "#0866FF" }}>
+                {de ? "Alle ansehen" : "See all photos"}
+              </span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, marginTop: 12 }}>
+              {posts.map((src, i) => (
+                <div key={i} onClick={() => onOpenPost(i)}
+                  style={{ aspectRatio: "1", borderRadius: 8, cursor: "pointer", overflow: "hidden",
+                    background: src ? `center/cover no-repeat url(${src})` : grey,
+                    display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {!src && placeholder("+")}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ ...card, padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 20, fontFamily: FONT, fontWeight: 700, color: "#080809" }}>
+              {de ? "Beiträge" : "Posts"}
+            </span>
+            <span style={{ padding: "8px 14px", borderRadius: 7, background: "#E4E6EB",
+              fontSize: 14, fontFamily: FONT, fontWeight: 600, color: "#080809" }}>
+              {de ? "Filter" : "Filters"}
+            </span>
+          </div>
+
+          <div style={{ ...card, overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 16 }}>
+              <div style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0, overflow: "hidden",
+                background: avatar ? `center/cover no-repeat url(${avatar})` : grey }} />
+              <div>
+                <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: "#080809" }}>
+                  {brand?.name || (de ? "Euer Markenname" : "Your brand name")}
+                </div>
+                <div style={{ fontSize: 13, fontFamily: FONT, color: "#65676B" }}>
+                  {de ? "26. Oktober · 🌐" : "October 26 · 🌐"}
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: "0 16px 12px", fontSize: 15, fontFamily: FONT, color: "#080809", lineHeight: 1.45 }}>
+              {brand?.description || brand?.claim
+                || (de ? "Hier stünde euer Beitrag. Der Text kommt aus eurer Brand-Beschreibung."
+                      : "Your post would sit here. The words come from your brand description.")}
+            </div>
+            <div onClick={onOpenBanner}
+              style={{ width: "100%", aspectRatio: "1.91", cursor: "pointer",
+                background: banner ? `center/cover no-repeat url(${banner})` : grey,
+                display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {!banner && placeholder(de ? "Beitragsbild" : "Post image")}
+            </div>
+            <div style={{ display: "flex", gap: 30, padding: "12px 16px", borderTop: `1px solid ${line}`, marginTop: 8 }}>
+              {[de ? "Gefällt mir" : "Like", de ? "Kommentieren" : "Comment", de ? "Teilen" : "Share"].map(a => (
+                <span key={a} style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: "#65676B" }}>{a}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Instagram reads nothing like LinkedIn: the picture is round and ringed, the
 // numbers sit beside the name rather than under it, and the page below is a
 // grid rather than a feed. Giving it the LinkedIn frame with different corners
@@ -16335,7 +16493,31 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveUrl, onSaveBrand
         {/* The mock itself, on its own light ground so it reads as a preview of
             somewhere else rather than as part of this app. */}
         <div style={{ padding: 22, background: darkMode ? "rgba(255,255,255,0.03)" : "#EFEFEA" }}>
-          {platform.key === "instagram" ? (
+          {platform.key === "facebook" ? (
+            <FacebookMock
+              brand={brand} banner={banner} avatar={avatar} posts={posts} de={de}
+              onOpenBanner={() => setZoom("banner")}
+              onOpenAvatar={() => setZoom("avatar")}
+              onOpenPost={(i) => setZoom("post:" + i)}
+              editable={{
+                claim: editField === "claim" ? (
+                  <input autoFocus value={claimDraft} onChange={e => setClaimDraft(e.target.value)}
+                    onBlur={() => { onSaveBrand({ claim: claimDraft }); setEditField(null); }}
+                    onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditField(null); }}
+                    style={{ fontSize: 15, fontFamily: FONT, color: "#080809", width: "100%", textAlign: "center",
+                      border: "none", borderBottom: "1.5px solid #999", outline: "none", background: "none" }} />
+                ) : (
+                  <div onClick={() => { setClaimDraft(brand?.claim || ""); setEditField("claim"); }}
+                    onMouseEnter={() => setHover("claim")} onMouseLeave={() => setHover(null)}
+                    style={{ fontSize: 15, fontFamily: FONT, color: "#080809", lineHeight: 1.45,
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 8, cursor: "text" }}>
+                    {brand?.claim || (de ? "Das ist die Platzhalter-Beschreibung. Der Text lässt sich jederzeit ändern."
+                                        : "This is the placeholder description. Change the text any time.")}
+                    {hover === "claim" && pencil}
+                  </div>
+                ),
+              }} />
+          ) : platform.key === "instagram" ? (
             <InstagramMock
               brand={brand} avatar={avatar} posts={posts} highlights={highlights} de={de}
               onOpenAvatar={() => setZoom("avatar")}
