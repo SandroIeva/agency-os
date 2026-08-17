@@ -17021,6 +17021,11 @@ function YouTubeMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onO
 // lost days to exactly that. Lines break where somebody pressed Enter and
 // nowhere else, so both sides draw the same thing by construction.
 
+// Profile pictures are tiny by platform standards — 200px on TikTok, 320 on
+// Instagram — and tiny is unpleasant to draw on. The editor works at no less
+// than this, and never below what the platform itself asks for: YouTube wants
+// 800, and a flat 700 would have quietly made that worse.
+const CANVAS_MIN_EDIT = 700;
 const CANVAS_LH = 1.2;               // line height, shared by display and export
 const CANVAS_FONT_STACK = "'Geist', -apple-system, sans-serif";
 
@@ -17117,7 +17122,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const padL = 78, padR = 274, padT = 62, padB = 26;
     const aw = Math.max(120, window.innerWidth - padL - padR);
     const ah = Math.max(120, window.innerHeight - padT - padB);
-    const s = Math.min(aw / W, ah / H) * 0.92;
+    // Capped at 1: a frame that fits opens at exactly 100%, which is what
+    // "open it at a hundred percent" means. Only frames too big to fit get
+    // shrunk. Magnifying a small frame on open would show a soft, enlarged
+    // picture and misreport the scale you are judging it at.
+    // The 8% breathing room belongs to shrinking. A frame that fits opens at a
+    // true 1:1 — otherwise YouTube's 800px logo would open at 93% and the header
+    // would claim a scale nobody asked for.
+    const raw = Math.min(aw / W, ah / H);
+    const s = raw >= 1 ? 1 : raw * 0.92;
     return { s, x: padL + (aw - W * s) / 2, y: padT + (ah - H * s) / 2 };
   };
 
@@ -18175,7 +18188,11 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
     : zoom === "banner"
     ? { title: de ? "Bannerbild" : "Banner image", value: banner, size: shape.bannerPx, ratio: bannerRatio, radius: 12 }
     : zoom === "avatar"
-      ? { title: de ? "Profilbild" : "Profile image", value: avatar, size: shape.logoPx, ratio: 1, radius: shape.avatar }
+      ? { title: de ? "Profilbild" : "Profile image", value: avatar,
+          size: shape.logoPx
+            ? [Math.max(CANVAS_MIN_EDIT, shape.logoPx[0]), Math.max(CANVAS_MIN_EDIT, shape.logoPx[1])]
+            : [CANVAS_MIN_EDIT, CANVAS_MIN_EDIT],
+          ratio: 1, radius: shape.avatar }
       : null;
 
   // One place that knows where a chosen image goes, so the upload button, the
