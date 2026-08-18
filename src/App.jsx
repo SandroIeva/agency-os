@@ -17101,6 +17101,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     ? brand.colors : ["#15151c", "#F4F4F7", "#E60023", "#0A66C2", "#FFFFFF"];
 
   const [bg, setBg] = useState(doc?.bg || palette[1] || "#FFFFFF");
+  const [frameRadius, setFrameRadius] = useState(Number(doc?.radius) || 0);
   const [items, setItems] = useState(() => (Array.isArray(doc?.items) ? doc.items : []));
   const [sel, setSel] = useState(null);
   const [tool, setTool] = useState("select");
@@ -17132,9 +17133,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // document unchanged and does nothing — and it also means simply opening a
   // canvas never writes a row.
   const [saveState, setSaveState] = useState("");     // "" | "saving" | "saved"
-  const baselineRef = useRef(JSON.stringify({ bg: doc?.bg || null, items: doc?.items || [] }));
-  const latestRef = useRef({ bg, items });
-  latestRef.current = { bg, items };
+  const baselineRef = useRef(JSON.stringify({ bg: doc?.bg || null, items: doc?.items || [], radius: Number(doc?.radius) || 0 }));
+  const latestRef = useRef({ bg, items, radius: frameRadius });
+  latestRef.current = { bg, items, radius: frameRadius };
   const saveTimer = useRef(null);
 
   const flush = async (payload) => {
@@ -17149,13 +17150,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   useEffect(() => {
     if (!onAutoSave) return;
-    const payload = { bg, items };
+    const payload = { bg, items, radius: frameRadius };
     if (JSON.stringify(payload) === baselineRef.current) return;
     setSaveState("saving");
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => flush(payload), 700);
     return () => clearTimeout(saveTimer.current);
-  }, [items, bg]);
+  }, [items, bg, frameRadius]);
 
   // Closing must not drop the last few hundred milliseconds of work, so the
   // pending save is flushed on the way out.
@@ -17180,6 +17181,25 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const radiiOf = (it) => Array.isArray(it.radii) && it.radii.length === 4
     ? it.radii.map(v => Math.max(0, Number(v) || 0))
     : [0, 1, 2, 3].map(() => Math.max(0, Number(it.radius) || 0));
+
+  // ONE filter string, handed to CSS on screen and to ctx.filter on export.
+  // The canvas filter takes the same functions CSS does, so building the string
+  // once is what makes a shadow land in the same place in both — two separate
+  // implementations of "drop shadow" would not.
+  const effectFilter = (it) => {
+    const parts = [];
+    if (it.blur) parts.push(`blur(${it.blur}px)`);
+    if (it.shadow) {
+      const d2 = it.shadow;
+      parts.push(`drop-shadow(${d2.x || 0}px ${d2.y || 0}px ${d2.blur || 0}px ${d2.color || "rgba(0,0,0,0.35)"})`);
+    }
+    return parts.length ? parts.join(" ") : "none";
+  };
+  // Inner shadow is the one effect no filter can express: CSS needs `inset` and
+  // the canvas needs a clip plus the inverse path. Kept to shapes whose outline
+  // a border-radius describes — a clip-path polygon would ignore the inset and
+  // the two sides would disagree.
+  const canInnerShadow = (it) => ["rect", "image", "sticky", "ellipse"].includes(it.type);
 
   const boxOf = (it) =>
     (it.type === "arrow" || it.type === "line")
@@ -17642,12 +17662,20 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const ctx = cvs.getContext("2d");
     // "transparent" must leave the alpha channel alone — painting white would
     // export a white rectangle that only looks like nothing on a white page.
+    // A rounded frame clips everything, so the corners come out genuinely empty
+    // rather than filled with the background colour.
+    if (frameRadius > 0 && ctx.roundRect) {
+      ctx.beginPath();
+      ctx.roundRect(0, 0, W, H, Math.min(frameRadius, Math.min(W, H) / 2));
+      ctx.clip();
+    }
     if (bg !== "transparent") { ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H); }
     for (const it of items) {
       // Comments are notes ABOUT the design. Exporting one would print a review
       // remark onto the banner, which is the one thing a comment must never do.
       if (it.type === "comment") continue;
       ctx.globalAlpha = it.opacity == null ? 1 : it.opacity;
+      ctx.filter = effectFilter(it);
       const spun = it.rot || it.flipX || it.flipY;
       if (spun) {
         const b = boxOf(it), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
@@ -17740,6 +17768,32 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         });
         if (canSpace) ctx.letterSpacing = "0px";
       }
+      // Inner shadow, after the fill: clip to the shape, then cast a shadow from
+      // the INVERSE path so it falls inward. The canvas has no inset shadow.
+      if (it.innerShadow && canInnerShadow(it)) {
+        const b = boxOf(it), sh = it.innerShadow;
+        ctx.save();
+        ctx.filter = "none";
+        ctx.beginPath();
+        if (it.type === "ellipse") ctx.ellipse(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, b.h / 2, 0, 0, Math.PI * 2);
+        else if (ctx.roundRect) ctx.roundRect(b.x, b.y, b.w, b.h, radiiOf(it).map(v => Math.min(v, Math.min(b.w, b.h) / 2)));
+        else ctx.rect(b.x, b.y, b.w, b.h);
+        ctx.clip();
+        const pad = (sh.blur || 0) * 2 + Math.abs(sh.x || 0) + Math.abs(sh.y || 0) + 40;
+        ctx.beginPath();
+        ctx.rect(b.x - pad, b.y - pad, b.w + pad * 2, b.h + pad * 2);
+        if (it.type === "ellipse") ctx.ellipse(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, b.h / 2, 0, 0, Math.PI * 2, true);
+        else if (ctx.roundRect) ctx.roundRect(b.x, b.y, b.w, b.h, radiiOf(it).map(v => Math.min(v, Math.min(b.w, b.h) / 2)));
+        else ctx.rect(b.x, b.y, b.w, b.h);
+        ctx.shadowColor = sh.color || "rgba(0,0,0,0.35)";
+        ctx.shadowBlur = sh.blur || 0;
+        ctx.shadowOffsetX = sh.x || 0;
+        ctx.shadowOffsetY = sh.y || 0;
+        ctx.fillStyle = "#000";
+        ctx.fill("evenodd");
+        ctx.restore();
+      }
+      ctx.filter = "none";
       if (spun) ctx.restore();
     }
     ctx.globalAlpha = 1;
@@ -17755,7 +17809,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         { type: "image/png" });
       const url = await onUpload(file);
       if (!url) throw new Error("upload");
-      onDone(url, { bg, items });
+      onDone(url, { bg, items, radius: frameRadius });
     } catch (e) {
       // A tainted canvas and a failed upload look identical to the user unless
       // they are told apart, and both end with nothing saved.
@@ -17835,6 +17889,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             transition: flying ? "transform 620ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
             // Selected frames say so. Without this the sidebar changed and
             // nothing on the canvas did, which reads as nothing having happened.
+            borderRadius: frameRadius > 0 ? Math.min(frameRadius, Math.min(W, H) / 2) : 0,
             outline: sel === "frame" ? `${Math.max(1, 2 / cam.s)}px solid #15151c` : "none",
             outlineOffset: 0,
             boxShadow: "0 18px 60px rgba(0,0,0,0.28)" }}>
@@ -17976,6 +18031,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     style={{ ...common, width: it.w, font: canvasFont(it), color: it.color,
                       lineHeight: `${canvasLH(it)}px`, textAlign: it.align || "left",
                       letterSpacing: `${canvasLS(it)}px`, opacity: it.opacity == null ? 1 : it.opacity,
+                      filter: effectFilter(it),
                       whiteSpace: "pre", overflow: "visible" }}>
                     {editing === it.id ? (
                       <textarea autoFocus value={it.text}
@@ -18089,6 +18145,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 <div key={it.id} onPointerDown={e => onItemDown(e, it)}
                   style={{ ...common, width: it.w, height: it.h, clipPath: polyClip(it.type),
                     opacity: it.opacity == null ? 1 : it.opacity,
+                    filter: effectFilter(it),
+                    boxShadow: (it.innerShadow && canInnerShadow(it))
+                      ? `inset ${it.innerShadow.x || 0}px ${it.innerShadow.y || 0}px ${it.innerShadow.blur || 0}px ${it.innerShadow.color || "rgba(0,0,0,0.35)"}`
+                      : undefined,
                     borderRadius: it.type === "ellipse" ? "50%" : radiiOf(it).map(v => `${v}px`).join(" "),
                     background: it.type === "image"
                       ? `center/${it.fit === "contain" ? "contain" : "cover"} no-repeat url(${it.url})`
@@ -18453,6 +18513,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             {label(sel === "frame" ? (de ? "Frame · ausgewählt" : "Frame · selected") : "Frame")}
             <div style={{ fontSize: 12, color: theme.textDim, marginTop: 6 }}>{title}</div>
             <div style={{ fontSize: 12, color: theme.textDim }}>{W} × {H} px</div>
+            {label(de ? "Eckenradius" : "Corner radius")}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, padding: "8px 10px",
+              borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+              <span style={{ fontSize: 11, color: theme.textFaint, minWidth: 13 }}>⌐</span>
+              <input value={frameRadius}
+                onChange={e => setFrameRadius(Math.max(0, Number(e.target.value) || 0))}
+                style={{ width: "100%", border: "none", outline: "none", background: "transparent",
+                  color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
+            </div>
+
             {label(de ? "Hintergrund" : "Background")}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
               {/* Transparent is a real choice, not the absence of one, so it gets
@@ -18671,6 +18741,68 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 ["right", <><path d="M4 6h16"/><path d="M10 12h10"/><path d="M4 18h16"/></>, de ? "Rechtsbündig" : "Right"],
               ], v => set("align", v))}
             </>)}
+
+            {/* Effects. Figma lists them; here they are three switches, because a
+                list of one-of-each is a list with nothing to sort. */}
+            {label(de ? "Effekte" : "Effects")}
+            {(() => {
+              const row = (on, onToggle, title, body) => (
+                <div style={{ marginTop: 6, borderRadius: 9, overflow: "hidden",
+                  background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                  <div onClick={onToggle}
+                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", cursor: "pointer" }}>
+                    <div style={{ width: 15, height: 15, borderRadius: 4, flexShrink: 0,
+                      border: `1.5px solid ${on ? "#15151c" : theme.borderFaint}`,
+                      background: on ? "#15151c" : "transparent", display: "flex",
+                      alignItems: "center", justifyContent: "center" }}>
+                      {on && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff"
+                        strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                    </div>
+                    <span style={{ fontFamily: FONT, fontSize: 12.5, color: theme.text }}>{title}</span>
+                  </div>
+                  {on && <div style={{ padding: "0 10px 10px" }}>{body}</div>}
+                </div>
+              );
+              const field = (v, onChange, glyph) => (
+                <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 8px", borderRadius: 7,
+                  background: darkMode ? "rgba(255,255,255,0.07)" : "#fff" }}>
+                  <span style={{ fontSize: 10.5, color: theme.textFaint }}>{glyph}</span>
+                  <input value={v} onChange={e => onChange(Number(e.target.value) || 0)}
+                    style={{ width: "100%", border: "none", outline: "none", background: "transparent",
+                      color: theme.text, fontFamily: FONT, fontSize: 12 }} />
+                </div>
+              );
+              const shadowBody = (key) => {
+                const sh = selItem[key] || {};
+                const put = (o) => set2({ [key]: { x: 0, y: 4, blur: 10, color: "rgba(0,0,0,0.35)", ...sh, ...o } });
+                return (<>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+                    {field(sh.x ?? 0, v => put({ x: v }), "X")}
+                    {field(sh.y ?? 4, v => put({ y: v }), "Y")}
+                    {field(sh.blur ?? 10, v => put({ blur: Math.max(0, v) }), "◌")}
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 }}>
+                    {["rgba(0,0,0,0.35)", "rgba(0,0,0,0.6)", "rgba(0,0,0,0.15)", ...palette.slice(0, 3)].map(c => (
+                      <div key={c} onClick={() => put({ color: c })}
+                        style={{ width: 20, height: 20, borderRadius: 6, background: c, cursor: "pointer",
+                          border: (sh.color || "rgba(0,0,0,0.35)") === c ? "2px solid #15151c" : `1px solid ${line}` }} />
+                    ))}
+                  </div>
+                </>);
+              };
+              return (<>
+                {row(!!selItem.shadow,
+                  () => set2({ shadow: selItem.shadow ? undefined : { x: 0, y: 4, blur: 10, color: "rgba(0,0,0,0.35)" } }),
+                  de ? "Schlagschatten" : "Drop shadow", shadowBody("shadow"))}
+                {canInnerShadow(selItem) && row(!!selItem.innerShadow,
+                  () => set2({ innerShadow: selItem.innerShadow ? undefined : { x: 0, y: 4, blur: 10, color: "rgba(0,0,0,0.35)" } }),
+                  de ? "Innerer Schatten" : "Inner shadow", shadowBody("innerShadow"))}
+                {row(!!selItem.blur,
+                  () => set2({ blur: selItem.blur ? undefined : 6 }),
+                  de ? "Weichzeichnen" : "Layer blur",
+                  field(selItem.blur ?? 6, v => set2({ blur: Math.max(0, v) }), "◌"))}
+              </>);
+            })()}
 
             {label(selItem.type === "image" ? (de ? "Bild" : "Image") : de ? "Füllung" : "Fill")}
             {selItem.type === "image" ? (
