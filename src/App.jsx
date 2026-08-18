@@ -17091,7 +17091,7 @@ const CANVAS_TEMPLATES = [
 ];
 
 function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, userOrg,
-                        theme, darkMode, appLanguage, onUpload, onDone, onClose }) {
+                        theme, darkMode, appLanguage, onUpload, onDone, onAutoSave, onClose }) {
   const de = appLanguage === "de";
   // The panel width sits in the camera arithmetic as well as in the panel, so it
   // is a name rather than a number in four places waiting to drift apart.
@@ -17122,6 +17122,47 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const stageRef = useRef(null);
+
+  // ── keeping the work ──────────────────────────────────────────────────────
+  // Everything used to hang on the Apply button: close the window and the design
+  // was gone. It now saves itself while you work.
+  //
+  // The baseline is compared as JSON rather than guarded with a "has run" ref.
+  // That makes it immune to StrictMode's double-invoke — a second run finds the
+  // document unchanged and does nothing — and it also means simply opening a
+  // canvas never writes a row.
+  const [saveState, setSaveState] = useState("");     // "" | "saving" | "saved"
+  const baselineRef = useRef(JSON.stringify({ bg: doc?.bg || null, items: doc?.items || [] }));
+  const latestRef = useRef({ bg, items });
+  latestRef.current = { bg, items };
+  const saveTimer = useRef(null);
+
+  const flush = async (payload) => {
+    if (!onAutoSave) return;
+    const body = JSON.stringify(payload);
+    if (body === baselineRef.current) return;
+    baselineRef.current = body;
+    setSaveState("saving");
+    try { await onAutoSave(payload); setSaveState("saved"); }
+    catch { setSaveState(""); }
+  };
+
+  useEffect(() => {
+    if (!onAutoSave) return;
+    const payload = { bg, items };
+    if (JSON.stringify(payload) === baselineRef.current) return;
+    setSaveState("saving");
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => flush(payload), 700);
+    return () => clearTimeout(saveTimer.current);
+  }, [items, bg]);
+
+  // Closing must not drop the last few hundred milliseconds of work, so the
+  // pending save is flushed on the way out.
+  useEffect(() => () => {
+    clearTimeout(saveTimer.current);
+    flush(latestRef.current);
+  }, []);
   const dragRef = useRef(null);
 
   const [ctxMenu, setCtxMenu] = useState(null);   // { x, y, id }
@@ -18261,6 +18302,23 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         <div style={{ fontSize: 11.5, color: theme.textDim }}>{W} × {H} px</div>
         <div style={{ flex: 1 }} />
         {err && <div style={{ fontSize: 11.5, color: "#D9342B" }}>{err}</div>}
+        {onAutoSave && saveState && !err && (
+          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: theme.textDim }}>
+            {saveState === "saving" ? (
+              <>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
+                  strokeLinecap="round"><path d="M12 3a9 9 0 019 9" /></svg>
+                {de ? "Speichert …" : "Saving …"}
+              </>
+            ) : (
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
+                  strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                {de ? "Gespeichert" : "Saved"}
+              </>
+            )}
+          </div>
+        )}
         <div style={{ position: "relative" }}>
           <motion.div whileTap={{ scale: 0.96 }} onClick={() => setZoomMenu(o => !o)}
             style={{ padding: "7px 10px 7px 13px", borderRadius: 999, border: `1px solid ${line}`,
@@ -19482,6 +19540,13 @@ function ChannelPreview({ platform, brand, saved, onSave, onSaveBrand, onClose, 
             brand={brand} orgId={orgId} session={session} userOrg={userOrg}
             theme={theme} darkMode={darkMode} appLanguage={appLanguage}
             onUpload={onUpload}
+            onAutoSave={(docOut) => {
+              // Design only. The slot's image is written by Apply, when there is
+              // actually a new export to point at.
+              const next = { ...designs, [zoom]: docOut };
+              setDesigns(next);
+              commit({ designs: next });
+            }}
             onDone={(u, docOut) => {
               const nextDesigns = { ...designs, [zoom]: docOut };
               setDesigns(nextDesigns);
@@ -21656,6 +21721,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
           brand={brand} orgId={userOrg?.id} session={session} userOrg={userOrg}
           theme={theme} darkMode={darkMode} appLanguage={appLanguage}
           onUpload={(file) => upload(file, "export")}
+          onAutoSave={(docOut) => saveCanvas(editing, docOut)}
           onDone={async (url, docOut) => {
             // The export is a finished file and belongs in Assets; the doc is the
             // working file and stays here. Both are written in one update so a
