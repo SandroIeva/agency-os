@@ -21237,7 +21237,14 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
       doc: { bg: "#FFFFFF", items: [] }, created_by: session?.user?.id || null,
     }).select().single();
     setBusy(false);
-    if (error) { setErr(error.message || (de ? "Anlegen fehlgeschlagen." : "Could not create.")); return; }
+    if (error) {
+      // planLimitError turns the trigger's raw token into the sentence the rest
+      // of the app uses. Showing "i7os_read_only" is showing somebody a symptom
+      // in a language written for the database.
+      setErr(planLimitError(error, de)
+        || error.message || (de ? "Anlegen fehlgeschlagen." : "Could not create."));
+      return;
+    }
     setNewOpen(false); setErr("");
     setRows(r => [data, ...(r || [])]);
     setEditing(data);
@@ -21248,7 +21255,10 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
     if (exportUrl) patch.export_url = exportUrl;
     if (thumbUrl) patch.thumb_url = thumbUrl;
     setRows(list => (list || []).map(r => r.id === row.id ? { ...r, ...patch } : r));
-    await supabase.from("brand_canvases").update(patch).eq("id", row.id);
+    const { error } = await supabase.from("brand_canvases").update(patch).eq("id", row.id);
+    // A save that fails must say so — the optimistic row above would otherwise
+    // show the new state until the next reload quietly threw it away.
+    if (error) setErr(planLimitError(error, de) || error.message);
   };
 
   const removeCanvas = async (row) => {
@@ -21265,9 +21275,10 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   const addFolder = async () => {
     const name = (window.prompt(de ? "Name des Ordners" : "Folder name") || "").trim();
     if (!name || !userOrg?.id) return;
-    const { data } = await supabase.from("canvas_folders").insert({
+    const { data, error } = await supabase.from("canvas_folders").insert({
       org_id: userOrg.id, project_id: projectId, name, created_by: session?.user?.id || null,
     }).select().single();
+    if (error) { setErr(planLimitError(error, de) || error.message); return; }
     if (data) setFolders(f => [...f, data]);
   };
 
@@ -21404,6 +21415,14 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
         )}
       </div>
 
+      {err && !newOpen && (
+        <div style={{ margin: "12px 24px 0", padding: "10px 13px", borderRadius: 10,
+          background: "rgba(217,52,43,0.10)", color: "#D9342B", fontFamily: FONT, fontSize: 12.5,
+          display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ flex: 1 }}>{err}</span>
+          <span onClick={() => setErr("")} style={{ cursor: "pointer", opacity: 0.7 }}>✕</span>
+        </div>
+      )}
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "18px 24px 26px" }}>
         {rows === null ? (
           <div style={{ color: theme.textDim, fontFamily: FONT, fontSize: 13 }}>{de ? "Lädt …" : "Loading …"}</div>
