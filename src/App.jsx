@@ -21491,39 +21491,42 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
         )}
       </div>
 
-      {/* Format picker */}
-      <AnimatePresence>
-        {newOpen && createPortal(
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={() => setNewOpen(false)}
-            style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.45)",
-              display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-            <motion.div initial={{ scale: 0.97, y: 8 }} animate={{ scale: 1, y: 0 }}
-              onClick={e => e.stopPropagation()}
-              style={{ width: "min(560px, 100%)", maxHeight: "80vh", overflowY: "auto",
-                background: darkMode ? "#16161e" : "#fff", borderRadius: 18, padding: 22,
-                border: `1px solid ${theme.borderFaint}` }}>
-              <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 600, color: theme.text }}>
-                {de ? "Format wählen" : "Pick a size"}
-              </div>
-              {err && (
-                <div style={{ marginTop: 10, padding: "9px 12px", borderRadius: 9,
-                  background: "rgba(217,52,43,0.10)", color: "#D9342B",
-                  fontFamily: FONT, fontSize: 12 }}>{err}</div>
-              )}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 14 }}>
-                {creationFormats(de).map((f, i) => (
-                  <div key={i} onClick={() => !busy && createCanvas(f)}
-                    style={{ padding: "11px 13px", borderRadius: 11, cursor: "pointer",
-                      border: `1px solid ${theme.borderFaint}` }}>
-                    <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: theme.text }}>{f.name}</div>
-                    <div style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textDim }}>{f.w} × {f.h} px</div>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          </motion.div>, document.body)}
-      </AnimatePresence>
+      {/* Format picker. Rendered as a plain portal, NOT wrapped in
+          AnimatePresence: that component tracks its children by key and drops the
+          ones it cannot track, and a portal is exactly such a child — so the
+          picker was built and then discarded before it ever reached the DOM.
+          Every other overlay in this app (ChannelPreview, ImageInsertModal, the
+          canvas editor) portals directly. This was the only place that did not. */}
+      {newOpen && createPortal(
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={() => setNewOpen(false)}
+          style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.45)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <motion.div initial={{ scale: 0.97, y: 8 }} animate={{ scale: 1, y: 0 }}
+            onClick={e => e.stopPropagation()}
+            style={{ width: "min(560px, 100%)", maxHeight: "80vh", overflowY: "auto",
+              background: darkMode ? "#16161e" : "#fff", borderRadius: 18, padding: 22,
+              border: `1px solid ${theme.borderFaint}` }}>
+            <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 600, color: theme.text }}>
+              {de ? "Format wählen" : "Pick a size"}
+            </div>
+            {err && (
+              <div style={{ marginTop: 10, padding: "9px 12px", borderRadius: 9,
+                background: "rgba(217,52,43,0.10)", color: "#D9342B",
+                fontFamily: FONT, fontSize: 12 }}>{err}</div>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 14 }}>
+              {creationFormats(de).map((f, i) => (
+                <div key={i} onClick={() => !busy && createCanvas(f)}
+                  style={{ padding: "11px 13px", borderRadius: 11, cursor: "pointer",
+                    border: `1px solid ${theme.borderFaint}` }}>
+                  <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: theme.text }}>{f.name}</div>
+                  <div style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textDim }}>{f.w} × {f.h} px</div>
+                </div>
+              ))}
+            </div>
+        </motion.div>
+        </motion.div>, document.body)}
 
       {editing && (
         <CanvasEditor
