@@ -17865,6 +17865,32 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                                 transform: `translate(${(fx ? 1 : -1) * rs * 0.75}px, ${(fy ? 1 : -1) * rs * 0.75}px)`,
                                 borderRadius: "50%", cursor: "grab", zIndex: 1 }} />
                           ))}
+                          {/* Corner-radius grips: small circles just inside each
+                              corner. Dragging one inward rounds that corner, and by
+                              default all four follow — only a shape switched to
+                              per-corner radii moves one alone. */}
+                          {it.type === "rect" && (() => {
+                            const rr = radiiOf(it);
+                            const cap = Math.min(it.w, bh) / 2;
+                            // Held a constant distance from the corner on screen while
+                            // the radius is small, or the grip would sit under the
+                            // resize handle and be impossible to hit.
+                            const minIn = 14 * k;
+                            return [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => {
+                              const off = Math.max(Math.min(rr[RADIUS_CORNER[hd]], cap), minIn);
+                              return (
+                                <div key={"rad" + hd} onPointerDown={e2 => onRadiusDown(e2, it, hd)}
+                                  title="Radius"
+                                  style={{ position: "absolute",
+                                    left: fx ? undefined : off, right: fx ? off : undefined,
+                                    top: fy ? undefined : off, bottom: fy ? off : undefined,
+                                    transform: `translate(${fx ? 50 : -50}%, ${fy ? 50 : -50}%)`,
+                                    width: 8 * k, height: 8 * k, borderRadius: "50%",
+                                    background: "#fff", border: `${1.6 * k}px solid #2F6BFF`,
+                                    cursor: "nwse-resize", zIndex: 3 }} />
+                              );
+                            });
+                          })()}
                           <div style={{ position: "absolute", left: "50%", top: `calc(100% + ${9 * k}px)`,
                             transform: "translateX(-50%)", padding: `${3 * k}px ${7 * k}px`,
                             borderRadius: 4 * k, background: "#2F6BFF", color: "#fff",
@@ -17919,6 +17945,32 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                                 transform: `translate(${(fx ? 1 : -1) * rs * 0.75}px, ${(fy ? 1 : -1) * rs * 0.75}px)`,
                                 borderRadius: "50%", cursor: "grab", zIndex: 1 }} />
                           ))}
+                          {/* Corner-radius grips: small circles just inside each
+                              corner. Dragging one inward rounds that corner, and by
+                              default all four follow — only a shape switched to
+                              per-corner radii moves one alone. */}
+                          {it.type === "rect" && (() => {
+                            const rr = radiiOf(it);
+                            const cap = Math.min(it.w, bh) / 2;
+                            // Held a constant distance from the corner on screen while
+                            // the radius is small, or the grip would sit under the
+                            // resize handle and be impossible to hit.
+                            const minIn = 14 * k;
+                            return [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => {
+                              const off = Math.max(Math.min(rr[RADIUS_CORNER[hd]], cap), minIn);
+                              return (
+                                <div key={"rad" + hd} onPointerDown={e2 => onRadiusDown(e2, it, hd)}
+                                  title="Radius"
+                                  style={{ position: "absolute",
+                                    left: fx ? undefined : off, right: fx ? off : undefined,
+                                    top: fy ? undefined : off, bottom: fy ? off : undefined,
+                                    transform: `translate(${fx ? 50 : -50}%, ${fy ? 50 : -50}%)`,
+                                    width: 8 * k, height: 8 * k, borderRadius: "50%",
+                                    background: "#fff", border: `${1.6 * k}px solid #2F6BFF`,
+                                    cursor: "nwse-resize", zIndex: 3 }} />
+                              );
+                            });
+                          })()}
                           <div style={{ position: "absolute", left: "50%", top: `calc(100% + ${9 * k}px)`,
                             transform: "translateX(-50%)", padding: `${3 * k}px ${7 * k}px`,
                             borderRadius: 4 * k, background: "#2F6BFF", color: "#fff",
@@ -17999,6 +18051,32 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                                 transform: `translate(${(fx ? 1 : -1) * rs * 0.75}px, ${(fy ? 1 : -1) * rs * 0.75}px)`,
                                 borderRadius: "50%", cursor: "grab", zIndex: 1 }} />
                           ))}
+                          {/* Corner-radius grips: small circles just inside each
+                              corner. Dragging one inward rounds that corner, and by
+                              default all four follow — only a shape switched to
+                              per-corner radii moves one alone. */}
+                          {it.type === "rect" && (() => {
+                            const rr = radiiOf(it);
+                            const cap = Math.min(it.w, bh) / 2;
+                            // Held a constant distance from the corner on screen while
+                            // the radius is small, or the grip would sit under the
+                            // resize handle and be impossible to hit.
+                            const minIn = 14 * k;
+                            return [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => {
+                              const off = Math.max(Math.min(rr[RADIUS_CORNER[hd]], cap), minIn);
+                              return (
+                                <div key={"rad" + hd} onPointerDown={e2 => onRadiusDown(e2, it, hd)}
+                                  title="Radius"
+                                  style={{ position: "absolute",
+                                    left: fx ? undefined : off, right: fx ? off : undefined,
+                                    top: fy ? undefined : off, bottom: fy ? off : undefined,
+                                    transform: `translate(${fx ? 50 : -50}%, ${fy ? 50 : -50}%)`,
+                                    width: 8 * k, height: 8 * k, borderRadius: "50%",
+                                    background: "#fff", border: `${1.6 * k}px solid #2F6BFF`,
+                                    cursor: "nwse-resize", zIndex: 3 }} />
+                              );
+                            });
+                          })()}
                           <div style={{ position: "absolute", left: "50%", top: `calc(100% + ${9 * k}px)`,
                             transform: "translateX(-50%)", padding: `${3 * k}px ${7 * k}px`,
                             borderRadius: 4 * k, background: "#2F6BFF", color: "#fff",
