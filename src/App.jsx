@@ -17431,6 +17431,20 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       else patch(d.id, { x: Math.round(d.ix + dx), y: Math.round(d.iy + dy) });
       return;
     }
+    if (d.mode === "radius") {
+      const b = d.base, cap = Math.min(b.w, b.h) / 2;
+      // How far the pointer has moved INTO the shape from that corner. The axis
+      // that moved LESS wins, so the value follows the hand along the diagonal
+      // instead of jumping when one axis runs ahead.
+      const inward = d.corner === "nw" ? Math.min(p.x - b.x, p.y - b.y)
+        : d.corner === "ne" ? Math.min(b.x + b.w - p.x, p.y - b.y)
+        : d.corner === "se" ? Math.min(b.x + b.w - p.x, b.y + b.h - p.y)
+        : Math.min(p.x - b.x, b.y + b.h - p.y);
+      const r = Math.round(Math.max(0, Math.min(cap, inward)));
+      if (d.per) { const next = [...d.radii]; next[RADIUS_CORNER[d.corner]] = r; patch(d.id, { radii: next }); }
+      else patch(d.id, { radius: r });
+      return;
+    }
     if (d.mode === "rotate") {
       let deg = d.rot0 + (Math.atan2(e.clientY - d.cy, e.clientX - d.cx) - d.a0) * 180 / Math.PI;
       if (e.shiftKey) deg = Math.round(deg / 15) * 15;   // Shift snaps to 15°
@@ -17534,6 +17548,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     dragRef.current = { mode: "resize", id: it.id, handle, sx: e.clientX, sy: e.clientY,
       base: { x: it.x, y: it.y, w: it.w, h: it.h || 0 }, rot: it.rot || 0,
       isText: it.type === "text" };
+  };
+
+  // radii are kept in CSS order — [tl, tr, br, bl] — so a corner name has to be
+  // mapped to its slot.
+  const RADIUS_CORNER = { nw: 0, ne: 1, se: 2, sw: 3 };
+  const onRadiusDown = (e, it, hd) => {
+    e.stopPropagation();
+    dragRef.current = { mode: "radius", id: it.id, corner: hd,
+      base: { x: it.x, y: it.y, w: it.w, h: it.h },
+      per: Array.isArray(it.radii), radii: radiiOf(it) };
   };
 
   // Rotation reads the angle from the shape's centre to the pointer, so the
