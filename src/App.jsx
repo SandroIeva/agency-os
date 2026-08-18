@@ -21197,6 +21197,11 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   const [editing, setEditing] = useState(null);    // the canvas row open in the editor
   const [renaming, setRenaming] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  // The app's own tab indicator: one persistent line, measured and animated.
+  // There is a note by the hook explaining why Framer's layoutId misbehaves here
+  // — first switch after mount often does not animate.
+  const ind = useTabIndicator(kind, [appLanguage]);
 
   const scope = (query) => projectId ? query.eq("project_id", projectId) : query.is("project_id", null);
 
@@ -21231,8 +21236,9 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
       name: fmt.name, kind: fmt.kind || kind, w: fmt.w, h: fmt.h,
       doc: { bg: "#FFFFFF", items: [] }, created_by: session?.user?.id || null,
     }).select().single();
-    setBusy(false); setNewOpen(false);
-    if (error) return;
+    setBusy(false);
+    if (error) { setErr(error.message || (de ? "Anlegen fehlgeschlagen." : "Could not create.")); return; }
+    setNewOpen(false); setErr("");
     setRows(r => [data, ...(r || [])]);
     setEditing(data);
   };
@@ -21331,21 +21337,27 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
         </div>
 
         {/* Tabs, drawn like the Audience tabs rather than as pills */}
-        <div style={{ padding: "0 24px", display: "flex", alignItems: "center", gap: 22,
-          borderBottom: `1px solid ${theme.borderFaint}` }}>
+        <div ref={ind.containerRef}
+          style={{ padding: "0 24px", display: "flex", alignItems: "center", gap: 22,
+            borderBottom: `1px solid ${theme.borderFaint}`, position: "relative" }}>
           {CREATION_KINDS.map(k => {
             const on = kind === k.key;
             return (
-              <div key={k.key} onClick={() => { setKind(k.key); setFolderId(null); }}
-                style={{ padding: "12px 2px", marginBottom: -1, cursor: "pointer", fontSize: 13.5,
-                  fontFamily: FONT, fontWeight: on ? 600 : 500,
+              <div key={k.key} ref={ind.registerTab(k.key)}
+                onClick={() => { setKind(k.key); setFolderId(null); }}
+                style={{ padding: "12px 2px", cursor: "pointer", fontSize: 13.5,
+                  fontFamily: FONT,
+                  // Weight is NOT switched with the tab: bolding the active label
+                  // changes its width, which shoves the neighbours sideways — that
+                  // is the jump. Colour carries the state instead.
+                  fontWeight: 600,
                   color: on ? theme.text : theme.textDim,
-                  borderBottom: `2px solid ${on ? theme.accent : "transparent"}`,
                   transition: "color 0.15s ease" }}>
                 {de ? k.de : k.en}
               </div>
             );
           })}
+          <TabUnderline box={ind.box} darkMode={darkMode} />
         </div>
 
         <div style={{ padding: "14px 24px 0" }}>
@@ -21494,6 +21506,11 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
               <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 600, color: theme.text }}>
                 {de ? "Format wählen" : "Pick a size"}
               </div>
+              {err && (
+                <div style={{ marginTop: 10, padding: "9px 12px", borderRadius: 9,
+                  background: "rgba(217,52,43,0.10)", color: "#D9342B",
+                  fontFamily: FONT, fontSize: 12 }}>{err}</div>
+              )}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 14 }}>
                 {creationFormats(de).map((f, i) => (
                   <div key={i} onClick={() => !busy && createCanvas(f)}
@@ -38411,6 +38428,10 @@ export default function CircularMenu() {
             <TouchpointsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} canEdit={canEditBrand} initialTab={audienceInitialTab}
               onBack={() => { setAudienceInitialTab("touchpoints"); setCurrentView("dashboard"); }} />
           )}
+        </AnimatePresence>
+
+        {/* CREATIONS VIEW (Brand → Creations): the working files behind the assets */}
+        <AnimatePresence>
           {currentView === "creations" && (
             <CreationsView session={session} userOrg={userOrg} brand={brandProfile} theme={theme} darkMode={darkMode}
               t={t} appLanguage={appLanguage} canEdit={canEditBrand}
