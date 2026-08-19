@@ -18414,6 +18414,42 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         ? { ...o, isMask: undefined, groupId: undefined } : o));
     });
   };
+  // Lock, then eye — the order Figma uses, so the eye is always the outermost
+  // thing on a row. Written once: the group header needs exactly this pair,
+  // pointed at every member instead of at one item.
+  const lockEye = (locked, hidden, onLock, onHide) => (<>
+    <span onClick={(e) => { e.stopPropagation(); onLock(); }}
+      title={locked ? (de ? "Entsperren" : "Unlock") : (de ? "Sperren" : "Lock")}
+      style={{ display: "flex", padding: 2, cursor: "pointer",
+        color: locked ? theme.text : theme.textFaint, opacity: locked ? 1 : 0.55 }}>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="4" y="11" width="16" height="10" rx="2" />
+        {locked ? <path d="M8 11V7a4 4 0 018 0v4" /> : <path d="M8 11V7a4 4 0 017-2.6" />}
+      </svg>
+    </span>
+    <span onClick={(e) => { e.stopPropagation(); onHide(); }}
+      title={hidden ? (de ? "Einblenden" : "Show") : (de ? "Ausblenden" : "Hide")}
+      style={{ display: "flex", padding: 2, cursor: "pointer",
+        color: hidden ? theme.text : theme.textFaint, opacity: hidden ? 1 : 0.55 }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+        {hidden ? (
+          <><path d="M3 3l18 18" /><path d="M10.6 5.1A9.6 9.6 0 0112 5c7 0 10 7 10 7a17 17 0 01-3.2 4.3" />
+            <path d="M6.5 6.6A17 17 0 002 12s3 7 10 7a9.5 9.5 0 004.2-.95" /></>
+        ) : (
+          <><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></>
+        )}
+      </svg>
+    </span>
+  </>);
+  // A group is hidden or locked when every part of it is — anything else and
+  // the header would claim a state half its rows disagree with.
+  const setGroupFlag = (gid, o) => {
+    markChange();
+    setItems(list => list.map(q => (q.groupId === gid ? { ...q, ...o } : q)));
+  };
+
   // A name somebody typed wins; otherwise something readable from the item.
   const layerName = (it) => it.name || (
     it.isMask ? (de ? "Maske" : "Mask")
@@ -20618,9 +20654,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   </span>
                   <div style={{ flex: 1 }} />
                   {/* Closed, the count is the only sign of what is in there. */}
-                  <span style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint }}>
+                  <span style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint,
+                    marginRight: 2 }}>
                     {items.filter(o => o.groupId === gid).length}
                   </span>
+                  {(() => {
+                    const mem = items.filter(o => o.groupId === gid);
+                    const allLocked = mem.every(o => o.locked);
+                    const allHidden = mem.every(o => o.hidden);
+                    return lockEye(allLocked, allHidden,
+                      () => setGroupFlag(gid, { locked: !allLocked }),
+                      () => setGroupFlag(gid, { hidden: !allHidden }));
+                  })()}
                 </div>
               ) : null;
               const ticked = pick.includes(it.id);
@@ -20693,34 +20738,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       style={{ fontSize: 11, color: theme.textFaint, padding: "0 3px" }}>✕</span>
                   )}
 
-                  {/* Lock, then eye — the order Figma uses, so the eye is always
-                      the outermost thing on the row. */}
-                  <span onClick={(e) => { e.stopPropagation(); patch(it.id, { locked: !it.locked }); }}
-                    title={it.locked ? (de ? "Entsperren" : "Unlock") : (de ? "Sperren" : "Lock")}
-                    style={{ display: "flex", padding: 2, cursor: "pointer",
-                      color: it.locked ? theme.text : theme.textFaint, opacity: it.locked ? 1 : 0.55 }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                      strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="4" y="11" width="16" height="10" rx="2" />
-                      {it.locked
-                        ? <path d="M8 11V7a4 4 0 018 0v4" />
-                        : <path d="M8 11V7a4 4 0 017-2.6" />}
-                    </svg>
-                  </span>
-                  <span onClick={(e) => { e.stopPropagation(); patch(it.id, { hidden: !it.hidden }); }}
-                    title={it.hidden ? (de ? "Einblenden" : "Show") : (de ? "Ausblenden" : "Hide")}
-                    style={{ display: "flex", padding: 2, cursor: "pointer",
-                      color: it.hidden ? theme.text : theme.textFaint, opacity: it.hidden ? 1 : 0.55 }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                      strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                      {it.hidden ? (
-                        <><path d="M3 3l18 18" /><path d="M10.6 5.1A9.6 9.6 0 0112 5c7 0 10 7 10 7a17 17 0 01-3.2 4.3" />
-                          <path d="M6.5 6.6A17 17 0 002 12s3 7 10 7a9.5 9.5 0 004.2-.95" /></>
-                      ) : (
-                        <><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></>
-                      )}
-                    </svg>
-                  </span>
+                  {lockEye(!!it.locked, !!it.hidden,
+                    () => patch(it.id, { locked: !it.locked }),
+                    () => patch(it.id, { hidden: !it.hidden }))}
                 </div>
                 </Fragment>
               );
