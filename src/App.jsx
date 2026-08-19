@@ -6163,7 +6163,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
   lastLineTool, setLastLineTool, lineToolOpen, setLineToolOpen,
   mediaOpen, setMediaOpen, mediaBtnRef, imgMenuOpen, setImgMenuOpen, imgBtnRef,
   fileRef, onFiles, zoomPct, onZoom, onResetZoom,
-  hide = [], theme, darkMode, de }) {
+  shapes = WB_SHAPE_TYPES, hide = [], theme, darkMode, de }) {
 
   const vertical = orientation === "vertical";
   const sw = 1.9;
@@ -6184,6 +6184,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
     st === "ellipse" ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw}><circle cx="12" cy="12" r="9"/></svg>
     : st === "diamond" ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinejoin="round"><path d="M12 2.5l9.5 9.5-9.5 9.5L2.5 12z"/></svg>
     : st === "triangle" ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinejoin="round"><path d="M12 3.5L21.5 20.5h-19z"/></svg>
+    : st === "star" ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinejoin="round"><path d="M12 2.6l2.9 6 6.5.9-4.7 4.6 1.1 6.5-5.8-3.1-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9z"/></svg>
     : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw}><rect x="3" y="3" width="18" height="18" rx="2.5"/></svg>;
 
   const sep = (
@@ -6254,8 +6255,8 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
       {/* Shapes — one button, Figma-style flyout with all shapes */}
       <div style={{ position: "relative" }}>
         <motion.div whileTap={{ scale: 0.9 }} onClick={() => setShapesOpen(o => !o)} title={de ? "Formen" : "Shapes"}
-          style={{ ...dropBtn, background: WB_SHAPE_TYPES.includes(tool) ? "#15151c" : "transparent",
-            color: WB_SHAPE_TYPES.includes(tool) ? "#fff" : theme.text }}>
+          style={{ ...dropBtn, background: shapes.includes(tool) ? "#15151c" : "transparent",
+            color: shapes.includes(tool) ? "#fff" : theme.text }}>
           {shapeIcon(lastShape)}{chev}
         </motion.div>
         <AnimatePresence>
@@ -6264,10 +6265,10 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
             <div style={flyoutWrap}>
               <motion.div initial={flyIn} animate={flyTo} exit={flyIn}
                 transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }} style={flyoutPanel}>
-                {WB_SHAPE_TYPES.map(st => (
+                {shapes.map(st => (
                   <motion.div key={st} whileTap={{ scale: 0.9 }}
                     onClick={() => { setTool(st); setLastShape(st); setShapesOpen(false); setEditing?.(null); }}
-                    title={st === "rect" ? (de ? "Rechteck" : "Rectangle") : st === "ellipse" ? (de ? "Kreis" : "Circle") : st === "diamond" ? (de ? "Raute" : "Diamond") : (de ? "Dreieck" : "Triangle")}
+                    title={st === "rect" ? (de ? "Rechteck" : "Rectangle") : st === "ellipse" ? (de ? "Kreis" : "Circle") : st === "diamond" ? (de ? "Raute" : "Diamond") : st === "star" ? (de ? "Stern" : "Star") : (de ? "Dreieck" : "Triangle")}
                     style={{ width: 38, height: 38, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
                       background: tool === st ? "#15151c" : "transparent", color: tool === st ? "#fff" : theme.text }}>
                     {shapeIcon(st)}
@@ -17055,9 +17056,29 @@ const CANVAS_POLY = {
   diamond:  [[0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]],
   triangle: [[0.5, 0], [1, 1], [0, 1]],
 };
-const polyClip = (type) => CANVAS_POLY[type]
-  ? `polygon(${CANVAS_POLY[type].map(([x, y]) => `${x * 100}% ${y * 100}%`).join(", ")})`
-  : undefined;
+// A star cannot be a fixed table — the point count is adjustable — so it is
+// generated in the same [0..1] fractions the table uses. Everything downstream
+// then treats it exactly like the other polygons.
+const starPoly = (points = 5, innerRatio = 0.42) => {
+  const n = Math.max(3, Math.min(20, Math.round(points) || 5));
+  const inner = Math.max(0.05, Math.min(0.95, innerRatio));
+  const out = [];
+  for (let i = 0; i < n * 2; i++) {
+    const r = (i % 2 ? 0.5 * inner : 0.5);
+    const a = (Math.PI * i) / n - Math.PI / 2;
+    out.push([0.5 + r * Math.cos(a), 0.5 + r * Math.sin(a)]);
+  }
+  return out;
+};
+// One place that answers "what polygon is this item", so the CSS clip, the canvas
+// path and the export cannot disagree about where a point sits.
+const polyOf = (it) => it.type === "star"
+  ? starPoly(it.points, it.innerRatio)
+  : CANVAS_POLY[it.type];
+const polyClip = (it) => {
+  const poly = polyOf(typeof it === "string" ? { type: it } : it);
+  return poly ? `polygon(${poly.map(([x, y]) => `${x * 100}% ${y * 100}%`).join(", ")})` : undefined;
+};
 
 // Every template is a function of the frame, so one entry works for a banner and
 // for a square profile picture without a second definition.
@@ -17124,6 +17145,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [mediaOpen, setMediaOpen] = useState(false);
   const [mediaTab, setMediaTab] = useState("emoji");
   const [zoomMenu, setZoomMenu] = useState(false);
+  // Collapsed by default: it is a panel you reach for, not one you work in.
+  const [layersOpen, setLayersOpen] = useState(false);
+  const [pick, setPick] = useState([]);          // ids ticked in the layers list
   const [barPop, setBarPop] = useState(null);   // "color" | null
   const [frameTab, setFrameTab] = useState("design");   // "design" | "templates"
   const [showGrid, setShowGrid] = useState(true);
@@ -17282,13 +17306,32 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // A CSS border draws INSIDE the box; a canvas stroke straddles the path. The
   // export therefore traces a box inset by half the width, or the outline would
   // sit half outside and the two would not match.
+  // A mask is one field on the masked item. The shape named there stops painting
+  // and only lends its outline — which is the same clip the background blur
+  // already uses, pointed at another element instead of at the backdrop.
+  const maskOf = (it) => it.maskId ? items.find(o => o.id === it.maskId) : null;
+  // Expressed for CSS in the MASKED item's own pixels, since clip-path counts
+  // from the element's own corner, not the artboard's.
+  const maskClip = (it) => {
+    const m = maskOf(it);
+    if (!m) return undefined;
+    const b = boxOf(m), dx = b.x - it.x, dy = b.y - it.y;
+    const poly = polyOf(m);
+    if (poly) return `polygon(${poly.map(([fx, fy]) =>
+      `${dx + fx * b.w}px ${dy + fy * b.h}px`).join(", ")})`;
+    if (m.type === "ellipse")
+      return `ellipse(${b.w / 2}px ${b.h / 2}px at ${dx + b.w / 2}px ${dy + b.h / 2}px)`;
+    const r = Math.min(...radiiOf(m), Math.min(b.w, b.h) / 2);
+    return `inset(${dy}px ${it.w - (dx + b.w)}px ${it.h - (dy + b.h)}px ${dx}px round ${r}px)`;
+  };
+
   const canStroke = (it) => ["rect", "image", "sticky", "ellipse"].includes(it.type);
 
   const tracePath = (ctx, it, b) => {
     ctx.beginPath();
     if (it.type === "ellipse") ctx.ellipse(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, b.h / 2, 0, 0, Math.PI * 2);
-    else if (CANVAS_POLY[it.type]) {
-      CANVAS_POLY[it.type].forEach(([fx, fy], i2) => {
+    else if (polyOf(it)) {
+      polyOf(it).forEach(([fx, fy], i2) => {
         const px2 = b.x + fx * b.w, py2 = b.y + fy * b.h;
         i2 ? ctx.lineTo(px2, py2) : ctx.moveTo(px2, py2);
       });
@@ -17562,7 +17605,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       d.live = box;
       if (!d.started) {
         d.started = true;
-        setItems(list => [...list, { id: d.id, type: d.type, ...box, fill: palette[0] }]);
+        setItems(list => [...list, { id: d.id, type: d.type, ...box, fill: palette[0],
+          ...(d.type === "star" ? { points: 5, innerRatio: 0.42 } : {}) }]);
       } else patch(d.id, box);
       return;
     }
@@ -17665,7 +17709,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         if (d.started) setItems(list => list.filter(i => i.id !== d.id));
         const side = Math.min(300, Math.round(Math.min(W, H) * 0.6));
         const it = { id: crypto.randomUUID(), type: d.type, w: side, h: side,
-          x: Math.round(d.ox - side / 2), y: Math.round(d.oy - side / 2), fill: palette[0] };
+          x: Math.round(d.ox - side / 2), y: Math.round(d.oy - side / 2), fill: palette[0],
+          ...(d.type === "star" ? { points: 5, innerRatio: 0.42 } : {}) };
         setItems(list => [...list, it]);
         setSel(it.id);
       }
@@ -17789,6 +17834,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       // Comments are notes ABOUT the design. Exporting one would print a review
       // remark onto the banner, which is the one thing a comment must never do.
       if (it.type === "comment") continue;
+      // The shape used as a mask lends its outline and nothing else.
+      if (it.isMask) continue;
       ctx.globalAlpha = it.opacity == null ? 1 : it.opacity;
       // Background blur, before the item's own paint: take what is already on
       // the canvas — which is exactly "everything behind", since items are drawn
@@ -17811,6 +17858,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       }
       ctx.filter = effectFilter(it);
       const spun = it.rot || it.flipX || it.flipY;
+      const maskShape = maskOf(it);
+      if (maskShape) { ctx.save(); tracePath(ctx, maskShape, boxOf(maskShape)); ctx.clip(); }
       if (spun) { ctx.save(); applySpin(ctx, it); }
       if (it.type === "image" && it.url) {
         const img = await loadImage(it.url);
@@ -17837,9 +17886,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         ctx.fillStyle = fillOf(it); ctx.beginPath();
         ctx.ellipse(it.x + it.w / 2, it.y + it.h / 2, it.w / 2, it.h / 2, 0, 0, Math.PI * 2);
         ctx.fill();
-      } else if (CANVAS_POLY[it.type]) {
+      } else if (polyOf(it)) {
         ctx.fillStyle = fillOf(it); ctx.beginPath();
-        CANVAS_POLY[it.type].forEach(([fx, fy], i) => {
+        polyOf(it).forEach(([fx, fy], i) => {
           const x = it.x + fx * it.w, y = it.y + fy * it.h;
           i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
         });
@@ -17933,6 +17982,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       }
       ctx.filter = "none";
       if (spun) ctx.restore();
+      if (maskShape) ctx.restore();
     }
     ctx.globalAlpha = 1;
     return await new Promise((res, rej) =>
@@ -18039,7 +18089,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   : { top: g.pos, left: Math.min(g.a, g.b), height: Math.max(1, 1 / cam.s),
                       width: Math.abs(g.b - g.a) }) }} />
             ))}
-            {items.map(it => {
+            {items.filter(it => !it.isMask).map(it => {
               const on = it.id === sel;
               const xf = [it.rot ? `rotate(${it.rot}deg)` : "",
                 it.flipX ? "scaleX(-1)" : "", it.flipY ? "scaleY(-1)" : ""].filter(Boolean).join(" ");
@@ -18295,7 +18345,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               return (
                 <div key={it.id} onPointerDown={e => onItemDown(e, it)}
                   style={{ ...common, width: it.w, height: it.h }}>
-                  <div style={{ position: "absolute", inset: 0, clipPath: polyClip(it.type),
+                  <div style={{ position: "absolute", inset: 0, clipPath: maskClip(it) || polyClip(it),
                     opacity: it.opacity == null ? 1 : it.opacity,
                     filter: effectFilter(it),
                     ...(it.bgBlur ? { backdropFilter: `blur(${it.bgBlur}px)`,
@@ -18399,6 +18449,28 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             onPointerDown={e => e.stopPropagation()}>
             <div style={{ display: "flex", alignItems: "center", gap: 3, padding: 5, borderRadius: 11,
               background: "#15151c", boxShadow: "0 8px 24px rgba(0,0,0,0.28)" }}>
+              {selItem.type === "star" && (<>
+                <div title={de ? "Zacken" : "Points"}
+                  style={{ display: "flex", alignItems: "center", gap: 4, padding: "0 8px 0 6px",
+                    height: 26, borderRadius: 7, background: "rgba(255,255,255,0.12)" }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff">
+                    <path d="M12 2.6l2.9 6 6.5.9-4.7 4.6 1.1 6.5-5.8-3.1-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9z" />
+                  </svg>
+                  <input type="number" min={3} max={20} value={selItem.points ?? 5}
+                    onChange={e => patch(selItem.id, { points: Math.max(3, Math.min(20, Number(e.target.value) || 5)) })}
+                    style={{ width: 32, border: "none", outline: "none", background: "transparent",
+                      color: "#fff", fontFamily: FONT, fontSize: 12 }} />
+                </div>
+                <div title={de ? "Zackentiefe" : "Point depth"}
+                  style={{ display: "flex", alignItems: "center", gap: 4, padding: "0 8px 0 6px",
+                    height: 26, borderRadius: 7, background: "rgba(255,255,255,0.12)" }}>
+                  <input type="range" min={10} max={90}
+                    value={Math.round((selItem.innerRatio ?? 0.42) * 100)}
+                    onChange={e => patch(selItem.id, { innerRatio: Number(e.target.value) / 100 })}
+                    style={{ width: 62 }} />
+                </div>
+                {div2}
+              </>)}
               {isText && (<>
                 <input type="number" value={selItem.size} min={6}
                   onChange={e => patch(selItem.id, { size: Math.max(6, Number(e.target.value) || 6) })}
@@ -18632,8 +18704,110 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           zoomPct={cam ? Math.round(cam.s * 100) : 100}
           onZoom={(d) => setCam(c => c && ({ ...c, s: Math.min(8, Math.max(0.02, c.s * (d > 0 ? 1.2 : 1 / 1.2))) }))}
           onResetZoom={() => setCam(fitCam())}
+          shapes={[...WB_SHAPE_TYPES, "star"]}
           hide={["zoom"]}
           theme={theme} darkMode={darkMode} de={de} />
+      </div>
+
+      {/* Layers, left of the canvas beside the rail. Collapsed by default — it
+          is a panel you reach for when the stack gets deep, not one you work in.
+          Not at the bottom: a strip there eats height, and height is what the
+          common formats (4:5, 9:16) have least of. */}
+      <div style={{ position: "absolute", left: 14, top: 68 + 396, zIndex: 5,
+        display: "flex", flexDirection: "column", alignItems: "flex-start" }}
+        onPointerDown={e => e.stopPropagation()}>
+        <motion.div whileTap={{ scale: 0.94 }} onClick={() => setLayersOpen(o => !o)}
+          title={de ? "Ebenen" : "Layers"}
+          style={{ width: 50, height: 44, borderRadius: 14, display: "flex", alignItems: "center",
+            justifyContent: "center", cursor: "pointer", background: panel,
+            border: `1px solid ${line}`, color: theme.text }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3l9 5-9 5-9-5z" /><path d="M3 13l9 5 9-5" />
+          </svg>
+        </motion.div>
+
+        {layersOpen && (
+          <div style={{ marginTop: 8, width: 250, maxHeight: "44vh", overflowY: "auto",
+            borderRadius: 14, background: panel, border: `1px solid ${line}`, padding: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "2px 4px 8px" }}>
+              <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: theme.text }}>
+                {de ? "Ebenen" : "Layers"}
+              </span>
+              <span style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint }}>
+                {items.length}
+              </span>
+            </div>
+
+            {/* Topmost first, because that is the order the eye sees them in. */}
+            {[...items].reverse().map(it => {
+              const m = maskOf(it);
+              const ticked = pick.includes(it.id);
+              const name = it.isMask ? (de ? "Maske" : "Mask")
+                : it.type === "text" || it.type === "sticky" || it.type === "comment"
+                  ? (String(it.text || "").split("\n")[0].slice(0, 22) || it.type)
+                  : it.type === "image" ? (de ? "Bild" : "Image")
+                  : it.type === "star" ? (de ? "Stern" : "Star")
+                  : it.type;
+              return (
+                <div key={it.id}
+                  onClick={(e) => {
+                    if (e.metaKey || e.ctrlKey || e.shiftKey) {
+                      setPick(p => p.includes(it.id) ? p.filter(x => x !== it.id) : [...p, it.id]);
+                    } else { setSel(it.id); setPick([]); }
+                  }}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px",
+                    marginLeft: m ? 14 : 0, borderRadius: 8, cursor: "pointer",
+                    background: ticked ? "rgba(47,107,255,0.16)"
+                      : sel === it.id ? (darkMode ? "rgba(255,255,255,0.08)" : "#EDEDF0") : "transparent" }}>
+                  <div style={{ width: 22, height: 22, borderRadius: 5, flexShrink: 0,
+                    border: `1px solid ${line}`,
+                    background: it.type === "image" ? `center/cover no-repeat url(${it.url})`
+                      : it.type === "text" ? "transparent" : (it.fill || "transparent"),
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 11, color: theme.textDim }}>
+                    {it.type === "text" ? "T" : ""}
+                  </div>
+                  <span style={{ flex: 1, minWidth: 0, fontFamily: FONT, fontSize: 12, color: theme.text,
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    opacity: it.hidden ? 0.4 : 1 }}>
+                    {m ? `↳ ${name}` : name}
+                  </span>
+                  {it.maskId && (
+                    <span onClick={(e) => { e.stopPropagation(); const mm = maskOf(it);
+                      patch(it.id, { maskId: undefined });
+                      if (mm) patch(mm.id, { isMask: undefined }); }}
+                      title={de ? "Maske lösen" : "Release mask"}
+                      style={{ fontSize: 11, color: theme.textFaint, padding: "0 3px" }}>✕</span>
+                  )}
+                </div>
+              );
+            })}
+
+            {pick.length === 2 && (
+              <div onClick={() => {
+                  // Figma's rule: the LOWER of the two becomes the mask.
+                  const [lo, hi] = [...pick].sort(
+                    (a, b) => items.findIndex(i => i.id === a) - items.findIndex(i => i.id === b));
+                  markChange();
+                  setItems(list => list.map(i =>
+                    i.id === lo ? { ...i, isMask: true, rot: 0 }
+                    : i.id === hi ? { ...i, maskId: lo } : i));
+                  setPick([]); setSel(hi);
+                }}
+                style={{ marginTop: 8, padding: "9px 12px", borderRadius: 9, textAlign: "center",
+                  background: "#15151c", color: "#fff", fontFamily: FONT, fontSize: 12,
+                  fontWeight: 600, cursor: "pointer" }}>
+                {de ? "Maskieren" : "Use as mask"}
+              </div>
+            )}
+            <div style={{ fontSize: 10.5, color: theme.textFaint, marginTop: 8, lineHeight: 1.45 }}>
+              {de ? "Zwei mit ⌘-Klick wählen — die untere wird zur Maske."
+                  : "Pick two with ⌘-click — the lower one becomes the mask."}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* right panel */}
