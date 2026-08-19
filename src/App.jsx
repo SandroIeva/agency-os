@@ -18338,6 +18338,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // null = all four corners share the one radius above. An array is the frame
   // saying its corners differ — the same shape a rectangle's radii already had,
   // so both ends of the panel can drive one control.
+  // Whether the frame cuts what hangs over its edge. Older documents have no
+  // such field and clip — which is what the export has always done, so reading
+  // a missing value as "on" keeps them looking the way they were saved.
+  const [frameClip, setFrameClip] = useState(doc?.clip !== false);
   const [frameRadii, setFrameRadii] = useState(
     Array.isArray(doc?.radii) && doc.radii.length === 4
       ? doc.radii.map(v => Math.max(0, Number(v) || 0)) : null);
@@ -18424,6 +18428,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const applyDoc = (d) => {
     setBg(d.bg); setItems(d.items || []); setFrameRadius(d.radius || 0);
     setFrameRadii(Array.isArray(d.radii) && d.radii.length === 4 ? d.radii : null);
+    setFrameClip(d.clip !== false);
     setSel(null); setEditing(null);
   };
   const undo = () => {
@@ -18452,9 +18457,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // document unchanged and does nothing — and it also means simply opening a
   // canvas never writes a row.
   const [saveState, setSaveState] = useState("");     // "" | "saving" | "saved"
-  const baselineRef = useRef(JSON.stringify({ bg: doc?.bg || null, items: doc?.items || [], radius: Number(doc?.radius) || 0, radii: Array.isArray(doc?.radii) ? doc.radii : undefined, w: Number(doc?.w) || size[0], h: Number(doc?.h) || size[1] }));
-  const latestRef = useRef({ bg, items, radius: frameRadius, radii: frameRadii || undefined, w: W, h: H });
-  latestRef.current = { bg, items, radius: frameRadius, radii: frameRadii || undefined, w: W, h: H };
+  const baselineRef = useRef(JSON.stringify({ bg: doc?.bg || null, items: doc?.items || [], radius: Number(doc?.radius) || 0, radii: Array.isArray(doc?.radii) ? doc.radii : undefined, clip: doc?.clip !== false, w: Number(doc?.w) || size[0], h: Number(doc?.h) || size[1] }));
+  const latestRef = useRef({ bg, items, radius: frameRadius, radii: frameRadii || undefined, clip: frameClip, w: W, h: H });
+  latestRef.current = { bg, items, radius: frameRadius, radii: frameRadii || undefined, clip: frameClip, w: W, h: H };
   const saveTimer = useRef(null);
 
   const flush = async (payload) => {
@@ -18469,13 +18474,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   useEffect(() => {
     if (!onAutoSave) return;
-    const payload = { bg, items, radius: frameRadius, radii: frameRadii || undefined, w: W, h: H };
+    const payload = { bg, items, radius: frameRadius, radii: frameRadii || undefined, clip: frameClip, w: W, h: H };
     if (JSON.stringify(payload) === baselineRef.current) return;
     setSaveState("saving");
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => flush(payload), 700);
     return () => clearTimeout(saveTimer.current);
-  }, [items, bg, frameRadius, frameRadii, W, H]);
+  }, [items, bg, frameRadius, frameRadii, frameClip, W, H]);
 
   // Closing must not drop the last few hundred milliseconds of work, so the
   // pending save is flushed on the way out.
@@ -19587,7 +19592,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     // export a white rectangle that only looks like nothing on a white page.
     // A rounded frame clips everything, so the corners come out genuinely empty
     // rather than filled with the background colour.
-    if (frameCorners().some(v => v > 0) && ctx.roundRect) {
+    // The file is always the frame — a 1080 x 1080 format cannot grow to fit
+    // an overhang. What this decides is the frame's SHAPE: unclipped, content
+    // may cover the rounded corners instead of being cut by them.
+    if (frameClip && frameCorners().some(v => v > 0) && ctx.roundRect) {
       ctx.beginPath();
       ctx.roundRect(0, 0, W, H, frameCorners());
       ctx.clip();
@@ -19897,7 +19905,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         { type: "image/png" });
       const url = await onUpload(file);
       if (!url) throw new Error("upload");
-      onDone(url, { bg, items, radius: frameRadius, radii: frameRadii || undefined, w: W, h: H });
+      onDone(url, { bg, items, radius: frameRadius, radii: frameRadii || undefined, clip: frameClip, w: W, h: H });
     } catch (e) {
       // A tainted canvas and a failed upload look identical to the user unless
       // they are told apart, and both end with nothing saved.
@@ -20142,6 +20150,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             // Selected frames say so. Without this the sidebar changed and
             // nothing on the canvas did, which reads as nothing having happened.
             borderRadius: frameCorners().map(v => `${v}px`).join(" "),
+            // Until now the editor showed the overhang and the file cut it off,
+            // so the two disagreed about the same design.
+            overflow: frameClip ? "hidden" : "visible",
             outline: sel === "frame" ? `${Math.max(1, 2 / cam.s)}px solid #15151c` : "none",
             outlineOffset: 0,
             boxShadow: "0 18px 60px rgba(0,0,0,0.28)" }}>
@@ -21393,6 +21404,29 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               onCorner: (i2, v) => { markChange();
                 setFrameRadii(prev => { const next = [...(prev || [])]; next[i2] = v; return next; }); },
             })}
+
+            {/* Sits with the frame's own shape, because that is what it is:
+                whether the frame cuts what crosses its edge. */}
+            <div onClick={() => { markChange(); setFrameClip(c => !c); }}
+              style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10,
+                padding: "9px 10px", borderRadius: 9, cursor: "pointer",
+                background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+              <span style={{ flex: 1, minWidth: 0, fontFamily: FONT, fontSize: 12.5,
+                color: theme.text }}>
+                {de ? "Inhalt beschneiden" : "Clip content"}
+              </span>
+              <div style={{ width: 34, height: 20, borderRadius: 999, padding: 2, flexShrink: 0,
+                background: frameClip ? "#15151c" : (darkMode ? "#3A3A44" : "#D3D3DA"),
+                display: "flex", justifyContent: frameClip ? "flex-end" : "flex-start",
+                transition: "background 0.15s" }}>
+                <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff" }} />
+              </div>
+            </div>
+            {/* Said once, here, rather than found out at export time. */}
+            <div style={{ fontSize: 10.5, color: theme.textFaint, marginTop: 6, lineHeight: 1.45 }}>
+              {de ? "Die Datei ist immer der Frame — ein Überstand ist zum Arbeiten sichtbar, nicht im Export."
+                  : "The file is always the frame — an overhang is visible while you work, not in the export."}
+            </div>
 
             {label(de ? "Hintergrund" : "Background")}
             {/* One swatch that opens the picker, like every other colour in the
