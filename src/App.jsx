@@ -25033,14 +25033,24 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
     await supabase.from("brand_canvases").update({ name }).eq("id", row.id);
   };
 
-  const addFolder = async () => {
-    const name = (window.prompt(de ? "Name des Ordners" : "Folder name") || "").trim();
-    if (!name || !userOrg?.id) return;
+  // The same dialog the file manager uses. A window.prompt is the browser's
+  // dialog, not the app's: it lands in the wrong typeface, in the wrong place,
+  // and it says "localhost:3000 wird Folgendes angezeigt" above the question.
+  const [folderModal, setFolderModal] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const addFolder = () => { setFolderName(""); setFolderModal(true); };
+  const submitFolder = async () => {
+    const name = folderName.trim();
+    if (!name || !userOrg?.id || creatingFolder) return;
+    setCreatingFolder(true);
     const { data, error } = await supabase.from("canvas_folders").insert({
       org_id: userOrg.id, project_id: projectId, name, created_by: session?.user?.id || null,
     }).select().single();
+    setCreatingFolder(false);
     if (error) { setErr(planLimitError(error, de) || error.message); return; }
     if (data) setFolders(f => [...f, data]);
+    setFolderModal(false);
   };
 
   const visible = (rows || [])
@@ -25329,6 +25339,73 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
           onPublish={(file) => { setEditing(null); onPublish?.(file); }}
           onClose={() => setEditing(null)} />
       )}
+
+      {/* One to one with the file manager's, down to the radii and the wording:
+          two dialogs for one job is how an app starts feeling assembled rather
+          than designed. */}
+      <AnimatePresence>
+        {folderModal && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            onClick={() => !creatingFolder && setFolderModal(false)}
+            style={{ position: "fixed", inset: 0, zIndex: 99998,
+              background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)",
+              display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 8 }}
+              transition={{ duration: 0.2, ease: [0.22, 0.68, 0.35, 1.0] }}
+              onClick={e => e.stopPropagation()}
+              style={{ width: "100%", maxWidth: 420, background: theme.cardBg,
+                border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26,
+                boxShadow: "0 25px 80px rgba(0,0,0,0.4)" }}>
+              <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text,
+                marginBottom: 6, letterSpacing: -0.2 }}>
+                {de ? "Neuer Ordner" : "New folder"}
+              </div>
+              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 18,
+                lineHeight: 1.5 }}>
+                {de ? "Wird in Creations angelegt." : "Will be created in Creations."}
+              </div>
+              <input autoFocus value={folderName}
+                onChange={e => setFolderName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && folderName.trim() && !creatingFolder) submitFolder();
+                  if (e.key === "Escape" && !creatingFolder) setFolderModal(false);
+                }}
+                placeholder={de ? "z.B. Kampagne Herbst" : "e.g. Autumn campaign"}
+                style={{ width: "100%", boxSizing: "border-box",
+                  background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                  border: `1px solid ${theme.borderFaint}`, borderRadius: 12,
+                  padding: "12px 14px", fontSize: 14, fontFamily: FONT,
+                  color: theme.text, outline: "none", caretColor: theme.accent }} />
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
+                <motion.div onClick={() => !creatingFolder && setFolderModal(false)}
+                  whileTap={{ scale: 0.97 }}
+                  style={{ padding: "10px 18px", borderRadius: 999,
+                    cursor: creatingFolder ? "not-allowed" : "pointer",
+                    background: "transparent", border: `1px solid ${theme.borderFaint}`,
+                    color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500,
+                    opacity: creatingFolder ? 0.5 : 1 }}>
+                  {de ? "Abbrechen" : "Cancel"}
+                </motion.div>
+                <motion.div onClick={submitFolder} whileTap={{ scale: 0.97 }}
+                  style={{ padding: "10px 22px", borderRadius: 999,
+                    cursor: (!folderName.trim() || creatingFolder) ? "not-allowed" : "pointer",
+                    background: (!folderName.trim() || creatingFolder)
+                      ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)") : theme.accent,
+                    border: "none",
+                    color: (!folderName.trim() || creatingFolder) ? theme.textFaint : "#fff",
+                    fontSize: 13, fontFamily: FONT, fontWeight: 600,
+                    display: "flex", alignItems: "center", gap: 6 }}>
+                  {creatingFolder ? (de ? "Erstellt …" : "Creating …") : (de ? "Erstellen" : "Create")}
+                </motion.div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       </div>
     </motion.div>
   );
