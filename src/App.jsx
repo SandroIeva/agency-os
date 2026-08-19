@@ -19773,26 +19773,29 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     )}
   </>);
 
-  // The alignment marks. Two weights, and that is the whole point of them: the
-  // edge you align TO is a hairline, and what MOVES against it are two heavy
-  // bars of different lengths. Drawn at one weight — as they were — an icon
-  // reads as three equal strokes and says nothing about which is the edge.
+  // The alignment marks. The edge you align TO is a hairline; what MOVES
+  // against it are two bars, one pixel heavier and standing CLEAR of the line
+  // rather than growing out of it. The gap is what makes them read as objects
+  // beside an edge instead of one bracket-shaped glyph.
+  //
+  // The two centre marks are the exception: there the bars cross the line,
+  // because that is what centring on it looks like.
   const alignMark = (guide, long, short) => (
     <>
       <path d={guide} strokeWidth="1.5" />
-      <path d={long} strokeWidth="3" />
-      <path d={short} strokeWidth="3" />
+      <path d={long} strokeWidth="2.5" />
+      <path d={short} strokeWidth="2.5" />
     </>
   );
   const ALIGN_DEFS = [
-    ["l",  alignMark("M5 3.5V20.5", "M6.5 9.5H18.5", "M6.5 15H14"), "Links", "Left"],
+    ["l",  alignMark("M5 3.5V20.5", "M8.5 9.5H18.5", "M8.5 15H14.5"), "Links", "Left"],
     ["cx", alignMark("M12 3V21", "M6 9.5H18", "M8.25 15H15.75"),
      "Horizontal zentrieren", "Centre horizontally"],
-    ["r",  alignMark("M19 3.5V20.5", "M5 9.5H17.5", "M9.5 15H17.5"), "Rechts", "Right"],
-    ["t",  alignMark("M3.5 5H20.5", "M9.5 6.5V18.5", "M15 6.5V14"), "Oben", "Top"],
+    ["r",  alignMark("M19 3.5V20.5", "M5.5 9.5H15.5", "M9.5 15H15.5"), "Rechts", "Right"],
+    ["t",  alignMark("M3.5 5H20.5", "M9.5 8.5V18.5", "M15 8.5V14.5"), "Oben", "Top"],
     ["cy", alignMark("M3 12H21", "M9.5 6V18", "M15 8.25V15.75"),
      "Vertikal zentrieren", "Centre vertically"],
-    ["b",  alignMark("M3.5 19H20.5", "M9.5 5V17.5", "M15 9.5V17.5"), "Unten", "Bottom"],
+    ["b",  alignMark("M3.5 19H20.5", "M9.5 5.5V15.5", "M15 9.5V15.5"), "Unten", "Bottom"],
   ];
   const alignBtn = (k, act) => {
     const [, glyph, dde, een] = ALIGN_DEFS.find(d => d[0] === k);
