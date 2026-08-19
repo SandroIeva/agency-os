@@ -17937,7 +17937,21 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setItems(list => [...list, ...made]);
     setSel(made[made.length - 1].id);
   };
-  const deleteSel = (id = sel) => { markChange(); setItems(list => list.filter(i => i.id !== id)); setSel(null); };
+  // Deletes what is SELECTED, which after a marquee is several things and no
+  // single `sel` at all — the old version read one id and quietly did nothing.
+  const deleteSel = (id = sel) => {
+    const ids = new Set(pick.length ? pick : (id ? [id] : []));
+    // A mask and its content go together; leaving half of a group behind leaves
+    // an invisible mask nobody can select.
+    for (const sid of [...ids]) {
+      const o = items.find(q => q.id === sid);
+      if (o?.groupId) items.filter(q => q.groupId === o.groupId).forEach(q => ids.add(q.id));
+    }
+    if (!ids.size) return;
+    markChange();
+    setItems(list => list.filter(i => !ids.has(i.id)));
+    setSel(null); setPick([]);
+  };
 
   // Topmost first, so a right-click hits what the eye sees on top.
   const itemAt = (pt) => {
@@ -17951,6 +17965,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const toArt = (e) => (cam ? { x: (e.clientX - cam.x) / cam.s, y: (e.clientY - cam.y) / cam.s } : { x: 0, y: 0 });
 
   const onStageDown = (e) => {
+    // Only the primary button starts anything. A right-click fires pointerdown
+    // as well, and letting it through here cleared the selection a moment before
+    // the context menu opened on it.
+    if (e.button !== 0) return;
     if (editing) return;
     if (tool === "hand") {
       dragRef.current = { mode: "pan", sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y };
@@ -18197,9 +18215,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   };
 
   const onItemDown = (e, it) => {
-    // A right-click fires pointerdown too. Letting it through cleared the very
-    // selection the context menu was about to act on.
-    if (e.button !== 0) return;
+    // A right-click fires pointerdown too. Stop it here as well as on the stage,
+    // or it bubbles up and the stage clears the selection instead.
+    if (e.button !== 0) { e.stopPropagation(); return; }
     if (tool !== "select" || editing) return;
     e.stopPropagation();
     // ⌘/Shift collects a second object without starting a drag, so a pair can be
@@ -18559,7 +18577,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             at: cam ? toArt(e) : null });
         }}
         style={{ position: "absolute", inset: 0, overflow: "hidden",
-          cursor: tool === "select" ? (dragRef.current?.mode === "pan" ? "grabbing" : "default") : "crosshair",
+          cursor: tool === "hand" ? (dragRef.current?.mode === "pan" ? "grabbing" : "grab")
+            : tool === "select" ? "default" : "crosshair",
           backgroundImage: showGrid
             ? `radial-gradient(${darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)"} 1px, transparent 1px)`
             : "none",
