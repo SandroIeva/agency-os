@@ -18382,28 +18382,31 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // before it means anything to the items array — which IS the paint order.
   const moveLayer = (fromRev, toRev) => {
     if (fromRev === toRev || toRev == null) return;
-    const n = items.length;
     markChange();
     setItems(list => {
-      const a = [...list];
-      const [x] = a.splice(n - 1 - fromRev, 1);
-      const at = n - 1 - toRev;
-      a.splice(at, 0, x);
-      // A mask stays where its members expect it; moving one in or out of a
-      // group would leave the others pointing at something that is no longer
-      // above them.
+      // Worked in list order, not in items order. The list is items reversed,
+      // and translating each index by hand got the shift wrong once the element
+      // had already been pulled out: dropping onto the mask row inserted at the
+      // very bottom instead of above it, so the thing vanished under the mask.
+      const rev = [...list].reverse();
+      // The row the drop line sat on. That row's group is the group you are
+      // dropping INTO — the neighbours cannot answer this, because the slot
+      // above a group's topmost part and the slot just outside the group are
+      // the same slot in a flat list. The line you saw is the intent.
+      const target = rev[toRev];
+      const [x] = rev.splice(fromRev, 1);
+      rev.splice(fromRev < toRev ? toRev - 1 : toRev, 0, x);
+      const a = rev.reverse();
+      // A mask stays with the items that point at it; carrying one into or out
+      // of a group would leave them pointing above themselves.
       if (x.isMask) return a;
-      // Dropped BETWEEN two parts of one group, it becomes a part — and if that
-      // group masks, it is masked too. This is what makes a mask hold more than
-      // one object: several items can name the same mask, and maskOf has always
-      // looked it up per item.
-      const above = a[at + 1], below = a[at - 1];
-      const gid = (below?.groupId && below.groupId === above?.groupId) ? below.groupId : null;
-      if (gid === (x.groupId || null)) return a;
-      const mask = gid ? a.find(o => o.groupId === gid && o.isMask) : null;
-      a[at] = gid
-        ? { ...x, groupId: gid, maskId: mask ? mask.id : undefined }
-        : { ...x, groupId: undefined, maskId: undefined };
+      const gid = target?.groupId || null;
+      if (gid !== (x.groupId || null)) {
+        const mask = gid ? a.find(o => o.groupId === gid && o.isMask) : null;
+        a[a.indexOf(x)] = gid
+          ? { ...x, groupId: gid, maskId: mask ? mask.id : undefined }
+          : { ...x, groupId: undefined, maskId: undefined };
+      }
       // A mask nothing points at any more is a shape that paints nothing and
       // cannot be clicked — an invisible row. Dragging the last masked item out
       // hands it back its own life.
@@ -20629,7 +20632,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 <Fragment key={it.id}>
                 {groupHeader}
                 <div
-                  draggable={renameId !== it.id}
+                  // A mask is the floor of its group. Dragged anywhere else it
+                  // keeps its members but stops being next to them, and the list
+                  // — which draws a group as one run of rows — comes apart.
+                  draggable={renameId !== it.id && !it.isMask}
                   onDragStart={() => setDragRow(rev)}
                   onDragOver={(e) => { e.preventDefault(); setOverRow(rev); }}
                   onDragEnd={() => { setDragRow(null); setOverRow(null); }}
@@ -20640,7 +20646,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     } else { setSel(it.id); setPick([]); }
                   }}
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px",
-                    marginLeft: gid ? 16 : 0, borderRadius: 8, cursor: "grab",
+                    marginLeft: gid ? 16 : 0, borderRadius: 8,
+                    cursor: it.isMask ? "default" : "grab",
                     borderTop: dropHere ? "2px solid #2F6BFF" : "2px solid transparent",
                     opacity: dragRow === rev ? 0.45 : 1,
                     // While the GROUP is the selection, its parts are not
