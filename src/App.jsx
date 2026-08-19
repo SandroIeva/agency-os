@@ -19774,7 +19774,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   </>);
 
   // The alignment marks. The edge you align TO is a hairline; what MOVES
-  // against it are two bars, one pixel heavier and standing CLEAR of the line
+  // against it are two bars, much heavier and standing CLEAR of the line
   // rather than growing out of it. The gap is what makes them read as objects
   // beside an edge instead of one bracket-shaped glyph.
   //
@@ -19783,8 +19783,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const alignMark = (guide, long, short) => (
     <>
       <path d={guide} strokeWidth="1.5" />
-      <path d={long} strokeWidth="2.5" />
-      <path d={short} strokeWidth="2.5" />
+      <path d={long} strokeWidth="3.5" />
+      <path d={short} strokeWidth="3.5" />
     </>
   );
   const ALIGN_DEFS = [
