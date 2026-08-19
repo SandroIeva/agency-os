@@ -18647,7 +18647,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     onChange={v => patch(selItem.id, { innerRatio: v / 100 })}
                     theme={{ text: "#fff", textDim: "rgba(255,255,255,0.6)" }} darkMode />
                 </div>
-                {div2}
               </>)}
               {isText && (<>
                 <NumberField value={selItem.size} min={6}
@@ -18666,7 +18665,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     <path d="M4 18h16" />
                   </svg>
                 </div>
-                {div2}
               </>)}
               <div onClick={() => setBarPop(pp => pp ? null : "color")} title={de ? "Farbe" : "Colour"}
                 style={{ display: "flex", alignItems: "center", gap: 4, padding: "0 8px 0 5px",
