@@ -18700,7 +18700,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
       {/* Left rail — the same BoardToolbar Brainstorm uses, stood on end. Same
           tools, same flyouts, same behaviour; only the direction differs. */}
-      <div style={{ position: "absolute", left: 14, top: 68, zIndex: 5 }}
+      {/* Tools and layers share ONE column, so the layers button sits under the
+          rail by construction. It used to carry a guessed offset of 396px while
+          the rail is about 420 tall — which put the button behind the rail, and
+          the panel nowhere to be seen. */}
+      <div style={{ position: "absolute", left: 14, top: 68, zIndex: 5,
+        display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 10 }}
         onPointerDown={e => e.stopPropagation()}>
         <BoardToolbar orientation="vertical"
           tool={tool} setTool={setTool} setEditing={setEditing}
@@ -18716,15 +18721,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           shapes={[...WB_SHAPE_TYPES, "star"]}
           hide={["zoom"]}
           theme={theme} darkMode={darkMode} de={de} />
-      </div>
 
-      {/* Layers, left of the canvas beside the rail. Collapsed by default — it
-          is a panel you reach for when the stack gets deep, not one you work in.
-          Not at the bottom: a strip there eats height, and height is what the
-          common formats (4:5, 9:16) have least of. */}
-      <div style={{ position: "absolute", left: 14, top: 68 + 396, zIndex: 5,
-        display: "flex", flexDirection: "column", alignItems: "flex-start" }}
-        onPointerDown={e => e.stopPropagation()}>
+        {/* Layers. Collapsed by default — a panel you reach for when the stack
+            gets deep, not one you work in. Not at the bottom: a strip there eats
+            height, and height is what 4:5 and 9:16 have least of. */}
         <motion.div whileTap={{ scale: 0.94 }} onClick={() => setLayersOpen(o => !o)}
           title={de ? "Ebenen" : "Layers"}
           style={{ width: 50, height: 44, borderRadius: 14, display: "flex", alignItems: "center",
