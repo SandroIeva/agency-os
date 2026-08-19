@@ -17497,6 +17497,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [mediaTab, setMediaTab] = useState("emoji");
   const [zoomMenu, setZoomMenu] = useState(false);
   const [doneMenu, setDoneMenu] = useState(false);
+  // Space held = the hand, borrowed. The chosen tool is untouched, so letting go
+  // puts you back where you were rather than making you re-pick the arrow.
+  const [spacePan, setSpacePan] = useState(false);
   // Collapsed by default: it is a panel you reach for, not one you work in.
   const [layersOpen, setLayersOpen] = useState(false);
   const [pick, setPick] = useState([]);          // ids ticked in the layers list
@@ -17872,6 +17875,33 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   }, []);
 
   useEffect(() => {
+    const inField = (t) => /^(INPUT|TEXTAREA|SELECT)$/.test(t?.tagName || "") || t?.isContentEditable;
+    const down = (e) => {
+      if (e.code !== "Space" || e.repeat) return;
+      if (inField(e.target) || editing) return;
+      // Space scrolls the page otherwise, which would move the view out from
+      // under the very drag it is meant to start.
+      e.preventDefault();
+      setSpacePan(true);
+    };
+    const up = (e) => { if (e.code === "Space") setSpacePan(false); };
+    // A window that loses focus never delivers the keyup, and the hand would
+    // stay stuck on until Space was pressed and released again.
+    const drop = () => setSpacePan(false);
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", drop);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", drop);
+    };
+  }, [editing]);
+
+  // What the pointer actually does right now.
+  const activeTool = spacePan ? "hand" : tool;
+
+  useEffect(() => {
     const onKey = (e) => {
       // Same guard the whiteboard already uses: while the focus is in a field,
       // the keyboard belongs to that field. Without it, Backspace to clear a
@@ -17991,11 +18021,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     // the context menu opened on it.
     if (e.button !== 0) return;
     if (editing) return;
-    if (tool === "hand") {
+    if (activeTool === "hand") {
       dragRef.current = { mode: "pan", sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y };
       return;
     }
-    if (tool === "select") {
+    if (activeTool === "select") {
       // Dragging with the arrow draws a selection box; panning belongs to the
       // hand tool and the wheel. Brainstorm splits them the same way, and having
       // the arrow shove the whole view is the thing that makes a canvas feel
@@ -18243,6 +18273,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     // A right-click fires pointerdown too. Stop it here as well as on the stage,
     // or it bubbles up and the stage clears the selection instead.
     if (e.button !== 0) { e.stopPropagation(); return; }
+    // With Space held the whole surface pans, whatever happens to be under the
+    // cursor — otherwise starting a pan on top of an object would drag it.
+    if (spacePan) return;
     if (tool !== "select" || editing) return;
     e.stopPropagation();
     // ⌘/Shift collects a second object without starting a drag, so a pair can be
@@ -18696,8 +18729,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             at: cam ? toArt(e) : null });
         }}
         style={{ position: "absolute", inset: 0, overflow: "hidden",
-          cursor: tool === "hand" ? (dragRef.current?.mode === "pan" ? "grabbing" : "grab")
-            : tool === "select" ? "default" : "crosshair",
+          cursor: activeTool === "hand" ? (dragRef.current?.mode === "pan" ? "grabbing" : "grab")
+            : activeTool === "select" ? "default" : "crosshair",
           backgroundImage: showGrid
             ? `radial-gradient(${darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)"} 1px, transparent 1px)`
             : "none",
