@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Component } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Component, Fragment } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "./supabase";
@@ -17486,6 +17486,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [overRow, setOverRow] = useState(null);
   const [renameId, setRenameId] = useState(null);
   const [picker, setPicker] = useState(null);   // { what, key, x, y }
+  const [marquee, setMarquee] = useState(null);        // { x, y, w, h } in artboard units
+  const [enteredGroup, setEnteredGroup] = useState(null);
   const [barPop, setBarPop] = useState(null);   // "color" | null
   const [frameTab, setFrameTab] = useState("design");   // "design" | "templates"
   const [showGrid, setShowGrid] = useState(true);
@@ -17672,25 +17674,48 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     : it.type);
 
   const maskOf = (it) => it.maskId ? items.find(o => o.id === it.maskId) : null;
+
+  // What moves when you grab one thing. A group moves as a unit until you step
+  // inside it, which is what makes a mask feel like one object rather than two
+  // that happen to sit together.
+  const moveSetFor = (id) => {
+    const seeds = (pick.includes(id) && pick.length > 1) ? [...pick] : [id];
+    // Whole groups, not just the member that was picked. Selecting a mask's
+    // content alongside something else and dragging used to tear the mask off
+    // its content, because only the picked half moved.
+    const out = new Set();
+    for (const sid of seeds) {
+      const o = items.find(q => q.id === sid);
+      if (!o) continue;
+      if (o.groupId && enteredGroup !== o.groupId)
+        items.filter(q => q.groupId === o.groupId).forEach(q => out.add(q.id));
+      else out.add(sid);
+    }
+    return [...out];
+  };
   // The LOWER of the two always becomes the mask — the rule Figma uses and the
   // one people expect, so it is not offered as a choice.
   const maskPair = (ids) => {
     if (ids.length !== 2) return;
     const [lo, hi] = [...ids].sort(
       (a, b) => items.findIndex(i => i.id === a) - items.findIndex(i => i.id === b));
+    // The two become a group, so they move as one thing afterwards. Without it
+    // a mask and its content drift apart the first time either is dragged.
+    const gid = crypto.randomUUID();
     markChange();
     setItems(list => list.map(i =>
-      i.id === lo ? { ...i, isMask: true, rot: 0 }
-      : i.id === hi ? { ...i, maskId: lo } : i));
-    setPick([]); setSel(hi);
+      i.id === lo ? { ...i, isMask: true, rot: 0, groupId: gid }
+      : i.id === hi ? { ...i, maskId: lo, groupId: gid } : i));
+    setPick([]); setSel(hi); setEnteredGroup(null);
   };
   const unmask = (id) => {
     const it = items.find(o => o.id === id);
     if (!it?.maskId) return;
     markChange();
     setItems(list => list.map(o =>
-      o.id === id ? { ...o, maskId: undefined }
-      : o.id === it.maskId ? { ...o, isMask: undefined } : o));
+      o.id === id ? { ...o, maskId: undefined, groupId: undefined }
+      : o.id === it.maskId ? { ...o, isMask: undefined, groupId: undefined } : o));
+    setEnteredGroup(null);
   };
   // Expressed for CSS in the MASKED item's own pixels, since clip-path counts
   // from the element's own corner, not the artboard's.
@@ -17927,12 +17952,21 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   const onStageDown = (e) => {
     if (editing) return;
-    if (tool === "select" || tool === "hand") {
-      // Clicking the frame itself selects the FRAME, so its background and size
-      // get a context panel of their own rather than living in a fixed corner
-      // of the sidebar.
-      if (tool === "select") setSel(e.target === e.currentTarget ? null : "frame");
+    if (tool === "hand") {
       dragRef.current = { mode: "pan", sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y };
+      return;
+    }
+    if (tool === "select") {
+      // Dragging with the arrow draws a selection box; panning belongs to the
+      // hand tool and the wheel. Brainstorm splits them the same way, and having
+      // the arrow shove the whole view is the thing that makes a canvas feel
+      // like it is fighting you.
+      const q = toArt(e);
+      setSel(e.target === e.currentTarget ? null : "frame");
+      if (!(e.metaKey || e.ctrlKey || e.shiftKey)) setPick([]);
+      setEnteredGroup(null);
+      dragRef.current = { mode: "marquee", ox: q.x, oy: q.y, add: e.metaKey || e.ctrlKey || e.shiftKey };
+      setMarquee({ x: q.x, y: q.y, w: 0, h: 0 });
       return;
     }
     const p = toArt(e);
@@ -18016,6 +18050,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       return;
     }
     if (d.mode === "arrow") { patch(d.id, { x2: p.x, y2: p.y }); return; }
+    if (d.mode === "marquee") {
+      setMarquee({ x: Math.min(d.ox, p.x), y: Math.min(d.oy, p.y),
+        w: Math.abs(p.x - d.ox), h: Math.abs(p.y - d.oy) });
+      return;
+    }
     if (d.mode === "move") {
       let dx = (e.clientX - d.sx) / cam.s, dy = (e.clientY - d.sy) / cam.s;
       // Brainstorm's own wbSnapBox, not a second implementation: nine candidates
@@ -18032,9 +18071,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         const key = r.guides.map(g => `${g.axis}${Math.round(g.pos)}:${Math.round(g.a)}:${Math.round(g.b)}`).join("|");
         if (key !== guidesKeyRef.current) { guidesKeyRef.current = key; setGuides(r.guides); }
       } else if (guidesKeyRef.current) { guidesKeyRef.current = ""; setGuides([]); }
-      if (d.kind === "draw") patch(d.id, { ox: d.ix + dx, oy: d.iy + dy });
-      else if (d.kind === "arrow") patch(d.id, { x1: d.ix + dx, y1: d.iy + dy, x2: d.ax + dx, y2: d.ay + dy });
-      else patch(d.id, { x: Math.round(d.ix + dx), y: Math.round(d.iy + dy) });
+      markChange();
+      setItems(list => list.map(o => {
+        const b = d.bases[o.id];
+        if (!b) return o;
+        if (o.type === "draw") return { ...o, ox: b.ox + dx, oy: b.oy + dy };
+        if (o.type === "arrow" || o.type === "line")
+          return { ...o, x1: b.x1 + dx, y1: b.y1 + dy, x2: b.x2 + dx, y2: b.y2 + dy };
+        return { ...o, x: Math.round(b.x + dx), y: Math.round(b.y + dy) };
+      }));
       return;
     }
     if (d.mode === "radius") {
@@ -18091,6 +18136,22 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const onStageUp = () => {
     if (guidesKeyRef.current) { guidesKeyRef.current = ""; setGuides([]); }
     const d = dragRef.current;
+    if (d?.mode === "marquee") {
+      dragRef.current = null;
+      const m = marquee;
+      setMarquee(null);
+      // A click that never became a drag is a click: it clears, it does not
+      // select every element that happens to touch a zero-sized box.
+      if (!m || (m.w < 3 && m.h < 3)) { setSel(null); return; }
+      const inside = items.filter(o => {
+        if (o.hidden || o.locked) return false;
+        const b = boxOf(o);
+        return b.x < m.x + m.w && b.x + b.w > m.x && b.y < m.y + m.h && b.y + b.h > m.y;
+      }).map(o => o.id);
+      setPick(prev => d.add ? [...new Set([...prev, ...inside])] : inside);
+      setSel(inside.length === 1 ? inside[0] : null);
+      return;
+    }
     dragRef.current = null;
     if (d?.mode === "create") {
       // A plain click drops a comfortably sized square centred on the cursor —
@@ -18136,6 +18197,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   };
 
   const onItemDown = (e, it) => {
+    // A right-click fires pointerdown too. Letting it through cleared the very
+    // selection the context menu was about to act on.
+    if (e.button !== 0) return;
     if (tool !== "select" || editing) return;
     e.stopPropagation();
     // ⌘/Shift collects a second object without starting a drag, so a pair can be
@@ -18145,18 +18209,26 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       setSel(it.id);
       return;
     }
-    setPick([]);
+    const ids = moveSetFor(it.id);
+    if (!ids.includes(it.id)) ids.push(it.id);
+    if (ids.length === 1) setPick([]);
     pushUndo(takeSnap());
     setSel(it.id);
-    dragRef.current = { mode: "move", id: it.id, sx: e.clientX, sy: e.clientY,
+    // Every member remembers where it started, so the group keeps its shape —
+    // applying one delta to live values would drift as the frames update.
+    const bases = {};
+    for (const id of ids) {
+      const o = items.find(q => q.id === id);
+      if (!o) continue;
+      bases[id] = o.type === "draw" ? { ox: o.ox || 0, oy: o.oy || 0 }
+        : (o.type === "arrow" || o.type === "line") ? { x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2 }
+        : { x: o.x, y: o.y };
+    }
+    dragRef.current = { mode: "move", id: it.id, ids, bases, sx: e.clientX, sy: e.clientY,
       // The frame is a target like any other, which is what makes an element
       // centre itself in the banner instead of only against its neighbours.
       baseBox: boxOf(it),
-      targets: [{ x: 0, y: 0, w: W, h: H }, ...items.filter(o => o.id !== it.id).map(boxOf)],
-      kind: it.type === "draw" ? "draw" : (it.type === "arrow" || it.type === "line") ? "arrow" : "box",
-      ix: it.type === "draw" ? (it.ox || 0) : it.type === "arrow" ? it.x1 : it.x,
-      iy: it.type === "draw" ? (it.oy || 0) : it.type === "arrow" ? it.y1 : it.y,
-      ax: it.x2, ay: it.y2 };
+      targets: [{ x: 0, y: 0, w: W, h: H }, ...items.filter(o => !ids.includes(o.id)).map(boxOf)] };
   };
 
   const onHandleDown = (e, it, handle) => {
@@ -18170,6 +18242,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // radii are kept in CSS order — [tl, tr, br, bl] — so a corner name has to be
   // mapped to its slot.
   const RADIUS_CORNER = { nw: 0, ne: 1, se: 2, sw: 3 };
+  // Double-clicking a group steps inside it, so its parts can be moved on their
+  // own. Clicking empty canvas steps back out.
+  const enterGroup = (it) => { if (it.groupId) setEnteredGroup(it.groupId); };
+
   const onRadiusDown = (e, it, hd) => {
     e.stopPropagation();
     pushUndo(takeSnap());
@@ -18504,6 +18580,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             outline: sel === "frame" ? `${Math.max(1, 2 / cam.s)}px solid #15151c` : "none",
             outlineOffset: 0,
             boxShadow: "0 18px 60px rgba(0,0,0,0.28)" }}>
+            {marquee && (
+              <div style={{ position: "absolute", left: marquee.x, top: marquee.y,
+                width: marquee.w, height: marquee.h, pointerEvents: "none",
+                border: `${Math.max(1, 1 / cam.s)}px solid #2F6BFF`,
+                background: "rgba(47,107,255,0.10)" }} />
+            )}
             {guides.map((g, gi) => (
               <div key={gi} style={{ position: "absolute", background: "#2F6BFF", pointerEvents: "none",
                 ...(g.axis === "x"
@@ -18761,6 +18843,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               // badge — those are chrome, not part of the design.
               return (
                 <div key={it.id} onPointerDown={e => onItemDown(e, it)}
+                  onDoubleClick={() => enterGroup(it)}
                   style={{ ...common, width: it.w, height: it.h }}>
                   <div style={{ position: "absolute", inset: 0, clipPath: maskClip(it) || polyClip(it),
                     opacity: it.opacity == null ? 1 : it.opacity,
@@ -19234,10 +19317,36 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 paints in — the list is that order made visible, not a copy. */}
             {[...items].reverse().map((it, rev) => {
               const m = maskOf(it);
+              // The first row of a group carries its header, so a mask reads as
+              // one thing with parts rather than two unrelated rows.
+              const gid = it.groupId;
+              const first = gid && [...items].reverse().findIndex(o => o.groupId === gid) === rev;
+              const groupHeader = first ? (
+                <div key={"g" + gid} onClick={() => setEnteredGroup(enteredGroup === gid ? null : gid)}
+                  style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 8px",
+                    borderRadius: 8, cursor: "pointer", color: theme.textDim,
+                    background: enteredGroup === gid ? (darkMode ? "rgba(255,255,255,0.05)" : "#F5F5F7") : "transparent" }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    style={{ transform: enteredGroup === gid ? "rotate(90deg)" : "none" }}>
+                    <path d="M9 6l6 6-6 6" />
+                  </svg>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />
+                    <path d="M14 6.5h7M6.5 14v7" />
+                  </svg>
+                  <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600 }}>
+                    {de ? "Gruppe" : "Group"}
+                  </span>
+                </div>
+              ) : null;
               const ticked = pick.includes(it.id);
               const dropHere = overRow === rev && dragRow !== null && dragRow !== rev;
               return (
-                <div key={it.id}
+                <Fragment key={it.id}>
+                {groupHeader}
+                <div
                   draggable={renameId !== it.id}
                   onDragStart={() => setDragRow(rev)}
                   onDragOver={(e) => { e.preventDefault(); setOverRow(rev); }}
@@ -19249,7 +19358,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     } else { setSel(it.id); setPick([]); }
                   }}
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px",
-                    marginLeft: m ? 14 : 0, borderRadius: 8, cursor: "grab",
+                    marginLeft: gid ? 16 : 0, borderRadius: 8, cursor: "grab",
                     borderTop: dropHere ? "2px solid #2F6BFF" : "2px solid transparent",
                     opacity: dragRow === rev ? 0.45 : 1,
                     background: ticked ? "rgba(47,107,255,0.16)"
@@ -19319,6 +19428,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     </svg>
                   </span>
                 </div>
+                </Fragment>
               );
             })}
 
