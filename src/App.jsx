@@ -6209,16 +6209,27 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
 
   // A button that opens a flyout carries a chevron; on the standing bar the
   // chevron points right rather than down, since that is where the panel appears.
-  const chev = (
+  // On the standing bar the chevron moves into the bottom-right corner and
+  // shrinks. Beside the icon it stole width from the button, which pushed the
+  // glyph off-centre — and a column of icons that do not line up is the first
+  // thing the eye catches.
+  const chev = vertical ? (
+    <svg width="7" height="7" viewBox="0 0 24 24" fill="currentColor"
+      style={{ position: "absolute", right: 3, bottom: 3, opacity: 0.55 }}>
+      <path d="M24 24H8L24 8z" />
+    </svg>
+  ) : (
     <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6"
-      strokeLinecap="round" strokeLinejoin="round"
-      style={{ opacity: 0.7, transform: vertical ? "rotate(-90deg)" : "none" }}>
+      strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
       <polyline points="6 9 12 15 18 9"/>
     </svg>
   );
-  const dropBtn = { height: 38, padding: vertical ? "0 4px 0 6px" : "0 7px 0 10px", borderRadius: 11,
-    display: "flex", alignItems: "center", justifyContent: "center", gap: 3, cursor: "pointer",
-    transition: "background 0.15s ease" };
+  const dropBtn = vertical
+    ? { position: "relative", width: 38, height: 38, borderRadius: 11, display: "flex",
+        alignItems: "center", justifyContent: "center", cursor: "pointer",
+        transition: "background 0.15s ease" }
+    : { height: 38, padding: "0 7px 0 10px", borderRadius: 11, display: "flex", alignItems: "center",
+        justifyContent: "center", gap: 3, cursor: "pointer", transition: "background 0.15s ease" };
 
   const lineIcon = (kind) => kind === "line"
     ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="18" x2="18" y2="6"/></svg>
@@ -17255,6 +17266,24 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // The outline of an item as a canvas path. Written once because three places
   // need the same shape — the inner shadow's clip, the background blur's clip,
   // and the fill itself.
+  // A colour and its own opacity, folded into one value both sides understand.
+  // Kept separate from the element's opacity: making a fill see-through so the
+  // background blur shows is not the same as fading the whole object, handles
+  // and shadow included.
+  const withAlpha = (col, pct) => {
+    if (pct == null || pct >= 100) return col;
+    const a = Math.max(0, Math.min(100, pct)) / 100;
+    const m = /^#([0-9a-f]{6})$/i.exec(String(col || ""));
+    if (!m) return col;
+    const n = parseInt(m[1], 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+  };
+  const fillOf = (it) => withAlpha(it.fill, it.fillAlpha);
+  // A CSS border draws INSIDE the box; a canvas stroke straddles the path. The
+  // export therefore traces a box inset by half the width, or the outline would
+  // sit half outside and the two would not match.
+  const canStroke = (it) => ["rect", "image", "sticky", "ellipse"].includes(it.type);
+
   const tracePath = (ctx, it, b) => {
     ctx.beginPath();
     if (it.type === "ellipse") ctx.ellipse(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, b.h / 2, 0, 0, Math.PI * 2);
@@ -17787,7 +17816,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         const img = await loadImage(it.url);
         drawFitted(ctx, img, it);
       } else if (it.type === "sticky") {
-        ctx.fillStyle = it.fill; ctx.fillRect(it.x, it.y, it.w, it.h);
+        ctx.fillStyle = fillOf(it); ctx.fillRect(it.x, it.y, it.w, it.h);
         const pad = Math.round(it.w * 0.08);
         ctx.fillStyle = it.color; ctx.font = canvasFont(it);
         const ms = ctx.measureText("Hg"), Ls = canvasLH(it);
@@ -17798,18 +17827,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           ctx.fillText(line, it.x + pad, it.y + pad + i2 * Ls + bs));
         ctx.restore();
       } else if (it.type === "rect") {
-        ctx.fillStyle = it.fill;
+        ctx.fillStyle = fillOf(it);
         const cap = Math.min(it.w, it.h) / 2;
         const rr = radiiOf(it).map(v => Math.min(v, cap));
         if (rr.some(v => v > 0) && ctx.roundRect) {
           ctx.beginPath(); ctx.roundRect(it.x, it.y, it.w, it.h, rr); ctx.fill();
         } else ctx.fillRect(it.x, it.y, it.w, it.h);
       } else if (it.type === "ellipse") {
-        ctx.fillStyle = it.fill; ctx.beginPath();
+        ctx.fillStyle = fillOf(it); ctx.beginPath();
         ctx.ellipse(it.x + it.w / 2, it.y + it.h / 2, it.w / 2, it.h / 2, 0, 0, Math.PI * 2);
         ctx.fill();
       } else if (CANVAS_POLY[it.type]) {
-        ctx.fillStyle = it.fill; ctx.beginPath();
+        ctx.fillStyle = fillOf(it); ctx.beginPath();
         CANVAS_POLY[it.type].forEach(([fx, fy], i) => {
           const x = it.x + fx * it.w, y = it.y + fy * it.h;
           i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
@@ -17867,6 +17896,19 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         });
         if (canSpace) ctx.letterSpacing = "0px";
       }
+      // The outline, after the fill and before the inner shadow.
+      if (it.strokeWidth && canStroke(it)) {
+        const b = boxOf(it), sw2 = it.strokeWidth;
+        ctx.save();
+        ctx.filter = "none";
+        tracePath(ctx, { ...it, radii: radiiOf(it).map(v => Math.max(0, v - sw2 / 2)) },
+          { x: b.x + sw2 / 2, y: b.y + sw2 / 2, w: Math.max(0, b.w - sw2), h: Math.max(0, b.h - sw2) });
+        ctx.lineWidth = sw2;
+        ctx.strokeStyle = withAlpha(it.stroke || "#15151c", it.strokeAlpha);
+        ctx.stroke();
+        ctx.restore();
+      }
+
       // Inner shadow, after the fill: clip to the shape, then cast a shadow from
       // the INVERSE path so it falls inward. The canvas has no inset shadow.
       if (it.innerShadow && canInnerShadow(it)) {
@@ -18262,9 +18304,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       ? `inset ${it.innerShadow.x || 0}px ${it.innerShadow.y || 0}px ${it.innerShadow.blur || 0}px ${it.innerShadow.color || "rgba(0,0,0,0.35)"}`
                       : undefined,
                     borderRadius: it.type === "ellipse" ? "50%" : radiiOf(it).map(v => `${v}px`).join(" "),
+                    boxSizing: "border-box",
+                    border: (it.strokeWidth && canStroke(it))
+                      ? `${it.strokeWidth}px solid ${withAlpha(it.stroke || "#15151c", it.strokeAlpha)}`
+                      : undefined,
                     background: it.type === "image"
                       ? `center/${it.fit === "contain" ? "contain" : "cover"} no-repeat url(${it.url})`
-                      : it.fill }} />
+                      : fillOf(it) }} />
                   {on && !editing && (() => {
                       const k = 1 / cam.s, hs = 9 * k, rs = 15 * k, bw = 1.6 * k;
                       const bh = it.h || (String(it.text ?? "").split("\n").length || 1) * canvasLH(it);
@@ -18874,6 +18920,48 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               ], v => set("align", v))}
             </>)}
 
+            {canStroke(selItem) && (<>
+              {label(de ? "Kontur" : "Stroke")}
+              {!selItem.strokeWidth ? (
+                <div onClick={() => set2({ strokeWidth: 2, stroke: palette[0], strokeAlpha: 100 })}
+                  style={{ marginTop: 6, padding: "9px 12px", borderRadius: 9, textAlign: "center",
+                    cursor: "pointer", border: `1px dashed ${line}`, color: theme.textDim, fontSize: 12 }}>
+                  {de ? "Kontur hinzufügen" : "Add a stroke"}
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, padding: "8px 10px",
+                    borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                    <div style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+                      border: `1px solid ${line}`,
+                      background: withAlpha(selItem.stroke || "#15151c", selItem.strokeAlpha) }} />
+                    <input value={String(selItem.stroke || "#15151c").replace("#", "").toUpperCase()}
+                      onChange={e => { const v = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
+                        if (v.length === 6) set2({ stroke: "#" + v }); }}
+                      style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
+                        color: theme.text, fontFamily: FONT, fontSize: 12.5, letterSpacing: 0.4 }} />
+                    <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0,
+                      paddingLeft: 8, borderLeft: `1px solid ${line}` }}>
+                      <input value={selItem.strokeAlpha == null ? 100 : selItem.strokeAlpha}
+                        onChange={e => set2({ strokeAlpha: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+                        style={{ width: 30, border: "none", outline: "none", background: "transparent",
+                          color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
+                      <span style={{ fontSize: 11.5, color: theme.textFaint }}>%</span>
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, marginTop: 6 }}>
+                    {num(selItem.strokeWidth, v => set2({ strokeWidth: Math.max(0, Number(v) || 0) }), "▭")}
+                    <div onClick={() => set2({ strokeWidth: undefined })}
+                      style={{ padding: "8px 12px", borderRadius: 9, cursor: "pointer", fontSize: 12,
+                        color: theme.textDim, border: `1px solid ${line}`, alignSelf: "center" }}>
+                      {de ? "Entfernen" : "Remove"}
+                    </div>
+                  </div>
+                  {swatch(selItem.stroke || "#15151c", c => set2({ stroke: c }))}
+                </>
+              )}
+            </>)}
+
             {/* Effects. Figma lists them; here they are three switches, because a
                 list of one-of-each is a list with nothing to sort. */}
             {label(de ? "Effekte" : "Effects")}
@@ -18964,13 +19052,25 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               return (<>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, padding: "8px 10px",
                   borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
-                  <div style={{ width: 20, height: 20, borderRadius: 5, background: cur,
-                    border: `1px solid ${line}`, flexShrink: 0 }} />
-                  <input value={cur.replace("#", "").toUpperCase()}
+                  {/* The swatch shows the colour AT its opacity, over a chequer —
+                      a 20% fill that previews as solid tells you nothing. */}
+                  <div style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+                    border: `1px solid ${line}`, backgroundColor: "#fff",
+                    backgroundImage: `linear-gradient(${withAlpha(cur, selItem.fillAlpha)}, ${withAlpha(cur, selItem.fillAlpha)}), conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)`,
+                    backgroundSize: "auto, 8px 8px" }} />
+                  <input value={String(cur).replace("#", "").toUpperCase()}
                     onChange={e => { const v = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
                       if (v.length === 6) set(key, "#" + v); }}
-                    style={{ width: "100%", border: "none", outline: "none", background: "transparent",
+                    style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
                       color: theme.text, fontFamily: FONT, fontSize: 12.5, letterSpacing: 0.4 }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0,
+                    paddingLeft: 8, borderLeft: `1px solid ${line}` }}>
+                    <input value={selItem.fillAlpha == null ? 100 : selItem.fillAlpha}
+                      onChange={e => set("fillAlpha", Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                      style={{ width: 30, border: "none", outline: "none", background: "transparent",
+                        color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
+                    <span style={{ fontSize: 11.5, color: theme.textFaint }}>%</span>
+                  </div>
                 </div>
                 {swatch(cur, c => set(key, c))}
               </>);
