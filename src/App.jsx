@@ -17380,12 +17380,37 @@ const PATTERN_TYPES = [
   ["grid",     { de: "Raster", en: "Grid" }],
   ["checks",   { de: "Schachbrett", en: "Checks" }],
 ];
+// What the mark is, where the pattern is made of marks; how the line is drawn,
+// where it is made of lines. One dropdown, two vocabularies, picked by the
+// pattern — a dash style means nothing to a field of dots.
+const PATTERN_SHAPES = [
+  ["circle",   { de: "Kreis", en: "Circle" }],
+  ["square",   { de: "Quadrat", en: "Square" }],
+  ["triangle", { de: "Dreieck", en: "Triangle" }],
+  ["ring",     { de: "Ring", en: "Ring" }],
+];
+const PATTERN_DASHES = [
+  ["solid",    { de: "Durchgezogen", en: "Solid" }],
+  ["dashed",   { de: "Gestrichelt", en: "Dashed" }],
+  ["dotted",   { de: "Gepunktet", en: "Dotted" }],
+  ["dashdot",  { de: "Strichpunkt", en: "Dash-dot" }],
+  ["longdash", { de: "Lang gestrichelt", en: "Long dash" }],
+];
+const patternVariants = (kind) =>
+  (kind === "dots" || kind === "checks") ? PATTERN_SHAPES : PATTERN_DASHES;
+const defaultVariant = (kind) =>
+  kind === "dots" ? "circle" : kind === "checks" ? "square" : "solid";
+const variantName = (kind, v, de) => {
+  const l = patternVariants(kind).find(([k]) => k === v)?.[1];
+  return l ? (de ? l.de : l.en) : "";
+};
+
 const patternName = (p, de) => {
   const l = PATTERN_TYPES.find(([v]) => v === p?.pattern)?.[1];
   return l ? (de ? l.de : l.en) : String(p?.pattern || "");
 };
 const defaultPattern = (from) => ({
-  pattern: "dots", color: "#15151C", gap: 24, size: 4,
+  pattern: "dots", variant: "circle", color: "#15151C", gap: 24, size: 4,
   bg: typeof from === "string" && /^#[0-9a-f]{6}$/i.test(from) ? from : "#FFFFFF",
 });
 // A pattern where the mark is as wide as the spacing is a solid colour, so the
@@ -17410,22 +17435,69 @@ const patternGeom = (p) => {
 const PATTERN_SCALE = 2;
 const patternTile = (p) => {
   const { gap, size } = patternGeom(p);
+  const kind = p.pattern;
+  const variant = p.variant || defaultVariant(kind);
   const c = document.createElement("canvas");
   c.width = c.height = gap * PATTERN_SCALE;
   const x = c.getContext("2d");
   x.scale(PATTERN_SCALE, PATTERN_SCALE);
   if (p.bg && p.bg !== "transparent") { x.fillStyle = p.bg; x.fillRect(0, 0, gap, gap); }
   x.fillStyle = x.strokeStyle = p.color || "#15151C";
-  x.lineWidth = size;
-  if (p.pattern === "lines") {
-    x.fillRect(0, (gap - size) / 2, gap, size);
-  } else if (p.pattern === "grid") {
-    x.fillRect(0, (gap - size) / 2, gap, size);
-    x.fillRect((gap - size) / 2, 0, size, gap);
-  } else if (p.pattern === "diagonal") {
+  x.lineCap = "butt";
+
+  // One mark, centred, d across. A triangle keeps the width and takes the
+  // height an equilateral one has, so it sits in the same box as the others
+  // instead of being the odd one that overflows the spacing.
+  const mark = (cx, cy, d, shape) => {
+    if (shape === "square") { x.fillRect(cx - d / 2, cy - d / 2, d, d); return; }
+    if (shape === "triangle") {
+      const h = (d * Math.sqrt(3)) / 2;
+      x.beginPath();
+      x.moveTo(cx, cy - h / 2);
+      x.lineTo(cx + d / 2, cy + h / 2);
+      x.lineTo(cx - d / 2, cy + h / 2);
+      x.closePath(); x.fill();
+      return;
+    }
+    if (shape === "ring") {
+      const lw = Math.max(0.5, d / 3.5);
+      x.save(); x.setLineDash([]); x.lineWidth = lw;
+      x.beginPath(); x.arc(cx, cy, Math.max(0.25, (d - lw) / 2), 0, Math.PI * 2); x.stroke();
+      x.restore();
+      return;
+    }
+    x.beginPath(); x.arc(cx, cy, d / 2, 0, Math.PI * 2); x.fill();
+  };
+
+  // Every cycle divides the distance the pattern repeats over, or the dash
+  // restarts mid-stride in the next tile and the seam shows. That distance is
+  // the spacing for a straight line and the spacing times √2 along a diagonal,
+  // because a diagonal crosses one tile over that much more line.
+  const dash = (unit) =>
+    variant === "dashed" ? [unit / 2, unit / 2]
+    : variant === "dotted" ? [unit / 8, unit / 8]
+    : variant === "dashdot" ? [unit / 2, unit / 8, unit / 4, unit / 8]
+    : variant === "longdash" ? [unit * 0.75, unit * 0.25]
+    : [];
+
+  if (kind === "lines") {
+    x.lineWidth = size; x.setLineDash(dash(gap));
+    x.beginPath(); x.moveTo(0, gap / 2); x.lineTo(gap, gap / 2); x.stroke();
+  } else if (kind === "grid") {
+    x.lineWidth = size; x.setLineDash(dash(gap));
+    // Two subpaths, because a dash restarts at the start of each one — which is
+    // what makes both directions line up with their own neighbours.
+    x.beginPath();
+    x.moveTo(0, gap / 2); x.lineTo(gap, gap / 2);
+    x.moveTo(gap / 2, 0); x.lineTo(gap / 2, gap);
+    x.stroke();
+  } else if (kind === "diagonal") {
     // Every line x + y = k·gap. That set survives a shift of one tile in either
     // direction — k just moves on by one — which is exactly what "seamless"
-    // means here. Drawn well past the edges so the corners are covered.
+    // means here. All of them start at the same parameter, so a dashed one is
+    // in the same phase as its neighbour. Drawn well past the edges so the
+    // corners are covered.
+    x.lineWidth = size; x.setLineDash(dash(gap * Math.SQRT2));
     x.beginPath();
     for (let k = -1; k <= 3; k++) {
       const c0 = k * gap;
@@ -17433,25 +17505,25 @@ const patternTile = (p) => {
       x.lineTo(c0 - gap * 2, gap * 2);
     }
     x.stroke();
-  } else if (p.pattern === "checks") {
-    // The squares ARE the pattern, so this one ignores the mark size and takes
-    // its scale from the spacing alone.
-    x.fillRect(0, 0, gap / 2, gap / 2);
-    x.fillRect(gap / 2, gap / 2, gap / 2, gap / 2);
+  } else if (kind === "checks") {
+    // The marks ARE the pattern, so this one takes its scale from the spacing
+    // alone and fills the two diagonal cells.
+    const d = gap / 2;
+    mark(d / 2, d / 2, d, variant);
+    mark(gap - d / 2, gap - d / 2, d, variant);
   } else {
-    x.beginPath();
-    x.arc(gap / 2, gap / 2, size / 2, 0, Math.PI * 2);
-    x.fill();
+    mark(gap / 2, gap / 2, size, variant);
   }
   return c;
 };
+
 
 // toDataURL is not cheap and a fill re-renders on every pointer move, so the
 // tiles are kept. Keyed by everything that changes the picture.
 const patternUrlCache = new Map();
 const patternUrl = (p) => {
   const { gap, size } = patternGeom(p);
-  const key = [p.pattern, p.color, p.bg, gap, size].join("|");
+  const key = [p.pattern, p.variant, p.color, p.bg, gap, size].join("|");
   let url = patternUrlCache.get(key);
   if (!url) {
     if (patternUrlCache.size > 80) patternUrlCache.clear();
@@ -17908,11 +17980,33 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, de,
                 for the one case where it does not. */}
             <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
               {PATTERN_TYPES.map(([k, l]) => (
-                <div key={k} title={de ? l.de : l.en} onClick={() => putPattern({ pattern: k })}
+                <div key={k} title={de ? l.de : l.en}
+                  // The variant resets with the type: a dash style carried over
+                  // to a field of dots is a setting that reads as nothing.
+                  onClick={() => putPattern({ pattern: k, variant: defaultVariant(k) })}
                   style={{ flex: 1, minWidth: 0, height: 46, borderRadius: 10, cursor: "pointer",
                     background: patternPreviewCss(k),
                     border: `1px solid ${pat.pattern === k ? "#15151c" : theme.borderFaint}` }} />
               ))}
+            </div>
+
+            {/* What the mark is, or how the line is drawn — the list follows the
+                pattern above it. */}
+            <div style={{ position: "relative", display: "flex", alignItems: "center", marginTop: 10,
+              padding: "0 12px", height: 36, borderRadius: 10, flexShrink: 0,
+              background: soft }}>
+              <select value={pat.variant || defaultVariant(pat.pattern)}
+                onChange={(e) => putPattern({ variant: e.target.value })}
+                style={{ width: "100%", border: "none", outline: "none", background: "transparent",
+                  color: theme.text, fontFamily: FONT, fontSize: 12.5, appearance: "none",
+                  cursor: "pointer" }}>
+                {patternVariants(pat.pattern).map(([v]) => (
+                  <option key={v} value={v}>{variantName(pat.pattern, v, de)}</option>
+                ))}
+              </select>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme.textFaint}
+                strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                <polyline points="6 9 12 15 18 9"/></svg>
             </div>
 
             <div style={lower}>
