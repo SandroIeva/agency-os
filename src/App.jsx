@@ -17462,6 +17462,21 @@ const patternUrl = (p) => {
 };
 const patternCss = (p) => `url(${patternUrl(p)}) 0 0 / ${patternGeom(p).gap}px ${patternGeom(p).gap}px repeat`;
 
+// The chooser's five tiles are a fixed picture of what each pattern IS: always
+// the same black on white, at a spacing picked to read at tile size. Following
+// the live settings meant all five redrew every time a slider moved — and at a
+// wide spacing in a pale colour, several of them showed nothing at all, which
+// is exactly the moment you need to tell them apart.
+const PATTERN_PREVIEW = {
+  dots:     { gap: 13, size: 6 },
+  lines:    { gap: 13, size: 6 },
+  diagonal: { gap: 13, size: 6 },
+  grid:     { gap: 13, size: 6 },
+  checks:   { gap: 14, size: 4 },
+};
+const patternPreviewCss = (k) =>
+  patternCss({ pattern: k, color: "#15151C", bg: "#FFFFFF", ...(PATTERN_PREVIEW[k] || {}) });
+
 // The canvas gradient editor: a type, an angle, and a list of stops, each with a
 // position, a colour and its own opacity.
 //
@@ -17895,7 +17910,7 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, de,
               {PATTERN_TYPES.map(([k, l]) => (
                 <div key={k} title={de ? l.de : l.en} onClick={() => putPattern({ pattern: k })}
                   style={{ flex: 1, minWidth: 0, height: 46, borderRadius: 10, cursor: "pointer",
-                    background: patternCss({ ...pat, pattern: k }),
+                    background: patternPreviewCss(k),
                     border: `1px solid ${pat.pattern === k ? "#15151c" : theme.borderFaint}` }} />
               ))}
             </div>
