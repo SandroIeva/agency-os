@@ -17377,7 +17377,10 @@ const gradientCanvas = (ctx, g, b) => {
 // and the export maps the object onto that quadrilateral.
 //
 // Both come from this one function, which is the only way the two can agree.
-const D3_DEFAULT = { rx: 0, ry: 0, z: 0, persp: 800 };
+// ox/oy move the point everything turns around away from the object's own
+// centre. That is what lets a GROUP turn as one body: every member keeps its
+// own picture but shares one pivot, the middle of the group.
+const D3_DEFAULT = { rx: 0, ry: 0, z: 0, persp: 800, ox: 0, oy: 0 };
 const d3Of = (it) => ({ ...D3_DEFAULT, ...(it?.d3 || {}) });
 const has3d = (it) => {
   const d = it?.d3;
@@ -17385,6 +17388,9 @@ const has3d = (it) => {
 };
 const d3Css = (d) =>
   `perspective(${d.persp}px) translateZ(${d.z}px) rotateX(${d.rx}deg) rotateY(${d.ry}deg)`;
+// Where CSS should turn from, written relative to the element's own box —
+// the transform origin IS the projection origin.
+const d3Origin = (d, w, h) => `${w / 2 + (d.ox || 0)}px ${h / 2 + (d.oy || 0)}px`;
 
 // A point of the element, in coordinates relative to its centre — which is
 // where CSS puts the transform origin, and therefore where the projection
@@ -17439,9 +17445,16 @@ const drawTri = (ctx, src, s0, s1, s2, d0, d1, d2) => {
 };
 // `src` holds the region [-halfW, halfW] x [-halfH, halfH] of the element,
 // measured from its centre, which is where the projection happens from.
+// (cx, cy) is the PIVOT — the point the projection happens from, which for a
+// grouped object is the middle of the group rather than of the object. The
+// texture still sits around the object's own centre, so its coordinates are
+// carried across by the same offset the pivot was moved by.
 const drawProjected = (ctx, src, d, halfW, halfH, cx, cy, n = 20) => {
+  const ox = Number(d.ox) || 0, oy = Number(d.oy) || 0;
   const at = (i, j) => {
-    const [px, py] = d3Project(d, -halfW + (2 * halfW * i) / n, -halfH + (2 * halfH * j) / n);
+    const [px, py] = d3Project(d,
+      -halfW + (2 * halfW * i) / n - ox,
+      -halfH + (2 * halfH * j) / n - oy);
     return [cx + px, cy + py];
   };
   const su = (i) => (src.width * i) / n, sv = (j) => (src.height * j) / n;
@@ -19373,6 +19386,26 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setEnteredGroup(null);
   };
 
+  // Depth applied to a GROUP: every member gets the same rotation, and each one
+  // gets the offset that puts the pivot on the middle of the group. Written to
+  // the members rather than to a group object, because a group here is a shared
+  // id and nothing else — there is no row to hang it on.
+  const setGroupD3 = (gid, o) => {
+    const members = items.filter(i => i.groupId === gid);
+    if (!members.length) return;
+    const gb = unionBox(members);
+    const gx = gb.x + gb.w / 2, gy = gb.y + gb.h / 2;
+    const base = d3Of(members.find(m => m.d3) || null);
+    markChange();
+    setItems(list => list.map(i => {
+      if (i.groupId !== gid) return i;
+      if (o === null) return { ...i, d3: undefined };
+      const b = boxOf(i);
+      return { ...i, d3: { ...base, ...o,
+        ox: gx - (b.x + b.w / 2), oy: gy - (b.y + b.h / 2) } };
+    }));
+  };
+
   // Moving something means moving whatever it is drawn from: a pen stroke has
   // an offset, a line has two ends, everything else has a corner.
   const shiftItem = (i, dx, dy) =>
@@ -19745,7 +19778,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         await paintFlat(oc);
         const keep = ctx.filter;
         ctx.filter = "none";
-        drawProjected(ctx, off, d, tw / 2, th / 2, bx.x + bx.w / 2, bx.y + bx.h / 2, 20);
+        drawProjected(ctx, off, d, tw / 2, th / 2,
+          bx.x + bx.w / 2 + (Number(d.ox) || 0), bx.y + bx.h / 2 + (Number(d.oy) || 0), 20);
         ctx.filter = keep;
       } else {
         await paintFlat(ctx);
@@ -20353,9 +20387,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     // list, so a repeat's placement is a flat move outside the
                     // depth — which is the order the export uses too: the
                     // placement on the canvas, the projection within it.
-                    transform: [ri ? repeatCss(pl) : "", has3d(it) ? d3Css(d3Of(it)) : ""]
-                      .filter(Boolean).join(" ") || undefined,
+                    transform: ri ? repeatCss(pl) : undefined,
                     pointerEvents: "none" }}>
+                  {/* Depth sits on a wrapper of its own, because it turns about
+                      a different point than a repeat does: the repeat about the
+                      object's centre, the depth about a pivot that a group
+                      shares. One element cannot hold two origins. */}
+                  <div style={{ position: "absolute", inset: 0,
+                    transform: has3d(it) ? d3Css(d3Of(it)) : undefined,
+                    transformOrigin: has3d(it) ? d3Origin(d3Of(it), it.w, it.h) : undefined }}>
                   <div style={{ position: "absolute", inset: 0, clipPath: maskClip(it) || polyClip(it),
                     opacity: it.opacity == null ? 1 : it.opacity,
                     mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
@@ -20389,6 +20429,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         stroke={withAlpha(it.stroke || "#15151c", it.strokeAlpha)} />
                     </svg>
                   )}
+                  </div>
                   </div>
                   ))}
                   {on && !editing && (() => {
@@ -21434,8 +21475,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               )}
             </div>
             {advOpen && (() => {
-              const d = d3Of(selItem);
-              const put = (o) => set2({ d3: { ...d, ...o } });
+              // A selected group turns as one body, so the sliders write to
+              // every member — otherwise they tilt the one part that happened
+              // to be clicked and the group falls apart on screen.
+              const gid = panelGid;
+              const members = gid ? items.filter(i => i.groupId === gid) : [];
+              const d = d3Of(gid ? (members.find(m => m.d3) || null) : selItem);
+              const put = (o) => (gid ? setGroupD3(gid, o) : set2({ d3: { ...d, ...o } }));
+              const clear = () => (gid ? setGroupD3(gid, null) : set2({ d3: undefined }));
+              const on = gid ? members.some(has3d) : has3d(selItem);
               return (
                 <div style={{ marginTop: 2 }}>
                   <div style={{ fontSize: 11, color: theme.textFaint, marginBottom: 6 }}>
@@ -21468,8 +21516,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       onCommit={(v) => put({ persp: Math.max(50, v) })}
                       theme={theme} darkMode={darkMode} />
                   </div>
-                  {has3d(selItem) && (
-                    <div onClick={() => set2({ d3: undefined })}
+                  {on && (
+                    <div onClick={clear}
                       style={{ marginTop: 8, height: 32, borderRadius: 9, display: "flex",
                         alignItems: "center", justifyContent: "center", cursor: "pointer",
                         fontFamily: FONT, fontSize: 12.5, color: theme.textDim,
