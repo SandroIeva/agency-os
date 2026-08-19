@@ -18572,7 +18572,24 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // Field helpers, at component level because BOTH panels use them — the frame
   // and the selected element. They lived inside the selection closure, so the
   // frame panel referenced identifiers that did not exist there.
-        const num = (value, onChange, glyph, suffix = "") => (
+        // The corner-radius mark: a line running in and turning down around one
+  // rounded corner. "⌐" was standing in for it and reads as a stray bracket.
+  const radiusGlyph = (size = 13) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 4h-9a8 8 0 00-8 8v9" />
+    </svg>
+  );
+  // The same mark turned to whichever corner it labels.
+  const cornerGlyph = (i) => (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      style={{ transform: `rotate(${[0, 90, 180, 270][i] || 0}deg)` }}>
+      <path d="M21 4h-9a8 8 0 00-8 8v9" />
+    </svg>
+  );
+
+  const num = (value, onChange, glyph, suffix = "") => (
           <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
             borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
             <span style={{ fontSize: 11, color: theme.textFaint, minWidth: 13 }}>{glyph}</span>
@@ -19681,7 +19698,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             {label(de ? "Eckenradius" : "Corner radius")}
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, padding: "8px 10px",
               borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
-              <span style={{ fontSize: 11, color: theme.textFaint, minWidth: 13 }}>⌐</span>
+              <span style={{ display: "flex", color: theme.textFaint }}>{radiusGlyph()}</span>
               <NumberField value={frameRadius} min={0} onCommit={setFrameRadius}
                 style={{ width: "100%", border: "none", outline: "none", background: "transparent",
                   color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
@@ -19843,8 +19860,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               </div>
               {Array.isArray(selItem.radii) && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 6 }}>
-                  {[[0, de ? "Oben links" : "Top left", "◜"], [1, de ? "Oben rechts" : "Top right", "◝"],
-                    [3, de ? "Unten links" : "Bottom left", "◟"], [2, de ? "Unten rechts" : "Bottom right", "◞"],
+                  {/* radii are [tl, tr, br, bl]; the grid reads left-right, top-bottom,
+                      so bottom-left (3) comes before bottom-right (2). Each mark is
+                      turned to the corner it stands for. */}
+                  {[[0, de ? "Oben links" : "Top left", cornerGlyph(0)],
+                    [1, de ? "Oben rechts" : "Top right", cornerGlyph(1)],
+                    [3, de ? "Unten links" : "Bottom left", cornerGlyph(3)],
+                    [2, de ? "Unten rechts" : "Bottom right", cornerGlyph(2)],
                   ].map(([i2, ttl, glyph]) => (
                     <div key={i2} title={ttl}>
                       {num(selItem.radii[i2], v => {
