@@ -17370,6 +17370,125 @@ const gradientCanvas = (ctx, g, b) => {
   return grad;
 };
 
+// Three pure helpers, at module level because the Creations list needs them
+// too: a card there draws a real preview of the canvas, and it has to reach the
+// same "what does this fill look like" the editor uses. Duplicating that is how
+// a preview starts lying about the file.
+const withAlpha = (col, pct) => {
+  if (pct == null || pct >= 100) return col;
+  const a = Math.max(0, Math.min(100, pct)) / 100;
+  const m = /^#([0-9a-f]{6})$/i.exec(String(col || ""));
+  if (!m) return col;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+};
+const paintCss = (v, alpha) =>
+  isGradient(v) ? gradientCss(v)
+  : isImageFill(v) ? `center/${v.fit === "contain" ? "contain" : "cover"} no-repeat url(${v.src})`
+  : isPattern(v) ? patternCss(v)
+  : withAlpha(v, alpha);
+const radiiOf = (it) => Array.isArray(it.radii) && it.radii.length === 4
+  ? it.radii.map(v => Math.max(0, Number(v) || 0))
+  : [0, 1, 2, 3].map(() => Math.max(0, Number(it.radius) || 0));
+
+// ── Canvas preview ───────────────────────────────────────────────────────────
+// A real picture of a canvas, small. Built from the saved document rather than
+// from a stored image, so it is never a version behind what is in the file and
+// costs no storage — the same reason the templates in the editor draw
+// themselves instead of shipping screenshots.
+//
+// It draws through the same fill, depth and repeat helpers the editor and the
+// export use. What it leaves out, it leaves out visibly: pen strokes, arrows
+// and comments are not in a thumbnail worth 200 pixels.
+function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
+  const W = Number(doc?.w) || Number(w) || 1;
+  const H = Number(doc?.h) || Number(h) || 1;
+  // Measured, not computed in CSS. `scale()` wants a number and 100cqw is a
+  // length — `scale(calc(100cqw / 1600))` parses as nothing and silently draws
+  // the canvas at full size inside a 240px card. Checked in the browser before
+  // settling on this.
+  const boxRef = useRef(null);
+  const [k, setK] = useState(0);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const read = () => setK(el.clientWidth / W);
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [W]);
+  const items = Array.isArray(doc?.items) ? doc.items : [];
+  const bg = doc?.bg;
+  const chequer = "conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)";
+  return (
+    <div ref={boxRef} style={{ position: "relative", width: "100%", aspectRatio: `${W} / ${H}`,
+      maxHeight: "100%", borderRadius: radius, overflow: doc?.clip === false ? "visible" : "hidden",
+      ...style,
+      ...(bg && bg !== "transparent"
+        ? { background: paintCss(bg, 100) }
+        : { backgroundColor: "#fff", backgroundImage: chequer, backgroundSize: "10px 10px" }) }}>
+      {/* One square viewport, then everything inside it in the canvas's own
+          coordinates: the scale is a transform, so nothing has to be divided by
+          hand and the numbers stay the ones in the document. */}
+      <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+        <div style={{ position: "absolute", left: 0, top: 0, width: W, height: H,
+          transformOrigin: "0 0", transform: `scale(${k})`,
+          // Nothing until the width is known, or the canvas flashes at full
+          // size for one frame inside a card a tenth its size.
+          visibility: k ? "visible" : "hidden" }}>
+          {items.filter(it => it && !it.isMask && !it.hidden
+            && !["draw", "arrow", "line", "comment"].includes(it.type)).map(it => {
+            const isText = it.type === "text" || it.type === "sticky";
+            const bw = Number(it.w) || 0;
+            const bh = Number(it.h) || (isText
+              ? (String(it.text ?? "").split("\n").length || 1) * canvasLH(it) : 0);
+            const spin = [it.rot ? `rotate(${it.rot}deg)` : "",
+              it.flipX ? "scaleX(-1)" : "", it.flipY ? "scaleY(-1)" : ""].filter(Boolean).join(" ");
+            const inner = (
+              <div style={{ position: "absolute", inset: 0,
+                opacity: it.opacity == null ? 1 : it.opacity,
+                borderRadius: it.type === "ellipse" ? "50%"
+                  : radiiOf(it).map(v => `${v}px`).join(" "),
+                clipPath: polyOf(it)
+                  ? `polygon(${polyOf(it).map(([fx, fy]) => `${fx * 100}% ${fy * 100}%`).join(", ")})`
+                  : undefined,
+                ...(it.type === "image"
+                  ? { background: `center/${it.fit === "contain" ? "contain" : "cover"} no-repeat url(${it.url})` }
+                  : isText && it.type === "text" ? {}
+                  : { background: paintCss(it.fill, it.fillAlpha) }),
+                ...(isText ? { font: canvasFont(it), color: it.color,
+                  lineHeight: `${canvasLH(it)}px`, textAlign: it.align || "left",
+                  whiteSpace: "pre", overflow: "hidden",
+                  padding: it.type === "sticky" ? Math.round(bw * 0.08) : 0,
+                  boxSizing: "border-box" } : {}) }}>
+                {isText ? String(it.text ?? "") : null}
+              </div>
+            );
+            return (
+              <div key={it.id} style={{ position: "absolute", left: it.x, top: it.y,
+                width: bw, height: bh || undefined,
+                ...(spin ? { transform: spin, transformOrigin: "center" } : {}) }}>
+                {repeatPlacements(it.repeat).map((pl, ri) => (
+                  <div key={ri} style={{ position: "absolute", inset: 0,
+                    transform: ri ? repeatCss(pl) : undefined }}>
+                    <div style={{ position: "absolute", inset: 0,
+                      transform: has3d(it) ? d3Transform(d3Of(it), it) : undefined,
+                      transformOrigin: has3d(it)
+                        ? d3Origin(d3Of(it), it, bw, bh || bw) : undefined }}>
+                      {inner}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Depth ────────────────────────────────────────────────────────────────────
 // Turning a flat object in space. The editor gets a CSS 3D transform; the
 // export cannot — a canvas has only affine transforms, and perspective is not
@@ -18511,9 +18630,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     return raw.map(v => Math.min(cap, Math.max(0, Number(v) || 0)));
   };
 
-  const radiiOf = (it) => Array.isArray(it.radii) && it.radii.length === 4
-    ? it.radii.map(v => Math.max(0, Number(v) || 0))
-    : [0, 1, 2, 3].map(() => Math.max(0, Number(it.radius) || 0));
 
   // ONE filter string, handed to CSS on screen and to ctx.filter on export.
   // The canvas filter takes the same functions CSS does, so building the string
@@ -18539,14 +18655,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // Kept separate from the element's opacity: making a fill see-through so the
   // background blur shows is not the same as fading the whole object, handles
   // and shadow included.
-  const withAlpha = (col, pct) => {
-    if (pct == null || pct >= 100) return col;
-    const a = Math.max(0, Math.min(100, pct)) / 100;
-    const m = /^#([0-9a-f]{6})$/i.exec(String(col || ""));
-    if (!m) return col;
-    const n = parseInt(m[1], 16);
-    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
-  };
   // A shadow's colour is a hex plus its own opacity, like every other colour
   // here — older documents stored a finished rgba() string, so those are passed
   // through untouched rather than being mangled into a hex.
@@ -18560,11 +18668,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // this editor — a shape, the frame behind it, the swatch in the panel — goes
   // through here, so none of them can learn about a new kind of fill later than
   // the others.
-  const paintCss = (v, alpha) =>
-    isGradient(v) ? gradientCss(v)
-    : isImageFill(v) ? `center/${v.fit === "contain" ? "contain" : "cover"} no-repeat url(${v.src})`
-    : isPattern(v) ? patternCss(v)
-    : withAlpha(v, alpha);
   const fillOf = (it) => paintCss(it.fill, it.fillAlpha);
   // What a swatch shows: the fill over a chequer, so a see-through colour does
   // not preview as solid. A gradient, an image and a pattern bring their own
@@ -24664,6 +24767,13 @@ const creationFormats = (de) => {
 function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, appLanguage = "de",
                          canEdit = true, projectId = null, onPublish = null }) {
   const de = appLanguage === "de";
+  // A canvas is any shape; the tile it sits in is not. Fitting is a choice of
+  // which side touches the edge, and the aspect decides it.
+  const fitStyle = (r) => {
+    const w = Number(r?.doc?.w) || Number(r?.w) || 1;
+    const h = Number(r?.doc?.h) || Number(r?.h) || 1;
+    return w / h >= 4 / 3 ? { width: "100%", height: "auto" } : { height: "100%", width: "auto" };
+  };
   const [kind, setKind] = useState("social");
   const [rows, setRows] = useState(null);          // null = loading
   const [folders, setFolders] = useState([]);
@@ -24916,12 +25026,16 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
             {visible.map(r => (
               <div key={r.id} style={{ ...card, overflow: "hidden" }}>
                 <div onClick={() => setEditing(r)}
-                  style={{ aspectRatio: "4 / 3", cursor: "pointer",
-                    background: r.thumb_url
-                      ? `center/contain no-repeat ${darkMode ? "#111117" : "#F3F3F5"} url(${r.thumb_url})`
-                      : (darkMode ? "#111117" : "#F3F3F5"),
+                  style={{ aspectRatio: "4 / 3", cursor: "pointer", padding: 12,
+                    boxSizing: "border-box", background: darkMode ? "#111117" : "#F3F3F5",
                     display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  {!r.thumb_url && (
+                  {/* The canvas itself, drawn from the saved document. A stored
+                      image would cost storage and be a version behind the moment
+                      anyone edits — this cannot be. */}
+                  {r.doc ? (
+                    <CanvasThumb doc={r.doc} w={r.w} h={r.h} theme={theme} radius={3}
+                      style={fitStyle(r)} />
+                  ) : (
                     <span style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textFaint }}>
                       {r.w} × {r.h}
                     </span>
@@ -24963,6 +25077,12 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
               <div key={r.id} onClick={() => setEditing(r)}
                 style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", cursor: "pointer",
                   borderTop: i ? `1px solid ${theme.borderFaint}` : "none" }}>
+                <div style={{ width: 46, height: 34, flexShrink: 0, borderRadius: 5,
+                  display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
+                  background: darkMode ? "#111117" : "#F3F3F5" }}>
+                  {r.doc && <CanvasThumb doc={r.doc} w={r.w} h={r.h} theme={theme} radius={2}
+                    style={fitStyle(r)} />}
+                </div>
                 <div style={{ width: 52, height: 38, borderRadius: 7, flexShrink: 0,
                   background: r.thumb_url
                     ? `center/contain no-repeat ${darkMode ? "#111117" : "#F3F3F5"} url(${r.thumb_url})`
