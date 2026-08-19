@@ -17183,6 +17183,39 @@ const CANVAS_TEMPLATES = [
     } },
 ];
 
+// A slider shaped like a field: label on the left, the value on the right, and
+// the fill itself showing where you are. A bare track tells you the position but
+// never what it sets or what it currently reads — both of which you want while
+// dragging, not after.
+function SliderField({ label, value, min = 0, max = 100, step = 1, suffix = "",
+                       onChange, theme, darkMode }) {
+  const ref = useRef(null);
+  const pct = Math.max(0, Math.min(1, (value - min) / (max - min || 1)));
+  const setFromX = (clientX) => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r || !r.width) return;
+    const t = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+    const raw = min + t * (max - min);
+    onChange(Math.round(raw / step) * step);
+  };
+  return (
+    <div ref={ref}
+      onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); setFromX(e.clientX); }}
+      onPointerMove={(e) => { if (e.buttons) setFromX(e.clientX); }}
+      style={{ position: "relative", height: 34, borderRadius: 999, overflow: "hidden",
+        cursor: "ew-resize", userSelect: "none", display: "flex", alignItems: "center",
+        padding: "0 14px", background: darkMode ? "rgba(255,255,255,0.07)" : "#F1F1F4" }}>
+      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct * 100}%`,
+        background: darkMode ? "rgba(255,255,255,0.13)" : "#E2E2E7", pointerEvents: "none" }} />
+      <span style={{ position: "relative", fontFamily: FONT, fontSize: 12.5, color: theme.textDim,
+        pointerEvents: "none" }}>{label}</span>
+      <div style={{ flex: 1 }} />
+      <span style={{ position: "relative", fontFamily: FONT, fontSize: 12.5, fontWeight: 500,
+        color: theme.text, pointerEvents: "none" }}>{value}{suffix}</span>
+    </div>
+  );
+}
+
 // A number field you can actually clear. A plain controlled input with
 // `Number(v) || fallback` snaps back the instant the last character goes, so the
 // field can never be empty and you cannot retype it. This keeps a draft string
@@ -18578,13 +18611,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     style={{ width: 32, border: "none", outline: "none", background: "transparent",
                       color: "#fff", fontFamily: FONT, fontSize: 12 }} />
                 </div>
-                <div title={de ? "Zackentiefe" : "Point depth"}
-                  style={{ display: "flex", alignItems: "center", gap: 4, padding: "0 8px 0 6px",
-                    height: 26, borderRadius: 7, background: "rgba(255,255,255,0.12)" }}>
-                  <input type="range" min={10} max={90}
-                    value={Math.round((selItem.innerRatio ?? 0.42) * 100)}
-                    onChange={e => patch(selItem.id, { innerRatio: Number(e.target.value) / 100 })}
-                    style={{ width: 62 }} />
+                {/* Labelled, because a bare track never says what it sets. It is
+                    the depth of the points, not an angle — naming it "Winkel"
+                    would be tidy and wrong. */}
+                <div style={{ width: 156 }}>
+                  <SliderField label={de ? "Tiefe" : "Depth"} suffix=" %"
+                    value={Math.round((selItem.innerRatio ?? 0.42) * 100)} min={10} max={90}
+                    onChange={v => patch(selItem.id, { innerRatio: v / 100 })}
+                    theme={{ text: "#fff", textDim: "rgba(255,255,255,0.6)" }} darkMode />
                 </div>
                 {div2}
               </>)}
@@ -19189,7 +19223,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
               <div style={{ flex: 1 }}>
-                {num(selItem.rot || 0, v => set2({ rot: Number(v) || 0 }), "∠", "°")}
+                {num(selItem.rot || 0, v => set2({ rot: Number(v) || 0 }),
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20.5 12a8.5 8.5 0 11-2.6-6.1" /><path d="M20.5 4.5V10h-5.5" />
+                  </svg>, "°")}
               </div>
               {[["flipX", <><path d="M12 4v16"/><path d="M9 8L4 12l5 4z"/><path d="M15 8l5 4-5 4z"/></>, de ? "Horizontal spiegeln" : "Flip horizontal"],
                 ["flipY", <><path d="M4 12h16"/><path d="M8 9l4-5 4 5z"/><path d="M8 15l4 5 4-5z"/></>, de ? "Vertikal spiegeln" : "Flip vertical"],
