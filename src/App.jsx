@@ -19773,19 +19773,26 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     )}
   </>);
 
-  // Figma's alignment marks, in one place now that two panels draw them: the
-  // edge you align TO as a line, and two bars of different lengths showing what
-  // moves against it. An earlier pass drew three near-identical arrows, which
-  // told you nothing about which edge was which.
+  // The alignment marks. Two weights, and that is the whole point of them: the
+  // edge you align TO is a hairline, and what MOVES against it are two heavy
+  // bars of different lengths. Drawn at one weight — as they were — an icon
+  // reads as three equal strokes and says nothing about which is the edge.
+  const alignMark = (guide, long, short) => (
+    <>
+      <path d={guide} strokeWidth="1.5" />
+      <path d={long} strokeWidth="3" />
+      <path d={short} strokeWidth="3" />
+    </>
+  );
   const ALIGN_DEFS = [
-    ["l",  <><path d="M4 4v16" /><path d="M8 9h11" /><path d="M8 15h7" /></>, "Links", "Left"],
-    ["cx", <><path d="M12 3v18" /><path d="M6.5 9h11" /><path d="M8.5 15h7" /></>,
+    ["l",  alignMark("M5 3.5V20.5", "M6.5 9.5H18.5", "M6.5 15H14"), "Links", "Left"],
+    ["cx", alignMark("M12 3V21", "M6 9.5H18", "M8.25 15H15.75"),
      "Horizontal zentrieren", "Centre horizontally"],
-    ["r",  <><path d="M20 4v16" /><path d="M5 9h11" /><path d="M9 15h7" /></>, "Rechts", "Right"],
-    ["t",  <><path d="M4 4h16" /><path d="M9 8v11" /><path d="M15 8v7" /></>, "Oben", "Top"],
-    ["cy", <><path d="M3 12h18" /><path d="M9 6.5v11" /><path d="M15 8.5v7" /></>,
+    ["r",  alignMark("M19 3.5V20.5", "M5 9.5H17.5", "M9.5 15H17.5"), "Rechts", "Right"],
+    ["t",  alignMark("M3.5 5H20.5", "M9.5 6.5V18.5", "M15 6.5V14"), "Oben", "Top"],
+    ["cy", alignMark("M3 12H21", "M9.5 6V18", "M15 8.25V15.75"),
      "Vertikal zentrieren", "Centre vertically"],
-    ["b",  <><path d="M4 20h16" /><path d="M9 5v11" /><path d="M15 9v7" /></>, "Unten", "Bottom"],
+    ["b",  alignMark("M3.5 19H20.5", "M9.5 5V17.5", "M15 9.5V17.5"), "Unten", "Bottom"],
   ];
   const alignBtn = (k, act) => {
     const [, glyph, dde, een] = ALIGN_DEFS.find(d => d[0] === k);
@@ -19794,8 +19801,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         style={{ flex: 1, height: 32, borderRadius: 8, display: "flex", alignItems: "center",
           justifyContent: "center", cursor: "pointer", color: theme.text,
           background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          strokeWidth="1.9" strokeLinecap="round">{glyph}</svg>
+        {/* No strokeWidth here: each mark sets its own, which is what keeps
+            the guide thin and the bars heavy. */}
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeLinecap="round">{glyph}</svg>
       </div>
     );
   };
