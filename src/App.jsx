@@ -17216,6 +17216,20 @@ function SliderField({ label, value, min = 0, max = 100, step = 1, suffix = "",
   );
 }
 
+// The blend modes CSS and the canvas BOTH know, under the same names —
+// mix-blend-mode and globalCompositeOperation share this vocabulary, so a mode
+// needs no translation between screen and file. Figma's "Pass through" is a
+// group concept and there are no groups here; "Plus darker" and "Plus lighter"
+// are its own, with no canvas twin, so they are left out rather than faked.
+const BLEND_MODES = [
+  ["normal", "Normal"],
+  ["darken", "Darken"], ["multiply", "Multiply"], ["color-burn", "Color burn"],
+  ["lighten", "Lighten"], ["screen", "Screen"], ["color-dodge", "Color dodge"],
+  ["overlay", "Overlay"], ["soft-light", "Soft light"], ["hard-light", "Hard light"],
+  ["difference", "Difference"], ["exclusion", "Exclusion"],
+  ["hue", "Hue"], ["saturation", "Saturation"], ["color", "Color"], ["luminosity", "Luminosity"],
+];
+
 // A number field you can actually clear. A plain controlled input with
 // `Number(v) || fallback` snaps back the instant the last character goes, so the
 // field can never be empty and you cannot retype it. This keeps a draft string
@@ -18020,6 +18034,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         ctx.drawImage(snap, 0, 0);
         ctx.restore();
       }
+      ctx.globalCompositeOperation = (it.blend && it.blend !== "normal") ? it.blend : "source-over";
       ctx.filter = effectFilter(it);
       const spun = it.rot || it.flipX || it.flipY;
       const maskShape = maskOf(it);
@@ -18154,6 +18169,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         ctx.restore();
       }
       ctx.filter = "none";
+      ctx.globalCompositeOperation = "source-over";
       if (spun) ctx.restore();
       if (maskShape) ctx.restore();
     }
@@ -18306,6 +18322,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     <div style={{ position: "absolute", inset: 0, background: it.fill,
                       padding: Math.round(it.w * 0.08), boxSizing: "border-box",
                       opacity: it.opacity == null ? 1 : it.opacity,
+                      mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
                       filter: effectFilter(it),
                       boxShadow: it.innerShadow
                         ? `inset ${it.innerShadow.x || 0}px ${it.innerShadow.y || 0}px ${it.innerShadow.blur || 0}px ${it.innerShadow.color || "rgba(0,0,0,0.35)"}, 0 2px 8px rgba(0,0,0,0.12)`
@@ -18392,6 +18409,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     <div style={{ font: canvasFont(it), color: it.color,
                       lineHeight: `${canvasLH(it)}px`, textAlign: it.align || "left",
                       letterSpacing: `${canvasLS(it)}px`, opacity: it.opacity == null ? 1 : it.opacity,
+                      mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
                       filter: effectFilter(it),
                       whiteSpace: "pre", overflow: "visible" }}>
                     {editing === it.id ? (
@@ -18512,6 +18530,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   style={{ ...common, width: it.w, height: it.h }}>
                   <div style={{ position: "absolute", inset: 0, clipPath: maskClip(it) || polyClip(it),
                     opacity: it.opacity == null ? 1 : it.opacity,
+                    mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
                     filter: effectFilter(it),
                     ...(it.bgBlur ? { backdropFilter: `blur(${it.bgBlur}px)`,
                       WebkitBackdropFilter: `blur(${it.bgBlur}px)` } : {}),
@@ -19282,11 +19301,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             <div style={two}>
               {num(Math.round((selItem.opacity == null ? 1 : selItem.opacity) * 100),
                 v => set("opacity", Math.min(100, Math.max(0, Number(v) || 0)) / 100), "◍", "%")}
-              {selItem.type === "rect"
-                ? (Array.isArray(selItem.radii)
-                    ? <div />
-                    : num(selItem.radius || 0, v => set("radius", Math.max(0, Number(v) || 0)), "⌐"))
-                : <div />}
+              {/* Beside opacity, since both answer "how does this sit on what is
+                  under it". Available on everything — text, emoji, shapes alike. */}
+              {pick(selItem.blend || "normal", BLEND_MODES, v => set("blend", v))}
             </div>
             {selItem.type === "rect" && (<>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
