@@ -17188,7 +17188,7 @@ const CANVAS_TEMPLATES = [
 // never what it sets or what it currently reads — both of which you want while
 // dragging, not after.
 function SliderField({ label, value, min = 0, max = 100, step = 1, suffix = "",
-                       onChange, theme, darkMode }) {
+                       height = 34, radius = 999, onChange, theme, darkMode }) {
   const ref = useRef(null);
   const pct = Math.max(0, Math.min(1, (value - min) / (max - min || 1)));
   const setFromX = (clientX) => {
@@ -17202,7 +17202,7 @@ function SliderField({ label, value, min = 0, max = 100, step = 1, suffix = "",
     <div ref={ref}
       onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); setFromX(e.clientX); }}
       onPointerMove={(e) => { if (e.buttons) setFromX(e.clientX); }}
-      style={{ position: "relative", height: 34, borderRadius: 999, overflow: "hidden",
+      style={{ position: "relative", height, borderRadius: radius, overflow: "hidden",
         cursor: "ew-resize", userSelect: "none", display: "flex", alignItems: "center",
         padding: "0 14px", background: darkMode ? "rgba(255,255,255,0.07)" : "#F1F1F4" }}>
       <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct * 100}%`,
@@ -17470,7 +17470,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     return `inset(${dy}px ${it.w - (dx + b.w)}px ${it.h - (dy + b.h)}px ${dx}px round ${r}px)`;
   };
 
-  const canStroke = (it) => ["rect", "image", "sticky", "ellipse"].includes(it.type);
+  const canStroke = (it) => ["rect", "image", "sticky", "ellipse"].includes(it.type) || !!polyOf(it);
+  // Two ways to draw the same outline, because the shapes are drawn two ways.
+  // A CSS border follows the border BOX, so on a clip-path polygon it would draw
+  // a rectangle around a triangle. Those shapes get a real line along their
+  // outline instead — an SVG on screen, a stroked path on export, both centred
+  // on the edge, which is why they land in the same place.
+  const strokeIsBox = (it) => !polyOf(it);
 
   const tracePath = (ctx, it, b) => {
     ctx.beginPath();
@@ -18108,8 +18114,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         const b = boxOf(it), sw2 = it.strokeWidth;
         ctx.save();
         ctx.filter = "none";
-        tracePath(ctx, { ...it, radii: radiiOf(it).map(v => Math.max(0, v - sw2 / 2)) },
-          { x: b.x + sw2 / 2, y: b.y + sw2 / 2, w: Math.max(0, b.w - sw2), h: Math.max(0, b.h - sw2) });
+        if (strokeIsBox(it)) {
+          // A CSS border draws INSIDE the box, so the path is inset by half the
+          // width to put the centred canvas stroke in the same place.
+          tracePath(ctx, { ...it, radii: radiiOf(it).map(v => Math.max(0, v - sw2 / 2)) },
+            { x: b.x + sw2 / 2, y: b.y + sw2 / 2, w: Math.max(0, b.w - sw2), h: Math.max(0, b.h - sw2) });
+        } else {
+          // An SVG stroke is centred on the edge already — inset here and the two
+          // would sit half a stroke apart.
+          tracePath(ctx, it, b);
+        }
+        ctx.lineJoin = "round";
         ctx.lineWidth = sw2;
         ctx.strokeStyle = withAlpha(it.stroke || "#15151c", it.strokeAlpha);
         ctx.stroke();
@@ -18505,12 +18520,24 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       : undefined,
                     borderRadius: it.type === "ellipse" ? "50%" : radiiOf(it).map(v => `${v}px`).join(" "),
                     boxSizing: "border-box",
-                    border: (it.strokeWidth && canStroke(it))
+                    border: (it.strokeWidth && canStroke(it) && strokeIsBox(it))
                       ? `${it.strokeWidth}px solid ${withAlpha(it.stroke || "#15151c", it.strokeAlpha)}`
                       : undefined,
                     background: it.type === "image"
                       ? `center/${it.fit === "contain" ? "contain" : "cover"} no-repeat url(${it.url})`
                       : fillOf(it) }} />
+                  {/* The outline for shapes a border cannot follow. Centred on
+                      the edge, exactly as the export strokes it. */}
+                  {it.strokeWidth > 0 && polyOf(it) && (
+                    <svg width={it.w} height={it.h} viewBox={`0 0 ${it.w} ${it.h}`}
+                      style={{ position: "absolute", left: 0, top: 0, overflow: "visible",
+                        pointerEvents: "none", opacity: it.opacity == null ? 1 : it.opacity }}>
+                      <polygon
+                        points={polyOf(it).map(([fx, fy]) => `${fx * it.w},${fy * it.h}`).join(" ")}
+                        fill="none" strokeWidth={it.strokeWidth} strokeLinejoin="round"
+                        stroke={withAlpha(it.stroke || "#15151c", it.strokeAlpha)} />
+                    </svg>
+                  )}
                   {on && !editing && (() => {
                       const k = 1 / cam.s, hs = 9 * k, rs = 15 * k, bw = 1.6 * k;
                       const bh = it.h || (String(it.text ?? "").split("\n").length || 1) * canvasLH(it);
@@ -18591,8 +18618,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         const isText = selItem.type === "text" || selItem.type === "sticky";
         const isStroke = selItem.type === "draw" || selItem.type === "arrow" || selItem.type === "line";
         const colourKey = isStroke ? "color" : selItem.type === "sticky" ? "fill" : isText ? "color" : "fill";
-        const iconBtn = { width: 26, height: 26, borderRadius: 7, display: "flex", alignItems: "center",
-          justifyContent: "center", cursor: "pointer", color: "#fff" };
+        // One height and one rounding for every control in this bar. Two fields
+        // of different heights side by side is the first thing the eye catches.
+        const BAR_H = 30, BAR_R = 9;
+        const iconBtn = { width: BAR_H, height: BAR_H, borderRadius: BAR_R, display: "flex",
+          alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff" };
         const div2 = <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.16)", margin: "0 3px" }} />;
         return (
           <div style={{ position: "fixed", left, top, transform: "translateX(-50%)", zIndex: 6 }}
@@ -18601,8 +18631,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               background: "#15151c", boxShadow: "0 8px 24px rgba(0,0,0,0.28)" }}>
               {selItem.type === "star" && (<>
                 <div title={de ? "Zacken" : "Points"}
-                  style={{ display: "flex", alignItems: "center", gap: 4, padding: "0 8px 0 6px",
-                    height: 26, borderRadius: 7, background: "rgba(255,255,255,0.12)" }}>
+                  style={{ display: "flex", alignItems: "center", gap: 4, padding: "0 10px 0 8px",
+                    height: BAR_H, borderRadius: BAR_R, background: "rgba(255,255,255,0.12)" }}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff">
                     <path d="M12 2.6l2.9 6 6.5.9-4.7 4.6 1.1 6.5-5.8-3.1-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9z" />
                   </svg>
@@ -18611,11 +18641,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     style={{ width: 32, border: "none", outline: "none", background: "transparent",
                       color: "#fff", fontFamily: FONT, fontSize: 12 }} />
                 </div>
-                {/* Labelled, because a bare track never says what it sets. It is
-                    the depth of the points, not an angle — naming it "Winkel"
-                    would be tidy and wrong. */}
                 <div style={{ width: 156 }}>
-                  <SliderField label={de ? "Tiefe" : "Depth"} suffix=" %"
+                  <SliderField label={de ? "Winkel" : "Angle"} suffix=" %" height={BAR_H} radius={BAR_R}
                     value={Math.round((selItem.innerRatio ?? 0.42) * 100)} min={10} max={90}
                     onChange={v => patch(selItem.id, { innerRatio: v / 100 })}
                     theme={{ text: "#fff", textDim: "rgba(255,255,255,0.6)" }} darkMode />
@@ -18625,7 +18652,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               {isText && (<>
                 <NumberField value={selItem.size} min={6}
                   onCommit={v => patch(selItem.id, { size: v })}
-                  style={{ width: 52, height: 26, borderRadius: 7, border: "none", outline: "none",
+                  style={{ width: 52, height: BAR_H, borderRadius: BAR_R, border: "none", outline: "none",
                     background: "rgba(255,255,255,0.12)", color: "#fff", fontFamily: FONT, fontSize: 12,
                     textAlign: "center" }} />
                 <div onClick={() => patch(selItem.id, { weight: selItem.weight >= 700 ? 400 : 700 })} title="Bold"
@@ -18642,8 +18669,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 {div2}
               </>)}
               <div onClick={() => setBarPop(pp => pp ? null : "color")} title={de ? "Farbe" : "Colour"}
-                style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 6px 3px 4px",
-                  borderRadius: 8, cursor: "pointer",
+                style={{ display: "flex", alignItems: "center", gap: 4, padding: "0 8px 0 5px",
+                  height: BAR_H, borderRadius: BAR_R, cursor: "pointer",
                   background: barPop ? "rgba(255,255,255,0.16)" : "transparent" }}>
                 <div style={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
                   background: selItem[colourKey] || "#fff",
