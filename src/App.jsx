@@ -17441,6 +17441,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   useEffect(() => {
     const onKey = (e) => {
+      // Same guard the whiteboard already uses: while the focus is in a field,
+      // the keyboard belongs to that field. Without it, Backspace to clear a
+      // star's point count deleted the star, and ⌘Z undid the canvas instead of
+      // the typing. Escape gets you out of the field rather than closing the
+      // editor behind it.
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || "") || e.target?.isContentEditable) {
+        if (e.key === "Escape") e.target.blur();
+        return;
+      }
       if (editing) return;
       if (e.key === "Escape") { sel ? setSel(null) : onClose(); }
       if ((e.key === "Backspace" || e.key === "Delete") && sel) deleteSel();
