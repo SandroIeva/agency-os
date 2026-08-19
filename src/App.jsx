@@ -6354,6 +6354,107 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
   );
 }
 
+// ── Comment popup ────────────────────────────────────────────────────────────
+// ONE definition, used by Brainstorm and by the canvas editor. They are the same
+// feature, so they are the same component — changing it changes both, which is
+// the whole point of it living here rather than twice.
+// Delete sits bottom-left, beside Save: it is an action on the comment, and
+// actions belong with the other action, not tucked into the title row.
+function CommentPopup({ authorName, createdAt, canEdit, text,
+  draft, onDraftChange, onKeyDown, areaRef,
+  mentionQuery, mentionMatches = [], onInsertMention,
+  onDelete, onClose, theme, darkMode, de }) {
+  const mentions = typeof onInsertMention === "function";
+  const stamp = createdAt
+    ? new Date(createdAt).toLocaleDateString("de-DE", { day: "2-digit", month: "short" })
+      + " · " + new Date(createdAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })
+    : "";
+  return (
+    <div onPointerDown={(e) => e.stopPropagation()}
+      style={{ width: 260, borderRadius: 14,
+        background: darkMode ? "rgba(28,28,38,0.98)" : "#fff",
+        border: `1px solid ${theme.borderFaint}`, boxShadow: "0 16px 44px rgba(0,0,0,0.24)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "12px 14px 8px" }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#15151c", color: "#fff",
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600,
+          fontFamily: FONT, flexShrink: 0 }}>
+          {(authorName || "?").trim()[0]?.toUpperCase() || "?"}
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text,
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{authorName || "—"}</div>
+          <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim }}>{stamp}</div>
+        </div>
+      </div>
+      <div style={{ padding: "0 12px 12px" }}>
+        {canEdit ? (
+          <div style={{ position: "relative" }}>
+            <textarea ref={areaRef} value={draft} onChange={onDraftChange} rows={3}
+              placeholder={mentions
+                ? (de ? "Kommentar… (@ erwähnt jemanden)" : "Comment… (@ to mention)")
+                : (de ? "Kommentar…" : "Comment…")}
+              onKeyDown={onKeyDown}
+              style={{ width: "100%", boxSizing: "border-box",
+                background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
+                border: `1px solid ${theme.borderFaint}`, borderRadius: 10, padding: "9px 11px",
+                fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", resize: "none",
+                lineHeight: 1.45, caretColor: theme.text }} />
+            {mentions && mentionQuery != null && mentionMatches.length > 0 && (
+              <div className="no-scrollbar"
+                style={{ position: "absolute", left: 0, right: 0, top: "calc(100% + 4px)", zIndex: 5,
+                  maxHeight: 168, overflowY: "auto", background: darkMode ? "#1c1c26" : "#fff",
+                  border: `1px solid ${theme.borderFaint}`, borderRadius: 10,
+                  boxShadow: "0 12px 32px rgba(0,0,0,0.2)", padding: 4 }}>
+                {mentionMatches.map(mem => {
+                  const nm = mem?.profiles?.display_name || mem?.display_name || "User";
+                  const av = mem?.profiles?.avatar_url || mem?.avatar_url;
+                  return (
+                    <div key={mem.user_id} className="hover-row"
+                      onPointerDown={(e) => { e.preventDefault(); onInsertMention(mem); }}
+                      style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px",
+                        borderRadius: 8, cursor: "pointer" }}>
+                      {av ? <img src={av} alt="" referrerPolicy="no-referrer"
+                        style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0 }} />
+                        : <div style={{ width: 22, height: 22, borderRadius: "50%", background: "#15151c",
+                          color: "#fff", fontSize: 10, fontWeight: 600, fontFamily: FONT, display: "flex",
+                          alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{nm[0]?.toUpperCase()}</div>}
+                      <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text,
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nm}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5,
+            whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+            {text || <span style={{ color: theme.textFaint }}>{de ? "Kein Text" : "No text"}</span>}
+          </div>
+        )}
+        {canEdit && (
+          <div style={{ display: "flex", alignItems: "center", marginTop: 9 }}>
+            <motion.div whileTap={{ scale: 0.85 }} onClick={onDelete} title={de ? "Löschen" : "Delete"}
+              style={{ width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center",
+                justifyContent: "center", cursor: "pointer", color: "#e5484d" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+              </svg>
+            </motion.div>
+            <div style={{ flex: 1 }} />
+            <motion.button whileTap={{ scale: 0.97 }} onClick={onClose}
+              style={{ padding: "8px 18px", borderRadius: 999, border: "none", background: "#15151c",
+                color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
+              {de ? "Speichern" : "Save"}
+            </motion.button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage = "de", orgMembers = [], boardId = null, createNotification }) {
   const de = appLanguage === "de";
   const [boards, setBoards] = useState([]);
@@ -8432,7 +8533,8 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
               </div>
             </>, document.body);
         })()}
-        {/* Comment bubble popup */}
+        {/* Comment bubble popup — the shared CommentPopup, so Brainstorm and the
+            canvas editor cannot drift apart. */}
         {(() => {
           const c = items.find(i => i.id === commentOpenId && i.type === "comment");
           if (!c) return null;
@@ -8442,59 +8544,18 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           const top = Math.max(12, (d.y || 0) * cam.s + cam.y - 12);
           return (
             <>
-              <div onPointerDown={(e) => { e.stopPropagation(); closeComment(); }} style={{ position: "fixed", inset: 0, zIndex: 21 }} />
-              <div onPointerDown={(e) => e.stopPropagation()}
-                style={{ position: "absolute", left, top, zIndex: 22, width: 260, borderRadius: 14,
-                  background: darkMode ? "rgba(28,28,38,0.98)" : "#fff", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 16px 44px rgba(0,0,0,0.24)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "12px 14px 8px" }}>
-                  <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#15151c", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, fontFamily: FONT, flexShrink: 0 }}>{(d.author_name || "?").trim()[0]?.toUpperCase() || "?"}</div>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.author_name || "—"}</div>
-                    <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim }}>{d.created_at ? new Date(d.created_at).toLocaleDateString("de-DE", { day: "2-digit", month: "short" }) + " · " + new Date(d.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : ""}</div>
-                  </div>
-                  {canEdit && (
-                    <motion.div whileTap={{ scale: 0.85 }} onClick={() => { deleteItem(c.id); setCommentOpenId(null); }} title={de ? "Löschen" : "Delete"}
-                      style={{ width: 24, height: 24, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#e5484d", flexShrink: 0 }}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-                    </motion.div>
-                  )}
-                </div>
-                <div style={{ padding: "0 12px 12px" }}>
-                  {canEdit ? (
-                    <div style={{ position: "relative" }}>
-                    <textarea ref={(el) => { commentAreaRef.current = el; if (el && !el.dataset.f) { el.dataset.f = "1"; setTimeout(() => { try { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } catch (_) {} }, 0); } }}
-                      value={commentDraft} onChange={onCommentChange} placeholder={de ? "Kommentar… (@ erwähnt jemanden)" : "Comment… (@ to mention)"} rows={3}
-                      onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape") { e.preventDefault(); if (mentionQuery != null) setMentionQuery(null); else closeComment(); } if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); closeComment(); } }}
-                      style={{ width: "100%", boxSizing: "border-box", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, padding: "9px 11px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", resize: "none", lineHeight: 1.45, caretColor: theme.text }} />
-                    {/* @-mention dropdown */}
-                    {mentionQuery != null && mentionMatches.length > 0 && (
-                      <div style={{ position: "absolute", left: 0, right: 0, top: "calc(100% + 4px)", zIndex: 5, maxHeight: 168, overflowY: "auto",
-                        background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, boxShadow: "0 12px 32px rgba(0,0,0,0.2)", padding: 4 }} className="no-scrollbar">
-                        {mentionMatches.map(mem => {
-                          const nm = mem?.profiles?.display_name || mem?.display_name || "User";
-                          const av = mem?.profiles?.avatar_url || mem?.avatar_url;
-                          return (
-                            <div key={mem.user_id} onPointerDown={(e) => { e.preventDefault(); insertMention(mem); }} className="hover-row"
-                              style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", borderRadius: 8, cursor: "pointer" }}>
-                              {av ? <img src={av} alt="" referrerPolicy="no-referrer" style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0 }} />
-                                : <div style={{ width: 22, height: 22, borderRadius: "50%", background: "#15151c", color: "#fff", fontSize: 10, fontWeight: 600, fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{nm[0]?.toUpperCase()}</div>}
-                              <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nm}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{d.text || <span style={{ color: theme.textFaint }}>{de ? "Kein Text" : "No text"}</span>}</div>
-                  )}
-                  {canEdit && (
-                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 9 }}>
-                      <motion.button whileTap={{ scale: 0.97 }} onClick={closeComment}
-                        style={{ padding: "8px 18px", borderRadius: 999, border: "none", background: "#15151c", color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>{de ? "Speichern" : "Save"}</motion.button>
-                    </div>
-                  )}
-                </div>
+              <div onPointerDown={(e) => { e.stopPropagation(); closeComment(); }}
+                style={{ position: "fixed", inset: 0, zIndex: 21 }} />
+              <div style={{ position: "absolute", left, top, zIndex: 22 }}>
+                <CommentPopup
+                  authorName={d.author_name} createdAt={d.created_at} canEdit={canEdit} text={d.text}
+                  draft={commentDraft} onDraftChange={onCommentChange}
+                  areaRef={(el) => { commentAreaRef.current = el; if (el && !el.dataset.f) { el.dataset.f = "1"; setTimeout(() => { try { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } catch (_) {} }, 0); } }}
+                  onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape") { e.preventDefault(); if (mentionQuery != null) setMentionQuery(null); else closeComment(); } if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); closeComment(); } }}
+                  mentionQuery={mentionQuery} mentionMatches={mentionMatches} onInsertMention={insertMention}
+                  onDelete={() => { deleteItem(c.id); setCommentOpenId(null); }}
+                  onClose={closeComment}
+                  theme={theme} darkMode={darkMode} de={de} />
               </div>
             </>
           );
@@ -17171,6 +17232,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // Collapsed by default: it is a panel you reach for, not one you work in.
   const [layersOpen, setLayersOpen] = useState(false);
   const [pick, setPick] = useState([]);          // ids ticked in the layers list
+  const [commentOpenId, setCommentOpenId] = useState(null);
   const [barPop, setBarPop] = useState(null);   // "color" | null
   const [frameTab, setFrameTab] = useState("design");   // "design" | "templates"
   const [showGrid, setShowGrid] = useState(true);
@@ -17575,8 +17637,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       // A note ABOUT the design, not part of it — see the export, which skips
       // these. Anything else would print a review remark onto the banner.
       const it = { id: crypto.randomUUID(), type: "comment", x: Math.round(p.x), y: Math.round(p.y),
-        w: Math.round(Math.min(W, H) * 0.22), h: Math.round(Math.min(W, H) * 0.13), text: "" };
-      addItem(it); setEditing(it.id);
+        text: "", authorId: session?.user?.id || null,
+        author: session?.user?.user_metadata?.full_name || session?.user?.email || "—",
+        createdAt: new Date().toISOString() };
+      addItem(it); setCommentOpenId(it.id);
       return;
     }
     if (tool === "sticky") {
@@ -18132,35 +18196,24 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 outlineOffset: 0, cursor: tool === "select" ? "move" : "inherit",
               };
               if (it.type === "comment") {
+                // The same pin Brainstorm draws: a speech bubble with a tail,
+                // held at a constant SCREEN size so it stays legible at any zoom
+                // — it is an annotation about the design, not part of it.
+                const k = 1 / cam.s, size = 34 * k;
                 return (
                   <div key={it.id} onPointerDown={e => onItemDown(e, it)}
-                    onDoubleClick={() => { setEditing(it.id); setSel(it.id); }}
-                    style={{ ...common, width: it.w, minHeight: it.h, background: "#FFF6D6",
-                      border: `${1.5 / cam.s}px solid #E8C35A`, borderRadius: 10 / cam.s,
-                      padding: 10 / cam.s, boxSizing: "border-box",
-                      fontFamily: FONT, fontSize: Math.max(10, Math.min(W, H) * 0.035),
-                      color: "#5A4A12", boxShadow: "0 2px 10px rgba(0,0,0,0.14)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 5,
-                      fontSize: Math.max(8, Math.min(W, H) * 0.024), opacity: 0.75, marginBottom: 4 }}>
-                      <svg width={Math.max(9, Math.min(W, H) * 0.028)} height={Math.max(9, Math.min(W, H) * 0.028)}
-                        viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M21 11.5a8.4 8.4 0 01-9 8.4 9 9 0 01-4-.9L3 21l1.9-4.6A8.4 8.4 0 013 11.5 8.5 8.5 0 0112 3a8.5 8.5 0 019 8.5z" />
-                      </svg>
-                      {de ? "Kommentar · nicht im Export" : "Comment · not exported"}
-                    </div>
-                    {editing === it.id ? (
-                      <textarea autoFocus value={it.text}
-                        onChange={e => patch(it.id, { text: e.target.value })}
-                        onBlur={() => setEditing(null)}
-                        onKeyDown={e => { if (e.key === "Escape") setEditing(null); }}
-                        placeholder={de ? "Anmerkung …" : "Note …"}
-                        style={{ width: "100%", minHeight: it.h * 0.5, background: "transparent",
-                          border: "none", outline: "none", resize: "none", font: "inherit",
-                          color: "inherit", padding: 0 }} />
-                    ) : (
-                      <div style={{ whiteSpace: "pre-wrap" }}>
-                        {it.text || (de ? "Anmerkung …" : "Note …")}
-                      </div>
+                    onClick={(e) => { e.stopPropagation(); setSel(it.id); setCommentOpenId(it.id); }}
+                    style={{ position: "absolute", left: it.x, top: it.y, width: size, height: size,
+                      borderRadius: "50% 50% 50% 3px", background: "#15151c", color: "#fff",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 13 * k, fontFamily: FONT, fontWeight: 600, cursor: "pointer",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.28)",
+                      border: `${2 * k}px solid ${on ? "#3B82F6" : "#fff"}` }}>
+                    {(it.author || "?").trim()[0]?.toUpperCase() || "?"}
+                    {!it.text && (
+                      <span style={{ position: "absolute", top: -3 * k, right: -3 * k,
+                        width: 9 * k, height: 9 * k, borderRadius: "50%", background: "#F59E0B",
+                        border: `${1.5 * k}px solid #fff` }} />
                     )}
                   </div>
                 );
@@ -18551,6 +18604,34 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               </div>
             )}
           </div>
+        );
+      })()}
+
+      {/* The comment card — the same CommentPopup Brainstorm uses. Mentions need
+          a member list this editor is not given, so it opens without the @-menu;
+          everything else, delete included, is the shared component. */}
+      {cam && (() => {
+        const c = items.find(i => i.id === commentOpenId && i.type === "comment");
+        if (!c) return null;
+        const left = Math.min(cam.x + c.x * cam.s + 44, window.innerWidth - PANEL_W - 290);
+        const top = Math.max(62, cam.y + c.y * cam.s - 12);
+        return (
+          <>
+            <div onPointerDown={(e) => { e.stopPropagation(); setCommentOpenId(null); }}
+              style={{ position: "fixed", inset: 0, zIndex: 21 }} />
+            <div style={{ position: "fixed", left, top, zIndex: 22 }}>
+              <CommentPopup
+                authorName={c.author} createdAt={c.createdAt}
+                canEdit={!c.authorId || c.authorId === session?.user?.id} text={c.text}
+                draft={c.text || ""}
+                onDraftChange={(e) => patch(c.id, { text: e.target.value })}
+                areaRef={(el) => { if (el && !el.dataset.f) { el.dataset.f = "1"; setTimeout(() => { try { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } catch (_) {} }, 0); } }}
+                onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape") { e.preventDefault(); setCommentOpenId(null); } if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setCommentOpenId(null); } }}
+                onDelete={() => { deleteSel(c.id); setCommentOpenId(null); }}
+                onClose={() => setCommentOpenId(null)}
+                theme={theme} darkMode={darkMode} de={de} />
+            </div>
+          </>
         );
       })()}
 
