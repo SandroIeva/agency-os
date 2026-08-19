@@ -17949,9 +17949,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 return (
                   <div key={it.id} onPointerDown={e => onItemDown(e, it)}
                     onDoubleClick={() => { setEditing(it.id); setSel(it.id); }}
-                    style={{ ...common, width: it.w, height: it.h, background: it.fill,
+                    style={{ ...common, width: it.w, height: it.h }}>
+                    <div style={{ position: "absolute", inset: 0, background: it.fill,
                       padding: Math.round(it.w * 0.08), boxSizing: "border-box",
-                      boxShadow: "0 2px 8px rgba(0,0,0,0.12)", font: canvasFont(it), color: it.color,
+                      opacity: it.opacity == null ? 1 : it.opacity,
+                      filter: effectFilter(it),
+                      boxShadow: it.innerShadow
+                        ? `inset ${it.innerShadow.x || 0}px ${it.innerShadow.y || 0}px ${it.innerShadow.blur || 0}px ${it.innerShadow.color || "rgba(0,0,0,0.35)"}, 0 2px 8px rgba(0,0,0,0.12)`
+                        : "0 2px 8px rgba(0,0,0,0.12)",
+                      font: canvasFont(it), color: it.color,
                       lineHeight: `${canvasLH(it)}px`, whiteSpace: "pre", overflow: "hidden" }}>
                     {editing === it.id ? (
                       <textarea autoFocus value={it.text}
@@ -17962,6 +17968,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                           outline: "none", resize: "none", font: "inherit", color: "inherit",
                           lineHeight: "inherit", padding: 0, margin: 0 }} />
                     ) : String(it.text)}
+                    </div>
                     {on && !editing && (() => {
                       const k = 1 / cam.s, hs = 9 * k, rs = 15 * k, bw = 1.6 * k;
                       const bh = it.h || (String(it.text ?? "").split("\n").length || 1) * canvasLH(it);
@@ -18028,7 +18035,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 return (
                   <div key={it.id} onPointerDown={e => onItemDown(e, it)}
                     onDoubleClick={() => { setEditing(it.id); setSel(it.id); }}
-                    style={{ ...common, width: it.w, font: canvasFont(it), color: it.color,
+                    style={{ ...common, width: it.w }}>
+                    <div style={{ font: canvasFont(it), color: it.color,
                       lineHeight: `${canvasLH(it)}px`, textAlign: it.align || "left",
                       letterSpacing: `${canvasLS(it)}px`, opacity: it.opacity == null ? 1 : it.opacity,
                       filter: effectFilter(it),
@@ -18043,6 +18051,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                           textAlign: "inherit", padding: 0, margin: 0, overflow: "hidden",
                           height: `${(String(it.text).split("\n").length || 1) * it.size * CANVAS_LH}px` }} />
                     ) : String(it.text)}
+                    </div>
                     {on && !editing && (() => {
                       const k = 1 / cam.s, hs = 9 * k, rs = 15 * k, bw = 1.6 * k;
                       const bh = it.h || (String(it.text ?? "").split("\n").length || 1) * canvasLH(it);
@@ -18141,9 +18150,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   </svg>
                 );
               }
+              // The outer box only positions and catches clicks. Everything the
+              // effects touch lives one layer in, so a layer blur blurs the
+              // PICTURE and not the selection frame, the handles or the size
+              // badge — those are chrome, not part of the design.
               return (
                 <div key={it.id} onPointerDown={e => onItemDown(e, it)}
-                  style={{ ...common, width: it.w, height: it.h, clipPath: polyClip(it.type),
+                  style={{ ...common, width: it.w, height: it.h }}>
+                  <div style={{ position: "absolute", inset: 0, clipPath: polyClip(it.type),
                     opacity: it.opacity == null ? 1 : it.opacity,
                     filter: effectFilter(it),
                     boxShadow: (it.innerShadow && canInnerShadow(it))
@@ -18152,7 +18166,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     borderRadius: it.type === "ellipse" ? "50%" : radiiOf(it).map(v => `${v}px`).join(" "),
                     background: it.type === "image"
                       ? `center/${it.fit === "contain" ? "contain" : "cover"} no-repeat url(${it.url})`
-                      : it.fill }}>
+                      : it.fill }} />
                   {on && !editing && (() => {
                       const k = 1 / cam.s, hs = 9 * k, rs = 15 * k, bw = 1.6 * k;
                       const bh = it.h || (String(it.text ?? "").split("\n").length || 1) * canvasLH(it);
