@@ -17143,25 +17143,16 @@ const polyClip = (it) => {
 
 // Every template is a function of the frame, so one entry works for a banner and
 // for a square profile picture without a second definition.
+const CANVAS_TEMPLATE_GROUPS = [
+  ["posts",     { de: "Posts", en: "Posts" }],
+  ["banner",    { de: "Banner", en: "Banners" }],
+  ["corporate", { de: "Corporate", en: "Corporate" }],
+];
 const CANVAS_TEMPLATES = [
-  { key: "solid", label: { de: "Fläche", en: "Solid" },
+  { key: "solid", group: "posts", label: { de: "Fläche", en: "Solid" },
     build: (W, H, pal) => ({ bg: pal[0], items: [] }) },
 
-  { key: "split", label: { de: "Zweiteilung", en: "Split" },
-    build: (W, H, pal) => ({ bg: pal[1], items: [
-      { id: crypto.randomUUID(), type: "rect", x: 0, y: 0, w: Math.round(W * 0.42), h: H, fill: pal[0], radius: 0 },
-    ] }) },
-
-  { key: "logo", label: { de: "Logo mittig", en: "Logo centred" },
-    build: (W, H, pal, brand) => {
-      const d = Math.round(Math.min(W, H) * 0.46);
-      return { bg: pal[0], items: brand?.logo_url ? [
-        { id: crypto.randomUUID(), type: "image", x: Math.round((W - d) / 2), y: Math.round((H - d) / 2),
-          w: d, h: d, url: brand.logo_url, fit: "contain" },
-      ] : [] };
-    } },
-
-  { key: "headline", label: { de: "Schlagzeile", en: "Headline" },
+  { key: "headline", group: "posts", label: { de: "Schlagzeile", en: "Headline" },
     build: (W, H, pal, brand) => {
       const size = Math.round(H * 0.16);
       return { bg: pal[0], items: [
@@ -17171,17 +17162,79 @@ const CANVAS_TEMPLATES = [
       ] };
     } },
 
-  { key: "bar", label: { de: "Textbalken", en: "Text bar" },
+  { key: "bar", group: "posts", label: { de: "Textbalken", en: "Text bar" },
     build: (W, H, pal, brand) => {
       const barH = Math.round(H * 0.26);
       const size = Math.round(barH * 0.42);
       return { bg: pal[1], items: [
-        { id: crypto.randomUUID(), type: "rect", x: 0, y: H - barH, w: W, h: barH, fill: pal[0], radius: 0 },
+        { id: crypto.randomUUID(), type: "rect", x: 0, y: H - barH, w: W, h: barH, fill: pal[0] },
         { id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.06), y: Math.round(H - barH + (barH - size * CANVAS_LH) / 2),
           w: Math.round(W * 0.88), text: brand?.name || "Name", size, weight: 600, color: pal[1], align: "left" },
       ] };
     } },
+
+  { key: "quote", group: "posts", label: { de: "Zitat", en: "Quote" },
+    build: (W, H, pal, brand) => {
+      const size = Math.round(Math.min(W, H) * 0.09);
+      return { bg: pal[1], items: [
+        { id: crypto.randomUUID(), type: "rect", x: Math.round(W * 0.08), y: Math.round(H * 0.3),
+          w: Math.round(W * 0.012), h: Math.round(H * 0.4), fill: pal[0] },
+        { id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.16), y: Math.round(H * 0.32),
+          w: Math.round(W * 0.72), text: brand?.claim || (brand?.name || "") ,
+          size, weight: 500, color: pal[0], align: "left" },
+      ] };
+    } },
+
+  { key: "split", group: "banner", label: { de: "Zweiteilung", en: "Split" },
+    build: (W, H, pal) => ({ bg: pal[1], items: [
+      { id: crypto.randomUUID(), type: "rect", x: 0, y: 0, w: Math.round(W * 0.42), h: H, fill: pal[0] },
+    ] }) },
+
+  { key: "logo", group: "banner", label: { de: "Logo mittig", en: "Logo centred" },
+    build: (W, H, pal, brand) => {
+      const d = Math.round(Math.min(W, H) * 0.46);
+      return { bg: pal[0], items: brand?.logo_url ? [
+        { id: crypto.randomUUID(), type: "image", x: Math.round((W - d) / 2), y: Math.round((H - d) / 2),
+          w: d, h: d, url: brand.logo_url, fit: "contain" },
+      ] : [] };
+    } },
+
+  { key: "logoclaim", group: "banner", label: { de: "Logo + Claim", en: "Logo + claim" },
+    build: (W, H, pal, brand) => {
+      const d = Math.round(Math.min(W, H) * 0.34);
+      const size = Math.round(Math.min(W, H) * 0.09);
+      return { bg: pal[1], items: [
+        ...(brand?.logo_url ? [{ id: crypto.randomUUID(), type: "image", x: Math.round(W * 0.07),
+          y: Math.round(H / 2 - d / 2), w: d, h: d, url: brand.logo_url, fit: "contain" }] : []),
+        { id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.07 + d + W * 0.04),
+          y: Math.round(H / 2 - size * CANVAS_LH / 2), w: Math.round(W * 0.5),
+          text: brand?.claim || brand?.name || "Claim", size, weight: 600, color: pal[0], align: "left" },
+      ] };
+    } },
+
+  { key: "title", group: "corporate", label: { de: "Titelfolie", en: "Title slide" },
+    build: (W, H, pal, brand) => {
+      const big = Math.round(Math.min(W, H) * 0.12), small = Math.round(big * 0.38);
+      return { bg: pal[0], items: [
+        { id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.08), y: Math.round(H * 0.42),
+          w: Math.round(W * 0.8), text: brand?.name || "Titel", size: big, weight: 700, color: pal[1], align: "left" },
+        { id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.08), y: Math.round(H * 0.42 + big * 1.5),
+          w: Math.round(W * 0.8), text: brand?.claim || "", size: small, weight: 400, color: pal[1], align: "left" },
+      ] };
+    } },
+
+  { key: "contact", group: "corporate", label: { de: "Kontakt", en: "Contact" },
+    build: (W, H, pal, brand) => {
+      const size = Math.round(Math.min(W, H) * 0.06);
+      return { bg: pal[1], items: [
+        { id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.08), y: Math.round(H * 0.5),
+          w: Math.round(W * 0.84),
+          text: [brand?.name, String(brand?.website_url || "").replace(/^https?:\/\//, "")].filter(Boolean).join("\n"),
+          size, weight: 500, color: pal[0], align: "left" },
+      ] };
+    } },
 ];
+
 
 // A slider shaped like a field: label on the left, the value on the right, and
 // the fill itself showing where you are. A bare track tells you the position but
@@ -17705,6 +17758,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [mediaTab, setMediaTab] = useState("emoji");
   const [zoomMenu, setZoomMenu] = useState(false);
   const [doneMenu, setDoneMenu] = useState(false);
+  const [tplGroup, setTplGroup] = useState("posts");
   // Space held = the hand, borrowed. The chosen tool is untouched, so letting go
   // puts you back where you were rather than making you re-pick the arrow.
   const [spacePan, setSpacePan] = useState(false);
@@ -18791,6 +18845,30 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const download = async (type = "image/png") => {
     setBusy("export"); setErr("");
     try {
+      // A PDF is the same redraw wrapped in a one-page document sized to the
+      // design, so what comes out is the frame at its own dimensions — not a
+      // design dropped onto an A4 sheet with margins around it.
+      if (type === "pdf") {
+        const png = await exportBlob("image/png");
+        const data = await new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = () => res(r.result); r.onerror = rej;
+          r.readAsDataURL(png);
+        });
+        const { jsPDF } = await import("jspdf");
+        // The page is the design at its own physical size. Pixels become points
+        // at 96 dpi — what a screen pixel is worth — except for a format that is
+        // paper: the A4 preset is 2480 × 3508 because that is A4 at 300 dpi, and
+        // laying it out at 96 would print a 26-inch sheet.
+        const dpi = PRINT_PX.some(([a, b]) => a === W && b === H) ? 300 : 96;
+        const pw = (W * 72) / dpi, ph = (H * 72) / dpi;
+        const doc = new jsPDF({ unit: "pt", format: [pw, ph],
+          orientation: pw >= ph ? "landscape" : "portrait", compress: true });
+        doc.addImage(data, "PNG", 0, 0, pw, ph);
+        doc.save(`${(title || "design").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.pdf`);
+        setBusy(""); setDoneMenu(false);
+        return;
+      }
       const blob = await exportBlob(type);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -18877,7 +18955,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             <select value={value} onChange={e => onChange(e.target.value)}
               style={{ width: "100%", border: "none", outline: "none", background: "transparent",
                 color: theme.text, fontFamily: FONT, fontSize: 12.5, appearance: "none", cursor: "pointer" }}>
-              {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              {/* An entry is either [value, label] or [section, [entries]] — which
+                  is all a native optgroup needs, and beats hand-building a menu
+                  for the sake of a few headings. Two presets can share a size
+                  (1920×1080 is both an ad and a slide), so the key carries the
+                  index — the value alone is not unique. */}
+              {options.map(([v, l], oi) => Array.isArray(l)
+                ? <optgroup key={"g" + oi} label={v}>
+                    {l.map(([v2, l2], oj) => <option key={v2 + oj} value={v2}>{l2}</option>)}
+                  </optgroup>
+                : <option key={v + oi} value={v}>{l}</option>)}
             </select>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme.textFaint}
               strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -19691,6 +19778,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     boxShadow: "0 16px 40px rgba(0,0,0,0.22)" }}>
                   {[[de ? "Als PNG herunterladen" : "Download PNG", `${W} × ${H} px`, () => download("image/png")],
                     [de ? "Als JPG herunterladen" : "Download JPG", `${W} × ${H} px`, () => download("image/jpeg")],
+                    [de ? "Als PDF herunterladen" : "Download PDF", `${W} × ${H} px`, () => download("pdf")],
                     ["sep"],
                     [de ? "Auf einem Kanal posten" : "Post to a channel",
                      de ? "Öffnet den Composer" : "Opens the composer", publish, !onPublish],
@@ -19924,9 +20012,25 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           </div>
         )}
 
-        {!selItem && frameTab === "templates" && <>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
-          {CANVAS_TEMPLATES.map(tpl => {
+        {/* One section per purpose, one open at a time. Nine previews stacked
+            in a single grid is a wall; posts and corporate assets are rarely
+            what you are after in the same minute. */}
+        {!selItem && frameTab === "templates" && CANVAS_TEMPLATE_GROUPS.map(([gk, gl]) => (
+        <div key={gk} style={{ borderBottom: `1px solid ${line}`, paddingBottom: 8, marginTop: 4 }}>
+          <div onClick={() => setTplGroup(g => (g === gk ? null : gk))}
+            style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "9px 0" }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme.textDim}
+              strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"
+              style={{ flexShrink: 0, transform: tplGroup === gk ? "rotate(90deg)" : "none",
+                transition: "transform 0.16s" }}>
+              <polyline points="9 6 15 12 9 18"/></svg>
+            <span style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: theme.text }}>
+              {de ? gl.de : gl.en}
+            </span>
+          </div>
+          {tplGroup === gk && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, paddingBottom: 4 }}>
+          {CANVAS_TEMPLATES.filter(t => t.group === gk).map(tpl => {
             const p = tpl.build(W, H, palette, brand);
             return (
               <div key={tpl.key}
@@ -19949,8 +20053,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               </div>
             );
           })}
+          </div>
+          )}
         </div>
-        </>}
+        ))}
 
         {!selItem && frameTab === "design" && (
           <>
@@ -19961,15 +20067,35 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             <div style={{ marginTop: 6 }}>
               {/* Read from the same list Creations offers, so a format cannot be
                   right in one place and stale here. */}
-              {/* A size that matches no preset shows a dash and says so, rather
-                  than sitting in the list looking like one of them. */}
-              {dropdown(`${W}×${H}`,
-                [[`${W}×${H}`, creationFormats(de).some(f => f.w === W && f.h === H)
-                    ? `${W} × ${H} px`
-                    : `—  ${de ? "Eigene Größe" : "Custom size"} · ${W} × ${H} px`],
-                 ...creationFormats(de).map(f => [`${f.w}×${f.h}`, `${f.name} — ${f.w} × ${f.h}`])],
-                (v) => { const [w2, h2] = v.split("×").map(Number);
-                  if (w2 && h2) { markChange(); setFrame({ w: w2, h: h2 }); } })}
+              {/* Sorted into sections, because twenty sizes in one flat list is
+                  something you read rather than something you pick from. The
+                  channel formats already carry their channel in the name
+                  ("Facebook — Banner"), so the heading comes from the same
+                  string; the rest fall back to their kind.
+                  A size that matches no preset reads just "Eigene" — the numbers
+                  sit in the two fields directly underneath, so repeating them
+                  here would say nothing twice. */}
+              {(() => {
+                const all = creationFormats(de);
+                const groups = [];
+                for (const f of all) {
+                  const cut = f.name.indexOf(" — ");
+                  const head = cut > 0 ? f.name.slice(0, cut)
+                    : f.kind === "ads" ? (de ? "Anzeigen" : "Ads")
+                    : f.kind === "deck" ? (de ? "Präsentation" : "Presentation")
+                    : f.kind === "social" ? (de ? "Beiträge" : "Posts")
+                    : (de ? "Weitere" : "Other");
+                  const entry = [`${f.w}×${f.h}`,
+                    `${cut > 0 ? f.name.slice(cut + 3) : f.name} — ${f.w} × ${f.h}`];
+                  const row = groups.find(g => g[0] === head);
+                  if (row) row[1].push(entry); else groups.push([head, [entry]]);
+                }
+                const known = all.some(f => f.w === W && f.h === H);
+                return dropdown(`${W}×${H}`,
+                  [...(known ? [] : [[`${W}×${H}`, de ? "Eigene" : "Custom"]]), ...groups],
+                  (v) => { const [w2, h2] = v.split("×").map(Number);
+                    if (w2 && h2) { markChange(); setFrame({ w: w2, h: h2 }); } });
+              })()}
             </div>
 
             <div style={two}>
@@ -23038,9 +23164,16 @@ const CREATION_KINDS = [
 // The formats offered when starting something new. The channel ones are read
 // from the same table the previews use, so a format cannot be right in one place
 // and stale in the other.
+// Sizes that are a sheet of paper rather than a screen — 300 dpi, both ways up.
+const PRINT_PX = [[2480, 3508], [3508, 2480]];
+const CHANNEL_NAME = { linkedin: "LinkedIn", tiktok: "TikTok", youtube: "YouTube",
+  x: "X", facebook: "Facebook", instagram: "Instagram", pinterest: "Pinterest", threads: "Threads" };
 const creationFormats = (de) => {
   const ch = Object.entries(CHANNEL_PREVIEW_SHAPE).flatMap(([key, sh]) => {
-    const label = key.charAt(0).toUpperCase() + key.slice(1);
+    // Written the way the platforms write themselves — capitalising the key
+    // gives "Linkedin", "Tiktok", "Youtube", which is wrong three times out of
+    // eight and shows up as a section heading.
+    const label = CHANNEL_NAME[key] || key.charAt(0).toUpperCase() + key.slice(1);
     const out = [];
     if (sh.bannerPx) out.push({ kind: "social", name: `${label} — ${de ? "Banner" : "banner"}`, w: sh.bannerPx[0], h: sh.bannerPx[1] });
     if (sh.logoPx) out.push({ kind: "social", name: `${label} — ${de ? "Profilbild" : "profile picture"}`,
@@ -23053,7 +23186,7 @@ const creationFormats = (de) => {
     { kind: "social", name: "Story / Reel (9:16)", w: 1080, h: 1920 },
     ...ch,
     { kind: "ads",  name: de ? "Anzeige quer (16:9)" : "Ad landscape (16:9)", w: 1920, h: 1080 },
-    { kind: "ads",  name: "Leaderboard 728 × 90", w: 728, h: 90 },
+    { kind: "ads",  name: "Leaderboard", w: 728, h: 90 },
     { kind: "deck", name: de ? "Folie (16:9)" : "Slide (16:9)", w: 1920, h: 1080 },
     { kind: "other", name: "A4 300 dpi", w: 2480, h: 3508 },
   ];
