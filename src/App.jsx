@@ -17124,6 +17124,59 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [err, setErr] = useState("");
   const stageRef = useRef(null);
 
+  // ── undo ──────────────────────────────────────────────────────────────────
+  // 30 steps rather than the five asked for: a document is a small piece of JSON
+  // and the depth costs nothing, while running out of undo costs work.
+  //
+  // One entry per ACTION, which is the only granularity that is any use. A drag
+  // fires a hundred pointermoves; all of them belong to one undo. So a gesture
+  // records its state once when it starts, and everything else — typing in the
+  // panel, nudging a colour — is coalesced inside a 600ms window.
+  const HISTORY_LIMIT = 30;
+  const histRef = useRef({ past: [], future: [] });
+  const [histTick, setHistTick] = useState(0);
+  const coalesceRef = useRef(0);
+
+  const takeSnap = () => JSON.parse(JSON.stringify(latestRef.current));
+  const pushUndo = (snapshot) => {
+    const h = histRef.current;
+    const last = h.past[h.past.length - 1];
+    if (last && JSON.stringify(last) === JSON.stringify(snapshot)) return;
+    h.past.push(snapshot);
+    if (h.past.length > HISTORY_LIMIT) h.past.shift();
+    h.future.length = 0;
+    setHistTick(t => t + 1);
+  };
+  // Called by every discrete edit. Silent during a gesture, because the gesture
+  // already recorded itself at pointerdown.
+  const markChange = () => {
+    if (dragRef.current) return;
+    const now = Date.now();
+    const fresh = now - coalesceRef.current > 600;
+    coalesceRef.current = now;
+    if (fresh) pushUndo(takeSnap());
+  };
+  const applyDoc = (d) => {
+    setBg(d.bg); setItems(d.items || []); setFrameRadius(d.radius || 0);
+    setSel(null); setEditing(null);
+  };
+  const undo = () => {
+    const h = histRef.current;
+    if (!h.past.length) return;
+    h.future.push(takeSnap());
+    applyDoc(h.past.pop());
+    coalesceRef.current = 0;
+    setHistTick(t => t + 1);
+  };
+  const redo = () => {
+    const h = histRef.current;
+    if (!h.future.length) return;
+    h.past.push(takeSnap());
+    applyDoc(h.future.pop());
+    coalesceRef.current = 0;
+    setHistTick(t => t + 1);
+  };
+
   // ── keeping the work ──────────────────────────────────────────────────────
   // Everything used to hang on the Apply button: close the window and the design
   // was gone. It now saves itself while you work.
@@ -17199,6 +17252,23 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // the canvas needs a clip plus the inverse path. Kept to shapes whose outline
   // a border-radius describes — a clip-path polygon would ignore the inset and
   // the two sides would disagree.
+  // The outline of an item as a canvas path. Written once because three places
+  // need the same shape — the inner shadow's clip, the background blur's clip,
+  // and the fill itself.
+  const tracePath = (ctx, it, b) => {
+    ctx.beginPath();
+    if (it.type === "ellipse") ctx.ellipse(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, b.h / 2, 0, 0, Math.PI * 2);
+    else if (CANVAS_POLY[it.type]) {
+      CANVAS_POLY[it.type].forEach(([fx, fy], i2) => {
+        const px2 = b.x + fx * b.w, py2 = b.y + fy * b.h;
+        i2 ? ctx.lineTo(px2, py2) : ctx.moveTo(px2, py2);
+      });
+      ctx.closePath();
+    } else if (ctx.roundRect) {
+      ctx.roundRect(b.x, b.y, b.w, b.h, radiiOf(it).map(v => Math.min(v, Math.min(b.w, b.h) / 2)));
+    } else ctx.rect(b.x, b.y, b.w, b.h);
+  };
+
   const canInnerShadow = (it) => ["rect", "image", "sticky", "ellipse"].includes(it.type);
 
   const boxOf = (it) =>
@@ -17233,8 +17303,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     ? brand.intelligence.fonts.google_fonts.filter(Boolean) : [];
   const FONT_CHOICES = [...new Set([...brandFonts, "Geist", "Helvetica", "Georgia", "Courier New"])];
   const WEIGHTS = [[300, "Light"], [400, "Regular"], [500, "Medium"], [600, "Semibold"], [700, "Bold"], [800, "Black"]];
-  const patch = (id, p) => setItems(list => list.map(i => (i.id === id ? { ...i, ...p } : i)));
-  const addItem = (it) => { setItems(list => [...list, it]); setSel(it.id); setTool("select"); };
+  const patch = (id, p) => { markChange(); setItems(list => list.map(i => (i.id === id ? { ...i, ...p } : i))); };
+  const addItem = (it) => { markChange(); setItems(list => [...list, it]); setSel(it.id); setTool("select"); };
 
   // Where the frame sits when nothing is being flown in: centred in what is left
   // of the viewport once the two rails have taken their share.
@@ -17305,6 +17375,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       const k = e.key.toLowerCase();
+      if (k === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+      if (k === "y") { e.preventDefault(); redo(); }
       if (k === "c" && sel) { e.preventDefault(); copySel(); }
       if (k === "d" && sel) { e.preventDefault(); duplicateSel(); }
       if (k === "v") { e.preventDefault(); pasteClip(null); }
@@ -17371,7 +17443,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setItems(list => [...list, ...made]);
     setSel(made[made.length - 1].id);
   };
-  const deleteSel = (id = sel) => { setItems(list => list.filter(i => i.id !== id)); setSel(null); };
+  const deleteSel = (id = sel) => { markChange(); setItems(list => list.filter(i => i.id !== id)); setSel(null); };
 
   // Topmost first, so a right-click hits what the eye sees on top.
   const itemAt = (pt) => {
@@ -17418,6 +17490,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       return;
     }
     if (tool === "image") { setImgMenuOpen(true); return; }
+    pushUndo(takeSnap());
     if (tool === "pen") {
       // Points in artboard units behind one offset, the way the whiteboard keeps
       // pen paths: moving the stroke then costs one number, not a rewrite of
@@ -17592,6 +17665,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const onItemDown = (e, it) => {
     if (tool !== "select" || editing) return;
     e.stopPropagation();
+    pushUndo(takeSnap());
     setSel(it.id);
     dragRef.current = { mode: "move", id: it.id, sx: e.clientX, sy: e.clientY,
       // The frame is a target like any other, which is what makes an element
@@ -17606,6 +17680,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   const onHandleDown = (e, it, handle) => {
     e.stopPropagation();
+    pushUndo(takeSnap());
     dragRef.current = { mode: "resize", id: it.id, handle, sx: e.clientX, sy: e.clientY,
       base: { x: it.x, y: it.y, w: it.w, h: it.h || 0 }, rot: it.rot || 0,
       isText: it.type === "text" };
@@ -17616,6 +17691,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const RADIUS_CORNER = { nw: 0, ne: 1, se: 2, sw: 3 };
   const onRadiusDown = (e, it, hd) => {
     e.stopPropagation();
+    pushUndo(takeSnap());
     dragRef.current = { mode: "radius", id: it.id, corner: hd,
       base: { x: it.x, y: it.y, w: it.w, h: it.h },
       per: Array.isArray(it.radii), radii: radiiOf(it) };
@@ -17626,6 +17702,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const onRotateDown = (e, it) => {
     e.stopPropagation();
     const cx = cam.x + (it.x + it.w / 2) * cam.s, cy = cam.y + (it.y + (it.h || 0) / 2) * cam.s;
+    pushUndo(takeSnap());
     dragRef.current = { mode: "rotate", id: it.id, cx, cy, rot0: it.rot || 0,
       a0: Math.atan2(e.clientY - cy, e.clientX - cx) };
   };
@@ -17655,6 +17732,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       it.x, it.y, it.w, it.h);
   };
 
+  const spunOf = (it) => !!(it.rot || it.flipX || it.flipY);
+  const applySpin = (ctx, it) => {
+    const b = boxOf(it), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+    ctx.translate(cx, cy);
+    if (it.rot) ctx.rotate(it.rot * Math.PI / 180);
+    if (it.flipX || it.flipY) ctx.scale(it.flipX ? -1 : 1, it.flipY ? -1 : 1);
+    ctx.translate(-cx, -cy);
+  };
+
   const exportBlob = async () => {
     if (document.fonts?.ready) await document.fonts.ready;   // or the text draws in a fallback face
     const cvs = document.createElement("canvas");
@@ -17675,15 +17761,28 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       // remark onto the banner, which is the one thing a comment must never do.
       if (it.type === "comment") continue;
       ctx.globalAlpha = it.opacity == null ? 1 : it.opacity;
+      // Background blur, before the item's own paint: take what is already on
+      // the canvas — which is exactly "everything behind", since items are drawn
+      // in order — blur it, and put it back through the item's own outline.
+      // Drawn at identity with the clip already set, because a clip lives in
+      // device space; that is what makes it come out right on a rotated shape
+      // instead of blurring a rectangle at the wrong angle.
+      if (it.bgBlur) {
+        const snap = document.createElement("canvas");
+        snap.width = W; snap.height = H;
+        snap.getContext("2d").drawImage(cvs, 0, 0);
+        ctx.save();
+        if (spunOf(it)) applySpin(ctx, it);
+        tracePath(ctx, it, boxOf(it));
+        ctx.clip();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.filter = `blur(${it.bgBlur}px)`;
+        ctx.drawImage(snap, 0, 0);
+        ctx.restore();
+      }
       ctx.filter = effectFilter(it);
       const spun = it.rot || it.flipX || it.flipY;
-      if (spun) {
-        const b = boxOf(it), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-        ctx.save(); ctx.translate(cx, cy);
-        if (it.rot) ctx.rotate(it.rot * Math.PI / 180);
-        if (it.flipX || it.flipY) ctx.scale(it.flipX ? -1 : 1, it.flipY ? -1 : 1);
-        ctx.translate(-cx, -cy);
-      }
+      if (spun) { ctx.save(); applySpin(ctx, it); }
       if (it.type === "image" && it.url) {
         const img = await loadImage(it.url);
         drawFitted(ctx, img, it);
@@ -17774,10 +17873,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         const b = boxOf(it), sh = it.innerShadow;
         ctx.save();
         ctx.filter = "none";
-        ctx.beginPath();
-        if (it.type === "ellipse") ctx.ellipse(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, b.h / 2, 0, 0, Math.PI * 2);
-        else if (ctx.roundRect) ctx.roundRect(b.x, b.y, b.w, b.h, radiiOf(it).map(v => Math.min(v, Math.min(b.w, b.h) / 2)));
-        else ctx.rect(b.x, b.y, b.w, b.h);
+        tracePath(ctx, it, b);
         ctx.clip();
         const pad = (sh.blur || 0) * 2 + Math.abs(sh.x || 0) + Math.abs(sh.y || 0) + 40;
         ctx.beginPath();
@@ -18160,6 +18256,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   <div style={{ position: "absolute", inset: 0, clipPath: polyClip(it.type),
                     opacity: it.opacity == null ? 1 : it.opacity,
                     filter: effectFilter(it),
+                    ...(it.bgBlur ? { backdropFilter: `blur(${it.bgBlur}px)`,
+                      WebkitBackdropFilter: `blur(${it.bgBlur}px)` } : {}),
                     boxShadow: (it.innerShadow && canInnerShadow(it))
                       ? `inset ${it.innerShadow.x || 0}px ${it.innerShadow.y || 0}px ${it.innerShadow.blur || 0}px ${it.innerShadow.color || "rgba(0,0,0,0.35)"}`
                       : undefined,
@@ -18393,6 +18491,26 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             )}
           </div>
         )}
+        {(() => {
+          const can = { undo: histRef.current.past.length > 0, redo: histRef.current.future.length > 0 };
+          const btn = (on, act, glyph, title) => (
+            <motion.div whileTap={on ? { scale: 0.94 } : undefined} onClick={on ? act : undefined} title={title}
+              style={{ width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center",
+                justifyContent: "center", cursor: on ? "pointer" : "default",
+                color: on ? theme.text : theme.textFaint, opacity: on ? 1 : 0.45 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{glyph}</svg>
+            </motion.div>
+          );
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: 2, marginRight: 4 }}>
+              {btn(can.undo, undo, <><path d="M9 14L4 9l5-5" /><path d="M4 9h11a5 5 0 010 10h-4" /></>,
+                (de ? "Rückgängig" : "Undo") + " ⌘Z")}
+              {btn(can.redo, redo, <><path d="M15 14l5-5-5-5" /><path d="M20 9H9a5 5 0 000 10h4" /></>,
+                (de ? "Wiederholen" : "Redo") + " ⇧⌘Z")}
+            </div>
+          );
+        })()}
         <div style={{ position: "relative" }}>
           <motion.div whileTap={{ scale: 0.96 }} onClick={() => setZoomMenu(o => !o)}
             style={{ padding: "7px 10px 7px 13px", borderRadius: 999, border: `1px solid ${line}`,
@@ -18811,6 +18929,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 {canInnerShadow(selItem) && row(!!selItem.innerShadow,
                   () => set2({ innerShadow: selItem.innerShadow ? undefined : { x: 0, y: 4, blur: 10, color: "rgba(0,0,0,0.35)" } }),
                   de ? "Innerer Schatten" : "Inner shadow", shadowBody("innerShadow"))}
+                {row(!!selItem.bgBlur,
+                  () => set2({ bgBlur: selItem.bgBlur ? undefined : 8 }),
+                  de ? "Hintergrund weichzeichnen" : "Background blur",
+                  <>
+                    {field(selItem.bgBlur ?? 8, v => set2({ bgBlur: Math.max(0, v) }), "◌")}
+                    <div style={{ fontSize: 10.5, color: theme.textFaint, marginTop: 6, lineHeight: 1.45 }}>
+                      {de ? "Wirkt nur, wenn die Füllung durchscheinend ist."
+                          : "Only visible through a translucent fill."}
+                    </div>
+                  </>)}
                 {row(!!selItem.blur,
                   () => set2({ blur: selItem.blur ? undefined : 6 }),
                   de ? "Weichzeichnen" : "Layer blur",
