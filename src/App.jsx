@@ -17148,6 +17148,81 @@ const polyClip = (it) => {
 
 // Every template is a function of the frame, so one entry works for a banner and
 // for a square profile picture without a second definition.
+// ── Components ───────────────────────────────────────────────────────────────
+// Parts you drop INTO a canvas, as opposed to a template, which replaces what
+// is there. Each one is ordinary items — a component here is an arrangement,
+// not a new kind of object, so everything that works on a shape works on it the
+// moment it lands.
+const CANVAS_COMPONENT_GROUPS = [
+  ["basics", { de: "Basis", en: "Basics" }],
+  ["text",   { de: "Text", en: "Text" }],
+];
+const CANVAS_COMPONENTS = [
+  { key: "button", group: "basics", label: { de: "Button", en: "Button" },
+    build: (W, H, pal) => {
+      const w = Math.round(W * 0.34), h = Math.round(w * 0.28), x = Math.round((W - w) / 2), y = Math.round((H - h) / 2);
+      const size = Math.max(12, Math.round(h * 0.34));
+      return [
+        { id: crypto.randomUUID(), type: "rect", x, y, w, h, fill: pal[0], radius: Math.round(h / 2) },
+        { id: crypto.randomUUID(), type: "text", x, y: Math.round(y + (h - size * CANVAS_LH) / 2), w,
+          text: "Jetzt starten", size, weight: 600, color: "#FFFFFF", align: "center" },
+      ];
+    } },
+  { key: "badge", group: "basics", label: { de: "Badge", en: "Badge" },
+    build: (W, H, pal) => {
+      const w = Math.round(W * 0.22), h = Math.round(w * 0.34), x = Math.round((W - w) / 2), y = Math.round(H * 0.3);
+      const size = Math.max(10, Math.round(h * 0.4));
+      return [
+        { id: crypto.randomUUID(), type: "rect", x, y, w, h, fill: pal[1] || pal[0], radius: Math.round(h / 2) },
+        { id: crypto.randomUUID(), type: "text", x, y: Math.round(y + (h - size * CANVAS_LH) / 2), w,
+          text: "Neu", size, weight: 600, color: pal[0], align: "center" },
+      ];
+    } },
+  { key: "divider", group: "basics", label: { de: "Trenner", en: "Divider" },
+    build: (W, H, pal) => [
+      { id: crypto.randomUUID(), type: "rect", x: Math.round(W * 0.15), y: Math.round(H / 2),
+        w: Math.round(W * 0.7), h: Math.max(2, Math.round(W * 0.004)), fill: pal[0], radius: 999 },
+    ] },
+  { key: "card", group: "basics", label: { de: "Karte", en: "Card" },
+    build: (W, H, pal) => {
+      const w = Math.round(W * 0.6), h = Math.round(w * 0.72);
+      const x = Math.round((W - w) / 2), y = Math.round((H - h) / 2);
+      const pad = Math.round(w * 0.08), size = Math.max(12, Math.round(w * 0.07));
+      return [
+        { id: crypto.randomUUID(), type: "rect", x, y, w, h, fill: "#FFFFFF",
+          radius: Math.round(w * 0.05), shadow: { x: 0, y: 8, blur: 24, color: "#000000", alpha: 14 } },
+        { id: crypto.randomUUID(), type: "rect", x: x + pad, y: y + pad, w: w - pad * 2,
+          h: Math.round(h * 0.42), fill: pal[1] || pal[0], radius: Math.round(w * 0.03) },
+        { id: crypto.randomUUID(), type: "text", x: x + pad, y: y + pad + Math.round(h * 0.5),
+          w: w - pad * 2, text: "Titel", size, weight: 600, color: pal[0], align: "left" },
+      ];
+    } },
+  { key: "headline", group: "text", label: { de: "Überschrift", en: "Headline" },
+    build: (W, H, pal) => {
+      const size = Math.round(W * 0.09);
+      return [{ id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.1), y: Math.round(H * 0.42),
+        w: Math.round(W * 0.8), text: "Eine klare Aussage", size, weight: 700, color: pal[0], align: "left" }];
+    } },
+  { key: "body", group: "text", label: { de: "Fließtext", en: "Body" },
+    build: (W, H, pal) => {
+      const size = Math.round(W * 0.038);
+      return [{ id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.1), y: Math.round(H * 0.5),
+        w: Math.round(W * 0.8),
+        text: "Zwei Zeilen, die den Gedanken\nzu Ende bringen.", size, weight: 400, color: pal[0], align: "left" }];
+    } },
+  { key: "quote", group: "text", label: { de: "Zitat", en: "Quote" },
+    build: (W, H, pal) => {
+      const size = Math.round(W * 0.062);
+      const x = Math.round(W * 0.14), y = Math.round(H * 0.4);
+      return [
+        { id: crypto.randomUUID(), type: "rect", x: Math.round(W * 0.1), y,
+          w: Math.max(3, Math.round(W * 0.008)), h: Math.round(size * CANVAS_LH * 2), fill: pal[1] || pal[0], radius: 999 },
+        { id: crypto.randomUUID(), type: "text", x, y, w: Math.round(W * 0.74),
+          text: "\u201EDer Satz, den man\nbeh\u00E4lt.\u201C", size, weight: 500, color: pal[0], align: "left" },
+      ];
+    } },
+];
+
 const CANVAS_TEMPLATE_GROUPS = [
   ["posts",     { de: "Posts", en: "Posts" }],
   ["banner",    { de: "Banner", en: "Banners" }],
@@ -18461,6 +18536,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // such field and clip — which is what the export has always done, so reading
   // a missing value as "on" keeps them looking the way they were saved.
   const [frameClip, setFrameClip] = useState(doc?.clip !== false);
+  // The colour of the area AROUND the canvas. It is not in the exported file —
+  // the file is the canvas — but it decides whether what you are making reads
+  // the way it will where it ends up, so it belongs to the document.
+  const [stageBg, setStageBg] = useState(doc?.stage || null);
   const [frameRadii, setFrameRadii] = useState(
     Array.isArray(doc?.radii) && doc.radii.length === 4
       ? doc.radii.map(v => Math.max(0, Number(v) || 0)) : null);
@@ -18477,6 +18556,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [zoomMenu, setZoomMenu] = useState(false);
   const [doneMenu, setDoneMenu] = useState(false);
   const [tplGroup, setTplGroup] = useState("posts");
+  const [compGroup, setCompGroup] = useState("basics");
   // Set while the asset browser is open ON BEHALF of the picker, so the chosen
   // picture lands in a fill instead of becoming an image of its own.
   const [fillImgFor, setFillImgFor] = useState(null);
@@ -18502,7 +18582,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const openGroup = (gid, on = true) =>
     setOpenGroups(g => (on ? (g.includes(gid) ? g : [...g, gid]) : g.filter(x => x !== gid)));
   const [barPop, setBarPop] = useState(null);   // "color" | null
-  const [frameTab, setFrameTab] = useState("design");   // "design" | "templates"
+  const [frameTab, setFrameTab] = useState("design");   // "design" | "components"
   const [showGrid, setShowGrid] = useState(true);
   const [cam, setCam] = useState(null);
   const [flying, setFlying] = useState(!!originRect);
@@ -18548,6 +18628,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setBg(d.bg); setItems(d.items || []); setFrameRadius(d.radius || 0);
     setFrameRadii(Array.isArray(d.radii) && d.radii.length === 4 ? d.radii : null);
     setFrameClip(d.clip !== false);
+    setStageBg(d.stage || null);
     setSel(null); setEditing(null);
   };
   const undo = () => {
@@ -18576,9 +18657,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // document unchanged and does nothing — and it also means simply opening a
   // canvas never writes a row.
   const [saveState, setSaveState] = useState("");     // "" | "saving" | "saved"
-  const baselineRef = useRef(JSON.stringify({ bg: doc?.bg || null, items: doc?.items || [], radius: Number(doc?.radius) || 0, radii: Array.isArray(doc?.radii) ? doc.radii : undefined, clip: doc?.clip !== false, w: Number(doc?.w) || size[0], h: Number(doc?.h) || size[1] }));
-  const latestRef = useRef({ bg, items, radius: frameRadius, radii: frameRadii || undefined, clip: frameClip, w: W, h: H });
-  latestRef.current = { bg, items, radius: frameRadius, radii: frameRadii || undefined, clip: frameClip, w: W, h: H };
+  const baselineRef = useRef(JSON.stringify({ bg: doc?.bg || null, items: doc?.items || [], radius: Number(doc?.radius) || 0, radii: Array.isArray(doc?.radii) ? doc.radii : undefined, clip: doc?.clip !== false, stage: doc?.stage || undefined, w: Number(doc?.w) || size[0], h: Number(doc?.h) || size[1] }));
+  const latestRef = useRef({ bg, items, radius: frameRadius, radii: frameRadii || undefined, clip: frameClip, stage: stageBg || undefined, w: W, h: H });
+  latestRef.current = { bg, items, radius: frameRadius, radii: frameRadii || undefined, clip: frameClip, stage: stageBg || undefined, w: W, h: H };
   const saveTimer = useRef(null);
 
   const flush = async (payload) => {
@@ -18593,13 +18674,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   useEffect(() => {
     if (!onAutoSave) return;
-    const payload = { bg, items, radius: frameRadius, radii: frameRadii || undefined, clip: frameClip, w: W, h: H };
+    const payload = { bg, items, radius: frameRadius, radii: frameRadii || undefined, clip: frameClip, stage: stageBg || undefined, w: W, h: H };
     if (JSON.stringify(payload) === baselineRef.current) return;
     setSaveState("saving");
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => flush(payload), 700);
     return () => clearTimeout(saveTimer.current);
-  }, [items, bg, frameRadius, frameRadii, frameClip, W, H]);
+  }, [items, bg, frameRadius, frameRadii, frameClip, stageBg, W, H]);
 
   // Closing must not drop the last few hundred milliseconds of work, so the
   // pending save is flushed on the way out.
@@ -20008,7 +20089,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         { type: "image/png" });
       const url = await onUpload(file);
       if (!url) throw new Error("upload");
-      onDone(url, { bg, items, radius: frameRadius, radii: frameRadii || undefined, clip: frameClip, w: W, h: H });
+      onDone(url, { bg, items, radius: frameRadius, radii: frameRadii || undefined, clip: frameClip, stage: stageBg || undefined, w: W, h: H });
     } catch (e) {
       // A tainted canvas and a failed upload look identical to the user unless
       // they are told apart, and both end with nothing saved.
@@ -20251,6 +20332,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         style={{ position: "absolute", inset: 0, overflow: "hidden",
           cursor: activeTool === "hand" ? (dragRef.current?.mode === "pan" ? "grabbing" : "grab")
             : activeTool === "select" ? "default" : "crosshair",
+          ...(stageBg ? { backgroundColor: stageBg } : {}),
           backgroundImage: showGrid
             ? `radial-gradient(${darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)"} 1px, transparent 1px)`
             : "none",
@@ -20798,7 +20880,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
       {/* The colour picker, opened from whichever swatch was clicked. Anchored
           left of the panel so it never covers the row it is editing. */}
-      {picker && (selItem || picker.what === "bg") && createPortal(
+      {picker && (selItem || picker.what === "bg" || picker.what === "stage") && createPortal(
         <>
           <div onPointerDown={() => setPicker(null)}
             style={{ position: "fixed", inset: 0, zIndex: 100008 }} />
@@ -20809,7 +20891,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             left: Math.max(12, picker.x - 358),
             top: Math.max(12, Math.min(picker.y - 20, window.innerHeight - 460)) }}>
             <ColorPicker
-              value={picker.what === "bg" ? (bg === "transparent" ? "#FFFFFF" : bg)
+              value={picker.what === "stage" ? (stageBg || (darkMode ? "#15151C" : "#F4F4F7"))
+                : picker.what === "bg" ? (bg === "transparent" ? "#FFFFFF" : bg)
                 : picker.what === "stroke" ? (selItem?.stroke || "#15151c")
                 : picker.what === "shadow"
                   ? (/^#/.test(selItem?.[picker.key]?.color || "") ? selItem[picker.key].color : "#000000")
@@ -20818,7 +20901,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 : picker.what === "stroke" ? (selItem?.strokeAlpha == null ? 100 : selItem.strokeAlpha)
                 : picker.what === "shadow" ? (selItem?.[picker.key]?.alpha == null ? 35 : selItem[picker.key].alpha)
                 : (selItem?.fillAlpha == null ? 100 : selItem.fillAlpha)}
-              onChange={(c) => picker.what === "bg" ? setBg(c)
+              onChange={(c) => picker.what === "stage" ? (markChange(), setStageBg(c))
+                : picker.what === "bg" ? setBg(c)
                 : picker.what === "stroke" ? patch(selItem.id, { stroke: c })
                 : picker.what === "shadow"
                   ? patch(selItem.id, { [picker.key]: { ...selItem[picker.key], color: c } })
@@ -20833,6 +20917,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               // arrow or a pen stroke has none — it has a colour and nothing
               // else — and neither do a stroke or a shadow. Offering the tabs
               // there produced a fill nothing could paint.
+              // The surface around the canvas takes a colour and nothing else:
+              // a patterned backdrop competes with the thing being made.
               tabs={(picker.what === "bg" || (picker.what === "fill" && picker.key === "fill"))
                 ? ["custom", "gradient", "image", "pattern"] : ["custom"]}
               onImage={() => setFillImgFor(picker)}
@@ -21405,9 +21491,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             it with a layout — so they get a tab each instead of stacking. With an
             element selected the panel is about that element, and a grid of
             layouts underneath it would be an offer to throw the work away. */}
-        {!selItem && (
+        {/* Two panels, and which one you get depends on what is selected.
+            Nothing selected is the working area: the surface you lay things on,
+            and the layouts you can start from. The canvas selected is the
+            artboard itself — its format, its shape, its background, and the
+            parts you drag into it. A radius or a clip means nothing to the
+            surface around it, which is why they are not offered there. */}
+        {sel === "frame" && !selItem && (
           <div style={{ display: "flex", gap: 4, margin: "8px 0 2px" }}>
-            {[["design", de ? "Design" : "Design"], ["templates", de ? "Vorlagen" : "Templates"]].map(([k, l]) => (
+            {[["design", de ? "Einstellungen" : "Settings"],
+              ["components", de ? "Komponenten" : "Components"]].map(([k, l]) => (
               <div key={k} onClick={() => setFrameTab(k)}
                 style={{ padding: "7px 14px", borderRadius: 9, cursor: "pointer",
                   fontFamily: FONT, fontSize: 13, fontWeight: 600,
@@ -21423,7 +21516,43 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         {/* One section per purpose, one open at a time. Nine previews stacked
             in a single grid is a wall; posts and corporate assets are rarely
             what you are after in the same minute. */}
-        {!selItem && frameTab === "templates" && CANVAS_TEMPLATE_GROUPS.map(([gk, gl]) => (
+        {/* The working area. Its colour is not in the exported file — the file
+            is the canvas — but it is what decides whether a design reads the
+            way it will where it ends up, so it is worth setting and worth
+            keeping with the document. */}
+        {!selItem && sel !== "frame" && (<>
+          {label(de ? "Arbeitsfläche" : "Workspace")}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, padding: "8px 10px",
+            borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+            <div onClick={(e) => setPicker({ what: "stage",
+                x: e.currentTarget.getBoundingClientRect().left,
+                y: e.currentTarget.getBoundingClientRect().top })}
+              style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, cursor: "pointer",
+                border: `1px solid ${line}`, backgroundColor: "#fff",
+                ...(stageBg ? { background: stageBg }
+                  : { backgroundImage: "conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)",
+                      backgroundSize: "8px 8px" }) }} />
+            <span style={{ flex: 1, fontFamily: FONT, fontSize: 12.5, color: theme.text, letterSpacing: 0.4 }}>
+              {stageBg ? String(stageBg).replace("#", "").toUpperCase() : (de ? "Standard" : "Default")}
+            </span>
+            {stageBg && (
+              <span onClick={() => { markChange(); setStageBg(null); }}
+                title={de ? "Zurücksetzen" : "Reset"}
+                style={{ cursor: "pointer", fontSize: 11, color: theme.textDim,
+                  padding: "3px 7px", borderRadius: 7, border: `1px solid ${line}` }}>
+                {de ? "Standard" : "Default"}
+              </span>
+            )}
+          </div>
+          {/* The size stays reachable here — it is the one thing about the
+              canvas you want to know without selecting it. */}
+          <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 12 }}>
+            {de ? "Canvas" : "Canvas"} · {W} × {H}
+          </div>
+          {label(de ? "Vorlagen" : "Templates")}
+        </>)}
+
+        {!selItem && sel !== "frame" && CANVAS_TEMPLATE_GROUPS.map(([gk, gl]) => (
         <div key={gk} style={{ borderBottom: `1px solid ${line}`, paddingBottom: 8, marginTop: 4 }}>
           <div onClick={() => setTplGroup(g => (g === gk ? null : gk))}
             style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "9px 0" }}>
@@ -21466,7 +21595,52 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         </div>
         ))}
 
-        {!selItem && frameTab === "design" && (
+        {sel === "frame" && !selItem && frameTab === "components" && CANVAS_COMPONENT_GROUPS.map(([gk, gl]) => (
+          <div key={gk} style={{ borderBottom: `1px solid ${line}`, paddingBottom: 8, marginTop: 4 }}>
+            <div onClick={() => setCompGroup(g => (g === gk ? null : gk))}
+              style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "9px 0" }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme.textDim}
+                strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"
+                style={{ flexShrink: 0, transform: compGroup === gk ? "rotate(90deg)" : "none",
+                  transition: "transform 0.16s" }}>
+                <polyline points="9 6 15 12 9 18"/></svg>
+              <span style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: theme.text }}>
+                {de ? gl.de : gl.en}
+              </span>
+            </div>
+            {compGroup === gk && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, paddingBottom: 4 }}>
+                {CANVAS_COMPONENTS.filter(c => c.group === gk).map(comp => {
+                  const made = comp.build(W, H, palette, brand);
+                  return (
+                    <div key={comp.key}
+                      // Added, not applied: a component joins what is there,
+                      // where a template replaces it. Selected after landing,
+                      // because the next thing you do is move it.
+                      onClick={() => { markChange();
+                        setItems(list => [...list, ...made]);
+                        setPick(made.map(o => o.id)); setSel(made[made.length - 1].id); }}
+                      style={{ cursor: "pointer" }}>
+                      <div style={{ position: "relative", width: "100%", aspectRatio: String(W / H),
+                        borderRadius: 7, overflow: "hidden", border: `1px solid ${line}`,
+                        background: darkMode ? "rgba(255,255,255,0.04)" : "#F7F7F9" }}>
+                        {/* The component itself, at card size — the same
+                            drawing the canvas will show, not an icon of it. */}
+                        <CanvasThumb doc={{ w: W, h: H, items: made, bg: "transparent", clip: true }}
+                          theme={theme} />
+                      </div>
+                      <div style={{ fontSize: 11, color: theme.textDim, marginTop: 4 }}>
+                        {de ? comp.label.de : comp.label.en}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ))}
+
+        {sel === "frame" && !selItem && frameTab === "design" && (
           <>
             {/* No "Frame" heading and no title line: the panel only shows this
                 when the frame IS what is selected, so both were repeating what
