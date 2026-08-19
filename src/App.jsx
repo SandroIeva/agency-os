@@ -17233,6 +17233,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [layersOpen, setLayersOpen] = useState(false);
   const [pick, setPick] = useState([]);          // ids ticked in the layers list
   const [commentOpenId, setCommentOpenId] = useState(null);
+  const [dragRow, setDragRow] = useState(null);      // index in the reversed list
+  const [overRow, setOverRow] = useState(null);
+  const [renameId, setRenameId] = useState(null);
   const [barPop, setBarPop] = useState(null);   // "color" | null
   const [frameTab, setFrameTab] = useState("design");   // "design" | "templates"
   const [showGrid, setShowGrid] = useState(true);
@@ -17394,6 +17397,30 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // A mask is one field on the masked item. The shape named there stops painting
   // and only lends its outline — which is the same clip the background blur
   // already uses, pointed at another element instead of at the backdrop.
+  // The list shows the topmost layer first, so a row index has to be flipped
+  // before it means anything to the items array — which IS the paint order.
+  const moveLayer = (fromRev, toRev) => {
+    if (fromRev === toRev || toRev == null) return;
+    const n = items.length;
+    markChange();
+    setItems(list => {
+      const a = [...list];
+      const [x] = a.splice(n - 1 - fromRev, 1);
+      a.splice(n - 1 - toRev, 0, x);
+      return a;
+    });
+  };
+  // A name somebody typed wins; otherwise something readable from the item.
+  const layerName = (it) => it.name || (
+    it.isMask ? (de ? "Maske" : "Mask")
+    : it.type === "text" || it.type === "sticky" || it.type === "comment"
+      ? (String(it.text || "").split("\n")[0].slice(0, 22) || it.type)
+    : it.type === "image" ? (de ? "Bild" : "Image")
+    : it.type === "star" ? (de ? "Stern" : "Star")
+    : it.type === "rect" ? (de ? "Rechteck" : "Rectangle")
+    : it.type === "ellipse" ? (de ? "Kreis" : "Circle")
+    : it.type);
+
   const maskOf = (it) => it.maskId ? items.find(o => o.id === it.maskId) : null;
   // Expressed for CSS in the MASKED item's own pixels, since clip-path counts
   // from the element's own corner, not the artboard's.
@@ -17932,6 +17959,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       if (it.type === "comment") continue;
       // The shape used as a mask lends its outline and nothing else.
       if (it.isMask) continue;
+      // Hidden means hidden everywhere, the exported file included.
+      if (it.hidden) continue;
       ctx.globalAlpha = it.opacity == null ? 1 : it.opacity;
       // Background blur, before the item's own paint: take what is already on
       // the canvas — which is exactly "everything behind", since items are drawn
@@ -18185,12 +18214,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   : { top: g.pos, left: Math.min(g.a, g.b), height: Math.max(1, 1 / cam.s),
                       width: Math.abs(g.b - g.a) }) }} />
             ))}
-            {items.filter(it => !it.isMask).map(it => {
+            {items.filter(it => !it.isMask && !it.hidden).map(it => {
               const on = it.id === sel;
               const xf = [it.rot ? `rotate(${it.rot}deg)` : "",
                 it.flipX ? "scaleX(-1)" : "", it.flipY ? "scaleY(-1)" : ""].filter(Boolean).join(" ");
               const common = {
                 position: "absolute", left: it.x, top: it.y,
+                // Locked layers stay visible and stop responding — that is the
+                // whole point of locking them.
+                ...(it.locked ? { pointerEvents: "none" } : {}),
                 ...(xf ? { transform: xf, transformOrigin: "center" } : {}),
                 outline: on ? `${Math.max(1, 1.5 / cam.s)}px solid #15151c` : "none",
                 outlineOffset: 0, cursor: tool === "select" ? "move" : "inherit",
@@ -18853,25 +18885,29 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               </span>
             </div>
 
-            {/* Topmost first, because that is the order the eye sees them in. */}
-            {[...items].reverse().map(it => {
+            {/* Topmost first, because that is the order the eye sees them in.
+                Rows drag to reorder, which is the same items order the canvas
+                paints in — the list is that order made visible, not a copy. */}
+            {[...items].reverse().map((it, rev) => {
               const m = maskOf(it);
               const ticked = pick.includes(it.id);
-              const name = it.isMask ? (de ? "Maske" : "Mask")
-                : it.type === "text" || it.type === "sticky" || it.type === "comment"
-                  ? (String(it.text || "").split("\n")[0].slice(0, 22) || it.type)
-                  : it.type === "image" ? (de ? "Bild" : "Image")
-                  : it.type === "star" ? (de ? "Stern" : "Star")
-                  : it.type;
+              const dropHere = overRow === rev && dragRow !== null && dragRow !== rev;
               return (
                 <div key={it.id}
+                  draggable={renameId !== it.id}
+                  onDragStart={() => setDragRow(rev)}
+                  onDragOver={(e) => { e.preventDefault(); setOverRow(rev); }}
+                  onDragEnd={() => { setDragRow(null); setOverRow(null); }}
+                  onDrop={(e) => { e.preventDefault(); moveLayer(dragRow, rev); setDragRow(null); setOverRow(null); }}
                   onClick={(e) => {
                     if (e.metaKey || e.ctrlKey || e.shiftKey) {
                       setPick(p => p.includes(it.id) ? p.filter(x => x !== it.id) : [...p, it.id]);
                     } else { setSel(it.id); setPick([]); }
                   }}
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px",
-                    marginLeft: m ? 14 : 0, borderRadius: 8, cursor: "pointer",
+                    marginLeft: m ? 14 : 0, borderRadius: 8, cursor: "grab",
+                    borderTop: dropHere ? "2px solid #2F6BFF" : "2px solid transparent",
+                    opacity: dragRow === rev ? 0.45 : 1,
                     background: ticked ? "rgba(47,107,255,0.16)"
                       : sel === it.id ? (darkMode ? "rgba(255,255,255,0.08)" : "#EDEDF0") : "transparent" }}>
                   <div style={{ width: 22, height: 22, borderRadius: 5, flexShrink: 0,
@@ -18880,13 +18916,30 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       : it.type === "text" ? "transparent" : (it.fill || "transparent"),
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: 11, color: theme.textDim }}>
-                    {it.type === "text" ? "T" : ""}
+                    {it.type === "text" ? "T" : it.type === "comment" ? "@" : ""}
                   </div>
-                  <span style={{ flex: 1, minWidth: 0, fontFamily: FONT, fontSize: 12, color: theme.text,
-                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                    opacity: it.hidden ? 0.4 : 1 }}>
-                    {m ? `↳ ${name}` : name}
-                  </span>
+
+                  {renameId === it.id ? (
+                    <input autoFocus defaultValue={layerName(it)}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={(e) => { const v = e.target.value.trim();
+                        if (v && v !== layerName(it)) patch(it.id, { name: v });
+                        setRenameId(null); }}
+                      onKeyDown={(e) => { e.stopPropagation();
+                        if (e.key === "Enter") e.currentTarget.blur();
+                        if (e.key === "Escape") setRenameId(null); }}
+                      style={{ flex: 1, minWidth: 0, border: "none", outline: "none",
+                        background: "transparent", color: theme.text, fontFamily: FONT, fontSize: 12,
+                        borderBottom: `1.5px solid ${theme.borderFaint}` }} />
+                  ) : (
+                    <span onDoubleClick={(e) => { e.stopPropagation(); setRenameId(it.id); }}
+                      style={{ flex: 1, minWidth: 0, fontFamily: FONT, fontSize: 12, color: theme.text,
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                        opacity: it.hidden ? 0.4 : 1 }}>
+                      {m ? `↳ ${layerName(it)}` : layerName(it)}
+                    </span>
+                  )}
+
                   {it.maskId && (
                     <span onClick={(e) => { e.stopPropagation(); const mm = maskOf(it);
                       patch(it.id, { maskId: undefined });
@@ -18894,6 +18947,35 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       title={de ? "Maske lösen" : "Release mask"}
                       style={{ fontSize: 11, color: theme.textFaint, padding: "0 3px" }}>✕</span>
                   )}
+
+                  {/* Lock, then eye — the order Figma uses, so the eye is always
+                      the outermost thing on the row. */}
+                  <span onClick={(e) => { e.stopPropagation(); patch(it.id, { locked: !it.locked }); }}
+                    title={it.locked ? (de ? "Entsperren" : "Unlock") : (de ? "Sperren" : "Lock")}
+                    style={{ display: "flex", padding: 2, cursor: "pointer",
+                      color: it.locked ? theme.text : theme.textFaint, opacity: it.locked ? 1 : 0.55 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="4" y="11" width="16" height="10" rx="2" />
+                      {it.locked
+                        ? <path d="M8 11V7a4 4 0 018 0v4" />
+                        : <path d="M8 11V7a4 4 0 017-2.6" />}
+                    </svg>
+                  </span>
+                  <span onClick={(e) => { e.stopPropagation(); patch(it.id, { hidden: !it.hidden }); }}
+                    title={it.hidden ? (de ? "Einblenden" : "Show") : (de ? "Ausblenden" : "Hide")}
+                    style={{ display: "flex", padding: 2, cursor: "pointer",
+                      color: it.hidden ? theme.text : theme.textFaint, opacity: it.hidden ? 1 : 0.55 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                      {it.hidden ? (
+                        <><path d="M3 3l18 18" /><path d="M10.6 5.1A9.6 9.6 0 0112 5c7 0 10 7 10 7a17 17 0 01-3.2 4.3" />
+                          <path d="M6.5 6.6A17 17 0 002 12s3 7 10 7a9.5 9.5 0 004.2-.95" /></>
+                      ) : (
+                        <><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></>
+                      )}
+                    </svg>
+                  </span>
                 </div>
               );
             })}
