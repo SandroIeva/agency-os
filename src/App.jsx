@@ -18618,12 +18618,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // Field helpers, at component level because BOTH panels use them — the frame
   // and the selected element. They lived inside the selection closure, so the
   // frame panel referenced identifiers that did not exist there.
-        // The corner-radius mark: a line running in and turning down around one
-  // rounded corner. "⌐" was standing in for it and reads as a stray bracket.
+        // The corner-radius mark: four rounded corner brackets, the same glyph the
+  // per-corner toggle beside the field carries. I had it as a single rounded
+  // corner first — that one belongs on the four INDIVIDUAL corner fields, where
+  // it says which corner, not on the field that sets all four at once.
   const radiusGlyph = (size = 13) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 4h-9a8 8 0 00-8 8v9" />
+      <path d="M4 9V6.5A2.5 2.5 0 016.5 4H9" />
+      <path d="M15 4h2.5A2.5 2.5 0 0120 6.5V9" />
+      <path d="M20 15v2.5a2.5 2.5 0 01-2.5 2.5H15" />
+      <path d="M9 20H6.5A2.5 2.5 0 014 17.5V15" />
     </svg>
   );
   // The same mark turned to whichever corner it labels.
@@ -19897,11 +19902,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     justifyContent: "center", cursor: "pointer", color: theme.text,
                     background: Array.isArray(selItem.radii)
                       ? (darkMode ? "rgba(255,255,255,0.14)" : "#E3E3E8") : "transparent" }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M4 9V6a2 2 0 012-2h3"/><path d="M15 4h3a2 2 0 012 2v3"/>
-                    <path d="M20 15v3a2 2 0 01-2 2h-3"/><path d="M9 20H6a2 2 0 01-2-2v-3"/>
-                  </svg>
+                  {radiusGlyph(14)}
                 </div>
               </div>
               {Array.isArray(selItem.radii) && (
