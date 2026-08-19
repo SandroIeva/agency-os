@@ -19032,7 +19032,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const RADIUS_CORNER = { nw: 0, ne: 1, se: 2, sw: 3 };
   // Double-clicking a group steps inside it, so its parts can be moved on their
   // own. Clicking empty canvas steps back out.
-  const enterGroup = (it) => { if (it.groupId) setEnteredGroup(it.groupId); };
+  // Stepping in has to drop the group from `pick` as well. The click that
+  // precedes the double-click selects the whole group, and moveSetFor seeds
+  // from `pick` before it looks at groups at all — so with both members still
+  // picked, being inside changed nothing and the whole group kept moving. That
+  // read as "the double-click stopped working".
+  const enterGroup = (it) => {
+    if (!it.groupId) return;
+    setEnteredGroup(it.groupId);
+    setPick([]);
+    setSel(it.id);
+  };
 
   // Grouping is the same field a mask pair already uses, handed out by hand:
   // one id shared by several items, which moveSetFor turns into "these move
@@ -20527,7 +20537,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               const groupHeader = first ? (
                 <div key={"g" + gid}
                   onClick={() => { setPick(items.filter(o => o.groupId === gid).map(o => o.id)); setSel(null); }}
-                  onDoubleClick={() => setEnteredGroup(enteredGroup === gid ? null : gid)}
+                  onDoubleClick={() => {
+                    const open = enteredGroup !== gid;
+                    setEnteredGroup(open ? gid : null);
+                    // Leaving the group re-selects it; entering hands the parts
+                    // back their own selection.
+                    setPick(open ? [] : items.filter(o => o.groupId === gid).map(o => o.id));
+                    if (open) setSel(null);
+                  }}
                   title={de ? "Klick wählt die Gruppe · Doppelklick geht hinein"
                             : "Click selects the group · double-click steps inside"}
                   style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 8px",
