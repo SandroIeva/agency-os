@@ -17388,9 +17388,40 @@ const has3d = (it) => {
 };
 const d3Css = (d) =>
   `perspective(${d.persp}px) translateZ(${d.z}px) rotateX(${d.rx}deg) rotateY(${d.ry}deg)`;
-// Where CSS should turn from, written relative to the element's own box —
-// the transform origin IS the projection origin.
-const d3Origin = (d, w, h) => `${w / 2 + (d.ox || 0)}px ${h / 2 + (d.oy || 0)}px`;
+// Where CSS should turn from, written relative to the element's own box — the
+// transform origin IS the projection origin.
+//
+// The pivot is stored in FRAME coordinates, but an element that carries its own
+// rotation or a flip draws in a turned coordinate system, so the offset has to
+// be carried into that system first. Without this a rotated member of a group
+// pivots around the wrong point and leaves the plane the others are on.
+const d3Local = (d, it) => {
+  const t = -(((it?.rot || 0) * Math.PI) / 180);
+  let x = (d.ox || 0) * Math.cos(t) - (d.oy || 0) * Math.sin(t);
+  let y = (d.ox || 0) * Math.sin(t) + (d.oy || 0) * Math.cos(t);
+  if (it?.flipX) x = -x;
+  if (it?.flipY) y = -y;
+  return [x, y];
+};
+const d3Origin = (d, it, w, h) => {
+  const [x, y] = d3Local(d, it);
+  return `${w / 2 + x}px ${h / 2 + y}px`;
+};
+// The depth has to act OUTSIDE the element's own rotation, or two members of one
+// group tilt about two different axes and the group stops being one plane. The
+// element draws inside that rotation, so the transform is conjugated by it:
+// turn back, project, turn in again. With no rotation and no flip this is the
+// projection alone, unchanged.
+const d3Transform = (d, it) => {
+  const parts = [
+    it?.flipY ? "scaleY(-1)" : "", it?.flipX ? "scaleX(-1)" : "",
+    it?.rot ? `rotate(${-it.rot}deg)` : "",
+    d3Css(d),
+    it?.rot ? `rotate(${it.rot}deg)` : "",
+    it?.flipX ? "scaleX(-1)" : "", it?.flipY ? "scaleY(-1)" : "",
+  ];
+  return parts.filter(Boolean).join(" ");
+};
 
 // A point of the element, in coordinates relative to its centre — which is
 // where CSS puts the transform origin, and therefore where the projection
@@ -19598,7 +19629,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       }
       ctx.globalCompositeOperation = (it.blend && it.blend !== "normal") ? it.blend : "source-over";
       ctx.filter = effectFilter(it);
-      const spun = it.rot || it.flipX || it.flipY;
+      // With depth, the element's own rotation is baked into the picture that
+      // gets warped, so the projection happens in frame coordinates — the same
+      // thing the conjugated CSS transform achieves on screen.
+      const spun = (it.rot || it.flipX || it.flipY) && !has3d(it);
       const maskShape = maskOf(it);
       if (maskShape) { ctx.save(); tracePath(ctx, maskShape, boxOf(maskShape)); ctx.clip(); }
       if (spun) { ctx.save(); applySpin(ctx, it); }
@@ -19766,11 +19800,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         const sh = it.shadow || {};
         const pad = Math.ceil(30 + (Number(it.blur) || 0) * 2
           + (it.shadow ? (Number(sh.blur) || 0) + Math.max(Math.abs(sh.x || 0), Math.abs(sh.y || 0)) : 0));
-        const tw = Math.max(1, Math.ceil(bx.w) + pad * 2), th = Math.max(1, Math.ceil(bx.h) + pad * 2);
+        // Square and big enough for the item at any angle: it is drawn into
+        // this picture already turned, so the diagonal is what has to fit.
+        const R = Math.ceil(Math.hypot(bx.w, bx.h) / 2) + pad;
+        const tw = R * 2, th = R * 2;
         const off = document.createElement("canvas");
         off.width = tw; off.height = th;
         const oc = off.getContext("2d");
-        oc.translate(pad - bx.x, pad - bx.y);
+        oc.translate(R - (bx.x + bx.w / 2), R - (bx.y + bx.h / 2));
+        if (it.rot || it.flipX || it.flipY) applySpin(oc, it);
         // The effects belong to the object, so they are baked into the picture
         // before it is turned — the same order CSS uses, where the filter sits
         // on the element and the transform on the wrapper around it.
@@ -20394,8 +20432,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       object's centre, the depth about a pivot that a group
                       shares. One element cannot hold two origins. */}
                   <div style={{ position: "absolute", inset: 0,
-                    transform: has3d(it) ? d3Css(d3Of(it)) : undefined,
-                    transformOrigin: has3d(it) ? d3Origin(d3Of(it), it.w, it.h) : undefined }}>
+                    transform: has3d(it) ? d3Transform(d3Of(it), it) : undefined,
+                    // boxOf, not it.w/it.h: an item that keeps its size some
+                    // other way would put NaN in here, and a NaN origin falls
+                    // silently back to the centre — which is exactly the bug
+                    // this is meant to fix, only quieter.
+                    transformOrigin: has3d(it)
+                      ? d3Origin(d3Of(it), it, boxOf(it).w, boxOf(it).h) : undefined }}>
                   <div style={{ position: "absolute", inset: 0, clipPath: maskClip(it) || polyClip(it),
                     opacity: it.opacity == null ? 1 : it.opacity,
                     mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
