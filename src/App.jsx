@@ -20019,15 +20019,31 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   set2({ x1: selItem.x1 + dx, y1: selItem.y1 + dy, x2: selItem.x2 + dx, y2: selItem.y2 + dy });
                 else set2({ x: Math.round(selItem.x + dx), y: Math.round(selItem.y + dy) });
               };
+              // Figma's alignment marks: the edge you align TO as a line, and two
+              // bars of different lengths showing what moves against it. My first
+              // pass drew three near-identical arrows, which told you nothing
+              // about which edge was which.
               const rowA = [
-                ["l", () => move(0, null), <><path d="M4 4v16"/><path d="M8 9h9"/><path d="M8 15h6"/></>, de ? "Links" : "Left"],
-                ["cx", () => move((W - b.w) / 2, null), <><path d="M12 4v16"/><path d="M7 9h10"/><path d="M9 15h6"/></>, de ? "Horizontal zentrieren" : "Centre horizontally"],
-                ["r", () => move(W - b.w, null), <><path d="M20 4v16"/><path d="M7 9h9"/><path d="M10 15h6"/></>, de ? "Rechts" : "Right"],
+                ["l", () => move(0, null),
+                 <><path d="M4 4v16" /><path d="M8 9h11" /><path d="M8 15h7" /></>,
+                 de ? "Links" : "Left"],
+                ["cx", () => move((W - b.w) / 2, null),
+                 <><path d="M12 3v18" /><path d="M6.5 9h11" /><path d="M8.5 15h7" /></>,
+                 de ? "Horizontal zentrieren" : "Centre horizontally"],
+                ["r", () => move(W - b.w, null),
+                 <><path d="M20 4v16" /><path d="M5 9h11" /><path d="M9 15h7" /></>,
+                 de ? "Rechts" : "Right"],
               ];
               const rowB = [
-                ["t", () => move(null, 0), <><path d="M4 4h16"/><path d="M9 8v9"/><path d="M15 8v6"/></>, de ? "Oben" : "Top"],
-                ["cy", () => move(null, (H - b.h) / 2), <><path d="M4 12h16"/><path d="M9 7v10"/><path d="M15 9v6"/></>, de ? "Vertikal zentrieren" : "Centre vertically"],
-                ["b", () => move(null, H - b.h), <><path d="M4 20h16"/><path d="M9 7v9"/><path d="M15 10v6"/></>, de ? "Unten" : "Bottom"],
+                ["t", () => move(null, 0),
+                 <><path d="M4 4h16" /><path d="M9 8v11" /><path d="M15 8v7" /></>,
+                 de ? "Oben" : "Top"],
+                ["cy", () => move(null, (H - b.h) / 2),
+                 <><path d="M3 12h18" /><path d="M9 6.5v11" /><path d="M15 8.5v7" /></>,
+                 de ? "Vertikal zentrieren" : "Centre vertically"],
+                ["b", () => move(null, H - b.h),
+                 <><path d="M4 20h16" /><path d="M9 5v11" /><path d="M15 9v7" /></>,
+                 de ? "Unten" : "Bottom"],
               ];
               const btn = (glyph, act, title) => (
                 <div key={title} title={title} onClick={act}
