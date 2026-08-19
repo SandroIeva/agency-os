@@ -20653,11 +20653,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     {de ? "Gruppe" : "Group"}
                   </span>
                   <div style={{ flex: 1 }} />
-                  {/* Closed, the count is the only sign of what is in there. */}
-                  <span style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint,
-                    marginRight: 2 }}>
-                    {items.filter(o => o.groupId === gid).length}
-                  </span>
                   {(() => {
                     const mem = items.filter(o => o.groupId === gid);
                     const allLocked = mem.every(o => o.locked);
