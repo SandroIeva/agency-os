@@ -18119,23 +18119,6 @@ function NumberField({ value, onCommit, min, max, style, ...rest }) {
   );
 }
 
-            {selItem.type === "rect" && (<>
-              <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 12 }}>
-                {de ? "Eckenradius" : "Corner radius"}
-              </div>
-              {radiusRow({
-                value: radiiOf(selItem)[0],
-                per: Array.isArray(selItem.radii),
-                onValue: (v) => { const n = Math.max(0, v);
-                  set2(Array.isArray(selItem.radii) ? { radii: [n, n, n, n] } : { radius: n }); },
-                onTogglePer: () => set2(Array.isArray(selItem.radii)
-                  ? { radii: undefined, radius: selItem.radii[0] || 0 }
-                  : { radii: radiiOf(selItem) }),
-                corners: radiiOf(selItem),
-                onCorner: (i2, v) => { const next = [...radiiOf(selItem)]; next[i2] = v; set2({ radii: next }); },
-              })}
-            </>)}
-
 function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, userOrg,
                         theme, darkMode, appLanguage, onUpload, onDone, onAutoSave, onPublish, onClose }) {
   const de = appLanguage === "de";
@@ -20804,42 +20787,20 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               {dropdown(selItem.blend || "normal", BLEND_MODES, v => set("blend", v))}
             </div>
             {selItem.type === "rect" && (<>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
-                marginTop: 10 }}>
-                <span style={{ fontSize: 11, color: theme.textFaint }}>
-                  {de ? "Eckenradius" : "Corner radius"}
-                </span>
-                <div title={de ? "Ecken einzeln" : "Corners individually"}
-                  onClick={() => set2(Array.isArray(selItem.radii)
-                    ? { radii: undefined, radius: selItem.radii[0] || 0 }
-                    : { radii: radiiOf(selItem) })}
-                  style={{ width: 28, height: 24, borderRadius: 7, display: "flex", alignItems: "center",
-                    justifyContent: "center", cursor: "pointer", color: theme.text,
-                    background: Array.isArray(selItem.radii)
-                      ? (darkMode ? "rgba(255,255,255,0.14)" : "#E3E3E8") : "transparent" }}>
-                  {radiusGlyph(14)}
-                </div>
+              <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 12 }}>
+                {de ? "Eckenradius" : "Corner radius"}
               </div>
-              {Array.isArray(selItem.radii) && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 6 }}>
-                  {/* radii are [tl, tr, br, bl]; the grid reads left-right, top-bottom,
-                      so bottom-left (3) comes before bottom-right (2). Each mark is
-                      turned to the corner it stands for. */}
-                  {[[0, de ? "Oben links" : "Top left", cornerGlyph(0)],
-                    [1, de ? "Oben rechts" : "Top right", cornerGlyph(1)],
-                    [3, de ? "Unten links" : "Bottom left", cornerGlyph(3)],
-                    [2, de ? "Unten rechts" : "Bottom right", cornerGlyph(2)],
-                  ].map(([i2, ttl, glyph]) => (
-                    <div key={i2} title={ttl}>
-                      {num(selItem.radii[i2], v => {
-                        const next = [...radiiOf(selItem)];
-                        next[i2] = Math.max(0, Number(v) || 0);
-                        set2({ radii: next });
-                      }, glyph)}
-                    </div>
-                  ))}
-                </div>
-              )}
+              {radiusRow({
+                value: radiiOf(selItem)[0],
+                per: Array.isArray(selItem.radii),
+                onValue: (v) => { const n = Math.max(0, v);
+                  set2(Array.isArray(selItem.radii) ? { radii: [n, n, n, n] } : { radius: n }); },
+                onTogglePer: () => set2(Array.isArray(selItem.radii)
+                  ? { radii: undefined, radius: selItem.radii[0] || 0 }
+                  : { radii: radiiOf(selItem) }),
+                corners: radiiOf(selItem),
+                onCorner: (i2, v) => { const next = [...radiiOf(selItem)]; next[i2] = v; set2({ radii: next }); },
+              })}
             </>)}
 
             {isText && (<>
