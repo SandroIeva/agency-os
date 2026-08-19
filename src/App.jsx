@@ -17242,6 +17242,13 @@ const GRADIENT_TYPES = [
   ["angular", { de: "Winkel", en: "Angular" }],
 ];
 const isGradient = (v) => !!v && typeof v === "object" && Array.isArray(v.stops);
+// Starting a gradient from the colour that was already set, so the switch reads
+// as "this colour, now fading" rather than an unrelated black-to-white.
+const defaultGradient = (from) => ({
+  type: "linear", angle: 90,
+  stops: [{ at: 0, color: typeof from === "string" && /^#[0-9a-f]{6}$/i.test(from) ? from : "#FFFFFF", alpha: 100 },
+          { at: 100, color: "#999999", alpha: 100 }],
+});
 const gradStops = (g) => [...(g.stops || [])].sort((a, b) => a.at - b.at);
 const gradColor = (st) => {
   const a = st.alpha == null ? 100 : st.alpha;
@@ -17288,13 +17295,8 @@ const gradientCanvas = (ctx, g, b) => {
 // per-stop opacity. Bending that one to serve both would change the brand UI to
 // suit the canvas, which is the wrong way round.
 function CanvasGradientEditor({ value, onChange, theme, darkMode, de }) {
-  const g = isGradient(value) ? value : {
-    type: "linear", angle: 90,
-    // Seeded from the colour that was there, so switching to a gradient starts
-    // from what you had rather than from an unrelated black-to-white.
-    stops: [{ at: 0, color: typeof value === "string" ? value : "#FFFFFF", alpha: 100 },
-            { at: 100, color: "#999999", alpha: 100 }],
-  };
+  const [editStop, setEditStop] = useState(null);
+  const g = isGradient(value) ? value : defaultGradient(value);
   const put = (patch) => onChange({ ...g, ...patch });
   const setStop = (i, patch) => put({ stops: g.stops.map((st, k) => k === i ? { ...st, ...patch } : st) });
   const field = { height: 30, borderRadius: 9, border: "none", outline: "none",
@@ -17346,6 +17348,28 @@ function CanvasGradientEditor({ value, onChange, theme, darkMode, de }) {
           style={{ cursor: "pointer", color: theme.textDim, padding: "2px 6px", fontSize: 15, lineHeight: 1 }}>＋</div>
       </div>
 
+      {editStop != null && g.stops[editStop] && (
+        <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: `1px solid ${theme.borderFaint}` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+            <div onClick={() => setEditStop(null)}
+              style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+            </div>
+            <span style={{ fontFamily: FONT, fontSize: 12, color: theme.textDim }}>
+              {de ? `Stopp bei ${g.stops[editStop].at} %` : `Stop at ${g.stops[editStop].at}%`}
+            </span>
+          </div>
+          {/* The same mixer the Farbe tab uses — one colour surface in this app,
+              not one per place that needs a colour. */}
+          <ColorMixer value={g.stops[editStop].color}
+            alpha={g.stops[editStop].alpha == null ? 100 : g.stops[editStop].alpha}
+            onChange={(c) => setStop(editStop, { color: c })}
+            onAlphaChange={(a) => setStop(editStop, { alpha: a })}
+            theme={theme} darkMode={darkMode} />
+        </div>
+      )}
+
       {g.stops.map((st, i) => (
         <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
           <div style={{ ...field, width: 52, display: "flex", alignItems: "center" }}>
@@ -17355,12 +17379,9 @@ function CanvasGradientEditor({ value, onChange, theme, darkMode, de }) {
             <span style={{ fontSize: 11, color: theme.textFaint }}>%</span>
           </div>
           <div style={{ ...field, flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 7 }}>
-            <label style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, cursor: "pointer",
-              background: st.color, border: `1px solid ${theme.borderFaint}`, overflow: "hidden" }}>
-              <input type="color" value={st.color}
-                onChange={(e) => setStop(i, { color: e.target.value })}
-                style={{ opacity: 0, width: 1, height: 1 }} />
-            </label>
+            <div onClick={() => setEditStop(editStop === i ? null : i)}
+              style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, cursor: "pointer",
+                background: st.color, border: `1px solid ${theme.borderFaint}` }} />
             <input value={String(st.color).replace("#", "").toUpperCase()}
               onChange={(e) => { const v = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
                 if (v.length === 6) setStop(i, { color: "#" + v }); }}
@@ -17418,20 +17439,19 @@ const hsvToRgb = ({ h, s, v }) => {
   return { r: (r1 + m) * 255, g: (g1 + m) * 255, b: (b1 + m) * 255 };
 };
 
-function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, theme, darkMode, de, onClose }) {
-  const [tab, setTab] = useState(() => isGradient(value) ? "gradient" : "custom");
-  // A gradient has no single hue, so the mixing square starts from its first
-  // stop rather than from the object itself.
-  const seed = isGradient(value) ? (gradStops(value)[0]?.color || "#000000") : value;
-  const [hsv, setHsv] = useState(() => rgbToHsv(hexToRgb(seed)));
-  const [hex, setHex] = useState(String(seed || "#000000").replace("#", "").toUpperCase());
+// The colour mixing surface on its own: square, hue, alpha, hex. Pulled out of
+// the picker because the gradient's stops need exactly this and were getting a
+// second, lesser version of it — a native colour input, which looks nothing like
+// the rest and behaves differently on every platform.
+function ColorMixer({ value, alpha = 100, onChange, onAlphaChange, theme, darkMode }) {
+  const [hsv, setHsv] = useState(() => rgbToHsv(hexToRgb(value)));
+  const [hex, setHex] = useState(String(value || "#000000").replace("#", "").toUpperCase());
   const svRef = useRef(null);
 
-  // Follow the outside value, but not while this picker is the one changing it —
+  // Follow the outside value, but not while this is the thing changing it —
   // otherwise dragging in the square fights its own round-trip and the knob
-  // jitters. Comparing the resulting hex is enough to tell the two apart.
+  // jitters. Comparing the resulting hex tells the two apart.
   useEffect(() => {
-    if (isGradient(value)) return;
     const incoming = String(value || "#000000").toUpperCase();
     if (rgbToHex(hsvToRgb(hsv)).toUpperCase() !== incoming) {
       setHsv(rgbToHsv(hexToRgb(incoming)));
@@ -17461,6 +17481,56 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, theme
   const pure = rgbToHex(hsvToRgb({ h: hsv.h, s: 1, v: 1 }));
   const current = rgbToHex(hsvToRgb(hsv));
   const chequer = "conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)";
+  const field = { height: 30, borderRadius: 9, border: "none", outline: "none",
+    background: darkMode ? "rgba(255,255,255,0.07)" : "#F1F1F4", color: theme.text,
+    fontFamily: FONT, fontSize: 12.5, padding: "0 10px" };
+
+  return (
+    <>
+      {/* Saturation across, brightness down, over the pure hue. */}
+      <div ref={svRef}
+        onPointerDown={dragIn(svRef, (x, y) => commit({ ...hsv, s: x, v: 1 - y }))}
+        style={{ position: "relative", height: 180, borderRadius: 11, cursor: "crosshair",
+          background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, ${pure})` }}>
+        <div style={{ position: "absolute", left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%`,
+          transform: "translate(-50%, -50%)", width: 14, height: 14, borderRadius: "50%",
+          background: current, border: "2.5px solid #fff", boxShadow: "0 1px 4px rgba(0,0,0,0.4)",
+          pointerEvents: "none" }} />
+      </div>
+
+      <Track bg="linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)"
+        pos={hsv.h / 360} onSet={(x) => commit({ ...hsv, h: x * 360 })} />
+      {onAlphaChange && (
+        <Track bg={`linear-gradient(to right, transparent, ${current}), ${chequer}`}
+          size="8px 8px" pos={alpha / 100} onSet={(x) => onAlphaChange(Math.round(x * 100))} />
+      )}
+
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        <input value={hex}
+          onChange={(e) => {
+            const v = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
+            setHex(v.toUpperCase());
+            if (v.length === 6) { const h = "#" + v; setHsv(rgbToHsv(hexToRgb(h))); onChange(h); }
+          }}
+          style={{ ...field, flex: 1, minWidth: 0, letterSpacing: 0.5 }} />
+        {onAlphaChange && (
+          <div style={{ ...field, width: 62, display: "flex", alignItems: "center", gap: 2 }}>
+            <NumberField value={alpha} min={0} max={100} onCommit={(v) => onAlphaChange(v)}
+              style={{ width: 28, border: "none", outline: "none", background: "transparent",
+                color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
+            <span style={{ fontSize: 11.5, color: theme.textFaint }}>%</span>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, theme, darkMode, de, onClose }) {
+  const [tab, setTab] = useState(() => isGradient(value) ? "gradient" : "custom");
+  // A gradient has no single hue, so the mixing square starts from its first
+  // stop rather than from the object itself.
+  const seed = isGradient(value) ? (gradStops(value)[0]?.color || "#000000") : value;
 
   // The brand's own colours, structured where the profile has it structured.
   const pal = brand?.color_palette || {};
@@ -17484,7 +17554,14 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, theme
       <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
         {[["custom", de ? "Farbe" : "Colour"], ["gradient", de ? "Verlauf" : "Gradient"],
           ["brand", "Brand"]].map(([k, l]) => (
-          <div key={k} onClick={() => setTab(k)}
+          <div key={k} onClick={() => {
+              setTab(k);
+              // Switching applies immediately — a tab you have to confirm before
+              // it does anything reads as broken. Brand is the exception: it has
+              // nothing to apply until you pick a colour from it.
+              if (k === "gradient" && !isGradient(value)) onChange(defaultGradient(value));
+              if (k === "custom" && isGradient(value)) onChange(gradStops(value)[0]?.color || "#000000");
+            }}
             style={{ padding: "6px 10px", borderRadius: 8, cursor: "pointer", fontFamily: FONT,
               fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap",
               color: tab === k ? theme.text : theme.textDim,
@@ -17497,42 +17574,9 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, theme
       </div>
 
       {tab === "custom" ? (
-        <>
-          {/* Saturation across, brightness down, over the pure hue. */}
-          <div ref={svRef}
-            onPointerDown={dragIn(svRef, (x, y) => commit({ ...hsv, s: x, v: 1 - y }))}
-            style={{ position: "relative", height: 180, borderRadius: 11, cursor: "crosshair",
-              background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, ${pure})` }}>
-            <div style={{ position: "absolute", left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%`,
-              transform: "translate(-50%, -50%)", width: 14, height: 14, borderRadius: "50%",
-              background: current, border: "2.5px solid #fff", boxShadow: "0 1px 4px rgba(0,0,0,0.4)",
-              pointerEvents: "none" }} />
-          </div>
-
-          <Track bg="linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)"
-            pos={hsv.h / 360} onSet={(x) => commit({ ...hsv, h: x * 360 })} />
-          <Track bg={`linear-gradient(to right, transparent, ${current}), ${chequer}`}
-            size="8px 8px" pos={alpha / 100} onSet={(x) => onAlphaChange?.(Math.round(x * 100))} />
-
-          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            <input value={hex}
-              onChange={(e) => {
-                const v = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
-                setHex(v.toUpperCase());
-                if (v.length === 6) { const h = "#" + v; setHsv(rgbToHsv(hexToRgb(h))); onChange(h); }
-              }}
-              style={{ ...field, flex: 1, minWidth: 0, letterSpacing: 0.5 }} />
-            <div style={{ ...field, width: 62, display: "flex", alignItems: "center", gap: 2 }}>
-              {/* Same rule as the sidebar: typing 35 over 100 must not apply 3 on
-                  the way. The hex beside it is different — it is only ever
-                  committed at six valid characters, so it has no half-values. */}
-              <NumberField value={alpha} min={0} max={100} onCommit={(v) => onAlphaChange?.(v)}
-                style={{ width: 28, border: "none", outline: "none", background: "transparent",
-                  color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
-              <span style={{ fontSize: 11.5, color: theme.textFaint }}>%</span>
-            </div>
-          </div>
-        </>
+        <ColorMixer value={isGradient(value) ? seed : value} alpha={alpha}
+          onChange={onChange} onAlphaChange={onAlphaChange}
+          theme={theme} darkMode={darkMode} />
       ) : tab === "gradient" ? (
         <CanvasGradientEditor value={value} onChange={onChange}
           theme={theme} darkMode={darkMode} de={de} />
@@ -20144,13 +20188,27 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       y: e.currentTarget.getBoundingClientRect().top })}
                     style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, cursor: "pointer",
                     border: `1px solid ${line}`, backgroundColor: "#fff",
-                    backgroundImage: `linear-gradient(${withAlpha(cur, selItem.fillAlpha)}, ${withAlpha(cur, selItem.fillAlpha)}), conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)`,
+                    backgroundImage: isGradient(cur)
+                      ? gradientCss(cur)
+                      : `linear-gradient(${withAlpha(cur, selItem.fillAlpha)}, ${withAlpha(cur, selItem.fillAlpha)}), conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)`,
                     backgroundSize: "auto, 8px 8px" }} />
-                  <input value={String(cur).replace("#", "").toUpperCase()}
-                    onChange={e => { const v = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
-                      if (v.length === 6) set(key, "#" + v); }}
-                    style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
-                      color: theme.text, fontFamily: FONT, fontSize: 12.5, letterSpacing: 0.4 }} />
+                  {/* A gradient has no hex to show, so the row names its type —
+                      "[object Object]" was what String() made of it. */}
+                  {isGradient(cur) ? (
+                    <span style={{ flex: 1, minWidth: 0, color: theme.text, fontFamily: FONT, fontSize: 12.5 }}>
+                      {(() => {
+                        const t = GRADIENT_TYPES.find(([v]) => v === cur.type);
+                        const l = t?.[1];
+                        return typeof l === "string" ? l : (l ? (de ? l.de : l.en) : cur.type);
+                      })()}
+                    </span>
+                  ) : (
+                    <input value={String(cur).replace("#", "").toUpperCase()}
+                      onChange={e => { const v = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
+                        if (v.length === 6) set(key, "#" + v); }}
+                      style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
+                        color: theme.text, fontFamily: FONT, fontSize: 12.5, letterSpacing: 0.4 }} />
+                  )}
                   <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0,
                     paddingLeft: 8, borderLeft: `1px solid ${line}` }}>
                     <NumberField value={selItem.fillAlpha == null ? 100 : selItem.fillAlpha}
