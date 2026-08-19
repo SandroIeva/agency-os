@@ -18626,12 +18626,20 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       if (k === "c" && sel) { e.preventDefault(); copySel(); }
       if (k === "d" && sel) { e.preventDefault(); duplicateSel(); }
       if (k === "v") { e.preventDefault(); pasteClip(null); }
+      if (k === "g") {
+        e.preventDefault();
+        if (e.shiftKey) ungroupSel(groupOf(sel) || groupOf(pick[0]));
+        else groupSel();
+      }
       if (e.key === "]" && sel) { e.preventDefault(); restack("front"); }
       if (e.key === "[" && sel) { e.preventDefault(); restack("back"); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [sel, editing, onClose]);
+    // `pick` belongs here: a marquee selects several and leaves sel null, so
+    // without it the handler kept a closure from before the selection existed —
+    // ⌘G would group nothing, and Delete already had the same hole.
+  }, [sel, pick, items, editing, onClose]);
 
   // Zoom about the middle of the working area, so the frame does not slide off
   // when the percentage is set from the menu rather than the wheel.
@@ -19022,6 +19030,78 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // Double-clicking a group steps inside it, so its parts can be moved on their
   // own. Clicking empty canvas steps back out.
   const enterGroup = (it) => { if (it.groupId) setEnteredGroup(it.groupId); };
+
+  // Grouping is the same field a mask pair already uses, handed out by hand:
+  // one id shared by several items, which moveSetFor turns into "these move
+  // together". Members of other groups are absorbed rather than nested — there
+  // is one level, and pretending otherwise would need a tree the rest of the
+  // editor does not have.
+  const groupSel = (ids2) => {
+    const ids = [...new Set(ids2 && ids2.length ? ids2 : pick)];
+    if (ids.length < 2) return;
+    markChange();
+    const gid = crypto.randomUUID();
+    setItems(list => list.map(i => (ids.includes(i.id) ? { ...i, groupId: gid } : i)));
+    setEnteredGroup(null);
+  };
+  // A mask pair is held together BY its group, so ungrouping one would let the
+  // mask and its content drift apart on the next drag. Those are released with
+  // "Maske lösen", which undoes both halves of the relationship.
+  const groupOf = (id) => items.find(i => i.id === id)?.groupId || null;
+  const canUngroup = (gid) => !!gid && !items.some(i => i.groupId === gid && (i.isMask || i.maskId));
+  const ungroupSel = (gid) => {
+    if (!canUngroup(gid)) return;
+    markChange();
+    setItems(list => list.map(i => (i.groupId === gid ? { ...i, groupId: undefined } : i)));
+    setEnteredGroup(null);
+  };
+
+  // Aligning several things to EACH OTHER, against the box they all sit in.
+  // Units, not items: a group aligns as one thing for the same reason it drags
+  // as one thing — moving its members apart is the opposite of what it is for.
+  const alignUnits = () => {
+    const seen = new Set(), units = [];
+    for (const id of [...new Set(pick)]) {
+      if (seen.has(id)) continue;
+      const o = items.find(q => q.id === id);
+      if (!o) continue;
+      const members = (o.groupId && enteredGroup !== o.groupId)
+        ? items.filter(q => q.groupId === o.groupId) : [o];
+      members.forEach(m => seen.add(m.id));
+      const bs = members.map(boxOf);
+      const x = Math.min(...bs.map(b => b.x)), y = Math.min(...bs.map(b => b.y));
+      units.push({ ids: members.map(m => m.id),
+        box: { x, y, w: Math.max(...bs.map(b => b.x + b.w)) - x, h: Math.max(...bs.map(b => b.y + b.h)) - y } });
+    }
+    return units;
+  };
+  const alignPick = (mode) => {
+    const units = alignUnits();
+    if (units.length < 2) return;
+    const X0 = Math.min(...units.map(u => u.box.x)), X1 = Math.max(...units.map(u => u.box.x + u.box.w));
+    const Y0 = Math.min(...units.map(u => u.box.y)), Y1 = Math.max(...units.map(u => u.box.y + u.box.h));
+    const shift = new Map();
+    for (const u of units) {
+      const b = u.box;
+      const d = mode === "l" ? [X0 - b.x, 0]
+        : mode === "r" ? [X1 - (b.x + b.w), 0]
+        : mode === "cx" ? [(X0 + X1) / 2 - (b.x + b.w / 2), 0]
+        : mode === "t" ? [0, Y0 - b.y]
+        : mode === "b" ? [0, Y1 - (b.y + b.h)]
+        : [0, (Y0 + Y1) / 2 - (b.y + b.h / 2)];
+      for (const id of u.ids) shift.set(id, d);
+    }
+    markChange();
+    setItems(list => list.map(i => {
+      const d = shift.get(i.id);
+      if (!d || (!d[0] && !d[1])) return i;
+      const [dx, dy] = d;
+      if (i.type === "draw") return { ...i, ox: (i.ox || 0) + dx, oy: (i.oy || 0) + dy };
+      if (i.type === "arrow" || i.type === "line")
+        return { ...i, x1: i.x1 + dx, y1: i.y1 + dy, x2: i.x2 + dx, y2: i.y2 + dy };
+      return { ...i, x: Math.round(i.x + dx), y: Math.round(i.y + dy) };
+    }));
+  };
 
   const onRadiusDown = (e, it, hd) => {
     e.stopPropagation();
@@ -19439,6 +19519,39 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       </div>
     )}
   </>);
+
+  // Figma's alignment marks, in one place now that two panels draw them: the
+  // edge you align TO as a line, and two bars of different lengths showing what
+  // moves against it. An earlier pass drew three near-identical arrows, which
+  // told you nothing about which edge was which.
+  const ALIGN_DEFS = [
+    ["l",  <><path d="M4 4v16" /><path d="M8 9h11" /><path d="M8 15h7" /></>, "Links", "Left"],
+    ["cx", <><path d="M12 3v18" /><path d="M6.5 9h11" /><path d="M8.5 15h7" /></>,
+     "Horizontal zentrieren", "Centre horizontally"],
+    ["r",  <><path d="M20 4v16" /><path d="M5 9h11" /><path d="M9 15h7" /></>, "Rechts", "Right"],
+    ["t",  <><path d="M4 4h16" /><path d="M9 8v11" /><path d="M15 8v7" /></>, "Oben", "Top"],
+    ["cy", <><path d="M3 12h18" /><path d="M9 6.5v11" /><path d="M15 8.5v7" /></>,
+     "Vertikal zentrieren", "Centre vertically"],
+    ["b",  <><path d="M4 20h16" /><path d="M9 5v11" /><path d="M15 9v7" /></>, "Unten", "Bottom"],
+  ];
+  const alignBtn = (k, act) => {
+    const [, glyph, dde, een] = ALIGN_DEFS.find(d => d[0] === k);
+    return (
+      <div key={k} title={de ? dde : een} onClick={act}
+        style={{ flex: 1, height: 32, borderRadius: 8, display: "flex", alignItems: "center",
+          justifyContent: "center", cursor: "pointer", color: theme.text,
+          background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="1.9" strokeLinecap="round">{glyph}</svg>
+      </div>
+    );
+  };
+  const alignGrid = (act) => (
+    <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
+      <div style={{ display: "flex", gap: 4, flex: 1 }}>{["l", "cx", "r"].map(k => alignBtn(k, () => act(k)))}</div>
+      <div style={{ display: "flex", gap: 4, flex: 1 }}>{["t", "cy", "b"].map(k => alignBtn(k, () => act(k)))}</div>
+    </div>
+  );
 
   const num = (value, onChange, glyph, suffix = "") => (
           <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
@@ -20122,6 +20235,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           rows.push(row(de ? "Objekte maskieren" : "Use as mask", "", () => maskPair(pick)));
           rows.push(sep("s0"));
         }
+        if (pick.length > 1) {
+          rows.push(row(de ? "Gruppieren" : "Group", `${mod}G`, () => groupSel()));
+        }
+        if (canUngroup(clicked?.groupId)) {
+          rows.push(row(de ? "Gruppierung aufheben" : "Ungroup", `${mod}⇧G`,
+            () => ungroupSel(clicked.groupId)));
+        }
+        if (pick.length > 1 || canUngroup(clicked?.groupId)) rows.push(sep("s0c"));
         if (clicked?.maskId) {
           rows.push(row(de ? "Maske lösen" : "Release mask", "", () => unmask(clicked.id)));
           rows.push(sep("s0b"));
@@ -20510,6 +20631,40 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       {/* right panel */}
       <div style={{ position: "absolute", right: 0, top: 52, bottom: 0, width: PANEL_W, padding: "4px 16px 20px",
         background: panel, borderLeft: `1px solid ${line}`, overflowY: "auto" }}>
+        {/* Several selected: the panel's first job is what you can only do to
+            several things at once. Aligning here is to EACH OTHER — the box they
+            share — not to the frame, which is what the single-element panel
+            below offers. */}
+        {pick.length > 1 && (() => {
+          const n = alignUnits().length;
+          const gid = groupOf(pick[0]);
+          const grouped = !!gid && pick.every(id => groupOf(id) === gid);
+          return (
+            <div style={{ paddingBottom: 14, marginBottom: 4, borderBottom: `1px solid ${line}` }}>
+              {label(de ? "Auswahl" : "Selection")}
+              <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 10 }}>
+                {/* Units, not items: two things in one group are one thing to
+                    align, and saying "3 objects" when only two can move would be
+                    a count of the wrong thing. */}
+                {n > 1 ? (de ? "Zueinander ausrichten" : "Align to each other")
+                       : (de ? "Eine Gruppe — nichts auszurichten" : "One group — nothing to align")}
+              </div>
+              {n > 1 && alignGrid(alignPick)}
+              <div onClick={() => (grouped ? ungroupSel(gid) : groupSel())}
+                style={{ marginTop: 10, height: 34, borderRadius: 9, display: "flex",
+                  alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer",
+                  fontFamily: FONT, fontSize: 12.5, color: theme.text,
+                  background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5",
+                  opacity: (grouped && !canUngroup(gid)) ? 0.45 : 1 }}>
+                {grouped ? (de ? "Gruppierung aufheben" : "Ungroup") : (de ? "Gruppieren" : "Group")}
+                <span style={{ color: theme.textFaint, fontSize: 11.5 }}>
+                  {navigator.platform?.toLowerCase().includes("mac") ? "⌘" : "Ctrl+"}{grouped ? "⇧G" : "G"}
+                </span>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* With the frame in view the panel has two jobs — set it up, or replace
             it with a layout — so they get a tab each instead of stacking. With an
             element selected the panel is about that element, and a grid of
@@ -20678,6 +20833,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 there is nothing to align to; on a fixed banner the frame is the
                 only thing worth aligning to, and it is what people reach for. */}
             {label(de ? "Position" : "Position")}
+            {/* Hidden while several are selected: two alignment grids one above
+                the other, one moving everything and one moving the last thing
+                clicked, is a coin toss. */}
+            {pick.length < 2 && (<>
             <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 10 }}>
               {de ? "Ausrichten am Frame" : "Align to frame"}
             </div>
@@ -20690,48 +20849,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   set2({ x1: selItem.x1 + dx, y1: selItem.y1 + dy, x2: selItem.x2 + dx, y2: selItem.y2 + dy });
                 else set2({ x: Math.round(selItem.x + dx), y: Math.round(selItem.y + dy) });
               };
-              // Figma's alignment marks: the edge you align TO as a line, and two
-              // bars of different lengths showing what moves against it. My first
-              // pass drew three near-identical arrows, which told you nothing
-              // about which edge was which.
-              const rowA = [
-                ["l", () => move(0, null),
-                 <><path d="M4 4v16" /><path d="M8 9h11" /><path d="M8 15h7" /></>,
-                 de ? "Links" : "Left"],
-                ["cx", () => move((W - b.w) / 2, null),
-                 <><path d="M12 3v18" /><path d="M6.5 9h11" /><path d="M8.5 15h7" /></>,
-                 de ? "Horizontal zentrieren" : "Centre horizontally"],
-                ["r", () => move(W - b.w, null),
-                 <><path d="M20 4v16" /><path d="M5 9h11" /><path d="M9 15h7" /></>,
-                 de ? "Rechts" : "Right"],
-              ];
-              const rowB = [
-                ["t", () => move(null, 0),
-                 <><path d="M4 4h16" /><path d="M9 8v11" /><path d="M15 8v7" /></>,
-                 de ? "Oben" : "Top"],
-                ["cy", () => move(null, (H - b.h) / 2),
-                 <><path d="M3 12h18" /><path d="M9 6.5v11" /><path d="M15 8.5v7" /></>,
-                 de ? "Vertikal zentrieren" : "Centre vertically"],
-                ["b", () => move(null, H - b.h),
-                 <><path d="M4 20h16" /><path d="M9 5v11" /><path d="M15 9v7" /></>,
-                 de ? "Unten" : "Bottom"],
-              ];
-              const btn = (glyph, act, title) => (
-                <div key={title} title={title} onClick={act}
-                  style={{ flex: 1, height: 32, borderRadius: 8, display: "flex", alignItems: "center",
-                    justifyContent: "center", cursor: "pointer", color: theme.text,
-                    background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth="1.9" strokeLinecap="round">{glyph}</svg>
-                </div>
-              );
-              return (
-                <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
-                  <div style={{ display: "flex", gap: 4, flex: 1 }}>{rowA.map(([, a, g, t]) => btn(g, a, t))}</div>
-                  <div style={{ display: "flex", gap: 4, flex: 1 }}>{rowB.map(([, a, g, t]) => btn(g, a, t))}</div>
-                </div>
-              );
+              const act = (k) =>
+                k === "l" ? move(0, null)
+                : k === "cx" ? move((W - b.w) / 2, null)
+                : k === "r" ? move(W - b.w, null)
+                : k === "t" ? move(null, 0)
+                : k === "cy" ? move(null, (H - b.h) / 2)
+                : move(null, H - b.h);
+              return alignGrid(act);
             })()}
+            </>)}
             <div style={two}>
               {num(Math.round(boxOf(selItem).x), v => {
                 const b = boxOf(selItem), d2 = (Number(v) || 0) - b.x;
