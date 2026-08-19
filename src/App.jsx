@@ -18119,6 +18119,23 @@ function NumberField({ value, onCommit, min, max, style, ...rest }) {
   );
 }
 
+            {selItem.type === "rect" && (<>
+              <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 12 }}>
+                {de ? "Eckenradius" : "Corner radius"}
+              </div>
+              {radiusRow({
+                value: radiiOf(selItem)[0],
+                per: Array.isArray(selItem.radii),
+                onValue: (v) => { const n = Math.max(0, v);
+                  set2(Array.isArray(selItem.radii) ? { radii: [n, n, n, n] } : { radius: n }); },
+                onTogglePer: () => set2(Array.isArray(selItem.radii)
+                  ? { radii: undefined, radius: selItem.radii[0] || 0 }
+                  : { radii: radiiOf(selItem) }),
+                corners: radiiOf(selItem),
+                onCorner: (i2, v) => { const next = [...radiiOf(selItem)]; next[i2] = v; set2({ radii: next }); },
+              })}
+            </>)}
+
 function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, userOrg,
                         theme, darkMode, appLanguage, onUpload, onDone, onAutoSave, onPublish, onClose }) {
   const de = appLanguage === "de";
@@ -18136,6 +18153,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   const [bg, setBg] = useState(doc?.bg || palette[1] || "#FFFFFF");
   const [frameRadius, setFrameRadius] = useState(Number(doc?.radius) || 0);
+  // null = all four corners share the one radius above. An array is the frame
+  // saying its corners differ — the same shape a rectangle's radii already had,
+  // so both ends of the panel can drive one control.
+  const [frameRadii, setFrameRadii] = useState(
+    Array.isArray(doc?.radii) && doc.radii.length === 4
+      ? doc.radii.map(v => Math.max(0, Number(v) || 0)) : null);
   const [items, setItems] = useState(() => (Array.isArray(doc?.items) ? doc.items : []));
   const [sel, setSel] = useState(null);
   const [tool, setTool] = useState("select");
@@ -18210,6 +18233,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   };
   const applyDoc = (d) => {
     setBg(d.bg); setItems(d.items || []); setFrameRadius(d.radius || 0);
+    setFrameRadii(Array.isArray(d.radii) && d.radii.length === 4 ? d.radii : null);
     setSel(null); setEditing(null);
   };
   const undo = () => {
@@ -18238,9 +18262,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // document unchanged and does nothing — and it also means simply opening a
   // canvas never writes a row.
   const [saveState, setSaveState] = useState("");     // "" | "saving" | "saved"
-  const baselineRef = useRef(JSON.stringify({ bg: doc?.bg || null, items: doc?.items || [], radius: Number(doc?.radius) || 0, w: Number(doc?.w) || size[0], h: Number(doc?.h) || size[1] }));
-  const latestRef = useRef({ bg, items, radius: frameRadius, w: W, h: H });
-  latestRef.current = { bg, items, radius: frameRadius, w: W, h: H };
+  const baselineRef = useRef(JSON.stringify({ bg: doc?.bg || null, items: doc?.items || [], radius: Number(doc?.radius) || 0, radii: Array.isArray(doc?.radii) ? doc.radii : undefined, w: Number(doc?.w) || size[0], h: Number(doc?.h) || size[1] }));
+  const latestRef = useRef({ bg, items, radius: frameRadius, radii: frameRadii || undefined, w: W, h: H });
+  latestRef.current = { bg, items, radius: frameRadius, radii: frameRadii || undefined, w: W, h: H };
   const saveTimer = useRef(null);
 
   const flush = async (payload) => {
@@ -18255,13 +18279,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   useEffect(() => {
     if (!onAutoSave) return;
-    const payload = { bg, items, radius: frameRadius, w: W, h: H };
+    const payload = { bg, items, radius: frameRadius, radii: frameRadii || undefined, w: W, h: H };
     if (JSON.stringify(payload) === baselineRef.current) return;
     setSaveState("saving");
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => flush(payload), 700);
     return () => clearTimeout(saveTimer.current);
-  }, [items, bg, frameRadius, W, H]);
+  }, [items, bg, frameRadius, frameRadii, W, H]);
 
   // Closing must not drop the last few hundred milliseconds of work, so the
   // pending save is flushed on the way out.
@@ -18283,6 +18307,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // One radius, or four. Figma's arrangement: a single field until you ask for
   // the corners separately. Both the display and the export read this, so they
   // cannot end up rounding different corners.
+  // The frame's four corners, clamped so a radius can never exceed half the
+  // shorter side — read by the stage and by the export, so they cannot round
+  // differently.
+  const frameCorners = () => {
+    const cap = Math.min(W, H) / 2;
+    const raw = Array.isArray(frameRadii) ? frameRadii : [0, 1, 2, 3].map(() => frameRadius);
+    return raw.map(v => Math.min(cap, Math.max(0, Number(v) || 0)));
+  };
+
   const radiiOf = (it) => Array.isArray(it.radii) && it.radii.length === 4
     ? it.radii.map(v => Math.max(0, Number(v) || 0))
     : [0, 1, 2, 3].map(() => Math.max(0, Number(it.radius) || 0));
@@ -19099,9 +19132,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     // export a white rectangle that only looks like nothing on a white page.
     // A rounded frame clips everything, so the corners come out genuinely empty
     // rather than filled with the background colour.
-    if (frameRadius > 0 && ctx.roundRect) {
+    if (frameCorners().some(v => v > 0) && ctx.roundRect) {
       ctx.beginPath();
-      ctx.roundRect(0, 0, W, H, Math.min(frameRadius, Math.min(W, H) / 2));
+      ctx.roundRect(0, 0, W, H, frameCorners());
       ctx.clip();
     }
     // JPEG has no alpha channel: a transparent frame would come out black
@@ -19346,7 +19379,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         { type: "image/png" });
       const url = await onUpload(file);
       if (!url) throw new Error("upload");
-      onDone(url, { bg, items, radius: frameRadius, w: W, h: H });
+      onDone(url, { bg, items, radius: frameRadius, radii: frameRadii || undefined, w: W, h: H });
     } catch (e) {
       // A tainted canvas and a failed upload look identical to the user unless
       // they are told apart, and both end with nothing saved.
@@ -19382,6 +19415,47 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       <path d="M21 4h-9a8 8 0 00-8 8v9" />
     </svg>
   );
+
+  // ONE corner-radius control, for the frame and for a rectangle. They were two
+  // different things doing one job: the frame had a field and no way to reach
+  // the four corners, the rectangle had the four corners and no field to type
+  // the shared radius into. A number, and a button at the right end that opens
+  // the corners — both places, same control.
+  const radiusRow = ({ value, per, onValue, onTogglePer, corners, onCorner }) => (<>
+    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6,
+      padding: "8px 6px 8px 10px", borderRadius: 9,
+      background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+      <span style={{ display: "flex", color: theme.textFaint, flexShrink: 0 }}>{cornerGlyph(0)}</span>
+      <NumberField value={value} min={0} onCommit={onValue}
+        style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
+          color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
+      {/* One rounded corner on the left for the radius itself; four detached
+          ones on the button, which is what it opens. */}
+      <div title={de ? "Ecken einzeln" : "Corners individually"} onClick={onTogglePer}
+        style={{ width: 26, height: 24, borderRadius: 7, flexShrink: 0, display: "flex",
+          alignItems: "center", justifyContent: "center", cursor: "pointer",
+          color: per ? theme.text : theme.textFaint,
+          background: per ? (darkMode ? "rgba(255,255,255,0.14)" : "#E3E3E8") : "transparent" }}>
+        {radiusGlyph(14)}
+      </div>
+    </div>
+    {per && (
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 6 }}>
+        {/* radii are [tl, tr, br, bl]; the grid reads left-right, top-bottom,
+            so bottom-left (3) comes before bottom-right (2). Each mark is
+            turned to the corner it stands for. */}
+        {[[0, de ? "Oben links" : "Top left"],
+          [1, de ? "Oben rechts" : "Top right"],
+          [3, de ? "Unten links" : "Bottom left"],
+          [2, de ? "Unten rechts" : "Bottom right"],
+        ].map(([i2, ttl]) => (
+          <div key={i2} title={ttl}>
+            {num(corners[i2], v => onCorner(i2, Math.max(0, Number(v) || 0)), cornerGlyph(i2))}
+          </div>
+        ))}
+      </div>
+    )}
+  </>);
 
   const num = (value, onChange, glyph, suffix = "") => (
           <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
@@ -19504,7 +19578,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             transition: flying ? "transform 620ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
             // Selected frames say so. Without this the sidebar changed and
             // nothing on the canvas did, which reads as nothing having happened.
-            borderRadius: frameRadius > 0 ? Math.min(frameRadius, Math.min(W, H) / 2) : 0,
+            borderRadius: frameCorners().map(v => `${v}px`).join(" "),
             outline: sel === "frame" ? `${Math.max(1, 2 / cam.s)}px solid #15151c` : "none",
             outlineOffset: 0,
             boxShadow: "0 18px 60px rgba(0,0,0,0.28)" }}>
@@ -20564,13 +20638,20 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             </div>
 
             {label(de ? "Eckenradius" : "Corner radius")}
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, padding: "8px 10px",
-              borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
-              <span style={{ display: "flex", color: theme.textFaint }}>{radiusGlyph()}</span>
-              <NumberField value={frameRadius} min={0} onCommit={setFrameRadius}
-                style={{ width: "100%", border: "none", outline: "none", background: "transparent",
-                  color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
-            </div>
+            {radiusRow({
+              value: frameRadii ? frameRadii[0] : frameRadius,
+              per: !!frameRadii,
+              // Typing in the shared field levels all four, which is the whole
+              // point of it still being there while the corners are open.
+              onValue: (v) => { markChange(); const n = Math.max(0, v);
+                if (frameRadii) setFrameRadii([n, n, n, n]); else setFrameRadius(n); },
+              onTogglePer: () => { markChange();
+                if (frameRadii) { setFrameRadius(frameRadii[0] || 0); setFrameRadii(null); }
+                else setFrameRadii([0, 1, 2, 3].map(() => frameRadius)); },
+              corners: frameRadii || [0, 1, 2, 3].map(() => frameRadius),
+              onCorner: (i2, v) => { markChange();
+                setFrameRadii(prev => { const next = [...(prev || [])]; next[i2] = v; return next; }); },
+            })}
 
             {label(de ? "Hintergrund" : "Background")}
             {/* One swatch that opens the picker, like every other colour in the
