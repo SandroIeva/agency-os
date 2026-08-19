@@ -17370,6 +17370,98 @@ const gradientCanvas = (ctx, g, b) => {
   return grad;
 };
 
+// ── Depth ────────────────────────────────────────────────────────────────────
+// Turning a flat object in space. The editor gets a CSS 3D transform; the
+// export cannot — a canvas has only affine transforms, and perspective is not
+// one. So the same rotation is also expressed as WHERE THE FOUR CORNERS LAND,
+// and the export maps the object onto that quadrilateral.
+//
+// Both come from this one function, which is the only way the two can agree.
+const D3_DEFAULT = { rx: 0, ry: 0, z: 0, persp: 800 };
+const d3Of = (it) => ({ ...D3_DEFAULT, ...(it?.d3 || {}) });
+const has3d = (it) => {
+  const d = it?.d3;
+  return !!d && !!(Number(d.rx) || Number(d.ry) || Number(d.z));
+};
+const d3Css = (d) =>
+  `perspective(${d.persp}px) translateZ(${d.z}px) rotateX(${d.rx}deg) rotateY(${d.ry}deg)`;
+
+// A point of the element, in coordinates relative to its centre — which is
+// where CSS puts the transform origin, and therefore where the projection
+// happens from.
+//
+// The transform list reads translateZ, rotateX, rotateY, so a point goes
+// through rotateY first and translateZ last; then perspective divides by the
+// depth it ended up at. Getting that ORDER wrong still produces a plausible
+// picture, which is exactly why it is checked against the browser's own matrix
+// rather than trusted.
+const d3Project = (d, x, y) => {
+  const rx = (d.rx * Math.PI) / 180, ry = (d.ry * Math.PI) / 180;
+  const cx = Math.cos(rx), sx = Math.sin(rx), cy = Math.cos(ry), sy = Math.sin(ry);
+  const X = x * cy;
+  const Y = y * cx + x * sy * sx;
+  const Z = y * sx - x * sy * cx + Number(d.z || 0);
+  const P = Math.max(1, Number(d.persp) || 800);
+  // Behind the eye there is no picture. Clamped rather than allowed to flip,
+  // because a sign change here turns the object inside out.
+  const k = P / Math.max(P * 0.05, P - Z);
+  return [X * k, Y * k];
+};
+// Drawing a picture onto a perspective plane, which setTransform cannot do: a
+// canvas transform is affine and perspective is not. So the surface is cut into
+// a grid, every grid point is projected exactly, and each little cell is drawn
+// with the affine map that fits ITS OWN corners. The error is zero at every
+// vertex and falls with the square of the cell size in between.
+//
+// Cells are drawn a hair oversized about their centre. Without it, the
+// antialiasing along two abutting clip paths leaves a visible hairline grid
+// across the object — the seams the technique is otherwise known for.
+const drawTri = (ctx, src, s0, s1, s2, d0, d1, d2) => {
+  const gx = (d0[0] + d1[0] + d2[0]) / 3, gy = (d0[1] + d1[1] + d2[1]) / 3;
+  const grow = ([x, y]) => {
+    const dx = x - gx, dy = y - gy, len = Math.hypot(dx, dy) || 1;
+    return [x + (dx / len) * 0.6, y + (dy / len) * 0.6];
+  };
+  const [e0, e1, e2] = [grow(d0), grow(d1), grow(d2)];
+  const den = (s1[0] - s0[0]) * (s2[1] - s0[1]) - (s2[0] - s0[0]) * (s1[1] - s0[1]);
+  if (!den) return;
+  const a = ((d1[0] - d0[0]) * (s2[1] - s0[1]) - (d2[0] - d0[0]) * (s1[1] - s0[1])) / den;
+  const b = ((d2[0] - d0[0]) * (s1[0] - s0[0]) - (d1[0] - d0[0]) * (s2[0] - s0[0])) / den;
+  const c = ((d1[1] - d0[1]) * (s2[1] - s0[1]) - (d2[1] - d0[1]) * (s1[1] - s0[1])) / den;
+  const e = ((d2[1] - d0[1]) * (s1[0] - s0[0]) - (d1[1] - d0[1]) * (s2[0] - s0[0])) / den;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(e0[0], e0[1]); ctx.lineTo(e1[0], e1[1]); ctx.lineTo(e2[0], e2[1]);
+  ctx.closePath(); ctx.clip();
+  ctx.transform(a, c, b, e, d0[0] - a * s0[0] - b * s0[1], d0[1] - c * s0[0] - e * s0[1]);
+  ctx.drawImage(src, 0, 0);
+  ctx.restore();
+};
+// `src` holds the region [-halfW, halfW] x [-halfH, halfH] of the element,
+// measured from its centre, which is where the projection happens from.
+const drawProjected = (ctx, src, d, halfW, halfH, cx, cy, n = 20) => {
+  const at = (i, j) => {
+    const [px, py] = d3Project(d, -halfW + (2 * halfW * i) / n, -halfH + (2 * halfH * j) / n);
+    return [cx + px, cy + py];
+  };
+  const su = (i) => (src.width * i) / n, sv = (j) => (src.height * j) / n;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const a0 = [su(i), sv(j)], a1 = [su(i + 1), sv(j)];
+      const a2 = [su(i + 1), sv(j + 1)], a3 = [su(i), sv(j + 1)];
+      const b0 = at(i, j), b1 = at(i + 1, j), b2 = at(i + 1, j + 1), b3 = at(i, j + 1);
+      drawTri(ctx, src, a0, a1, a2, b0, b1, b2);
+      drawTri(ctx, src, a0, a2, a3, b0, b2, b3);
+    }
+  }
+};
+
+// The four corners, in the same order a quad is walked: top-left, top-right,
+// bottom-right, bottom-left.
+const d3Quad = (d, w, h) =>
+  [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]]
+    .map(([x, y]) => d3Project(d, x, y));
+
 // ── Repeat ───────────────────────────────────────────────────────────────────
 // A repeat is not copies in the document: it is one object drawn several times.
 // It stays one thing to select, to restyle and to undo, and changing the count
@@ -18222,6 +18314,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // picture lands in a fill instead of becoming an image of its own.
   const [fillImgFor, setFillImgFor] = useState(null);
   const [repeatOpen, setRepeatOpen] = useState(false);
+  const [advOpen, setAdvOpen] = useState(false);
   // Space held = the hand, borrowed. The chosen tool is untouched, so letting go
   // puts you back where you were rather than making you re-pick the arrow.
   const [spacePan, setSpacePan] = useState(false);
@@ -19492,133 +19585,170 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           ctx.scale(pl.s, pl.s);
           ctx.translate(-cx0, -cy0);
         }
-      if (it.type === "image" && it.url) {
-        const img = await loadImage(it.url);
-        drawFitted(ctx, img, it);
-      } else if (it.type === "sticky") {
-        ctx.fillStyle = await paintCanvas(ctx, it.fill, boxOf(it), it.fillAlpha); ctx.fillRect(it.x, it.y, it.w, it.h);
-        const pad = Math.round(it.w * 0.08);
-        ctx.fillStyle = it.color; ctx.font = canvasFont(it);
-        const ms = ctx.measureText("Hg"), Ls = canvasLH(it);
-        const bs = (Ls - (ms.fontBoundingBoxAscent + ms.fontBoundingBoxDescent)) / 2 + ms.fontBoundingBoxAscent;
-        ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
-        ctx.save(); ctx.beginPath(); ctx.rect(it.x, it.y, it.w, it.h); ctx.clip();
-        String(it.text).split("\n").forEach((line, i2) =>
-          ctx.fillText(line, it.x + pad, it.y + pad + i2 * Ls + bs));
-        ctx.restore();
-      } else if (it.type === "rect") {
-        ctx.fillStyle = await paintCanvas(ctx, it.fill, boxOf(it), it.fillAlpha);
-        const cap = Math.min(it.w, it.h) / 2;
-        const rr = radiiOf(it).map(v => Math.min(v, cap));
-        if (rr.some(v => v > 0) && ctx.roundRect) {
-          ctx.beginPath(); ctx.roundRect(it.x, it.y, it.w, it.h, rr); ctx.fill();
-        } else ctx.fillRect(it.x, it.y, it.w, it.h);
-      } else if (it.type === "ellipse") {
-        ctx.fillStyle = await paintCanvas(ctx, it.fill, boxOf(it), it.fillAlpha); ctx.beginPath();
-        ctx.ellipse(it.x + it.w / 2, it.y + it.h / 2, it.w / 2, it.h / 2, 0, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (polyOf(it)) {
-        ctx.fillStyle = await paintCanvas(ctx, it.fill, boxOf(it), it.fillAlpha); ctx.beginPath();
-        polyOf(it).forEach(([fx, fy], i) => {
-          const x = it.x + fx * it.w, y = it.y + fy * it.h;
-          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-        });
-        ctx.closePath(); ctx.fill();
-      } else if (it.type === "draw") {
-        ctx.strokeStyle = it.color; ctx.lineWidth = it.width;
-        ctx.lineCap = "round"; ctx.lineJoin = "round";
-        ctx.beginPath();
-        it.pts.forEach(([x, y], i) => {
-          const px2 = x + (it.ox || 0), py2 = y + (it.oy || 0);
-          i ? ctx.lineTo(px2, py2) : ctx.moveTo(px2, py2);
-        });
-        ctx.stroke();
-      } else if (it.type === "arrow" || it.type === "line") {
-        ctx.strokeStyle = it.color; ctx.fillStyle = it.color;
-        ctx.lineWidth = it.width; ctx.lineCap = "round";
-        ctx.beginPath(); ctx.moveTo(it.x1, it.y1); ctx.lineTo(it.x2, it.y2); ctx.stroke();
-        if (it.type === "line") continue;   // a line is an arrow without the head
-        const a = Math.atan2(it.y2 - it.y1, it.x2 - it.x1), L = it.width * 4.5;
-        ctx.beginPath(); ctx.moveTo(it.x2, it.y2);
-        ctx.lineTo(it.x2 - L * Math.cos(a - 0.42), it.y2 - L * Math.sin(a - 0.42));
-        ctx.lineTo(it.x2 - L * Math.cos(a + 0.42), it.y2 - L * Math.sin(a + 0.42));
-        ctx.closePath(); ctx.fill();
-      } else if (it.type === "text") {
-        ctx.fillStyle = it.color; ctx.font = canvasFont(it);
-        ctx.textAlign = it.align === "center" ? "center" : it.align === "right" ? "right" : "left";
-        const tx = it.align === "center" ? it.x + it.w / 2
-          : it.align === "right" ? it.x + it.w : it.x;
-        // textBaseline "top" puts the em box at y; CSS instead centres the glyph
-        // box inside the line box, so the two drift apart by the half-leading —
-        // measured at 1.4px for 26px text, and it grows with the size. Drawing
-        // on the alphabetic baseline with the same half-leading makes the export
-        // land where the editor showed it.
-        // Letter spacing: the canvas property where the browser has it, and a
-        // per-character walk where it does not — otherwise the export would
-        // quietly ignore a setting the editor is showing.
-        const ls = canvasLS(it);
-        const canSpace = "letterSpacing" in ctx;
-        if (canSpace) ctx.letterSpacing = `${ls}px`;
-        const m = ctx.measureText("Hg");
-        const L = canvasLH(it);
-        const base = (L - (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent)) / 2
-          + m.fontBoundingBoxAscent;
-        ctx.textBaseline = "alphabetic";
-        String(it.text).split("\n").forEach((line, i) => {
-          const y = it.y + i * L + base;
-          if (canSpace || !ls) { ctx.fillText(line, tx, y); return; }
-          const wLine = [...line].reduce((a2, ch) => a2 + ctx.measureText(ch).width + ls, 0) - ls;
-          let x = it.align === "center" ? it.x + it.w / 2 - wLine / 2
-                : it.align === "right" ? it.x + it.w - wLine : it.x;
-          const prev = ctx.textAlign; ctx.textAlign = "left";
-          for (const ch of line) { ctx.fillText(ch, x, y); x += ctx.measureText(ch).width + ls; }
-          ctx.textAlign = prev;
-        });
-        if (canSpace) ctx.letterSpacing = "0px";
-      }
-      // The outline, after the fill and before the inner shadow.
-      if (it.strokeWidth && canStroke(it)) {
-        const b = boxOf(it), sw2 = it.strokeWidth;
-        ctx.save();
-        ctx.filter = "none";
-        if (strokeIsBox(it)) {
-          // A CSS border draws INSIDE the box, so the path is inset by half the
-          // width to put the centred canvas stroke in the same place.
-          tracePath(ctx, { ...it, radii: radiiOf(it).map(v => Math.max(0, v - sw2 / 2)) },
-            { x: b.x + sw2 / 2, y: b.y + sw2 / 2, w: Math.max(0, b.w - sw2), h: Math.max(0, b.h - sw2) });
-        } else {
-          // An SVG stroke is centred on the edge already — inset here and the two
-          // would sit half a stroke apart.
-          tracePath(ctx, it, b);
+      // The whole picture of one item, as a function of the canvas it goes on.
+      // Flat, that canvas is the export itself; turned in space, it is an
+      // offscreen one that gets warped into place afterwards — the drawing must
+      // not know which.
+      const paintFlat = async (ctx) => {
+        if (it.type === "image" && it.url) {
+          const img = await loadImage(it.url);
+          drawFitted(ctx, img, it);
+        } else if (it.type === "sticky") {
+          ctx.fillStyle = await paintCanvas(ctx, it.fill, boxOf(it), it.fillAlpha); ctx.fillRect(it.x, it.y, it.w, it.h);
+          const pad = Math.round(it.w * 0.08);
+          ctx.fillStyle = it.color; ctx.font = canvasFont(it);
+          const ms = ctx.measureText("Hg"), Ls = canvasLH(it);
+          const bs = (Ls - (ms.fontBoundingBoxAscent + ms.fontBoundingBoxDescent)) / 2 + ms.fontBoundingBoxAscent;
+          ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
+          ctx.save(); ctx.beginPath(); ctx.rect(it.x, it.y, it.w, it.h); ctx.clip();
+          String(it.text).split("\n").forEach((line, i2) =>
+            ctx.fillText(line, it.x + pad, it.y + pad + i2 * Ls + bs));
+          ctx.restore();
+        } else if (it.type === "rect") {
+          ctx.fillStyle = await paintCanvas(ctx, it.fill, boxOf(it), it.fillAlpha);
+          const cap = Math.min(it.w, it.h) / 2;
+          const rr = radiiOf(it).map(v => Math.min(v, cap));
+          if (rr.some(v => v > 0) && ctx.roundRect) {
+            ctx.beginPath(); ctx.roundRect(it.x, it.y, it.w, it.h, rr); ctx.fill();
+          } else ctx.fillRect(it.x, it.y, it.w, it.h);
+        } else if (it.type === "ellipse") {
+          ctx.fillStyle = await paintCanvas(ctx, it.fill, boxOf(it), it.fillAlpha); ctx.beginPath();
+          ctx.ellipse(it.x + it.w / 2, it.y + it.h / 2, it.w / 2, it.h / 2, 0, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (polyOf(it)) {
+          ctx.fillStyle = await paintCanvas(ctx, it.fill, boxOf(it), it.fillAlpha); ctx.beginPath();
+          polyOf(it).forEach(([fx, fy], i) => {
+            const x = it.x + fx * it.w, y = it.y + fy * it.h;
+            i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+          });
+          ctx.closePath(); ctx.fill();
+        } else if (it.type === "draw") {
+          ctx.strokeStyle = it.color; ctx.lineWidth = it.width;
+          ctx.lineCap = "round"; ctx.lineJoin = "round";
+          ctx.beginPath();
+          it.pts.forEach(([x, y], i) => {
+            const px2 = x + (it.ox || 0), py2 = y + (it.oy || 0);
+            i ? ctx.lineTo(px2, py2) : ctx.moveTo(px2, py2);
+          });
+          ctx.stroke();
+        } else if (it.type === "arrow" || it.type === "line") {
+          ctx.strokeStyle = it.color; ctx.fillStyle = it.color;
+          ctx.lineWidth = it.width; ctx.lineCap = "round";
+          ctx.beginPath(); ctx.moveTo(it.x1, it.y1); ctx.lineTo(it.x2, it.y2); ctx.stroke();
+          // A line is an arrow without the head. This was a `continue` while the
+          // code sat in a loop; in a function of its own it is a return, and it
+          // skips exactly the same rest.
+          if (it.type === "line") return;
+          const a = Math.atan2(it.y2 - it.y1, it.x2 - it.x1), L = it.width * 4.5;
+          ctx.beginPath(); ctx.moveTo(it.x2, it.y2);
+          ctx.lineTo(it.x2 - L * Math.cos(a - 0.42), it.y2 - L * Math.sin(a - 0.42));
+          ctx.lineTo(it.x2 - L * Math.cos(a + 0.42), it.y2 - L * Math.sin(a + 0.42));
+          ctx.closePath(); ctx.fill();
+        } else if (it.type === "text") {
+          ctx.fillStyle = it.color; ctx.font = canvasFont(it);
+          ctx.textAlign = it.align === "center" ? "center" : it.align === "right" ? "right" : "left";
+          const tx = it.align === "center" ? it.x + it.w / 2
+            : it.align === "right" ? it.x + it.w : it.x;
+          // textBaseline "top" puts the em box at y; CSS instead centres the glyph
+          // box inside the line box, so the two drift apart by the half-leading —
+          // measured at 1.4px for 26px text, and it grows with the size. Drawing
+          // on the alphabetic baseline with the same half-leading makes the export
+          // land where the editor showed it.
+          // Letter spacing: the canvas property where the browser has it, and a
+          // per-character walk where it does not — otherwise the export would
+          // quietly ignore a setting the editor is showing.
+          const ls = canvasLS(it);
+          const canSpace = "letterSpacing" in ctx;
+          if (canSpace) ctx.letterSpacing = `${ls}px`;
+          const m = ctx.measureText("Hg");
+          const L = canvasLH(it);
+          const base = (L - (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent)) / 2
+            + m.fontBoundingBoxAscent;
+          ctx.textBaseline = "alphabetic";
+          String(it.text).split("\n").forEach((line, i) => {
+            const y = it.y + i * L + base;
+            if (canSpace || !ls) { ctx.fillText(line, tx, y); return; }
+            const wLine = [...line].reduce((a2, ch) => a2 + ctx.measureText(ch).width + ls, 0) - ls;
+            let x = it.align === "center" ? it.x + it.w / 2 - wLine / 2
+                  : it.align === "right" ? it.x + it.w - wLine : it.x;
+            const prev = ctx.textAlign; ctx.textAlign = "left";
+            for (const ch of line) { ctx.fillText(ch, x, y); x += ctx.measureText(ch).width + ls; }
+            ctx.textAlign = prev;
+          });
+          if (canSpace) ctx.letterSpacing = "0px";
         }
-        ctx.lineJoin = "round";
-        ctx.lineWidth = sw2;
-        ctx.strokeStyle = withAlpha(it.stroke || "#15151c", it.strokeAlpha);
-        ctx.stroke();
-        ctx.restore();
-      }
+        // The outline, after the fill and before the inner shadow.
+        if (it.strokeWidth && canStroke(it)) {
+          const b = boxOf(it), sw2 = it.strokeWidth;
+          ctx.save();
+          ctx.filter = "none";
+          if (strokeIsBox(it)) {
+            // A CSS border draws INSIDE the box, so the path is inset by half the
+            // width to put the centred canvas stroke in the same place.
+            tracePath(ctx, { ...it, radii: radiiOf(it).map(v => Math.max(0, v - sw2 / 2)) },
+              { x: b.x + sw2 / 2, y: b.y + sw2 / 2, w: Math.max(0, b.w - sw2), h: Math.max(0, b.h - sw2) });
+          } else {
+            // An SVG stroke is centred on the edge already — inset here and the two
+            // would sit half a stroke apart.
+            tracePath(ctx, it, b);
+          }
+          ctx.lineJoin = "round";
+          ctx.lineWidth = sw2;
+          ctx.strokeStyle = withAlpha(it.stroke || "#15151c", it.strokeAlpha);
+          ctx.stroke();
+          ctx.restore();
+        }
 
-      // Inner shadow, after the fill: clip to the shape, then cast a shadow from
-      // the INVERSE path so it falls inward. The canvas has no inset shadow.
-      if (it.innerShadow && canInnerShadow(it)) {
-        const b = boxOf(it), sh = it.innerShadow;
-        ctx.save();
-        ctx.filter = "none";
-        tracePath(ctx, it, b);
-        ctx.clip();
-        const pad = (sh.blur || 0) * 2 + Math.abs(sh.x || 0) + Math.abs(sh.y || 0) + 40;
-        ctx.beginPath();
-        ctx.rect(b.x - pad, b.y - pad, b.w + pad * 2, b.h + pad * 2);
-        if (it.type === "ellipse") ctx.ellipse(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, b.h / 2, 0, 0, Math.PI * 2, true);
-        else if (ctx.roundRect) ctx.roundRect(b.x, b.y, b.w, b.h, radiiOf(it).map(v => Math.min(v, Math.min(b.w, b.h) / 2)));
-        else ctx.rect(b.x, b.y, b.w, b.h);
-        ctx.shadowColor = shadowColor(sh);
-        ctx.shadowBlur = sh.blur || 0;
-        ctx.shadowOffsetX = sh.x || 0;
-        ctx.shadowOffsetY = sh.y || 0;
-        ctx.fillStyle = "#000";
+        // Inner shadow, after the fill: clip to the shape, then cast a shadow from
+        // the INVERSE path so it falls inward. The canvas has no inset shadow.
+        if (it.innerShadow && canInnerShadow(it)) {
+          const b = boxOf(it), sh = it.innerShadow;
+          ctx.save();
+          ctx.filter = "none";
+          tracePath(ctx, it, b);
+          ctx.clip();
+          const pad = (sh.blur || 0) * 2 + Math.abs(sh.x || 0) + Math.abs(sh.y || 0) + 40;
+          ctx.beginPath();
+          ctx.rect(b.x - pad, b.y - pad, b.w + pad * 2, b.h + pad * 2);
+          if (it.type === "ellipse") ctx.ellipse(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, b.h / 2, 0, 0, Math.PI * 2, true);
+          else if (ctx.roundRect) ctx.roundRect(b.x, b.y, b.w, b.h, radiiOf(it).map(v => Math.min(v, Math.min(b.w, b.h) / 2)));
+          else ctx.rect(b.x, b.y, b.w, b.h);
+          ctx.shadowColor = shadowColor(sh);
+          ctx.shadowBlur = sh.blur || 0;
+          ctx.shadowOffsetX = sh.x || 0;
+          ctx.shadowOffsetY = sh.y || 0;
+          ctx.fillStyle = "#000";
         ctx.fill("evenodd");
         ctx.restore();
+        }
+      };
+
+      if (has3d(it)) {
+        // A canvas has no perspective, so the item is drawn flat into an
+        // offscreen picture and that picture is laid onto the plane its corners
+        // project to. The padding is room for what reaches outside the box —
+        // a shadow, a blur — because the warp can only carry what was drawn.
+        const d = d3Of(it);
+        const bx = boxOf(it);
+        const sh = it.shadow || {};
+        const pad = Math.ceil(30 + (Number(it.blur) || 0) * 2
+          + (it.shadow ? (Number(sh.blur) || 0) + Math.max(Math.abs(sh.x || 0), Math.abs(sh.y || 0)) : 0));
+        const tw = Math.max(1, Math.ceil(bx.w) + pad * 2), th = Math.max(1, Math.ceil(bx.h) + pad * 2);
+        const off = document.createElement("canvas");
+        off.width = tw; off.height = th;
+        const oc = off.getContext("2d");
+        oc.translate(pad - bx.x, pad - bx.y);
+        // The effects belong to the object, so they are baked into the picture
+        // before it is turned — the same order CSS uses, where the filter sits
+        // on the element and the transform on the wrapper around it.
+        oc.filter = effectFilter(it);
+        await paintFlat(oc);
+        const keep = ctx.filter;
+        ctx.filter = "none";
+        drawProjected(ctx, off, d, tw / 2, th / 2, bx.x + bx.w / 2, bx.y + bx.h / 2, 20);
+        ctx.filter = keep;
+      } else {
+        await paintFlat(ctx);
       }
         if (moved) ctx.restore();
       }
@@ -20219,7 +20349,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       export rotates and scales about too. */}
                   {repeatPlacements(it.repeat).map((pl, ri) => (
                   <div key={ri} style={{ position: "absolute", inset: 0,
-                    transform: ri ? repeatCss(pl) : undefined, pointerEvents: "none" }}>
+                    // perspective() applies to the functions AFTER it in the
+                    // list, so a repeat's placement is a flat move outside the
+                    // depth — which is the order the export uses too: the
+                    // placement on the canvas, the projection within it.
+                    transform: [ri ? repeatCss(pl) : "", has3d(it) ? d3Css(d3Of(it)) : ""]
+                      .filter(Boolean).join(" ") || undefined,
+                    pointerEvents: "none" }}>
                   <div style={{ position: "absolute", inset: 0, clipPath: maskClip(it) || polyClip(it),
                     opacity: it.opacity == null ? 1 : it.opacity,
                     mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
@@ -21280,6 +21416,70 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 </div>
               ))}
             </div>
+
+            {/* Depth, folded away. Most work here is flat and should not have to
+                step past three fields that say so. */}
+            <div onClick={() => setAdvOpen(o => !o)}
+              style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 10,
+                cursor: "pointer", padding: "4px 0" }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme.textDim}
+                strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+                style={{ transform: advOpen ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
+                <polyline points="9 6 15 12 9 18" /></svg>
+              <span style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textDim }}>
+                {de ? "Erweitert" : "Advanced"}
+              </span>
+              {has3d(selItem) && (
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#15151c" }} />
+              )}
+            </div>
+            {advOpen && (() => {
+              const d = d3Of(selItem);
+              const put = (o) => set2({ d3: { ...d, ...o } });
+              return (
+                <div style={{ marginTop: 2 }}>
+                  <div style={{ fontSize: 11, color: theme.textFaint, marginBottom: 6 }}>
+                    {de ? "3D-Drehung" : "3D rotation"}
+                  </div>
+                  <SliderField label={de ? "Kippen (X)" : "Tilt (X)"} suffix="°"
+                    value={Math.round(d.rx)} min={-80} max={80}
+                    onChange={(v) => put({ rx: v })} onCommit={(v) => put({ rx: v })}
+                    theme={theme} darkMode={darkMode} />
+                  <div style={{ marginTop: 8 }}>
+                    <SliderField label={de ? "Drehen (Y)" : "Turn (Y)"} suffix="°"
+                      value={Math.round(d.ry)} min={-80} max={80}
+                      onChange={(v) => put({ ry: v })} onCommit={(v) => put({ ry: v })}
+                      theme={theme} darkMode={darkMode} />
+                  </div>
+                  {/* Depth. A stack of shapes with different z is the whole
+                      point: it is what stops a graphic reading as flat. */}
+                  <div style={{ marginTop: 8 }}>
+                    <SliderField label={de ? "Tiefe (Z)" : "Depth (Z)"} suffix=" px"
+                      value={Math.round(d.z)} min={-400} max={400}
+                      onChange={(v) => put({ z: v })} onCommit={(v) => put({ z: v })}
+                      theme={theme} darkMode={darkMode} />
+                  </div>
+                  {/* How near the eye is. Small numbers exaggerate, large ones
+                      flatten towards no perspective at all. */}
+                  <div style={{ marginTop: 8 }}>
+                    <SliderField label={de ? "Perspektive" : "Perspective"} suffix=" px"
+                      value={Math.round(d.persp)} min={200} max={2400} editMax={20000}
+                      onChange={(v) => put({ persp: Math.max(50, v) })}
+                      onCommit={(v) => put({ persp: Math.max(50, v) })}
+                      theme={theme} darkMode={darkMode} />
+                  </div>
+                  {has3d(selItem) && (
+                    <div onClick={() => set2({ d3: undefined })}
+                      style={{ marginTop: 8, height: 32, borderRadius: 9, display: "flex",
+                        alignItems: "center", justifyContent: "center", cursor: "pointer",
+                        fontFamily: FONT, fontSize: 12.5, color: theme.textDim,
+                        background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                      {de ? "Zurücksetzen" : "Reset"}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {!["draw", "arrow", "line"].includes(selItem.type) && (<>
               {label(de ? "Maße" : "Layout")}
