@@ -17456,7 +17456,7 @@ function NumberField({ value, onCommit, min, max, style, ...rest }) {
 }
 
 function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, userOrg,
-                        theme, darkMode, appLanguage, onUpload, onDone, onAutoSave, onClose }) {
+                        theme, darkMode, appLanguage, onUpload, onDone, onAutoSave, onPublish, onClose }) {
   const de = appLanguage === "de";
   // The panel width sits in the camera arithmetic as well as in the panel, so it
   // is a name rather than a number in four places waiting to drift apart.
@@ -17483,6 +17483,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [mediaOpen, setMediaOpen] = useState(false);
   const [mediaTab, setMediaTab] = useState("emoji");
   const [zoomMenu, setZoomMenu] = useState(false);
+  const [doneMenu, setDoneMenu] = useState(false);
   // Collapsed by default: it is a panel you reach for, not one you work in.
   const [layersOpen, setLayersOpen] = useState(false);
   const [pick, setPick] = useState([]);          // ids ticked in the layers list
@@ -18327,7 +18328,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     ctx.translate(-cx, -cy);
   };
 
-  const exportBlob = async () => {
+  const exportBlob = async (type = "image/png") => {
     if (document.fonts?.ready) await document.fonts.ready;   // or the text draws in a fallback face
     const cvs = document.createElement("canvas");
     cvs.width = W; cvs.height = H;
@@ -18341,7 +18342,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       ctx.roundRect(0, 0, W, H, Math.min(frameRadius, Math.min(W, H) / 2));
       ctx.clip();
     }
+    // JPEG has no alpha channel: a transparent frame would come out black
+    // rather than empty, so it gets white to sit on.
     if (bg !== "transparent") { ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H); }
+    else if (type === "image/jpeg") { ctx.fillStyle = "#FFFFFF"; ctx.fillRect(0, 0, W, H); }
     for (const it of items) {
       // Comments are notes ABOUT the design. Exporting one would print a review
       // remark onto the banner, which is the one thing a comment must never do.
@@ -18511,7 +18515,38 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     }
     ctx.globalAlpha = 1;
     return await new Promise((res, rej) =>
-      cvs.toBlob(b => (b ? res(b) : rej(new Error("toBlob"))), "image/png"));
+      cvs.toBlob(b => (b ? res(b) : rej(new Error("toBlob"))), type,
+        type === "image/jpeg" ? 0.92 : undefined));
+  };
+
+  // The frame at its true pixel size, handed to the browser as a file. Not a
+  // screenshot of the view — the export redraws, so a 2480x3508 A4 comes out at
+  // 2480x3508 whatever the zoom happens to be.
+  const download = async (type = "image/png") => {
+    setBusy("export"); setErr("");
+    try {
+      const blob = await exportBlob(type);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${(title || "design").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.${type === "image/jpeg" ? "jpg" : "png"}`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    } catch (e) { setErr(de ? "Der Export ist fehlgeschlagen." : "The export failed."); }
+    setBusy(""); setDoneMenu(false);
+  };
+
+  // Publishing hands the finished image to the post composer rather than
+  // rebuilding account picking, character limits and scheduling here.
+  const publish = async () => {
+    setBusy("export"); setErr("");
+    try {
+      const blob = await exportBlob();
+      const file = new File([blob], `${(title || "visual").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`,
+        { type: "image/png" });
+      onPublish?.(file);
+    } catch (e) { setErr(de ? "Der Export ist fehlgeschlagen." : "The export failed."); }
+    setBusy(""); setDoneMenu(false);
   };
 
   const finish = async () => {
@@ -19331,11 +19366,54 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             </>)}
           </AnimatePresence>
         </div>
-        <motion.div whileTap={{ scale: 0.96 }} onClick={busy ? undefined : finish}
-          style={{ padding: "8px 18px", borderRadius: 999, background: "#15151c", color: "#fff",
-            fontSize: 12.5, fontWeight: 600, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}>
-          {busy ? (de ? "Speichert …" : "Saving …") : (de ? "Übernehmen" : "Apply")}
-        </motion.div>
+        {/* "Übernehmen" only makes sense when there is a slot to hand the result
+            back to. Started from scratch there is nothing to apply TO, so the
+            button offers what a finished visual actually needs: a file, or a
+            post. */}
+        {onDone ? (
+          <motion.div whileTap={{ scale: 0.96 }} onClick={busy ? undefined : finish}
+            style={{ padding: "8px 18px", borderRadius: 999, background: "#15151c", color: "#fff",
+              fontSize: 12.5, fontWeight: 600, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}>
+            {busy ? (de ? "Speichert …" : "Saving …") : (de ? "Übernehmen" : "Apply")}
+          </motion.div>
+        ) : (
+          <div style={{ position: "relative" }}>
+            <motion.div whileTap={{ scale: 0.96 }} onClick={() => setDoneMenu(o => !o)}
+              style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 14px 8px 18px",
+                borderRadius: 999, background: "#15151c", color: "#fff",
+                fontSize: 12.5, fontWeight: 600, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}>
+              {busy ? (de ? "Exportiert …" : "Exporting …") : (de ? "Fertig" : "Done")}
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </motion.div>
+            <AnimatePresence>
+              {doneMenu && (<>
+                <div onClick={() => setDoneMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
+                <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.14 }}
+                  style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 31, width: 244,
+                    padding: 6, borderRadius: 14, background: panel, border: `1px solid ${line}`,
+                    boxShadow: "0 16px 40px rgba(0,0,0,0.22)" }}>
+                  {[[de ? "Als PNG herunterladen" : "Download PNG", `${W} × ${H} px`, () => download("image/png")],
+                    [de ? "Als JPG herunterladen" : "Download JPG", `${W} × ${H} px`, () => download("image/jpeg")],
+                    ["sep"],
+                    [de ? "Auf einem Kanal posten" : "Post to a channel",
+                     de ? "Öffnet den Composer" : "Opens the composer", publish, !onPublish],
+                  ].map((row, i2) => row[0] === "sep" ? (
+                    <div key={"s" + i2} style={{ height: 1, background: line, margin: "6px 8px" }} />
+                  ) : (
+                    <div key={row[0]} onClick={row[3] ? undefined : row[2]}
+                      style={{ padding: "9px 12px", borderRadius: 9, cursor: row[3] ? "default" : "pointer",
+                        opacity: row[3] ? 0.45 : 1 }}>
+                      <div style={{ fontSize: 13, color: theme.text }}>{row[0]}</div>
+                      <div style={{ fontSize: 11, color: theme.textFaint }}>{row[1]}</div>
+                    </div>
+                  ))}
+                </motion.div>
+              </>)}
+            </AnimatePresence>
+          </div>
+        )}
       </div>
 
       {/* Left rail — the same BoardToolbar Brainstorm uses, stood on end. Same
@@ -22153,7 +22231,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
 const POST_CHAR_LIMITS = { x: 280, threads: 500, pinterest: 500, instagram: 2200, linkedin: 3000 };
 const POST_OVERLAY_COLORS = ["#FFFFFF", "#15151c", "#F5C518", "#E86767", "#4D9FFF"];
 
-function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage = "de", onOpenAudience }) {
+function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage = "de", onOpenAudience, incomingVisual = null }) {
   const de = appLanguage === "de";
   const L = (o) => (de ? o.de : o.en);
   const steps = [{ de: "Kanäle", en: "Channels" }, { de: "Visual", en: "Visual" }, { de: "Text", en: "Text" }, { de: "Veröffentlichen", en: "Publish" }];
@@ -22203,6 +22281,19 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const toggleAccount = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   const charLimit = selected.length ? Math.min(...selected.map(a => POST_CHAR_LIMITS[uiKeyFor(a.platform)] || 3000)) : 3000;
   const overLimit = text.length > charLimit;
+
+  // A visual handed over from the canvas editor arrives the same way a picked
+  // file does, so everything downstream — preview, presign, upload — is the one
+  // path that was already there.
+  useEffect(() => {
+    const f = incomingVisual?.file;
+    if (!f) return;
+    imageFileRef.current = f;
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => setVisual({ url, w: img.naturalWidth, h: img.naturalHeight });
+    img.src = url;
+  }, [incomingVisual?.ts]);
 
   const onPickImage = (e) => {
     const f = e.target.files?.[0];
@@ -22615,7 +22706,7 @@ const creationFormats = (de) => {
 };
 
 function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, appLanguage = "de",
-                         canEdit = true, projectId = null }) {
+                         canEdit = true, projectId = null, onPublish = null }) {
   const de = appLanguage === "de";
   const [kind, setKind] = useState("social");
   const [rows, setRows] = useState(null);          // null = loading
@@ -22985,13 +23076,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
           theme={theme} darkMode={darkMode} appLanguage={appLanguage}
           onUpload={(file) => upload(file, "export")}
           onAutoSave={(docOut) => saveCanvas(editing, docOut)}
-          onDone={async (url, docOut) => {
-            // The export is a finished file and belongs in Assets; the doc is the
-            // working file and stays here. Both are written in one update so a
-            // thumbnail can never point at a design it does not show.
-            await saveCanvas(editing, docOut, url, url);
-            setEditing(null);
-          }}
+          onPublish={(file) => { setEditing(null); onPublish?.(file); }}
           onClose={() => setEditing(null)} />
       )}
       </div>
@@ -35815,6 +35900,8 @@ export default function CircularMenu() {
   // Which tab the Audience view opens on. Set to "analytics" by the Zernio OAuth
   // return redirect and by the composer's "connect accounts" shortcut.
   const [audienceInitialTab, setAudienceInitialTab] = useState("touchpoints");
+  // A visual handed over from the canvas editor, waiting for the composer.
+  const [postVisual, setPostVisual] = useState(null);
   const [deleteWsOpen, setDeleteWsOpen] = useState(false);   // workspace-delete confirm modal
   const [deleteWsText, setDeleteWsText] = useState("");      // typed confirmation (must match workspace name)
   const [deletingWs, setDeletingWs] = useState(false);
@@ -39888,6 +39975,7 @@ export default function CircularMenu() {
           {currentView === "creations" && (
             <CreationsView session={session} userOrg={userOrg} brand={brandProfile} theme={theme} darkMode={darkMode}
               t={t} appLanguage={appLanguage} canEdit={canEditBrand}
+              onPublish={(file) => { setPostVisual({ file, ts: Date.now() }); setCurrentView("createpost"); }}
               onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
@@ -39895,7 +39983,7 @@ export default function CircularMenu() {
         {/* CREATE SOCIAL MEDIA POST */}
         <AnimatePresence>
           {currentView === "createpost" && (
-            <CreatePostView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} appLanguage={appLanguage} onBack={() => setCurrentView("dashboard")}
+            <CreatePostView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} appLanguage={appLanguage} incomingVisual={postVisual} onBack={() => setCurrentView("dashboard")}
               onOpenAudience={() => { setAudienceInitialTab("analytics"); setCurrentView("touchpoints"); }} />
           )}
         </AnimatePresence>
