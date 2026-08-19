@@ -17684,8 +17684,10 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, de,
   const kindOf = (v) => isGradient(v) ? "gradient" : isImageFill(v) ? "image"
     : isPattern(v) ? "pattern" : "custom";
   const [tab, setTab] = useState(() => (tabs.includes(kindOf(value)) ? kindOf(value) : "custom"));
-  // Which of a pattern's two colours the mixer is editing.
-  const [patPart, setPatPart] = useState("color");
+  // Which of a pattern's two colours is being mixed, or none. The mixer is not
+  // standing there permanently: at 180px tall it pushed everything else out of
+  // the panel, which is what made this thing feel squeezed.
+  const [patEdit, setPatEdit] = useState(null);
 
   // A gradient, a pattern and an image have no single hue, so anything that
   // needs one starts from the nearest thing they do have.
@@ -17720,35 +17722,40 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, de,
 
   const heading = (txt) => (
     <div style={{ fontFamily: FONT, fontSize: 10.5, fontWeight: 600, letterSpacing: 0.8,
-      textTransform: "uppercase", color: theme.textFaint, margin: "18px 0 8px" }}>{txt}</div>
+      textTransform: "uppercase", color: theme.textFaint, margin: "4px 0 10px" }}>{txt}</div>
   );
   const soft = darkMode ? "rgba(255,255,255,0.07)" : "#F1F1F4";
+  // Everything below the fold scrolls, and only that. A scrollbar around the
+  // whole panel would take the tabs with it.
+  const lower = { flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden",
+    marginTop: 18, paddingTop: 4, borderTop: `1px solid ${theme.borderFaint}` };
+  const fill = { display: "flex", flexDirection: "column", minHeight: 0, flex: 1 };
 
   // Switching a tab applies immediately — a tab you have to confirm before it
-  // does anything reads as broken. Image is the exception: there is nothing to
-  // apply until a picture has been chosen, so it asks for one.
+  // does anything reads as broken. Image is the exception: opening the asset
+  // browser the moment the tab is touched takes over the screen before anyone
+  // asked for a picture, so that waits for the button.
   const enter = (k) => {
-    setTab(k);
+    setTab(k); setPatEdit(null);
     if (k === "custom" && kindOf(value) !== "custom") onChange(seed);
     if (k === "gradient" && !isGradient(value)) onChange(defaultGradient(seed));
     if (k === "pattern" && !isPattern(value)) onChange(defaultPattern("#FFFFFF"));
-    if (k === "image" && !isImageFill(value)) onImage?.();
   };
   const putPattern = (o) => onChange({ ...defaultPattern("#FFFFFF"), ...(isPattern(value) ? value : {}), ...o });
 
   return (
     <div onPointerDown={e => e.stopPropagation()}
-      style={{ width: 292, borderRadius: 16, padding: 14,
-        maxHeight: "78vh", overflowY: "auto",
+      style={{ width: 344, borderRadius: 16, padding: 16, boxSizing: "border-box",
+        maxHeight: "80vh", display: "flex", flexDirection: "column", overflow: "hidden",
         background: darkMode ? "#1B1B23" : "#fff",
         border: `1px solid ${theme.borderFaint}`, boxShadow: "0 18px 48px rgba(0,0,0,0.3)" }}>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 12, flexShrink: 0 }}>
         {[["custom", de ? "Farbe" : "Colour"], ["gradient", de ? "Verlauf" : "Gradient"],
           ["image", de ? "Bild" : "Image"], ["pattern", de ? "Muster" : "Pattern"]]
           .filter(([k]) => tabs.includes(k)).map(([k, l]) => (
           <div key={k} onClick={() => enter(k)}
-            style={{ padding: "6px 9px", borderRadius: 8, cursor: "pointer", fontFamily: FONT,
+            style={{ padding: "6px 10px", borderRadius: 8, cursor: "pointer", fontFamily: FONT,
               fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap",
               color: tab === k ? theme.text : theme.textDim,
               background: tab === k ? (darkMode ? "rgba(255,255,255,0.10)" : "#EDEDF0") : "transparent" }}>
@@ -17759,80 +17766,95 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, de,
         <div onClick={onClose} style={{ cursor: "pointer", color: theme.textDim, padding: "4px 6px" }}>✕</div>
       </div>
 
-      {tab === "custom" && (<>
-        <ColorMixer value={kindOf(value) === "custom" ? value : seed} alpha={alpha}
-          onChange={onChange} onAlphaChange={onAlphaChange}
-          theme={theme} darkMode={darkMode} />
-        {/* The brand's colours sit under the hex field rather than behind a tab
-            of their own: they are the same answer to the same question, and a
-            tab made you leave the mixer to reach them. */}
-        {brandColors.length > 0 && (<>
-          {heading("Brand")}
-          {brandColors.map(([name, list]) => (
-            <div key={name} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
-              <span style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint,
-                width: 66, flexShrink: 0 }}>{name}</span>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {list.map((c, i) => {
-                  const on = String(value || "").toLowerCase() === String(c).toLowerCase();
-                  return (
-                    <div key={c + i} title={String(c).toUpperCase()} onClick={() => onChange(c)}
-                      style={{ width: 26, height: 26, borderRadius: 8, background: c, cursor: "pointer",
-                        border: on ? "2.5px solid #15151c" : `1px solid ${theme.borderFaint}` }} />
-                  );
-                })}
-              </div>
+      {tab === "custom" && (
+        <div style={fill}>
+          <ColorMixer value={kindOf(value) === "custom" ? value : seed} alpha={alpha}
+            onChange={onChange} onAlphaChange={onAlphaChange}
+            theme={theme} darkMode={darkMode} />
+          {/* The brand's colours sit under the hex field rather than behind a tab
+              of their own: they are the same answer to the same question, and a
+              tab made you leave the mixer to reach them. */}
+          {brandColors.length > 0 && (
+            <div style={lower}>
+              {heading("Brand")}
+              {brandColors.map(([name, list]) => (
+                <div key={name} style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 12 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textFaint,
+                    width: 68, flexShrink: 0, paddingTop: 8 }}>{name}</span>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, minWidth: 0 }}>
+                    {list.map((c, i) => {
+                      const on = String(value || "").toLowerCase() === String(c).toLowerCase();
+                      return (
+                        <div key={c + i} title={String(c).toUpperCase()} onClick={() => onChange(c)}
+                          style={{ width: 30, height: 30, borderRadius: 9, background: c, cursor: "pointer",
+                            border: on ? "2.5px solid #15151c" : `1px solid ${theme.borderFaint}` }} />
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </>)}
-      </>)}
+          )}
+        </div>
+      )}
 
-      {tab === "gradient" && (<>
-        <CanvasGradientEditor value={isGradient(value) ? value : defaultGradient(seed)} onChange={onChange}
-          theme={theme} darkMode={darkMode} de={de} />
-        {brandGrads.length > 0 && (<>
-          {heading(de ? "Brand-Verläufe" : "Brand gradients")}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            {brandGrads.map((g, i) => (
-              <div key={i} onClick={() => onChange(JSON.parse(JSON.stringify(g.grad)))}
-                style={{ cursor: "pointer" }}>
-                <div style={{ height: 34, borderRadius: 9, background: gradientCss(g.grad),
-                  border: `1px solid ${theme.borderFaint}` }} />
-                {g.name && <div style={{ fontFamily: FONT, fontSize: 11, color: theme.textDim,
-                  marginTop: 4 }}>{g.name}</div>}
-              </div>
-            ))}
-          </div>
-        </>)}
-      </>)}
+      {tab === "gradient" && (
+        <div style={fill}>
+          <CanvasGradientEditor value={isGradient(value) ? value : defaultGradient(seed)} onChange={onChange}
+            theme={theme} darkMode={darkMode} de={de} />
+          {brandGrads.length > 0 && (
+            <div style={lower}>
+              {heading(de ? "Brand-Verläufe" : "Brand gradients")}
+              {/* One per row, the full width of the panel. Side by side they were
+                  two narrow slivers of colour — too small to tell a gradient
+                  from a flat grey, which is exactly how they read. */}
+              {brandGrads.map((g, i) => (
+                <div key={i} onClick={() => onChange(JSON.parse(JSON.stringify(g.grad)))}
+                  style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10,
+                    cursor: "pointer" }}>
+                  <span style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textFaint,
+                    width: 68, flexShrink: 0 }}>{g.name || `${i + 1}`}</span>
+                  <div style={{ flex: 1, minWidth: 0, height: 32, borderRadius: 9,
+                    background: gradientCss(g.grad), border: `1px solid ${theme.borderFaint}` }} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {tab === "image" && (
         isImageFill(value) ? (<>
-          <div style={{ height: 150, borderRadius: 11, border: `1px solid ${theme.borderFaint}`,
+          <div style={{ height: 168, flexShrink: 0, borderRadius: 12, border: `1px solid ${theme.borderFaint}`,
             background: `center/${value.fit === "contain" ? "contain" : "cover"} no-repeat url(${value.src}), conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)`,
             backgroundSize: value.fit === "contain" ? "contain, 10px 10px" : "cover, 10px 10px" }} />
-          <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
             {[["cover", de ? "Füllen" : "Fill"], ["contain", de ? "Einpassen" : "Fit"]].map(([k, l]) => (
               <div key={k} onClick={() => onChange({ ...value, fit: k })}
-                style={{ flex: 1, height: 32, borderRadius: 9, display: "flex", alignItems: "center",
-                  justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontSize: 12.5,
-                  color: theme.text, background: soft,
+                style={{ flex: 1, minWidth: 0, height: 36, borderRadius: 10, display: "flex",
+                  alignItems: "center", justifyContent: "center", cursor: "pointer",
+                  fontFamily: FONT, fontSize: 12.5, color: theme.text, background: soft,
                   border: `1px solid ${(value.fit || "cover") === k ? "#15151c" : "transparent"}` }}>
                 {l}
               </div>
             ))}
           </div>
           <div onClick={() => onImage?.()}
-            style={{ marginTop: 8, height: 32, borderRadius: 9, display: "flex", alignItems: "center",
+            style={{ marginTop: 10, height: 36, borderRadius: 10, display: "flex", alignItems: "center",
               justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontSize: 12.5,
               color: theme.text, background: soft }}>
             {de ? "Anderes Bild wählen" : "Choose another image"}
           </div>
         </>) : (
           <div onClick={() => onImage?.()}
-            style={{ height: 150, borderRadius: 11, display: "flex", alignItems: "center",
-              justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontSize: 12.5,
-              color: theme.textDim, border: `1px dashed ${theme.borderFaint}` }}>
+            style={{ height: 168, borderRadius: 12, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer",
+              fontFamily: FONT, fontSize: 12.5, color: theme.textDim,
+              border: `1px dashed ${theme.borderFaint}` }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.6"/>
+              <path d="M21 15l-5-5L5 21"/></svg>
             {de ? "Bild wählen" : "Choose an image"}
           </div>
         )
@@ -17841,58 +17863,65 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, de,
       {tab === "pattern" && (() => {
         const pat = isPattern(value) ? value : defaultPattern("#FFFFFF");
         const { gap, size } = patternGeom(pat);
-        return (<>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-            {PATTERN_TYPES.map(([k, l]) => {
-              const preview = { ...pat, pattern: k };
-              return (
+        const numRow = (label, v, put, min, max) => (
+          <div key={label} style={{ display: "flex", alignItems: "center", gap: 10, height: 36,
+            borderRadius: 10, padding: "0 12px", background: soft, marginBottom: 8 }}>
+            <span style={{ fontFamily: FONT, fontSize: 12, color: theme.textFaint, flex: 1, minWidth: 0 }}>{label}</span>
+            <NumberField value={v} min={min} max={max} onCommit={put}
+              style={{ width: 46, flexShrink: 0, border: "none", outline: "none", background: "transparent",
+                color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
+          </div>
+        );
+        return (
+          <div style={fill}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, flexShrink: 0 }}>
+              {PATTERN_TYPES.map(([k, l]) => (
                 <div key={k} onClick={() => putPattern({ pattern: k })} style={{ cursor: "pointer" }}>
-                  <div style={{ height: 46, borderRadius: 9, background: patternCss(preview),
+                  <div style={{ height: 52, borderRadius: 10, background: patternCss({ ...pat, pattern: k }),
                     border: `1px solid ${pat.pattern === k ? "#15151c" : theme.borderFaint}` }} />
-                  <div style={{ fontFamily: FONT, fontSize: 10.5, color: theme.textDim,
-                    marginTop: 4, textAlign: "center" }}>{de ? l.de : l.en}</div>
+                  <div style={{ fontFamily: FONT, fontSize: 11, color: theme.textDim,
+                    marginTop: 6, textAlign: "center" }}>{de ? l.de : l.en}</div>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
 
-          {/* Two colours, one mixer. A second mixing square for the ground would
-              be the same control twice over. */}
-          <div style={{ display: "flex", gap: 6, marginTop: 14, marginBottom: 4 }}>
-            {[["color", de ? "Muster" : "Pattern"], ["bg", de ? "Hintergrund" : "Background"]].map(([k, l]) => (
-              <div key={k} onClick={() => setPatPart(k)}
-                style={{ flex: 1, height: 32, borderRadius: 9, display: "flex", alignItems: "center",
-                  justifyContent: "center", gap: 7, cursor: "pointer", fontFamily: FONT, fontSize: 12.5,
-                  color: theme.text, background: soft,
-                  border: `1px solid ${patPart === k ? "#15151c" : "transparent"}` }}>
-                <span style={{ width: 14, height: 14, borderRadius: 4, flexShrink: 0,
-                  border: `1px solid ${theme.borderFaint}`,
-                  background: pat[k] === "transparent" ? "conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)" : pat[k],
-                  backgroundSize: pat[k] === "transparent" ? "6px 6px" : undefined }} />
-                {l}
-              </div>
-            ))}
+            <div style={lower}>
+              {/* The two colours open the mixer the way a gradient stop does —
+                  clicked, not standing there. One colour surface in this app,
+                  and it appears where it was asked for. */}
+              {[["color", de ? "Musterfarbe" : "Pattern colour"], ["bg", de ? "Hintergrund" : "Background"]]
+                .map(([k, l]) => (
+                <div key={k} style={{ marginBottom: 8 }}>
+                  <div onClick={() => setPatEdit(patEdit === k ? null : k)}
+                    style={{ display: "flex", alignItems: "center", gap: 10, height: 36, borderRadius: 10,
+                      padding: "0 12px", cursor: "pointer", background: soft,
+                      border: `1px solid ${patEdit === k ? "#15151c" : "transparent"}` }}>
+                    <span style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+                      border: `1px solid ${theme.borderFaint}`, background: pat[k] }} />
+                    <span style={{ flex: 1, minWidth: 0, fontFamily: FONT, fontSize: 12.5,
+                      color: theme.text }}>{l}</span>
+                    <span style={{ fontFamily: FONT, fontSize: 12, color: theme.textFaint,
+                      letterSpacing: 0.4 }}>{String(pat[k] || "").replace("#", "").toUpperCase()}</span>
+                  </div>
+                  {patEdit === k && (
+                    <div style={{ marginTop: 10, marginBottom: 14 }}>
+                      <ColorMixer value={hex6(pat[k]) || "#FFFFFF"}
+                        onChange={(c) => putPattern({ [k]: c })}
+                        theme={theme} darkMode={darkMode} />
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              <div style={{ height: 10 }} />
+              {numRow(de ? "Abstand" : "Spacing", gap, (v) => putPattern({ gap: v }), 4, 200)}
+              {/* Checks take their scale from the spacing alone — the squares ARE
+                  the picture, so there is no mark to weigh. */}
+              {pat.pattern !== "checks"
+                && numRow(de ? "Stärke" : "Weight", size, (v) => putPattern({ size: v }), 1, 100)}
+            </div>
           </div>
-          <ColorMixer value={hex6(pat[patPart]) || "#FFFFFF"}
-            onChange={(c) => putPattern({ [patPart]: c })}
-            theme={theme} darkMode={darkMode} />
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
-            {[[de ? "Abstand" : "Spacing", gap, (v) => putPattern({ gap: v }), 4, 200],
-              [de ? "Stärke" : "Weight", size, (v) => putPattern({ size: v }), 1, 100]]
-              .filter((_, i) => !(i === 1 && pat.pattern === "checks"))
-              .map(([l, v, put, min, max]) => (
-              <div key={l} style={{ flex: 1, display: "flex", alignItems: "center", gap: 6,
-                height: 32, borderRadius: 9, padding: "0 10px", background: soft }}>
-                <span style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint }}>{l}</span>
-                <NumberField value={v} min={min} max={max} onCommit={put}
-                  style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
-                    color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
-              </div>
-            ))}
-          </div>
-          {/* A pattern whose squares ARE the picture takes its scale from the
-              spacing alone, so there is no weight to set. */}
-        </>);
+        );
       })()}
     </div>
   );
@@ -19836,8 +19865,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           <div onPointerDown={() => setPicker(null)}
             style={{ position: "fixed", inset: 0, zIndex: 100008 }} />
           <div style={{ position: "fixed", zIndex: 100009,
-            left: Math.max(12, picker.x - 306),
-            top: Math.min(picker.y - 20, window.innerHeight - 340) }}>
+            // Anchored clear of the panel it belongs to: the offset is the
+            // picker's own width plus the gap, so widening it does not park it
+            // half on top of the row being edited.
+            left: Math.max(12, picker.x - 358),
+            top: Math.max(12, Math.min(picker.y - 20, window.innerHeight - 460)) }}>
             <ColorPicker
               value={picker.what === "bg" ? (bg === "transparent" ? "#FFFFFF" : bg)
                 : picker.what === "stroke" ? (selItem?.stroke || "#15151c")
