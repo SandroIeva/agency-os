@@ -17461,7 +17461,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // The panel width sits in the camera arithmetic as well as in the panel, so it
   // is a name rather than a number in four places waiting to drift apart.
   const PANEL_W = 300, RAIL_W = 78;
-  const [W, H] = size;
+  // The frame can be resized and swapped for another format, so its size is
+  // state rather than a fixed prop — and it travels in the document, or the
+  // canvas would open at the old size next time.
+  const [frame, setFrame] = useState(() => ({
+    w: Number(doc?.w) || size[0], h: Number(doc?.h) || size[1] }));
+  const W = frame.w, H = frame.h;
   const palette = (Array.isArray(brand?.colors) && brand.colors.length >= 2)
     ? brand.colors : ["#15151c", "#F4F4F7", "#E60023", "#0A66C2", "#FFFFFF"];
 
@@ -17561,9 +17566,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // document unchanged and does nothing — and it also means simply opening a
   // canvas never writes a row.
   const [saveState, setSaveState] = useState("");     // "" | "saving" | "saved"
-  const baselineRef = useRef(JSON.stringify({ bg: doc?.bg || null, items: doc?.items || [], radius: Number(doc?.radius) || 0 }));
-  const latestRef = useRef({ bg, items, radius: frameRadius });
-  latestRef.current = { bg, items, radius: frameRadius };
+  const baselineRef = useRef(JSON.stringify({ bg: doc?.bg || null, items: doc?.items || [], radius: Number(doc?.radius) || 0, w: Number(doc?.w) || size[0], h: Number(doc?.h) || size[1] }));
+  const latestRef = useRef({ bg, items, radius: frameRadius, w: W, h: H });
+  latestRef.current = { bg, items, radius: frameRadius, w: W, h: H };
   const saveTimer = useRef(null);
 
   const flush = async (payload) => {
@@ -17578,13 +17583,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   useEffect(() => {
     if (!onAutoSave) return;
-    const payload = { bg, items, radius: frameRadius };
+    const payload = { bg, items, radius: frameRadius, w: W, h: H };
     if (JSON.stringify(payload) === baselineRef.current) return;
     setSaveState("saving");
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => flush(payload), 700);
     return () => clearTimeout(saveTimer.current);
-  }, [items, bg, frameRadius]);
+  }, [items, bg, frameRadius, W, H]);
 
   // Closing must not drop the last few hundred milliseconds of work, so the
   // pending save is flushed on the way out.
@@ -17865,7 +17870,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       }
       if (editing) return;
       if (e.key === "Escape") { sel ? setSel(null) : onClose(); }
-      if ((e.key === "Backspace" || e.key === "Delete") && sel) deleteSel();
+      // Was guarded on `sel` alone, so a marquee or a group — which leave
+      // several picked and no single selection — could not be deleted at all.
+      if ((e.key === "Backspace" || e.key === "Delete") && (sel || pick.length)) deleteSel();
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       const k = e.key.toLowerCase();
@@ -17980,10 +17987,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       // the arrow shove the whole view is the thing that makes a canvas feel
       // like it is fighting you.
       const q = toArt(e);
-      setSel(e.target === e.currentTarget ? null : "frame");
+      const onFrame = e.target !== e.currentTarget;
+      setSel(onFrame ? "frame" : null);
       if (!(e.metaKey || e.ctrlKey || e.shiftKey)) setPick([]);
       setEnteredGroup(null);
-      dragRef.current = { mode: "marquee", ox: q.x, oy: q.y, add: e.metaKey || e.ctrlKey || e.shiftKey };
+      dragRef.current = { mode: "marquee", ox: q.x, oy: q.y, onFrame,
+        add: e.metaKey || e.ctrlKey || e.shiftKey };
       setMarquee({ x: q.x, y: q.y, w: 0, h: 0 });
       return;
     }
@@ -18160,7 +18169,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       setMarquee(null);
       // A click that never became a drag is a click: it clears, it does not
       // select every element that happens to touch a zero-sized box.
-      if (!m || (m.w < 3 && m.h < 3)) { setSel(null); return; }
+      // A click that never became a drag clears — unless it landed ON the frame,
+      // which is how the frame gets selected in the first place.
+      if (!m || (m.w < 3 && m.h < 3)) { if (!d.onFrame) setSel(null); return; }
       const inside = items.filter(o => {
         if (o.hidden || o.locked) return false;
         const b = boxOf(o);
@@ -18511,7 +18522,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         { type: "image/png" });
       const url = await onUpload(file);
       if (!url) throw new Error("upload");
-      onDone(url, { bg, items, radius: frameRadius });
+      onDone(url, { bg, items, radius: frameRadius, w: W, h: H });
     } catch (e) {
       // A tainted canvas and a failed upload look identical to the user unless
       // they are told apart, and both end with nothing saved.
@@ -18522,6 +18533,49 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     }
     setBusy("");
   };
+
+  // Field helpers, at component level because BOTH panels use them — the frame
+  // and the selected element. They lived inside the selection closure, so the
+  // frame panel referenced identifiers that did not exist there.
+        const num = (value, onChange, glyph, suffix = "") => (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
+            borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+            <span style={{ fontSize: 11, color: theme.textFaint, minWidth: 13 }}>{glyph}</span>
+            <NumberField value={value} onCommit={onChange}
+              style={{ width: "100%", border: "none", outline: "none", background: "transparent",
+                color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
+            {suffix && <span style={{ fontSize: 11.5, color: theme.textFaint }}>{suffix}</span>}
+          </div>
+        );
+        const dropdown = (value, options, onChange) => (
+          <div style={{ position: "relative", display: "flex", alignItems: "center",
+            padding: "8px 10px", borderRadius: 9,
+            background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+            <select value={value} onChange={e => onChange(e.target.value)}
+              style={{ width: "100%", border: "none", outline: "none", background: "transparent",
+                color: theme.text, fontFamily: FONT, fontSize: 12.5, appearance: "none", cursor: "pointer" }}>
+              {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme.textFaint}
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+        );
+        const segment = (value, options, onChange) => (
+          <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
+            {options.map(([v, glyph, title]) => (
+              <div key={v} title={title} onClick={() => onChange(v)}
+                style={{ flex: 1, height: 32, borderRadius: 8, display: "flex", alignItems: "center",
+                  justifyContent: "center", cursor: "pointer", color: theme.text,
+                  border: `1px solid ${value === v ? "#15151c" : "transparent"}`,
+                  background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2" strokeLinecap="round">{glyph}</svg>
+              </div>
+            ))}
+          </div>
+        );
+        const two = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 6 };
 
   // ── chrome ────────────────────────────────────────────────────────────────
 
@@ -19083,7 +19137,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
       {/* The colour picker, opened from whichever swatch was clicked. Anchored
           left of the panel so it never covers the row it is editing. */}
-      {picker && selItem && createPortal(
+      {picker && (selItem || picker.what === "bg") && createPortal(
         <>
           <div onPointerDown={() => setPicker(null)}
             style={{ position: "fixed", inset: 0, zIndex: 100008 }} />
@@ -19091,15 +19145,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             left: Math.max(12, picker.x - 306),
             top: Math.min(picker.y - 20, window.innerHeight - 340) }}>
             <ColorPicker
-              value={picker.what === "stroke" ? (selItem.stroke || "#15151c") : (selItem[picker.key] || "#000000")}
-              alpha={picker.what === "stroke"
-                ? (selItem.strokeAlpha == null ? 100 : selItem.strokeAlpha)
-                : (selItem.fillAlpha == null ? 100 : selItem.fillAlpha)}
-              onChange={(c) => picker.what === "stroke"
-                ? patch(selItem.id, { stroke: c })
+              value={picker.what === "bg" ? (bg === "transparent" ? "#FFFFFF" : bg)
+                : picker.what === "stroke" ? (selItem?.stroke || "#15151c")
+                : (selItem?.[picker.key] || "#000000")}
+              alpha={picker.what === "bg" ? 100
+                : picker.what === "stroke" ? (selItem?.strokeAlpha == null ? 100 : selItem.strokeAlpha)
+                : (selItem?.fillAlpha == null ? 100 : selItem.fillAlpha)}
+              onChange={(c) => picker.what === "bg" ? setBg(c)
+                : picker.what === "stroke" ? patch(selItem.id, { stroke: c })
                 : patch(selItem.id, { [picker.key]: c })}
-              onAlphaChange={(a) => picker.what === "stroke"
-                ? patch(selItem.id, { strokeAlpha: a })
+              onAlphaChange={(a) => picker.what === "bg" ? undefined
+                : picker.what === "stroke" ? patch(selItem.id, { strokeAlpha: a })
                 : patch(selItem.id, { fillAlpha: a })}
               brand={brand} theme={theme} darkMode={darkMode} de={de}
               onClose={() => setPicker(null)} />
@@ -19341,10 +19397,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               const gid = it.groupId;
               const first = gid && [...items].reverse().findIndex(o => o.groupId === gid) === rev;
               const groupHeader = first ? (
-                <div key={"g" + gid} onClick={() => setEnteredGroup(enteredGroup === gid ? null : gid)}
+                <div key={"g" + gid}
+                  onClick={() => { setPick(items.filter(o => o.groupId === gid).map(o => o.id)); setSel(null); }}
+                  onDoubleClick={() => setEnteredGroup(enteredGroup === gid ? null : gid)}
+                  title={de ? "Klick wählt die Gruppe · Doppelklick geht hinein"
+                            : "Click selects the group · double-click steps inside"}
                   style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 8px",
                     borderRadius: 8, cursor: "pointer", color: theme.textDim,
-                    background: enteredGroup === gid ? (darkMode ? "rgba(255,255,255,0.05)" : "#F5F5F7") : "transparent" }}>
+                    background: items.some(o => o.groupId === gid && pick.includes(o.id))
+                      ? "rgba(47,107,255,0.16)"
+                      : enteredGroup === gid ? (darkMode ? "rgba(255,255,255,0.05)" : "#F5F5F7") : "transparent" }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
                     style={{ transform: enteredGroup === gid ? "rotate(90deg)" : "none" }}>
@@ -19521,7 +19583,23 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           <>
             {label(sel === "frame" ? (de ? "Frame · ausgewählt" : "Frame · selected") : "Frame")}
             <div style={{ fontSize: 12, color: theme.textDim, marginTop: 6 }}>{title}</div>
-            <div style={{ fontSize: 12, color: theme.textDim }}>{W} × {H} px</div>
+
+            {label(de ? "Format" : "Preset")}
+            <div style={{ marginTop: 6 }}>
+              {/* Read from the same list Creations offers, so a format cannot be
+                  right in one place and stale here. */}
+              {dropdown(`${W}×${H}`,
+                [[`${W}×${H}`, `${W} × ${H} px${creationFormats(de).some(f => f.w === W && f.h === H) ? "" : (de ? " · eigene" : " · custom")}`],
+                 ...creationFormats(de).map(f => [`${f.w}×${f.h}`, `${f.name} — ${f.w} × ${f.h}`])],
+                (v) => { const [w2, h2] = v.split("×").map(Number);
+                  if (w2 && h2) { markChange(); setFrame({ w: w2, h: h2 }); } })}
+            </div>
+
+            <div style={two}>
+              {num(W, v => { const n = Math.max(16, Math.round(v)); markChange(); setFrame(f => ({ ...f, w: n })); }, "W")}
+              {num(H, v => { const n = Math.max(16, Math.round(v)); markChange(); setFrame(f => ({ ...f, h: n })); }, "H")}
+            </div>
+
             {label(de ? "Eckenradius" : "Corner radius")}
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, padding: "8px 10px",
               borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
@@ -19532,18 +19610,31 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             </div>
 
             {label(de ? "Hintergrund" : "Background")}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-              {/* Transparent is a real choice, not the absence of one, so it gets
-                  a swatch of its own — the chequerboard every editor uses to mean
-                  "nothing here". */}
-              <div onClick={() => setBg("transparent")} title={de ? "Transparent" : "Transparent"}
-                style={{ width: 24, height: 24, borderRadius: 7, cursor: "pointer",
-                  backgroundColor: "#fff",
-                  backgroundImage: "conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)",
-                  backgroundSize: "8px 8px",
-                  border: bg === "transparent" ? "2px solid #15151c" : `1px solid ${line}` }} />
+            {/* One swatch that opens the picker, like every other colour in the
+                editor — a palette here and a picker there was two answers to the
+                same question. */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, padding: "8px 10px",
+              borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+              <div onClick={(e) => setPicker({ what: "bg",
+                  x: e.currentTarget.getBoundingClientRect().left,
+                  y: e.currentTarget.getBoundingClientRect().top })}
+                style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, cursor: "pointer",
+                  border: `1px solid ${line}`, backgroundColor: "#fff",
+                  ...(bg === "transparent"
+                    ? { backgroundImage: "conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)",
+                        backgroundSize: "8px 8px" }
+                    : { background: bg }) }} />
+              <span style={{ flex: 1, fontFamily: FONT, fontSize: 12.5, color: theme.text, letterSpacing: 0.4 }}>
+                {bg === "transparent" ? (de ? "Transparent" : "Transparent") : String(bg).replace("#", "").toUpperCase()}
+              </span>
+              <span onClick={() => setBg(bg === "transparent" ? (palette[1] || "#FFFFFF") : "transparent")}
+                title={de ? "Transparent umschalten" : "Toggle transparent"}
+                style={{ cursor: "pointer", fontSize: 11, color: theme.textDim,
+                  padding: "3px 7px", borderRadius: 7,
+                  border: `1px solid ${bg === "transparent" ? "#15151c" : line}` }}>
+                {de ? "Transparent" : "None"}
+              </span>
             </div>
-            {swatch(bg, setBg)}
           </>
         )}
 
@@ -19551,45 +19642,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           const isText = selItem.type === "text" || selItem.type === "sticky";
           const set = (k, v) => patch(selItem.id, { [k]: v });
           const set2 = (o) => patch(selItem.id, o);
-          const num = (value, onChange, glyph, suffix = "") => (
-            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
-              borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
-              <span style={{ fontSize: 11, color: theme.textFaint, minWidth: 13 }}>{glyph}</span>
-              <NumberField value={value} onCommit={onChange}
-                style={{ width: "100%", border: "none", outline: "none", background: "transparent",
-                  color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
-              {suffix && <span style={{ fontSize: 11.5, color: theme.textFaint }}>{suffix}</span>}
-            </div>
-          );
-          const pick = (value, options, onChange) => (
-            <div style={{ position: "relative", display: "flex", alignItems: "center",
-              padding: "8px 10px", borderRadius: 9,
-              background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
-              <select value={value} onChange={e => onChange(e.target.value)}
-                style={{ width: "100%", border: "none", outline: "none", background: "transparent",
-                  color: theme.text, fontFamily: FONT, fontSize: 12.5, appearance: "none", cursor: "pointer" }}>
-                {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme.textFaint}
-                strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                <polyline points="6 9 12 15 18 9"/></svg>
-            </div>
-          );
-          const segment = (value, options, onChange) => (
-            <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
-              {options.map(([v, glyph, title]) => (
-                <div key={v} title={title} onClick={() => onChange(v)}
-                  style={{ flex: 1, height: 32, borderRadius: 8, display: "flex", alignItems: "center",
-                    justifyContent: "center", cursor: "pointer", color: theme.text,
-                    border: `1px solid ${value === v ? "#15151c" : "transparent"}`,
-                    background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth="2" strokeLinecap="round">{glyph}</svg>
-                </div>
-              ))}
-            </div>
-          );
-          const two = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 6 };
+
 
           return (
           <>
@@ -19687,7 +19740,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 v => set("opacity", Math.min(100, Math.max(0, Number(v) || 0)) / 100), "◍", "%")}
               {/* Beside opacity, since both answer "how does this sit on what is
                   under it". Available on everything — text, emoji, shapes alike. */}
-              {pick(selItem.blend || "normal", BLEND_MODES, v => set("blend", v))}
+              {dropdown(selItem.blend || "normal", BLEND_MODES, v => set("blend", v))}
             </div>
             {selItem.type === "rect" && (<>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -19730,10 +19783,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             {isText && (<>
               {label(de ? "Typografie" : "Typography")}
               <div style={{ marginTop: 6 }}>
-                {pick(selItem.font || "Geist", FONT_CHOICES.map(f => [f, f]), v => set("font", v))}
+                {dropdown(selItem.font || "Geist", FONT_CHOICES.map(f => [f, f]), v => set("font", v))}
               </div>
               <div style={two}>
-                {pick(String(selItem.weight || 600), WEIGHTS.map(([v, l]) => [String(v), l]),
+                {dropdown(String(selItem.weight || 600), WEIGHTS.map(([v, l]) => [String(v), l]),
                   v => set("weight", Number(v)))}
                 {num(selItem.size, v => set("size", Math.max(6, Number(v) || 6)), "T")}
               </div>
