@@ -17230,6 +17230,197 @@ const BLEND_MODES = [
   ["hue", "Hue"], ["saturation", "Saturation"], ["color", "Color"], ["luminosity", "Luminosity"],
 ];
 
+// ── Colour picker ────────────────────────────────────────────────────────────
+// One picker for every colour in the editor — fill, stroke, text, background.
+// Two tabs: mix your own, or take one the brand already owns. The brand tab is
+// the point of it sitting in this app rather than a generic swatch grid: a
+// channel visual in a colour the brand does not use is the mistake the whole
+// preview exists to catch.
+const hexToRgb = (hex) => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+  if (!m) return { r: 0, g: 0, b: 0 };
+  const n = parseInt(m[1], 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+};
+const rgbToHex = ({ r, g, b }) =>
+  "#" + [r, g, b].map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
+const rgbToHsv = ({ r, g, b }) => {
+  const r1 = r / 255, g1 = g / 255, b1 = b / 255;
+  const max = Math.max(r1, g1, b1), min = Math.min(r1, g1, b1), d = max - min;
+  let h = 0;
+  if (d) {
+    if (max === r1) h = ((g1 - b1) / d) % 6;
+    else if (max === g1) h = (b1 - r1) / d + 2;
+    else h = (r1 - g1) / d + 4;
+    h *= 60; if (h < 0) h += 360;
+  }
+  return { h, s: max ? d / max : 0, v: max };
+};
+const hsvToRgb = ({ h, s, v }) => {
+  const c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c;
+  const [r1, g1, b1] =
+    h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+    : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return { r: (r1 + m) * 255, g: (g1 + m) * 255, b: (b1 + m) * 255 };
+};
+
+function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, theme, darkMode, de, onClose }) {
+  const [tab, setTab] = useState("custom");
+  const [hsv, setHsv] = useState(() => rgbToHsv(hexToRgb(value)));
+  const [hex, setHex] = useState(String(value || "#000000").replace("#", "").toUpperCase());
+  const svRef = useRef(null);
+
+  // Follow the outside value, but not while this picker is the one changing it —
+  // otherwise dragging in the square fights its own round-trip and the knob
+  // jitters. Comparing the resulting hex is enough to tell the two apart.
+  useEffect(() => {
+    const incoming = String(value || "#000000").toUpperCase();
+    if (rgbToHex(hsvToRgb(hsv)).toUpperCase() !== incoming) {
+      setHsv(rgbToHsv(hexToRgb(incoming)));
+      setHex(incoming.replace("#", ""));
+    }
+  }, [value]);
+
+  const commit = (next) => {
+    setHsv(next);
+    const h = rgbToHex(hsvToRgb(next));
+    setHex(h.replace("#", "").toUpperCase());
+    onChange(h);
+  };
+  const dragIn = (ref, fn) => (e) => {
+    const move = (ev) => {
+      const r = ref.current?.getBoundingClientRect();
+      if (!r) return;
+      fn(Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)),
+         Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height)));
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    move(e);
+    e.currentTarget.onpointermove = (ev) => { if (ev.buttons) move(ev); };
+    e.currentTarget.onpointerup = () => { e.currentTarget.onpointermove = null; };
+  };
+
+  const pure = rgbToHex(hsvToRgb({ h: hsv.h, s: 1, v: 1 }));
+  const current = rgbToHex(hsvToRgb(hsv));
+  const chequer = "conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)";
+
+  // The brand's own colours, structured where the profile has it structured.
+  const pal = brand?.color_palette || {};
+  const groups = [
+    [de ? "Primär" : "Primary", [pal.primary].filter(Boolean)],
+    [de ? "Sekundär" : "Secondary", [pal.secondary].filter(Boolean)],
+    [de ? "Akzente" : "Accents", Array.isArray(pal.accents) ? pal.accents.filter(Boolean) : []],
+  ].filter(([, list]) => list.length);
+  const flat = Array.isArray(brand?.colors) ? brand.colors.filter(Boolean) : [];
+
+  const field = { height: 30, borderRadius: 9, border: "none", outline: "none",
+    background: darkMode ? "rgba(255,255,255,0.07)" : "#F1F1F4", color: theme.text,
+    fontFamily: FONT, fontSize: 12.5, padding: "0 10px" };
+
+  return (
+    <div onPointerDown={e => e.stopPropagation()}
+      style={{ width: 244, borderRadius: 14, padding: 12,
+        background: darkMode ? "#1B1B23" : "#fff",
+        border: `1px solid ${theme.borderFaint}`, boxShadow: "0 18px 48px rgba(0,0,0,0.3)" }}>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
+        {[["custom", de ? "Eigene" : "Custom"], ["brand", "Brand"]].map(([k, l]) => (
+          <div key={k} onClick={() => setTab(k)}
+            style={{ padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontFamily: FONT,
+              fontSize: 12.5, fontWeight: 600,
+              color: tab === k ? theme.text : theme.textDim,
+              background: tab === k ? (darkMode ? "rgba(255,255,255,0.10)" : "#EDEDF0") : "transparent" }}>
+            {l}
+          </div>
+        ))}
+        <div style={{ flex: 1 }} />
+        <div onClick={onClose} style={{ cursor: "pointer", color: theme.textDim, padding: "4px 6px" }}>✕</div>
+      </div>
+
+      {tab === "custom" ? (
+        <>
+          {/* Saturation across, brightness down, over the pure hue. */}
+          <div ref={svRef}
+            onPointerDown={dragIn(svRef, (x, y) => commit({ ...hsv, s: x, v: 1 - y }))}
+            style={{ position: "relative", height: 150, borderRadius: 10, cursor: "crosshair",
+              background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, ${pure})` }}>
+            <div style={{ position: "absolute", left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%`,
+              transform: "translate(-50%, -50%)", width: 14, height: 14, borderRadius: "50%",
+              background: current, border: "2.5px solid #fff", boxShadow: "0 1px 4px rgba(0,0,0,0.4)",
+              pointerEvents: "none" }} />
+          </div>
+
+          <Track bg="linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)"
+            pos={hsv.h / 360} onSet={(x) => commit({ ...hsv, h: x * 360 })} />
+          <Track bg={`linear-gradient(to right, transparent, ${current}), ${chequer}`}
+            size="8px 8px" pos={alpha / 100} onSet={(x) => onAlphaChange?.(Math.round(x * 100))} />
+
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <input value={hex}
+              onChange={(e) => {
+                const v = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
+                setHex(v.toUpperCase());
+                if (v.length === 6) { const h = "#" + v; setHsv(rgbToHsv(hexToRgb(h))); onChange(h); }
+              }}
+              style={{ ...field, flex: 1, minWidth: 0, letterSpacing: 0.5 }} />
+            <div style={{ ...field, width: 62, display: "flex", alignItems: "center", gap: 2 }}>
+              <input value={alpha}
+                onChange={(e) => onAlphaChange?.(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                style={{ width: 28, border: "none", outline: "none", background: "transparent",
+                  color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
+              <span style={{ fontSize: 11.5, color: theme.textFaint }}>%</span>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div>
+          {groups.length === 0 && flat.length === 0 ? (
+            <div style={{ fontFamily: FONT, fontSize: 12, color: theme.textDim, lineHeight: 1.5,
+              padding: "18px 4px" }}>
+              {de ? "Für diese Marke sind noch keine Farben hinterlegt. Unter Brand → Identität lassen sie sich festlegen."
+                  : "No colours defined for this brand yet. Set them under Brand → Identity."}
+            </div>
+          ) : (groups.length ? groups : [[de ? "Farben" : "Colours", flat]]).map(([name, list]) => (
+            <div key={name} style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 10.5, letterSpacing: 0.6, textTransform: "uppercase",
+                color: theme.textFaint, marginBottom: 6 }}>{name}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {list.map((c, i) => (
+                  <div key={c + i} title={c}
+                    onClick={() => { setHsv(rgbToHsv(hexToRgb(c))); setHex(String(c).replace("#", "").toUpperCase()); onChange(c); }}
+                    style={{ width: 30, height: 30, borderRadius: 8, background: c, cursor: "pointer",
+                      border: String(value || "").toLowerCase() === String(c).toLowerCase()
+                        ? "2.5px solid #2F6BFF" : `1px solid ${theme.borderFaint}` }} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// A slider track for the picker — hue and alpha are the same control twice.
+function Track({ bg, pos, onSet, size }) {
+  const ref = useRef(null);
+  const set = (clientX) => {
+    const r = ref.current?.getBoundingClientRect();
+    if (r?.width) onSet(Math.min(1, Math.max(0, (clientX - r.left) / r.width)));
+  };
+  return (
+    <div ref={ref}
+      onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); set(e.clientX); }}
+      onPointerMove={(e) => { if (e.buttons) set(e.clientX); }}
+      style={{ position: "relative", height: 12, borderRadius: 999, marginTop: 10, cursor: "ew-resize",
+        background: bg, backgroundSize: size ? `auto, ${size}` : undefined }}>
+      <div style={{ position: "absolute", left: `${pos * 100}%`, top: "50%",
+        transform: "translate(-50%, -50%)", width: 15, height: 15, borderRadius: "50%",
+        background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.45)", pointerEvents: "none" }} />
+    </div>
+  );
+}
+
 // A number field you can actually clear. A plain controlled input with
 // `Number(v) || fallback` snaps back the instant the last character goes, so the
 // field can never be empty and you cannot retype it. This keeps a draft string
@@ -17283,6 +17474,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [dragRow, setDragRow] = useState(null);      // index in the reversed list
   const [overRow, setOverRow] = useState(null);
   const [renameId, setRenameId] = useState(null);
+  const [picker, setPicker] = useState(null);   // { what, key, x, y }
   const [barPop, setBarPop] = useState(null);   // "color" | null
   const [frameTab, setFrameTab] = useState("design");   // "design" | "templates"
   const [showGrid, setShowGrid] = useState(true);
@@ -18745,6 +18937,31 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         );
       })()}
 
+      {/* The colour picker, opened from whichever swatch was clicked. Anchored
+          left of the panel so it never covers the row it is editing. */}
+      {picker && selItem && createPortal(
+        <>
+          <div onPointerDown={() => setPicker(null)}
+            style={{ position: "fixed", inset: 0, zIndex: 100008 }} />
+          <div style={{ position: "fixed", zIndex: 100009,
+            left: Math.max(12, picker.x - 258),
+            top: Math.min(picker.y - 20, window.innerHeight - 340) }}>
+            <ColorPicker
+              value={picker.what === "stroke" ? (selItem.stroke || "#15151c") : (selItem[picker.key] || "#000000")}
+              alpha={picker.what === "stroke"
+                ? (selItem.strokeAlpha == null ? 100 : selItem.strokeAlpha)
+                : (selItem.fillAlpha == null ? 100 : selItem.fillAlpha)}
+              onChange={(c) => picker.what === "stroke"
+                ? patch(selItem.id, { stroke: c })
+                : patch(selItem.id, { [picker.key]: c })}
+              onAlphaChange={(a) => picker.what === "stroke"
+                ? patch(selItem.id, { strokeAlpha: a })
+                : patch(selItem.id, { fillAlpha: a })}
+              brand={brand} theme={theme} darkMode={darkMode} de={de}
+              onClose={() => setPicker(null)} />
+          </div>
+        </>, document.body)}
+
       {/* Right-click menu, the same rows Brainstorm offers. Both layers below
           stop their pointer events, and that is not tidiness: a portal renders
           into document.body but its React events still bubble along the REACT
@@ -19368,6 +19585,50 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               ], v => set("align", v))}
             </>)}
 
+            {label(selItem.type === "image" ? (de ? "Bild" : "Image") : de ? "Füllung" : "Fill")}
+            {selItem.type === "image" ? (
+              <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                {["cover", "contain"].map(f => (
+                  <div key={f} onClick={() => set("fit", f)}
+                    style={{ padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontSize: 11.5,
+                      border: `1px solid ${(selItem.fit || "cover") === f ? "#15151c" : line}`, color: theme.text }}>
+                    {f === "cover" ? (de ? "Füllend" : "Cover") : (de ? "Ganz sichtbar" : "Contain")}
+                  </div>
+                ))}
+              </div>
+            ) : (() => {
+              const key = (selItem.type === "draw" || selItem.type === "arrow" || selItem.type === "line")
+                ? "color" : selItem.type === "text" ? "color" : "fill";
+              const cur = selItem[key] || "#000000";
+              return (<>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, padding: "8px 10px",
+                  borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                  {/* The swatch shows the colour AT its opacity, over a chequer —
+                      a 20% fill that previews as solid tells you nothing. */}
+                  <div onClick={(e) => setPicker({ what: "fill", key,
+                      x: e.currentTarget.getBoundingClientRect().left,
+                      y: e.currentTarget.getBoundingClientRect().top })}
+                    style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, cursor: "pointer",
+                    border: `1px solid ${line}`, backgroundColor: "#fff",
+                    backgroundImage: `linear-gradient(${withAlpha(cur, selItem.fillAlpha)}, ${withAlpha(cur, selItem.fillAlpha)}), conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)`,
+                    backgroundSize: "auto, 8px 8px" }} />
+                  <input value={String(cur).replace("#", "").toUpperCase()}
+                    onChange={e => { const v = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
+                      if (v.length === 6) set(key, "#" + v); }}
+                    style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
+                      color: theme.text, fontFamily: FONT, fontSize: 12.5, letterSpacing: 0.4 }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0,
+                    paddingLeft: 8, borderLeft: `1px solid ${line}` }}>
+                    <NumberField value={selItem.fillAlpha == null ? 100 : selItem.fillAlpha}
+                      min={0} max={100} onCommit={v => set("fillAlpha", v)}
+                      style={{ width: 30, border: "none", outline: "none", background: "transparent",
+                        color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
+                    <span style={{ fontSize: 11.5, color: theme.textFaint }}>%</span>
+                  </div>
+                </div>
+              </>);
+            })()}
+
             {canStroke(selItem) && (<>
               {label(de ? "Kontur" : "Stroke")}
               {!selItem.strokeWidth ? (
@@ -19380,7 +19641,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 <>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, padding: "8px 10px",
                     borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
-                    <div style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+                    <div onClick={(e) => setPicker({ what: "stroke",
+                        x: e.currentTarget.getBoundingClientRect().left,
+                        y: e.currentTarget.getBoundingClientRect().top })}
+                      style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, cursor: "pointer",
                       border: `1px solid ${line}`,
                       background: withAlpha(selItem.stroke || "#15151c", selItem.strokeAlpha) }} />
                     <input value={String(selItem.stroke || "#15151c").replace("#", "").toUpperCase()}
@@ -19405,7 +19669,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       {de ? "Entfernen" : "Remove"}
                     </div>
                   </div>
-                  {swatch(selItem.stroke || "#15151c", c => set2({ stroke: c }))}
                 </>
               )}
             </>)}
@@ -19479,48 +19742,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   () => set2({ blur: selItem.blur ? undefined : 6 }),
                   de ? "Weichzeichnen" : "Layer blur",
                   field(selItem.blur ?? 6, v => set2({ blur: Math.max(0, v) }), "◌"))}
-              </>);
-            })()}
-
-            {label(selItem.type === "image" ? (de ? "Bild" : "Image") : de ? "Füllung" : "Fill")}
-            {selItem.type === "image" ? (
-              <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-                {["cover", "contain"].map(f => (
-                  <div key={f} onClick={() => set("fit", f)}
-                    style={{ padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontSize: 11.5,
-                      border: `1px solid ${(selItem.fit || "cover") === f ? "#15151c" : line}`, color: theme.text }}>
-                    {f === "cover" ? (de ? "Füllend" : "Cover") : (de ? "Ganz sichtbar" : "Contain")}
-                  </div>
-                ))}
-              </div>
-            ) : (() => {
-              const key = (selItem.type === "draw" || selItem.type === "arrow" || selItem.type === "line")
-                ? "color" : selItem.type === "text" ? "color" : "fill";
-              const cur = selItem[key] || "#000000";
-              return (<>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, padding: "8px 10px",
-                  borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
-                  {/* The swatch shows the colour AT its opacity, over a chequer —
-                      a 20% fill that previews as solid tells you nothing. */}
-                  <div style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0,
-                    border: `1px solid ${line}`, backgroundColor: "#fff",
-                    backgroundImage: `linear-gradient(${withAlpha(cur, selItem.fillAlpha)}, ${withAlpha(cur, selItem.fillAlpha)}), conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)`,
-                    backgroundSize: "auto, 8px 8px" }} />
-                  <input value={String(cur).replace("#", "").toUpperCase()}
-                    onChange={e => { const v = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
-                      if (v.length === 6) set(key, "#" + v); }}
-                    style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
-                      color: theme.text, fontFamily: FONT, fontSize: 12.5, letterSpacing: 0.4 }} />
-                  <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0,
-                    paddingLeft: 8, borderLeft: `1px solid ${line}` }}>
-                    <NumberField value={selItem.fillAlpha == null ? 100 : selItem.fillAlpha}
-                      min={0} max={100} onCommit={v => set("fillAlpha", v)}
-                      style={{ width: 30, border: "none", outline: "none", background: "transparent",
-                        color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
-                    <span style={{ fontSize: 11.5, color: theme.textFaint }}>%</span>
-                  </div>
-                </div>
-                {swatch(cur, c => set(key, c))}
               </>);
             })()}
 
