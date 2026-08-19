@@ -17241,7 +17241,8 @@ const CANVAS_TEMPLATES = [
 // never what it sets or what it currently reads — both of which you want while
 // dragging, not after.
 function SliderField({ label, value, min = 0, max = 100, step = 1, suffix = "",
-                       height = 34, radius = 999, onChange, theme, darkMode }) {
+                       height = 34, radius = 999, onChange, onCommit, editMax,
+                       theme, darkMode }) {
   const ref = useRef(null);
   const pct = Math.max(0, Math.min(1, (value - min) / (max - min || 1)));
   const setFromX = (clientX) => {
@@ -17263,8 +17264,26 @@ function SliderField({ label, value, min = 0, max = 100, step = 1, suffix = "",
       <span style={{ position: "relative", fontFamily: FONT, fontSize: 12.5, color: theme.textDim,
         pointerEvents: "none" }}>{label}</span>
       <div style={{ flex: 1 }} />
-      <span style={{ position: "relative", fontFamily: FONT, fontSize: 12.5, fontWeight: 500,
-        color: theme.text, pointerEvents: "none" }}>{value}{suffix}</span>
+      {/* With onCommit the number is typable as well as draggable, so a value
+          past the end of the track is still reachable — the track covers the
+          useful range, not the possible one. The field swallows the pointer or
+          clicking into it would start a drag, and it re-enables selection,
+          which the track turns off so dragging does not highlight the label. */}
+      {onCommit ? (
+        <div onPointerDown={(e) => e.stopPropagation()}
+          style={{ position: "relative", display: "flex", alignItems: "center", gap: 1,
+            cursor: "text", userSelect: "text" }}>
+          <NumberField value={value} min={min} max={editMax} onCommit={onCommit}
+            style={{ width: 44, border: "none", outline: "none", background: "transparent",
+              color: theme.text, fontFamily: FONT, fontSize: 12.5, fontWeight: 500,
+              textAlign: "right" }} />
+          {suffix && <span style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 500,
+            color: theme.text }}>{suffix}</span>}
+        </div>
+      ) : (
+        <span style={{ position: "relative", fontFamily: FONT, fontSize: 12.5, fontWeight: 500,
+          color: theme.text, pointerEvents: "none" }}>{value}{suffix}</span>
+      )}
     </div>
   );
 }
@@ -17372,7 +17391,10 @@ const defaultPattern = (from) => ({
 // A pattern where the mark is as wide as the spacing is a solid colour, so the
 // two are clamped against each other rather than left to cancel out.
 const patternGeom = (p) => {
-  const gap = Math.max(4, Math.round(p?.gap ?? 24));
+  // Capped here rather than in the field, because the tile is a canvas of
+  // (gap × PATTERN_SCALE)² pixels — a spacing of 5000 asks for a 10000 × 10000
+  // bitmap, and the number can be typed as well as dragged.
+  const gap = Math.min(400, Math.max(4, Math.round(p?.gap ?? 24)));
   return { gap, size: Math.max(0.5, Math.min(gap - 1, p?.size ?? 4)) };
 };
 
@@ -17863,25 +17885,18 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, de,
       {tab === "pattern" && (() => {
         const pat = isPattern(value) ? value : defaultPattern("#FFFFFF");
         const { gap, size } = patternGeom(pat);
-        const numRow = (label, v, put, min, max) => (
-          <div key={label} style={{ display: "flex", alignItems: "center", gap: 10, height: 36,
-            borderRadius: 10, padding: "0 12px", background: soft, marginBottom: 8 }}>
-            <span style={{ fontFamily: FONT, fontSize: 12, color: theme.textFaint, flex: 1, minWidth: 0 }}>{label}</span>
-            <NumberField value={v} min={min} max={max} onCommit={put}
-              style={{ width: 46, flexShrink: 0, border: "none", outline: "none", background: "transparent",
-                color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
-          </div>
-        );
         return (
           <div style={fill}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, flexShrink: 0 }}>
+            {/* All five in one row, no captions. Two rows of captioned tiles
+                made the panel look twice as wide as it needed to be, and the
+                picture says what the word said — the name is on the tooltip
+                for the one case where it does not. */}
+            <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
               {PATTERN_TYPES.map(([k, l]) => (
-                <div key={k} onClick={() => putPattern({ pattern: k })} style={{ cursor: "pointer" }}>
-                  <div style={{ height: 52, borderRadius: 10, background: patternCss({ ...pat, pattern: k }),
+                <div key={k} title={de ? l.de : l.en} onClick={() => putPattern({ pattern: k })}
+                  style={{ flex: 1, minWidth: 0, height: 46, borderRadius: 10, cursor: "pointer",
+                    background: patternCss({ ...pat, pattern: k }),
                     border: `1px solid ${pat.pattern === k ? "#15151c" : theme.borderFaint}` }} />
-                  <div style={{ fontFamily: FONT, fontSize: 11, color: theme.textDim,
-                    marginTop: 6, textAlign: "center" }}>{de ? l.de : l.en}</div>
-                </div>
               ))}
             </div>
 
@@ -17914,11 +17929,23 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, de,
               ))}
 
               <div style={{ height: 10 }} />
-              {numRow(de ? "Abstand" : "Spacing", gap, (v) => putPattern({ gap: v }), 4, 200)}
+              {/* The same slider the star's angle uses: label left, value right,
+                  the fill showing where you are. Both take a typed number too,
+                  for a spacing wider than the track goes. */}
+              <SliderField label={de ? "Abstand" : "Spacing"} suffix=" px"
+                value={gap} min={4} max={120} editMax={400}
+                onChange={(v) => putPattern({ gap: v })} onCommit={(v) => putPattern({ gap: v })}
+                theme={theme} darkMode={darkMode} />
               {/* Checks take their scale from the spacing alone — the squares ARE
                   the picture, so there is no mark to weigh. */}
-              {pat.pattern !== "checks"
-                && numRow(de ? "Stärke" : "Weight", size, (v) => putPattern({ size: v }), 1, 100)}
+              {pat.pattern !== "checks" && (
+                <div style={{ marginTop: 8 }}>
+                  <SliderField label={de ? "Stärke" : "Weight"} suffix=" px"
+                    value={size} min={1} max={Math.max(2, gap - 1)} editMax={399}
+                    onChange={(v) => putPattern({ size: v })} onCommit={(v) => putPattern({ size: v })}
+                    theme={theme} darkMode={darkMode} />
+                </div>
+              )}
             </div>
           </div>
         );
