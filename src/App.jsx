@@ -17364,8 +17364,10 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, theme
               }}
               style={{ ...field, flex: 1, minWidth: 0, letterSpacing: 0.5 }} />
             <div style={{ ...field, width: 62, display: "flex", alignItems: "center", gap: 2 }}>
-              <input value={alpha}
-                onChange={(e) => onAlphaChange?.(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+              {/* Same rule as the sidebar: typing 35 over 100 must not apply 3 on
+                  the way. The hex beside it is different — it is only ever
+                  committed at six valid characters, so it has no half-values. */}
+              <NumberField value={alpha} min={0} max={100} onCommit={(v) => onAlphaChange?.(v)}
                 style={{ width: 28, border: "none", outline: "none", background: "transparent",
                   color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
               <span style={{ fontSize: 11.5, color: theme.textFaint }}>%</span>
@@ -17432,25 +17434,36 @@ function Track({ bg, pos, onSet, size }) {
   );
 }
 
-// A number field you can actually clear. A plain controlled input with
-// `Number(v) || fallback` snaps back the instant the last character goes, so the
-// field can never be empty and you cannot retype it. This keeps a draft string
-// while the field has focus: it commits whatever parses, and simply shows the
-// empty string when there is nothing there yet.
+// A number field that commits on confirm, not on every keystroke.
+//
+// Two reasons, and the second is the one that bites. Typing 150 into a field
+// holding 20 passes through 1 and 15 on the way; applying each of those resizes
+// the frame twice for nothing and fills the undo stack with steps nobody made.
+// And a field that rewrites itself while you type cannot be emptied at all:
+// Number("") || fallback puts the old value straight back as the last character
+// goes.
+//
+// So the draft lives here while the field has focus, and Enter or leaving the
+// field hands it over. Escape drops it. Sliders stay live on purpose — a drag
+// shows its own result, and waiting for a confirmation there would be worse.
 function NumberField({ value, onCommit, min, max, style, ...rest }) {
   const [draft, setDraft] = useState(null);
   const clamp = (n) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n));
+  const commit = () => {
+    if (draft === null) return;
+    const n = Number(draft);
+    if (draft.trim() !== "" && Number.isFinite(n)) onCommit(clamp(n));
+    setDraft(null);
+  };
   return (
     <input {...rest}
       value={draft ?? String(value ?? "")}
-      onChange={(e) => {
-        const raw = e.target.value;
-        setDraft(raw);
-        const n = Number(raw);
-        if (raw.trim() !== "" && Number.isFinite(n)) onCommit(clamp(n));
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") { e.preventDefault(); commit(); e.currentTarget.blur(); }
+        if (e.key === "Escape") { e.preventDefault(); setDraft(null); e.currentTarget.blur(); }
       }}
-      onBlur={() => setDraft(null)}
-      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
       style={style} />
   );
 }
