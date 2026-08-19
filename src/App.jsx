@@ -18429,7 +18429,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setItems(list => list.map(i =>
       i.id === lo ? { ...i, isMask: true, rot: 0, groupId: gid }
       : i.id === hi ? { ...i, maskId: lo, groupId: gid } : i));
-    setPick([]); setSel(hi); setEnteredGroup(null);
+    setPick([lo, hi]); setSel(hi); setEnteredGroup(null);
   };
   const unmask = (id) => {
     const it = items.find(o => o.id === id);
@@ -18628,8 +18628,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       if (k === "v") { e.preventDefault(); pasteClip(null); }
       if (k === "g") {
         e.preventDefault();
-        if (e.shiftKey) ungroupSel(groupOf(sel) || groupOf(pick[0]));
-        else groupSel();
+        if (e.shiftKey) ungroupSel(selGid || groupOf(sel) || groupOf(pick[0]));
+        else if (!selGid) groupSel();
       }
       if (e.key === "]" && sel) { e.preventDefault(); restack("front"); }
       if (e.key === "[" && sel) { e.preventDefault(); restack("back"); }
@@ -18996,7 +18996,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     }
     const ids = moveSetFor(it.id);
     if (!ids.includes(it.id)) ids.push(it.id);
-    if (ids.length === 1) setPick([]);
+    // Clicking one member picks the whole group, so the layers list and the
+    // panel show the thing that will actually move. Stepped inside, moveSetFor
+    // already returns the one item and this collapses to selecting it alone.
+    if (ids.length === 1) setPick([]); else setPick(ids);
     pushUndo(takeSnap());
     setSel(it.id);
     // Every member remembers where it started, so the group keeps its shape —
@@ -19049,6 +19052,19 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // "Maske lösen", which undoes both halves of the relationship.
   const groupOf = (id) => items.find(i => i.id === id)?.groupId || null;
   const canUngroup = (gid) => !!gid && !items.some(i => i.groupId === gid && (i.isMask || i.maskId));
+  // The selection as everything else should read it: until a group has been
+  // stepped into, picking any of its members IS picking the group. Without this
+  // the layers list highlighted the one part that happened to be clicked — on a
+  // mask that read as "the image is selected" while the whole group was what
+  // would move.
+  const selGid = (() => {
+    const ids = pick.length ? pick : (sel && sel !== "frame" ? [sel] : []);
+    if (!ids.length) return null;
+    const gid = groupOf(ids[0]);
+    if (!gid || enteredGroup === gid) return null;
+    return ids.every(id => groupOf(id) === gid) ? gid : null;
+  })();
+
   const ungroupSel = (gid) => {
     if (!canUngroup(gid)) return;
     markChange();
@@ -20242,18 +20258,21 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         const mod = navigator.platform?.toLowerCase().includes("mac") ? "⌘" : "Ctrl+";
         const rows = [];
         const clicked = items.find(i => i.id === ctxMenu.id);
-        if (pick.length === 2) {
+        // Two things picked, and not because one group is selected — clicking a
+        // mask group now picks both its members, and offering to mask them again
+        // would mask a mask.
+        if (pick.length === 2 && !selGid) {
           rows.push(row(de ? "Objekte maskieren" : "Use as mask", "", () => maskPair(pick)));
           rows.push(sep("s0"));
         }
-        if (pick.length > 1) {
+        if (pick.length > 1 && !selGid) {
           rows.push(row(de ? "Gruppieren" : "Group", `${mod}G`, () => groupSel()));
         }
         if (canUngroup(clicked?.groupId)) {
           rows.push(row(de ? "Gruppierung aufheben" : "Ungroup", `${mod}⇧G`,
             () => ungroupSel(clicked.groupId)));
         }
-        if (pick.length > 1 || canUngroup(clicked?.groupId)) rows.push(sep("s0c"));
+        if ((pick.length > 1 && !selGid) || canUngroup(clicked?.groupId)) rows.push(sep("s0c"));
         if (clicked?.maskId) {
           rows.push(row(de ? "Maske lösen" : "Release mask", "", () => unmask(clicked.id)));
           rows.push(sep("s0b"));
@@ -20513,7 +20532,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                             : "Click selects the group · double-click steps inside"}
                   style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 8px",
                     borderRadius: 8, cursor: "pointer", color: theme.textDim,
-                    background: items.some(o => o.groupId === gid && pick.includes(o.id))
+                    background: (selGid === gid || items.some(o => o.groupId === gid && pick.includes(o.id)))
                       ? "rgba(47,107,255,0.16)"
                       : enteredGroup === gid ? (darkMode ? "rgba(255,255,255,0.05)" : "#F5F5F7") : "transparent" }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -20545,13 +20564,22 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   onClick={(e) => {
                     if (e.metaKey || e.ctrlKey || e.shiftKey) {
                       setPick(p => p.includes(it.id) ? p.filter(x => x !== it.id) : [...p, it.id]);
+                    } else if (gid && enteredGroup !== gid) {
+                      // Same rule as the canvas: the group is the thing you get
+                      // until you open it.
+                      setPick(items.filter(o => o.groupId === gid).map(o => o.id));
+                      setSel(it.id);
                     } else { setSel(it.id); setPick([]); }
                   }}
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px",
                     marginLeft: gid ? 16 : 0, borderRadius: 8, cursor: "grab",
                     borderTop: dropHere ? "2px solid #2F6BFF" : "2px solid transparent",
                     opacity: dragRow === rev ? 0.45 : 1,
-                    background: ticked ? "rgba(47,107,255,0.16)"
+                    // While the GROUP is the selection, its parts are not
+                    // highlighted one by one — the header above says what is
+                    // selected, and marking both said two different things.
+                    background: selGid === gid ? "transparent"
+                      : ticked ? "rgba(47,107,255,0.16)"
                       : sel === it.id ? (darkMode ? "rgba(255,255,255,0.08)" : "#EDEDF0") : "transparent" }}>
                   <div style={{ width: 22, height: 22, borderRadius: 5, flexShrink: 0,
                     border: `1px solid ${line}`,
@@ -20646,7 +20674,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             several things at once. Aligning here is to EACH OTHER — the box they
             share — not to the frame, which is what the single-element panel
             below offers. */}
-        {pick.length > 1 && (() => {
+        {pick.length > 1 && !selGid && (() => {
           const n = alignUnits().length;
           const gid = groupOf(pick[0]);
           const grouped = !!gid && pick.every(id => groupOf(id) === gid);
@@ -20680,8 +20708,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             offers the one thing that only applies to a group. Stepping inside is
             a double-click on the canvas, which is worth saying once here rather
             than leaving to be discovered. */}
-        {pick.length < 2 && !!selItem?.groupId && (() => {
-          const gid = selItem.groupId;
+        {!!selGid && (() => {
+          const gid = selGid;
           const members = items.filter(i => i.groupId === gid);
           const inside = enteredGroup === gid;
           return (
@@ -20882,7 +20910,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             {/* Hidden while several are selected: two alignment grids one above
                 the other, one moving everything and one moving the last thing
                 clicked, is a coin toss. */}
-            {pick.length < 2 && (<>
+            {(pick.length < 2 || !!selGid) && (<>
             <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 10 }}>
               {de ? "Ausrichten am Frame" : "Align to frame"}
             </div>
