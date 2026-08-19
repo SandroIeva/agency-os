@@ -17122,6 +17122,29 @@ const CANVAS_TEMPLATES = [
     } },
 ];
 
+// A number field you can actually clear. A plain controlled input with
+// `Number(v) || fallback` snaps back the instant the last character goes, so the
+// field can never be empty and you cannot retype it. This keeps a draft string
+// while the field has focus: it commits whatever parses, and simply shows the
+// empty string when there is nothing there yet.
+function NumberField({ value, onCommit, min, max, style, ...rest }) {
+  const [draft, setDraft] = useState(null);
+  const clamp = (n) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n));
+  return (
+    <input {...rest}
+      value={draft ?? String(value ?? "")}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setDraft(raw);
+        const n = Number(raw);
+        if (raw.trim() !== "" && Number.isFinite(n)) onCommit(clamp(n));
+      }}
+      onBlur={() => setDraft(null)}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+      style={style} />
+  );
+}
+
 function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, userOrg,
                         theme, darkMode, appLanguage, onUpload, onDone, onAutoSave, onClose }) {
   const de = appLanguage === "de";
@@ -18465,8 +18488,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff">
                     <path d="M12 2.6l2.9 6 6.5.9-4.7 4.6 1.1 6.5-5.8-3.1-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9z" />
                   </svg>
-                  <input type="number" min={3} max={20} value={selItem.points ?? 5}
-                    onChange={e => patch(selItem.id, { points: Math.max(3, Math.min(20, Number(e.target.value) || 5)) })}
+                  <NumberField value={selItem.points ?? 5} min={3} max={20}
+                    onCommit={v => patch(selItem.id, { points: Math.round(v) })}
                     style={{ width: 32, border: "none", outline: "none", background: "transparent",
                       color: "#fff", fontFamily: FONT, fontSize: 12 }} />
                 </div>
@@ -18481,8 +18504,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 {div2}
               </>)}
               {isText && (<>
-                <input type="number" value={selItem.size} min={6}
-                  onChange={e => patch(selItem.id, { size: Math.max(6, Number(e.target.value) || 6) })}
+                <NumberField value={selItem.size} min={6}
+                  onCommit={v => patch(selItem.id, { size: v })}
                   style={{ width: 52, height: 26, borderRadius: 7, border: "none", outline: "none",
                     background: "rgba(255,255,255,0.12)", color: "#fff", fontFamily: FONT, fontSize: 12,
                     textAlign: "center" }} />
@@ -18878,8 +18901,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, padding: "8px 10px",
               borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
               <span style={{ fontSize: 11, color: theme.textFaint, minWidth: 13 }}>⌐</span>
-              <input value={frameRadius}
-                onChange={e => setFrameRadius(Math.max(0, Number(e.target.value) || 0))}
+              <NumberField value={frameRadius} min={0} onCommit={setFrameRadius}
                 style={{ width: "100%", border: "none", outline: "none", background: "transparent",
                   color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
             </div>
@@ -18908,7 +18930,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
               borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
               <span style={{ fontSize: 11, color: theme.textFaint, minWidth: 13 }}>{glyph}</span>
-              <input value={value} onChange={e => onChange(e.target.value)}
+              <NumberField value={value} onCommit={onChange}
                 style={{ width: "100%", border: "none", outline: "none", background: "transparent",
                   color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
               {suffix && <span style={{ fontSize: 11.5, color: theme.textFaint }}>{suffix}</span>}
@@ -19125,8 +19147,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         color: theme.text, fontFamily: FONT, fontSize: 12.5, letterSpacing: 0.4 }} />
                     <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0,
                       paddingLeft: 8, borderLeft: `1px solid ${line}` }}>
-                      <input value={selItem.strokeAlpha == null ? 100 : selItem.strokeAlpha}
-                        onChange={e => set2({ strokeAlpha: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+                      <NumberField value={selItem.strokeAlpha == null ? 100 : selItem.strokeAlpha}
+                        min={0} max={100} onCommit={v => set2({ strokeAlpha: v })}
                         style={{ width: 30, border: "none", outline: "none", background: "transparent",
                           color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
                       <span style={{ fontSize: 11.5, color: theme.textFaint }}>%</span>
@@ -19170,7 +19192,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 8px", borderRadius: 7,
                   background: darkMode ? "rgba(255,255,255,0.07)" : "#fff" }}>
                   <span style={{ fontSize: 10.5, color: theme.textFaint }}>{glyph}</span>
-                  <input value={v} onChange={e => onChange(Number(e.target.value) || 0)}
+                  <NumberField value={v} onCommit={onChange}
                     style={{ width: "100%", border: "none", outline: "none", background: "transparent",
                       color: theme.text, fontFamily: FONT, fontSize: 12 }} />
                 </div>
@@ -19248,8 +19270,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       color: theme.text, fontFamily: FONT, fontSize: 12.5, letterSpacing: 0.4 }} />
                   <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0,
                     paddingLeft: 8, borderLeft: `1px solid ${line}` }}>
-                    <input value={selItem.fillAlpha == null ? 100 : selItem.fillAlpha}
-                      onChange={e => set("fillAlpha", Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                    <NumberField value={selItem.fillAlpha == null ? 100 : selItem.fillAlpha}
+                      min={0} max={100} onCommit={v => set("fillAlpha", v)}
                       style={{ width: 30, border: "none", outline: "none", background: "transparent",
                         color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
                     <span style={{ fontSize: 11.5, color: theme.textFaint }}>%</span>
