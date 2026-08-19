@@ -17849,7 +17849,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     if (it.blur) parts.push(`blur(${it.blur}px)`);
     if (it.shadow) {
       const d2 = it.shadow;
-      parts.push(`drop-shadow(${d2.x || 0}px ${d2.y || 0}px ${d2.blur || 0}px ${d2.color || "rgba(0,0,0,0.35)"})`);
+      parts.push(`drop-shadow(${d2.x || 0}px ${d2.y || 0}px ${d2.blur || 0}px ${shadowColor(d2)})`);
     }
     return parts.length ? parts.join(" ") : "none";
   };
@@ -17872,6 +17872,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const n = parseInt(m[1], 16);
     return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
   };
+  // A shadow's colour is a hex plus its own opacity, like every other colour
+  // here — older documents stored a finished rgba() string, so those are passed
+  // through untouched rather than being mangled into a hex.
+  const shadowColor = (sh) => {
+    if (!sh) return "rgba(0,0,0,0.35)";
+    const c = sh.color || "#000000";
+    return /^#/.test(c) ? withAlpha(c, sh.alpha == null ? 35 : sh.alpha) : c;
+  };
+
   const fillOf = (it) => isGradient(it.fill) ? gradientCss(it.fill) : withAlpha(it.fill, it.fillAlpha);
   // A CSS border draws INSIDE the box; a canvas stroke straddles the path. The
   // export therefore traces a box inset by half the width, or the outline would
@@ -18757,7 +18766,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         if (it.type === "ellipse") ctx.ellipse(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, b.h / 2, 0, 0, Math.PI * 2, true);
         else if (ctx.roundRect) ctx.roundRect(b.x, b.y, b.w, b.h, radiiOf(it).map(v => Math.min(v, Math.min(b.w, b.h) / 2)));
         else ctx.rect(b.x, b.y, b.w, b.h);
-        ctx.shadowColor = sh.color || "rgba(0,0,0,0.35)";
+        ctx.shadowColor = shadowColor(sh);
         ctx.shadowBlur = sh.blur || 0;
         ctx.shadowOffsetX = sh.x || 0;
         ctx.shadowOffsetY = sh.y || 0;
@@ -19028,7 +19037,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
                       filter: effectFilter(it),
                       boxShadow: it.innerShadow
-                        ? `inset ${it.innerShadow.x || 0}px ${it.innerShadow.y || 0}px ${it.innerShadow.blur || 0}px ${it.innerShadow.color || "rgba(0,0,0,0.35)"}, 0 2px 8px rgba(0,0,0,0.12)`
+                        ? `inset ${it.innerShadow.x || 0}px ${it.innerShadow.y || 0}px ${it.innerShadow.blur || 0}px ${shadowColor(it.innerShadow)}, 0 2px 8px rgba(0,0,0,0.12)`
                         : "0 2px 8px rgba(0,0,0,0.12)",
                       font: canvasFont(it), color: it.color,
                       lineHeight: `${canvasLH(it)}px`, whiteSpace: "pre", overflow: "hidden" }}>
@@ -19239,7 +19248,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     ...(it.bgBlur ? { backdropFilter: `blur(${it.bgBlur}px)`,
                       WebkitBackdropFilter: `blur(${it.bgBlur}px)` } : {}),
                     boxShadow: (it.innerShadow && canInnerShadow(it))
-                      ? `inset ${it.innerShadow.x || 0}px ${it.innerShadow.y || 0}px ${it.innerShadow.blur || 0}px ${it.innerShadow.color || "rgba(0,0,0,0.35)"}`
+                      ? `inset ${it.innerShadow.x || 0}px ${it.innerShadow.y || 0}px ${it.innerShadow.blur || 0}px ${shadowColor(it.innerShadow)}`
                       : undefined,
                     borderRadius: it.type === "ellipse" ? "50%" : radiiOf(it).map(v => `${v}px`).join(" "),
                     boxSizing: "border-box",
@@ -19461,15 +19470,22 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             <ColorPicker
               value={picker.what === "bg" ? (bg === "transparent" ? "#FFFFFF" : bg)
                 : picker.what === "stroke" ? (selItem?.stroke || "#15151c")
+                : picker.what === "shadow"
+                  ? (/^#/.test(selItem?.[picker.key]?.color || "") ? selItem[picker.key].color : "#000000")
                 : (selItem?.[picker.key] || "#000000")}
               alpha={picker.what === "bg" ? 100
                 : picker.what === "stroke" ? (selItem?.strokeAlpha == null ? 100 : selItem.strokeAlpha)
+                : picker.what === "shadow" ? (selItem?.[picker.key]?.alpha == null ? 35 : selItem[picker.key].alpha)
                 : (selItem?.fillAlpha == null ? 100 : selItem.fillAlpha)}
               onChange={(c) => picker.what === "bg" ? setBg(c)
                 : picker.what === "stroke" ? patch(selItem.id, { stroke: c })
+                : picker.what === "shadow"
+                  ? patch(selItem.id, { [picker.key]: { ...selItem[picker.key], color: c } })
                 : patch(selItem.id, { [picker.key]: c })}
               onAlphaChange={(a) => picker.what === "bg" ? undefined
                 : picker.what === "stroke" ? patch(selItem.id, { strokeAlpha: a })
+                : picker.what === "shadow"
+                  ? patch(selItem.id, { [picker.key]: { ...selItem[picker.key], alpha: a } })
                 : patch(selItem.id, { fillAlpha: a })}
               brand={brand} theme={theme} darkMode={darkMode} de={de}
               onClose={() => setPicker(null)} />
@@ -19938,15 +19954,19 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
         {!selItem && frameTab === "design" && (
           <>
-            {label(sel === "frame" ? (de ? "Frame · ausgewählt" : "Frame · selected") : "Frame")}
-            <div style={{ fontSize: 12, color: theme.textDim, marginTop: 6 }}>{title}</div>
-
+            {/* No "Frame" heading and no title line: the panel only shows this
+                when the frame IS what is selected, so both were repeating what
+                the context already said and pushing everything down. */}
             {label(de ? "Format" : "Preset")}
             <div style={{ marginTop: 6 }}>
               {/* Read from the same list Creations offers, so a format cannot be
                   right in one place and stale here. */}
+              {/* A size that matches no preset shows a dash and says so, rather
+                  than sitting in the list looking like one of them. */}
               {dropdown(`${W}×${H}`,
-                [[`${W}×${H}`, `${W} × ${H} px${creationFormats(de).some(f => f.w === W && f.h === H) ? "" : (de ? " · eigene" : " · custom")}`],
+                [[`${W}×${H}`, creationFormats(de).some(f => f.w === W && f.h === H)
+                    ? `${W} × ${H} px`
+                    : `—  ${de ? "Eigene Größe" : "Custom size"} · ${W} × ${H} px`],
                  ...creationFormats(de).map(f => [`${f.w}×${f.h}`, `${f.name} — ${f.w} × ${f.h}`])],
                 (v) => { const [w2, h2] = v.split("×").map(Number);
                   if (w2 && h2) { markChange(); setFrame({ w: w2, h: h2 }); } })}
@@ -20320,21 +20340,45 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     {field(sh.y ?? 4, v => put({ y: v }), "Y")}
                     {field(sh.blur ?? 10, v => put({ blur: Math.max(0, v) }), "◌")}
                   </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 }}>
-                    {["rgba(0,0,0,0.35)", "rgba(0,0,0,0.6)", "rgba(0,0,0,0.15)", ...palette.slice(0, 3)].map(c => (
-                      <div key={c} onClick={() => put({ color: c })}
-                        style={{ width: 20, height: 20, borderRadius: 6, background: c, cursor: "pointer",
-                          border: (sh.color || "rgba(0,0,0,0.35)") === c ? "2px solid #15151c" : `1px solid ${line}` }} />
-                    ))}
-                  </div>
+                  {/* The same row a fill gets: a swatch, its value, its opacity —
+                      and the same picker behind it. A palette here and a picker
+                      there was two answers to one question. */}
+                  {(() => {
+                    const hex = /^#/.test(sh.color || "") ? sh.color : "#000000";
+                    const a = sh.alpha == null ? 35 : sh.alpha;
+                    return (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6,
+                        padding: "7px 9px", borderRadius: 9,
+                        background: darkMode ? "rgba(255,255,255,0.07)" : "#fff" }}>
+                        <div onClick={(e) => setPicker({ what: "shadow", key,
+                            x: e.currentTarget.getBoundingClientRect().left,
+                            y: e.currentTarget.getBoundingClientRect().top })}
+                          style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, cursor: "pointer",
+                            border: `1px solid ${line}`, backgroundColor: "#fff",
+                            backgroundImage: `linear-gradient(${withAlpha(hex, a)}, ${withAlpha(hex, a)}), conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)`,
+                            backgroundSize: "auto, 8px 8px" }} />
+                        <span style={{ flex: 1, minWidth: 0, fontFamily: FONT, fontSize: 12.5,
+                          color: theme.text, letterSpacing: 0.4 }}>
+                          {hex.replace("#", "").toUpperCase()}
+                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0,
+                          paddingLeft: 8, borderLeft: `1px solid ${line}` }}>
+                          <NumberField value={a} min={0} max={100} onCommit={(v) => put({ alpha: v })}
+                            style={{ width: 30, border: "none", outline: "none", background: "transparent",
+                              color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
+                          <span style={{ fontSize: 11.5, color: theme.textFaint }}>%</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </>);
               };
               return (<>
                 {row(!!selItem.shadow,
-                  () => set2({ shadow: selItem.shadow ? undefined : { x: 0, y: 4, blur: 10, color: "rgba(0,0,0,0.35)" } }),
+                  () => set2({ shadow: selItem.shadow ? undefined : { x: 0, y: 4, blur: 10, color: "#000000", alpha: 35 } }),
                   de ? "Schlagschatten" : "Drop shadow", shadowBody("shadow"))}
                 {canInnerShadow(selItem) && row(!!selItem.innerShadow,
-                  () => set2({ innerShadow: selItem.innerShadow ? undefined : { x: 0, y: 4, blur: 10, color: "rgba(0,0,0,0.35)" } }),
+                  () => set2({ innerShadow: selItem.innerShadow ? undefined : { x: 0, y: 4, blur: 10, color: "#000000", alpha: 35 } }),
                   de ? "Innerer Schatten" : "Inner shadow", shadowBody("innerShadow"))}
                 {row(!!selItem.bgBlur,
                   () => set2({ bgBlur: selItem.bgBlur ? undefined : 8 }),
