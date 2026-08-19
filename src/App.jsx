@@ -18171,6 +18171,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [picker, setPicker] = useState(null);   // { what, key, x, y }
   const [marquee, setMarquee] = useState(null);        // { x, y, w, h } in artboard units
   const [enteredGroup, setEnteredGroup] = useState(null);
+  // Which groups are unfolded in the layers list. Closed by default: a group is
+  // one row until you ask for its parts, which is what the chevron promised
+  // while the parts sat there anyway.
+  const [openGroups, setOpenGroups] = useState([]);
+  const openGroup = (gid, on = true) =>
+    setOpenGroups(g => (on ? (g.includes(gid) ? g : [...g, gid]) : g.filter(x => x !== gid)));
   const [barPop, setBarPop] = useState(null);   // "color" | null
   const [frameTab, setFrameTab] = useState("design");   // "design" | "templates"
   const [showGrid, setShowGrid] = useState(true);
@@ -18381,8 +18387,28 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setItems(list => {
       const a = [...list];
       const [x] = a.splice(n - 1 - fromRev, 1);
-      a.splice(n - 1 - toRev, 0, x);
-      return a;
+      const at = n - 1 - toRev;
+      a.splice(at, 0, x);
+      // A mask stays where its members expect it; moving one in or out of a
+      // group would leave the others pointing at something that is no longer
+      // above them.
+      if (x.isMask) return a;
+      // Dropped BETWEEN two parts of one group, it becomes a part — and if that
+      // group masks, it is masked too. This is what makes a mask hold more than
+      // one object: several items can name the same mask, and maskOf has always
+      // looked it up per item.
+      const above = a[at + 1], below = a[at - 1];
+      const gid = (below?.groupId && below.groupId === above?.groupId) ? below.groupId : null;
+      if (gid === (x.groupId || null)) return a;
+      const mask = gid ? a.find(o => o.groupId === gid && o.isMask) : null;
+      a[at] = gid
+        ? { ...x, groupId: gid, maskId: mask ? mask.id : undefined }
+        : { ...x, groupId: undefined, maskId: undefined };
+      // A mask nothing points at any more is a shape that paints nothing and
+      // cannot be clicked — an invisible row. Dragging the last masked item out
+      // hands it back its own life.
+      return a.map(o => (o.isMask && !a.some(q => q.maskId === o.id)
+        ? { ...o, isMask: undefined, groupId: undefined } : o));
     });
   };
   // A name somebody typed wins; otherwise something readable from the item.
@@ -18429,7 +18455,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setItems(list => list.map(i =>
       i.id === lo ? { ...i, isMask: true, rot: 0, groupId: gid }
       : i.id === hi ? { ...i, maskId: lo, groupId: gid } : i));
-    setPick([lo, hi]); setSel(hi); setEnteredGroup(null);
+    setPick([lo, hi]); setSel(hi); setEnteredGroup(null); openGroup(gid);
   };
   const unmask = (id) => {
     const it = items.find(o => o.id === id);
@@ -19040,6 +19066,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const enterGroup = (it) => {
     if (!it.groupId) return;
     setEnteredGroup(it.groupId);
+    openGroup(it.groupId);
     setPick([]);
     setSel(it.id);
   };
@@ -19056,6 +19083,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const gid = crypto.randomUUID();
     setItems(list => list.map(i => (ids.includes(i.id) ? { ...i, groupId: gid } : i)));
     setEnteredGroup(null);
+    openGroup(gid);
   };
   // A mask pair is held together BY its group, so ungrouping one would let the
   // mask and its content drift apart on the next drag. Those are released with
@@ -20550,12 +20578,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 <div key={"g" + gid}
                   onClick={() => { setPick(items.filter(o => o.groupId === gid).map(o => o.id)); setSel(null); }}
                   onDoubleClick={() => {
-                    const open = enteredGroup !== gid;
-                    setEnteredGroup(open ? gid : null);
+                    const into = enteredGroup !== gid;
+                    setEnteredGroup(into ? gid : null);
+                    if (into) openGroup(gid);
                     // Leaving the group re-selects it; entering hands the parts
                     // back their own selection.
-                    setPick(open ? [] : items.filter(o => o.groupId === gid).map(o => o.id));
-                    if (open) setSel(null);
+                    setPick(into ? [] : items.filter(o => o.groupId === gid).map(o => o.id));
+                    if (into) setSel(null);
                   }}
                   title={de ? "Klick wählt die Gruppe · Doppelklick geht hinein"
                             : "Click selects the group · double-click steps inside"}
@@ -20564,11 +20593,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     background: (selGid === gid || items.some(o => o.groupId === gid && pick.includes(o.id)))
                       ? "rgba(47,107,255,0.16)"
                       : enteredGroup === gid ? (darkMode ? "rgba(255,255,255,0.05)" : "#F5F5F7") : "transparent" }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                    style={{ transform: enteredGroup === gid ? "rotate(90deg)" : "none" }}>
-                    <path d="M9 6l6 6-6 6" />
-                  </svg>
+                  {/* The chevron folds the group and nothing else — clicking it
+                      used to select the group as a side effect, which is not
+                      what an arrow that says "open me" offers. */}
+                  <span onClick={(e) => { e.stopPropagation(); openGroup(gid, !openGroups.includes(gid)); }}
+                    style={{ display: "flex", padding: 2, margin: -2, cursor: "pointer" }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                      style={{ transform: openGroups.includes(gid) ? "rotate(90deg)" : "none",
+                        transition: "transform 0.15s" }}>
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
+                  </span>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />
@@ -20577,10 +20613,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600 }}>
                     {de ? "Gruppe" : "Group"}
                   </span>
+                  <div style={{ flex: 1 }} />
+                  {/* Closed, the count is the only sign of what is in there. */}
+                  <span style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint }}>
+                    {items.filter(o => o.groupId === gid).length}
+                  </span>
                 </div>
               ) : null;
               const ticked = pick.includes(it.id);
               const dropHere = overRow === rev && dragRow !== null && dragRow !== rev;
+              // Folded away, the parts are not rows at all — which is also what
+              // stops something being dropped into a group you cannot see.
+              if (gid && !openGroups.includes(gid)) return groupHeader;
               return (
                 <Fragment key={it.id}>
                 {groupHeader}
@@ -20683,10 +20727,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 {de ? "Maskieren" : "Use as mask"}
               </div>
             )}
-            <div style={{ fontSize: 10.5, color: theme.textFaint, marginTop: 8, lineHeight: 1.45 }}>
-              {de ? "Zwei mit ⌘-Klick wählen — die untere wird zur Maske."
-                  : "Pick two with ⌘-click — the lower one becomes the mask."}
-            </div>
           </div>
         )}
       </div>
