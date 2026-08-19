@@ -17295,6 +17295,12 @@ const GRADIENT_TYPES = [
   ["angular", { de: "Winkel", en: "Angular" }],
 ];
 const isGradient = (v) => !!v && typeof v === "object" && Array.isArray(v.stops);
+// A gradient has no hex to show, so a colour row names its type instead —
+// "[object Object]" is what String() makes of it otherwise.
+const gradientName = (g, de) => {
+  const l = GRADIENT_TYPES.find(([v]) => v === g?.type)?.[1];
+  return typeof l === "string" ? l : l ? (de ? l.de : l.en) : String(g?.type || "");
+};
 // Starting a gradient from the colour that was already set, so the switch reads
 // as "this colour, now fading" rather than an unrelated black-to-white.
 const defaultGradient = (from) => ({
@@ -17366,7 +17372,7 @@ function CanvasGradientEditor({ value, onChange, theme, darkMode, de }) {
             style={{ width: "100%", border: "none", outline: "none", background: "transparent",
               color: theme.text, fontFamily: FONT, fontSize: 12.5, appearance: "none", cursor: "pointer" }}>
             {GRADIENT_TYPES.map(([v, l]) => (
-              <option key={v} value={v}>{typeof l === "string" ? l : (de ? l.de : l.en)}</option>
+              <option key={v} value={v}>{gradientName({ type: v }, de)}</option>
             ))}
           </select>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme.textFaint}
@@ -20126,9 +20132,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   ...(bg === "transparent"
                     ? { backgroundImage: "conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)",
                         backgroundSize: "8px 8px" }
+                    : isGradient(bg) ? { backgroundImage: gradientCss(bg) }
                     : { background: bg }) }} />
               <span style={{ flex: 1, fontFamily: FONT, fontSize: 12.5, color: theme.text, letterSpacing: 0.4 }}>
-                {bg === "transparent" ? (de ? "Transparent" : "Transparent") : String(bg).replace("#", "").toUpperCase()}
+                {bg === "transparent" ? (de ? "Transparent" : "Transparent")
+                  : isGradient(bg) ? gradientName(bg, de)
+                  : String(bg).replace("#", "").toUpperCase()}
               </span>
               <span onClick={() => setBg(bg === "transparent" ? (palette[1] || "#FFFFFF") : "transparent")}
                 title={de ? "Transparent umschalten" : "Toggle transparent"}
@@ -20354,15 +20363,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       ? gradientCss(cur)
                       : `linear-gradient(${withAlpha(cur, selItem.fillAlpha)}, ${withAlpha(cur, selItem.fillAlpha)}), conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)`,
                     backgroundSize: "auto, 8px 8px" }} />
-                  {/* A gradient has no hex to show, so the row names its type —
-                      "[object Object]" was what String() made of it. */}
                   {isGradient(cur) ? (
                     <span style={{ flex: 1, minWidth: 0, color: theme.text, fontFamily: FONT, fontSize: 12.5 }}>
-                      {(() => {
-                        const t = GRADIENT_TYPES.find(([v]) => v === cur.type);
-                        const l = t?.[1];
-                        return typeof l === "string" ? l : (l ? (de ? l.de : l.en) : cur.type);
-                      })()}
+                      {gradientName(cur, de)}
                     </span>
                   ) : (
                     <input value={String(cur).replace("#", "").toUpperCase()}
