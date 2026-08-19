@@ -19225,6 +19225,61 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setEnteredGroup(null);
   };
 
+  // Turning a repeat into real objects. The placements are a transform, and a
+  // plain item has no transform beyond its own rotation — so each one is baked
+  // into position, size and angle instead.
+  //
+  // The placement's shift happens INSIDE the object's own rotation, the way the
+  // two wrappers nest on screen, so it has to be turned by that angle before it
+  // can be added to a position in frame coordinates.
+  //
+  // A CSS scale() shrinks everything it touches, borders and blurs included, so
+  // baking only w and h would make the copies grow a thicker outline the moment
+  // they became real. Every length that is drawn scales with them.
+  const bakeRepeat = (it) => {
+    const places = repeatPlacements(it.repeat);
+    const a = ((it.rot || 0) * Math.PI) / 180;
+    const cx = it.x + it.w / 2, cy = it.y + it.h / 2;
+    const scaled = (v, s) => (v == null ? v : v * s);
+    const shadowScaled = (sh, s) => (sh ? { ...sh, x: scaled(sh.x, s), y: scaled(sh.y, s),
+      blur: scaled(sh.blur, s) } : sh);
+    return places.map((pl, k) => {
+      const ox = pl.x * Math.cos(a) - pl.y * Math.sin(a);
+      const oy = pl.x * Math.sin(a) + pl.y * Math.cos(a);
+      const w = it.w * pl.s, h = it.h * pl.s;
+      return {
+        ...it,
+        id: k ? crypto.randomUUID() : it.id,
+        repeat: undefined,
+        x: Math.round(cx + ox - w / 2), y: Math.round(cy + oy - h / 2),
+        w: Math.round(w), h: Math.round(h),
+        rot: (it.rot || 0) + pl.rot,
+        strokeWidth: scaled(it.strokeWidth, pl.s),
+        radius: scaled(it.radius, pl.s),
+        radii: Array.isArray(it.radii) ? it.radii.map(v => v * pl.s) : it.radii,
+        blur: scaled(it.blur, pl.s),
+        bgBlur: scaled(it.bgBlur, pl.s),
+        shadow: shadowScaled(it.shadow, pl.s),
+        innerShadow: shadowScaled(it.innerShadow, pl.s),
+      };
+    });
+  };
+  // Deliberately NOT grouped: the point of expanding is to get at the copies one
+  // by one, and a group would put the thing you just took apart back together.
+  const expandRepeat = (it) => {
+    if (!isRepeating(it)) return;
+    const made = bakeRepeat(it);
+    markChange();
+    setItems(list => {
+      const at = list.findIndex(o => o.id === it.id);
+      if (at < 0) return list;
+      return [...list.slice(0, at), ...made, ...list.slice(at + 1)];
+    });
+    setSel(it.id);
+    setPick(made.map(o => o.id));
+    setEnteredGroup(null);
+  };
+
   // Moving something means moving whatever it is drawn from: a pen stroke has
   // an offset, a line has two ends, everything else has a corner.
   const shiftItem = (i, dx, dy) =>
@@ -21306,6 +21361,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       theme={theme} darkMode={darkMode} />
                   </div>
                 </>)}
+
+                <div onClick={() => expandRepeat(selItem)}
+                  style={{ marginTop: 8, height: 34, borderRadius: 9, display: "flex",
+                    alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer",
+                    fontFamily: FONT, fontSize: 12.5, color: theme.text,
+                    background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                  {de ? "Auflösen" : "Expand"}
+                  <span style={{ color: theme.textFaint, fontSize: 11.5 }}>
+                    {Math.min(REPEAT_MAX, Math.max(1, Math.round(r.count || 1)))}
+                  </span>
+                </div>
 
                 {/* Start and end size; everything between is interpolated, which
                     is what turns a repeat into a spiral or a fade. */}
