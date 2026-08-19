@@ -17346,6 +17346,100 @@ const gradientCanvas = (ctx, g, b) => {
   return grad;
 };
 
+// ── the other two kinds of fill: an image, and a pattern ─────────────────────
+// A fill is one of four things — a colour, a gradient, an image, or a pattern —
+// and every one of them has to exist twice over: once in CSS for the editor,
+// once on a canvas for the export. Three of the four are already a pair of
+// implementations kept in step by hand.
+const isImageFill = (v) => !!v && typeof v === "object" && typeof v.src === "string";
+const isPattern = (v) => !!v && typeof v === "object" && typeof v.pattern === "string";
+
+const PATTERN_TYPES = [
+  ["dots",     { de: "Punkte", en: "Dots" }],
+  ["lines",    { de: "Linien", en: "Lines" }],
+  ["diagonal", { de: "Diagonal", en: "Diagonal" }],
+  ["grid",     { de: "Raster", en: "Grid" }],
+  ["checks",   { de: "Schachbrett", en: "Checks" }],
+];
+const patternName = (p, de) => {
+  const l = PATTERN_TYPES.find(([v]) => v === p?.pattern)?.[1];
+  return l ? (de ? l.de : l.en) : String(p?.pattern || "");
+};
+const defaultPattern = (from) => ({
+  pattern: "dots", color: "#15151C", gap: 24, size: 4,
+  bg: typeof from === "string" && /^#[0-9a-f]{6}$/i.test(from) ? from : "#FFFFFF",
+});
+// A pattern where the mark is as wide as the spacing is a solid colour, so the
+// two are clamped against each other rather than left to cancel out.
+const patternGeom = (p) => {
+  const gap = Math.max(4, Math.round(p?.gap ?? 24));
+  return { gap, size: Math.max(0.5, Math.min(gap - 1, p?.size ?? 4)) };
+};
+
+// The pattern is drawn ONCE, into a tile, and that tile is what both sides use:
+// the editor sets it as a repeating CSS background, the export hands the very
+// same canvas to createPattern. The alternative — a repeating-linear-gradient
+// for the preview and canvas strokes for the export — is one picture written
+// twice, and this file has paid for that lesson on text metrics, on radial
+// radii and on stroke insets. Sharing the tile removes the question entirely.
+//
+// Drawn at twice the size so it stays crisp on a retina screen; both consumers
+// divide by the same PATTERN_SCALE, so the geometry stays identical.
+const PATTERN_SCALE = 2;
+const patternTile = (p) => {
+  const { gap, size } = patternGeom(p);
+  const c = document.createElement("canvas");
+  c.width = c.height = gap * PATTERN_SCALE;
+  const x = c.getContext("2d");
+  x.scale(PATTERN_SCALE, PATTERN_SCALE);
+  if (p.bg && p.bg !== "transparent") { x.fillStyle = p.bg; x.fillRect(0, 0, gap, gap); }
+  x.fillStyle = x.strokeStyle = p.color || "#15151C";
+  x.lineWidth = size;
+  if (p.pattern === "lines") {
+    x.fillRect(0, (gap - size) / 2, gap, size);
+  } else if (p.pattern === "grid") {
+    x.fillRect(0, (gap - size) / 2, gap, size);
+    x.fillRect((gap - size) / 2, 0, size, gap);
+  } else if (p.pattern === "diagonal") {
+    // Every line x + y = k·gap. That set survives a shift of one tile in either
+    // direction — k just moves on by one — which is exactly what "seamless"
+    // means here. Drawn well past the edges so the corners are covered.
+    x.beginPath();
+    for (let k = -1; k <= 3; k++) {
+      const c0 = k * gap;
+      x.moveTo(c0 + gap * 2, -gap * 2);
+      x.lineTo(c0 - gap * 2, gap * 2);
+    }
+    x.stroke();
+  } else if (p.pattern === "checks") {
+    // The squares ARE the pattern, so this one ignores the mark size and takes
+    // its scale from the spacing alone.
+    x.fillRect(0, 0, gap / 2, gap / 2);
+    x.fillRect(gap / 2, gap / 2, gap / 2, gap / 2);
+  } else {
+    x.beginPath();
+    x.arc(gap / 2, gap / 2, size / 2, 0, Math.PI * 2);
+    x.fill();
+  }
+  return c;
+};
+
+// toDataURL is not cheap and a fill re-renders on every pointer move, so the
+// tiles are kept. Keyed by everything that changes the picture.
+const patternUrlCache = new Map();
+const patternUrl = (p) => {
+  const { gap, size } = patternGeom(p);
+  const key = [p.pattern, p.color, p.bg, gap, size].join("|");
+  let url = patternUrlCache.get(key);
+  if (!url) {
+    if (patternUrlCache.size > 80) patternUrlCache.clear();
+    url = patternTile(p).toDataURL();
+    patternUrlCache.set(key, url);
+  }
+  return url;
+};
+const patternCss = (p) => `url(${patternUrl(p)}) 0 0 / ${patternGeom(p).gap}px ${patternGeom(p).gap}px repeat`;
+
 // The canvas gradient editor: a type, an angle, and a list of stops, each with a
 // position, a colour and its own opacity.
 //
@@ -17585,11 +17679,20 @@ function ColorMixer({ value, alpha = 100, onChange, onAlphaChange, theme, darkMo
   );
 }
 
-function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, theme, darkMode, de, onClose }) {
-  const [tab, setTab] = useState(() => isGradient(value) ? "gradient" : "custom");
-  // A gradient has no single hue, so the mixing square starts from its first
-  // stop rather than from the object itself.
-  const seed = isGradient(value) ? (gradStops(value)[0]?.color || "#000000") : value;
+function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, de,
+  tabs = ["custom"], onImage, theme, darkMode, onClose }) {
+  const kindOf = (v) => isGradient(v) ? "gradient" : isImageFill(v) ? "image"
+    : isPattern(v) ? "pattern" : "custom";
+  const [tab, setTab] = useState(() => (tabs.includes(kindOf(value)) ? kindOf(value) : "custom"));
+  // Which of a pattern's two colours the mixer is editing.
+  const [patPart, setPatPart] = useState("color");
+
+  // A gradient, a pattern and an image have no single hue, so anything that
+  // needs one starts from the nearest thing they do have.
+  const seed = isGradient(value) ? (gradStops(value)[0]?.color || "#000000")
+    : isPattern(value) ? (value.color || "#15151C")
+    : isImageFill(value) ? "#FFFFFF"
+    : (typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : "#FFFFFF");
 
   // The brand's own colours, structured where the profile has it structured.
   const pal = brand?.color_palette || {};
@@ -17599,29 +17702,53 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, theme
     [de ? "Akzente" : "Accents", Array.isArray(pal.accents) ? pal.accents.filter(Boolean) : []],
   ].filter(([, list]) => list.length);
   const flat = Array.isArray(brand?.colors) ? brand.colors.filter(Boolean) : [];
+  const brandColors = groups.length ? groups : (flat.length ? [[de ? "Farben" : "Colours", flat]] : []);
 
-  const field = { height: 30, borderRadius: 9, border: "none", outline: "none",
-    background: darkMode ? "rgba(255,255,255,0.07)" : "#F1F1F4", color: theme.text,
-    fontFamily: FONT, fontSize: 12.5, padding: "0 10px" };
+  // The brand's gradients, in the model this editor speaks: the brand stores a
+  // list of colours and always paints them top to bottom, which is 180 degrees.
+  // Where none are saved, the brand page shows four derived from the palette —
+  // the same four are offered here, so the two places agree.
+  const hex6 = (c) => { const m = /^#?([0-9a-f]{6})$/i.exec(String(c || "").trim()); return m ? "#" + m[1] : null; };
+  const paletteHexes = [pal.primary, pal.secondary, ...(pal.accents || []), ...flat].map(hex6).filter(Boolean);
+  const rawGrads = (Array.isArray(brand?.gradients) && brand.gradients.length)
+    ? brand.gradients : defaultGradients([...new Set(paletteHexes)]);
+  const brandGrads = (rawGrads || [])
+    .map(g => ({ name: g?.name, stops: (g?.stops || []).map(hex6).filter(Boolean) }))
+    .filter(g => g.stops.length >= 2)
+    .map(g => ({ name: g.name, grad: { type: "linear", angle: 180,
+      stops: g.stops.map((c, i, a) => ({ at: Math.round((i / (a.length - 1)) * 100), color: c, alpha: 100 })) } }));
+
+  const heading = (txt) => (
+    <div style={{ fontFamily: FONT, fontSize: 10.5, fontWeight: 600, letterSpacing: 0.8,
+      textTransform: "uppercase", color: theme.textFaint, margin: "18px 0 8px" }}>{txt}</div>
+  );
+  const soft = darkMode ? "rgba(255,255,255,0.07)" : "#F1F1F4";
+
+  // Switching a tab applies immediately — a tab you have to confirm before it
+  // does anything reads as broken. Image is the exception: there is nothing to
+  // apply until a picture has been chosen, so it asks for one.
+  const enter = (k) => {
+    setTab(k);
+    if (k === "custom" && kindOf(value) !== "custom") onChange(seed);
+    if (k === "gradient" && !isGradient(value)) onChange(defaultGradient(seed));
+    if (k === "pattern" && !isPattern(value)) onChange(defaultPattern("#FFFFFF"));
+    if (k === "image" && !isImageFill(value)) onImage?.();
+  };
+  const putPattern = (o) => onChange({ ...defaultPattern("#FFFFFF"), ...(isPattern(value) ? value : {}), ...o });
 
   return (
     <div onPointerDown={e => e.stopPropagation()}
       style={{ width: 292, borderRadius: 16, padding: 14,
+        maxHeight: "78vh", overflowY: "auto",
         background: darkMode ? "#1B1B23" : "#fff",
         border: `1px solid ${theme.borderFaint}`, boxShadow: "0 18px 48px rgba(0,0,0,0.3)" }}>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 10 }}>
         {[["custom", de ? "Farbe" : "Colour"], ["gradient", de ? "Verlauf" : "Gradient"],
-          ["brand", "Brand"]].map(([k, l]) => (
-          <div key={k} onClick={() => {
-              setTab(k);
-              // Switching applies immediately — a tab you have to confirm before
-              // it does anything reads as broken. Brand is the exception: it has
-              // nothing to apply until you pick a colour from it.
-              if (k === "gradient" && !isGradient(value)) onChange(defaultGradient(value));
-              if (k === "custom" && isGradient(value)) onChange(gradStops(value)[0]?.color || "#000000");
-            }}
-            style={{ padding: "6px 10px", borderRadius: 8, cursor: "pointer", fontFamily: FONT,
+          ["image", de ? "Bild" : "Image"], ["pattern", de ? "Muster" : "Pattern"]]
+          .filter(([k]) => tabs.includes(k)).map(([k, l]) => (
+          <div key={k} onClick={() => enter(k)}
+            style={{ padding: "6px 9px", borderRadius: 8, cursor: "pointer", fontFamily: FONT,
               fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap",
               color: tab === k ? theme.text : theme.textDim,
               background: tab === k ? (darkMode ? "rgba(255,255,255,0.10)" : "#EDEDF0") : "transparent" }}>
@@ -17632,49 +17759,141 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, theme
         <div onClick={onClose} style={{ cursor: "pointer", color: theme.textDim, padding: "4px 6px" }}>✕</div>
       </div>
 
-      {tab === "custom" ? (
-        <ColorMixer value={isGradient(value) ? seed : value} alpha={alpha}
+      {tab === "custom" && (<>
+        <ColorMixer value={kindOf(value) === "custom" ? value : seed} alpha={alpha}
           onChange={onChange} onAlphaChange={onAlphaChange}
           theme={theme} darkMode={darkMode} />
-      ) : tab === "gradient" ? (
-        <CanvasGradientEditor value={value} onChange={onChange}
-          theme={theme} darkMode={darkMode} de={de} />
-      ) : (
-        <div>
-          {groups.length === 0 && flat.length === 0 ? (
-            <div style={{ fontFamily: FONT, fontSize: 12.5, color: theme.textDim, lineHeight: 1.55,
-              padding: "22px 4px" }}>
-              {de ? "Für diese Marke sind noch keine Farben hinterlegt. Unter Brand → Identität lassen sie sich festlegen."
-                  : "No colours defined for this brand yet. Set them under Brand → Identity."}
-            </div>
-          ) : (groups.length ? groups : [[de ? "Farben" : "Colours", flat]]).map(([name, list], gi) => (
-            <div key={name} style={{ marginTop: gi ? 22 : 4 }}>
-              {/* fontFamily was missing here, so these headings fell back to the
-                  browser's default face while everything around them used ours. */}
-              <div style={{ fontFamily: FONT, fontSize: 10.5, fontWeight: 600, letterSpacing: 0.8,
-                textTransform: "uppercase", color: theme.textFaint, marginBottom: 8 }}>{name}</div>
-              {list.map((c, i) => {
-                const on = String(value || "").toLowerCase() === String(c).toLowerCase();
-                return (
-                  <div key={c + i}
-                    onClick={() => { setHsv(rgbToHsv(hexToRgb(c))); setHex(String(c).replace("#", "").toUpperCase()); onChange(c); }}
-                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px",
-                      marginBottom: 2, borderRadius: 9, cursor: "pointer",
-                      background: on ? (darkMode ? "rgba(255,255,255,0.08)" : "#EDEDF0") : "transparent" }}>
-                    <div style={{ width: 26, height: 26, borderRadius: 8, background: c, flexShrink: 0,
-                      border: on ? "2.5px solid #2F6BFF" : `1px solid ${theme.borderFaint}` }} />
-                    {/* The stored palette is hex values with no names attached, so
-                        the value IS the name — inventing one would be prettier and
-                        would not match what is in the brand profile. */}
-                    <span style={{ fontFamily: FONT, fontSize: 12.5, color: theme.text,
-                      letterSpacing: 0.4 }}>{String(c).toUpperCase()}</span>
-                  </div>
-                );
-              })}
+        {/* The brand's colours sit under the hex field rather than behind a tab
+            of their own: they are the same answer to the same question, and a
+            tab made you leave the mixer to reach them. */}
+        {brandColors.length > 0 && (<>
+          {heading("Brand")}
+          {brandColors.map(([name, list]) => (
+            <div key={name} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
+              <span style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint,
+                width: 66, flexShrink: 0 }}>{name}</span>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {list.map((c, i) => {
+                  const on = String(value || "").toLowerCase() === String(c).toLowerCase();
+                  return (
+                    <div key={c + i} title={String(c).toUpperCase()} onClick={() => onChange(c)}
+                      style={{ width: 26, height: 26, borderRadius: 8, background: c, cursor: "pointer",
+                        border: on ? "2.5px solid #15151c" : `1px solid ${theme.borderFaint}` }} />
+                  );
+                })}
+              </div>
             </div>
           ))}
-        </div>
+        </>)}
+      </>)}
+
+      {tab === "gradient" && (<>
+        <CanvasGradientEditor value={isGradient(value) ? value : defaultGradient(seed)} onChange={onChange}
+          theme={theme} darkMode={darkMode} de={de} />
+        {brandGrads.length > 0 && (<>
+          {heading(de ? "Brand-Verläufe" : "Brand gradients")}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            {brandGrads.map((g, i) => (
+              <div key={i} onClick={() => onChange(JSON.parse(JSON.stringify(g.grad)))}
+                style={{ cursor: "pointer" }}>
+                <div style={{ height: 34, borderRadius: 9, background: gradientCss(g.grad),
+                  border: `1px solid ${theme.borderFaint}` }} />
+                {g.name && <div style={{ fontFamily: FONT, fontSize: 11, color: theme.textDim,
+                  marginTop: 4 }}>{g.name}</div>}
+              </div>
+            ))}
+          </div>
+        </>)}
+      </>)}
+
+      {tab === "image" && (
+        isImageFill(value) ? (<>
+          <div style={{ height: 150, borderRadius: 11, border: `1px solid ${theme.borderFaint}`,
+            background: `center/${value.fit === "contain" ? "contain" : "cover"} no-repeat url(${value.src}), conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)`,
+            backgroundSize: value.fit === "contain" ? "contain, 10px 10px" : "cover, 10px 10px" }} />
+          <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+            {[["cover", de ? "Füllen" : "Fill"], ["contain", de ? "Einpassen" : "Fit"]].map(([k, l]) => (
+              <div key={k} onClick={() => onChange({ ...value, fit: k })}
+                style={{ flex: 1, height: 32, borderRadius: 9, display: "flex", alignItems: "center",
+                  justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontSize: 12.5,
+                  color: theme.text, background: soft,
+                  border: `1px solid ${(value.fit || "cover") === k ? "#15151c" : "transparent"}` }}>
+                {l}
+              </div>
+            ))}
+          </div>
+          <div onClick={() => onImage?.()}
+            style={{ marginTop: 8, height: 32, borderRadius: 9, display: "flex", alignItems: "center",
+              justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontSize: 12.5,
+              color: theme.text, background: soft }}>
+            {de ? "Anderes Bild wählen" : "Choose another image"}
+          </div>
+        </>) : (
+          <div onClick={() => onImage?.()}
+            style={{ height: 150, borderRadius: 11, display: "flex", alignItems: "center",
+              justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontSize: 12.5,
+              color: theme.textDim, border: `1px dashed ${theme.borderFaint}` }}>
+            {de ? "Bild wählen" : "Choose an image"}
+          </div>
+        )
       )}
+
+      {tab === "pattern" && (() => {
+        const pat = isPattern(value) ? value : defaultPattern("#FFFFFF");
+        const { gap, size } = patternGeom(pat);
+        return (<>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            {PATTERN_TYPES.map(([k, l]) => {
+              const preview = { ...pat, pattern: k };
+              return (
+                <div key={k} onClick={() => putPattern({ pattern: k })} style={{ cursor: "pointer" }}>
+                  <div style={{ height: 46, borderRadius: 9, background: patternCss(preview),
+                    border: `1px solid ${pat.pattern === k ? "#15151c" : theme.borderFaint}` }} />
+                  <div style={{ fontFamily: FONT, fontSize: 10.5, color: theme.textDim,
+                    marginTop: 4, textAlign: "center" }}>{de ? l.de : l.en}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Two colours, one mixer. A second mixing square for the ground would
+              be the same control twice over. */}
+          <div style={{ display: "flex", gap: 6, marginTop: 14, marginBottom: 4 }}>
+            {[["color", de ? "Muster" : "Pattern"], ["bg", de ? "Hintergrund" : "Background"]].map(([k, l]) => (
+              <div key={k} onClick={() => setPatPart(k)}
+                style={{ flex: 1, height: 32, borderRadius: 9, display: "flex", alignItems: "center",
+                  justifyContent: "center", gap: 7, cursor: "pointer", fontFamily: FONT, fontSize: 12.5,
+                  color: theme.text, background: soft,
+                  border: `1px solid ${patPart === k ? "#15151c" : "transparent"}` }}>
+                <span style={{ width: 14, height: 14, borderRadius: 4, flexShrink: 0,
+                  border: `1px solid ${theme.borderFaint}`,
+                  background: pat[k] === "transparent" ? "conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)" : pat[k],
+                  backgroundSize: pat[k] === "transparent" ? "6px 6px" : undefined }} />
+                {l}
+              </div>
+            ))}
+          </div>
+          <ColorMixer value={hex6(pat[patPart]) || "#FFFFFF"}
+            onChange={(c) => putPattern({ [patPart]: c })}
+            theme={theme} darkMode={darkMode} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
+            {[[de ? "Abstand" : "Spacing", gap, (v) => putPattern({ gap: v }), 4, 200],
+              [de ? "Stärke" : "Weight", size, (v) => putPattern({ size: v }), 1, 100]]
+              .filter((_, i) => !(i === 1 && pat.pattern === "checks"))
+              .map(([l, v, put, min, max]) => (
+              <div key={l} style={{ flex: 1, display: "flex", alignItems: "center", gap: 6,
+                height: 32, borderRadius: 9, padding: "0 10px", background: soft }}>
+                <span style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint }}>{l}</span>
+                <NumberField value={v} min={min} max={max} onCommit={put}
+                  style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
+                    color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
+              </div>
+            ))}
+          </div>
+          {/* A pattern whose squares ARE the picture takes its scale from the
+              spacing alone, so there is no weight to set. */}
+        </>);
+      })()}
     </div>
   );
 }
@@ -17765,6 +17984,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [zoomMenu, setZoomMenu] = useState(false);
   const [doneMenu, setDoneMenu] = useState(false);
   const [tplGroup, setTplGroup] = useState("posts");
+  // Set while the asset browser is open ON BEHALF of the picker, so the chosen
+  // picture lands in a fill instead of becoming an image of its own.
+  const [fillImgFor, setFillImgFor] = useState(null);
   // Space held = the hand, borrowed. The chosen tool is untouched, so letting go
   // puts you back where you were rather than making you re-pick the arrow.
   const [spacePan, setSpacePan] = useState(false);
@@ -17941,7 +18163,28 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     return /^#/.test(c) ? withAlpha(c, sh.alpha == null ? 35 : sh.alpha) : c;
   };
 
-  const fillOf = (it) => isGradient(it.fill) ? gradientCss(it.fill) : withAlpha(it.fill, it.fillAlpha);
+  // One fill, four kinds, one CSS value. Everything that paints something in
+  // this editor — a shape, the frame behind it, the swatch in the panel — goes
+  // through here, so none of them can learn about a new kind of fill later than
+  // the others.
+  const paintCss = (v, alpha) =>
+    isGradient(v) ? gradientCss(v)
+    : isImageFill(v) ? `center/${v.fit === "contain" ? "contain" : "cover"} no-repeat url(${v.src})`
+    : isPattern(v) ? patternCss(v)
+    : withAlpha(v, alpha);
+  const fillOf = (it) => paintCss(it.fill, it.fillAlpha);
+  // What a swatch shows: the fill over a chequer, so a see-through colour does
+  // not preview as solid. A gradient, an image and a pattern bring their own
+  // ground and need none.
+  const swatchBg = (v, alpha) => (isGradient(v) || isImageFill(v) || isPattern(v))
+    ? { background: paintCss(v, alpha) }
+    : { backgroundImage: `linear-gradient(${withAlpha(v, alpha)}, ${withAlpha(v, alpha)}), conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)`,
+        backgroundSize: "auto, 8px 8px" };
+  // Only a colour has a hex to type. The rest name themselves.
+  const paintLabel = (v) => isGradient(v) ? gradientName(v, de)
+    : isImageFill(v) ? (de ? "Bild" : "Image")
+    : isPattern(v) ? patternName(v, de)
+    : null;
   // A CSS border draws INSIDE the box; a canvas stroke straddles the path. The
   // export therefore traces a box inset by half the width, or the outline would
   // sit half outside and the two would not match.
@@ -18642,6 +18885,37 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       it.x, it.y, it.w, it.h);
   };
 
+  // The same four kinds, for the export. Async because an image fill cannot be
+  // painted before it has loaded.
+  //
+  // Image and pattern both come back as a CanvasPattern anchored to the box: a
+  // pattern left at the default origin starts counting from the canvas corner,
+  // so two identical shapes at different positions would show the tile cut at
+  // different places — CSS anchors a background to its own element, and this is
+  // what makes the export agree.
+  const paintCanvas = async (ctx, v, b, alpha) => {
+    if (isGradient(v)) return gradientCanvas(ctx, v, b);
+    if (isPattern(v)) {
+      const pat = ctx.createPattern(patternTile(v), "repeat");
+      pat.setTransform(new DOMMatrix().translate(b.x, b.y).scale(1 / PATTERN_SCALE));
+      return pat;
+    }
+    if (isImageFill(v)) {
+      const img = await loadImage(v.src);
+      const off = document.createElement("canvas");
+      off.width = Math.max(1, Math.round(b.w));
+      off.height = Math.max(1, Math.round(b.h));
+      // Fitted by the same function an image ITEM uses, so "cover" means the
+      // same thing whether the picture is the object or its fill.
+      drawFitted(off.getContext("2d"), img,
+        { x: 0, y: 0, w: off.width, h: off.height, fit: v.fit });
+      const pat = ctx.createPattern(off, "no-repeat");
+      pat.setTransform(new DOMMatrix().translate(b.x, b.y));
+      return pat;
+    }
+    return withAlpha(v, alpha);
+  };
+
   const spunOf = (it) => !!(it.rot || it.flipX || it.flipY);
   const applySpin = (ctx, it) => {
     const b = boxOf(it), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
@@ -18668,7 +18942,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     // JPEG has no alpha channel: a transparent frame would come out black
     // rather than empty, so it gets white to sit on.
     if (bg !== "transparent") {
-      ctx.fillStyle = isGradient(bg) ? gradientCanvas(ctx, bg, { x: 0, y: 0, w: W, h: H }) : bg;
+      ctx.fillStyle = await paintCanvas(ctx, bg, { x: 0, y: 0, w: W, h: H }, 100);
       ctx.fillRect(0, 0, W, H);
     }
     else if (type === "image/jpeg") { ctx.fillStyle = "#FFFFFF"; ctx.fillRect(0, 0, W, H); }
@@ -18710,7 +18984,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         const img = await loadImage(it.url);
         drawFitted(ctx, img, it);
       } else if (it.type === "sticky") {
-        ctx.fillStyle = isGradient(it.fill) ? gradientCanvas(ctx, it.fill, boxOf(it)) : fillOf(it); ctx.fillRect(it.x, it.y, it.w, it.h);
+        ctx.fillStyle = await paintCanvas(ctx, it.fill, boxOf(it), it.fillAlpha); ctx.fillRect(it.x, it.y, it.w, it.h);
         const pad = Math.round(it.w * 0.08);
         ctx.fillStyle = it.color; ctx.font = canvasFont(it);
         const ms = ctx.measureText("Hg"), Ls = canvasLH(it);
@@ -18721,18 +18995,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           ctx.fillText(line, it.x + pad, it.y + pad + i2 * Ls + bs));
         ctx.restore();
       } else if (it.type === "rect") {
-        ctx.fillStyle = isGradient(it.fill) ? gradientCanvas(ctx, it.fill, boxOf(it)) : fillOf(it);
+        ctx.fillStyle = await paintCanvas(ctx, it.fill, boxOf(it), it.fillAlpha);
         const cap = Math.min(it.w, it.h) / 2;
         const rr = radiiOf(it).map(v => Math.min(v, cap));
         if (rr.some(v => v > 0) && ctx.roundRect) {
           ctx.beginPath(); ctx.roundRect(it.x, it.y, it.w, it.h, rr); ctx.fill();
         } else ctx.fillRect(it.x, it.y, it.w, it.h);
       } else if (it.type === "ellipse") {
-        ctx.fillStyle = isGradient(it.fill) ? gradientCanvas(ctx, it.fill, boxOf(it)) : fillOf(it); ctx.beginPath();
+        ctx.fillStyle = await paintCanvas(ctx, it.fill, boxOf(it), it.fillAlpha); ctx.beginPath();
         ctx.ellipse(it.x + it.w / 2, it.y + it.h / 2, it.w / 2, it.h / 2, 0, 0, Math.PI * 2);
         ctx.fill();
       } else if (polyOf(it)) {
-        ctx.fillStyle = isGradient(it.fill) ? gradientCanvas(ctx, it.fill, boxOf(it)) : fillOf(it); ctx.beginPath();
+        ctx.fillStyle = await paintCanvas(ctx, it.fill, boxOf(it), it.fillAlpha); ctx.beginPath();
         polyOf(it).forEach(([fx, fy], i) => {
           const x = it.x + fx * it.w, y = it.y + fy * it.h;
           i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
@@ -19059,7 +19333,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               ? { backgroundColor: "#fff",
                   backgroundImage: "conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)",
                   backgroundSize: "18px 18px" }
-              : { background: isGradient(bg) ? gradientCss(bg) : bg }),
+              : { background: paintCss(bg, 100) }),
             transformOrigin: "0 0",
             transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`,
             transition: flying ? "transform 620ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
@@ -19124,7 +19398,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   <div key={it.id} onPointerDown={e => onItemDown(e, it)}
                     onDoubleClick={() => { setEditing(it.id); setSel(it.id); }}
                     style={{ ...common, width: it.w, height: it.h }}>
-                    <div style={{ position: "absolute", inset: 0, clipPath: maskClip(it), background: it.fill,
+                    {/* Through fillOf like every other shape. Reading it.fill
+                        straight meant a sticky was the one thing that could be
+                        given a gradient and not show it — the export painted it,
+                        the editor did not. */}
+                    <div style={{ position: "absolute", inset: 0, clipPath: maskClip(it), background: fillOf(it),
                       padding: Math.round(it.w * 0.08), boxSizing: "border-box",
                       opacity: it.opacity == null ? 1 : it.opacity,
                       mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
@@ -19581,6 +19859,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   ? patch(selItem.id, { [picker.key]: { ...selItem[picker.key], alpha: a } })
                 : patch(selItem.id, { fillAlpha: a })}
               brand={brand} theme={theme} darkMode={darkMode} de={de}
+              // An image and a pattern are fills for a SURFACE. A line, an
+              // arrow or a pen stroke has none — it has a colour and nothing
+              // else — and neither do a stroke or a shadow. Offering the tabs
+              // there produced a fill nothing could paint.
+              tabs={(picker.what === "bg" || (picker.what === "fill" && picker.key === "fill"))
+                ? ["custom", "gradient", "image", "pattern"] : ["custom"]}
+              onImage={() => setFillImgFor(picker)}
               onClose={() => setPicker(null)} />
           </div>
         </>, document.body)}
@@ -19914,7 +20199,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   <div style={{ width: 22, height: 22, borderRadius: 5, flexShrink: 0,
                     border: `1px solid ${line}`,
                     background: it.type === "image" ? `center/cover no-repeat url(${it.url})`
-                      : it.type === "text" ? "transparent" : (it.fill || "transparent"),
+                      : it.type === "text" ? "transparent"
+                      : it.fill ? paintCss(it.fill, it.fillAlpha) : "transparent",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: 11, color: theme.textDim }}>
                     {it.type === "text" ? "T" : it.type === "comment" ? "@" : ""}
@@ -20132,12 +20418,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   ...(bg === "transparent"
                     ? { backgroundImage: "conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)",
                         backgroundSize: "8px 8px" }
-                    : isGradient(bg) ? { backgroundImage: gradientCss(bg) }
-                    : { background: bg }) }} />
+                    : swatchBg(bg, 100)) }} />
               <span style={{ flex: 1, fontFamily: FONT, fontSize: 12.5, color: theme.text, letterSpacing: 0.4 }}>
                 {bg === "transparent" ? (de ? "Transparent" : "Transparent")
-                  : isGradient(bg) ? gradientName(bg, de)
-                  : String(bg).replace("#", "").toUpperCase()}
+                  : paintLabel(bg) || String(bg).replace("#", "").toUpperCase()}
               </span>
               <span onClick={() => setBg(bg === "transparent" ? (palette[1] || "#FFFFFF") : "transparent")}
                 title={de ? "Transparent umschalten" : "Toggle transparent"}
@@ -20359,13 +20643,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       y: e.currentTarget.getBoundingClientRect().top })}
                     style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, cursor: "pointer",
                     border: `1px solid ${line}`, backgroundColor: "#fff",
-                    backgroundImage: isGradient(cur)
-                      ? gradientCss(cur)
-                      : `linear-gradient(${withAlpha(cur, selItem.fillAlpha)}, ${withAlpha(cur, selItem.fillAlpha)}), conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)`,
-                    backgroundSize: "auto, 8px 8px" }} />
-                  {isGradient(cur) ? (
-                    <span style={{ flex: 1, minWidth: 0, color: theme.text, fontFamily: FONT, fontSize: 12.5 }}>
-                      {gradientName(cur, de)}
+                    ...swatchBg(cur, selItem.fillAlpha) }} />
+                  {paintLabel(cur) ? (
+                    <span style={{ flex: 1, minWidth: 0, color: theme.text, fontFamily: FONT, fontSize: 12.5,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {paintLabel(cur)}
                     </span>
                   ) : (
                     <input value={String(cur).replace("#", "").toUpperCase()}
@@ -20374,14 +20656,19 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
                         color: theme.text, fontFamily: FONT, fontSize: 12.5, letterSpacing: 0.4 }} />
                   )}
-                  <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0,
-                    paddingLeft: 8, borderLeft: `1px solid ${line}` }}>
-                    <NumberField value={selItem.fillAlpha == null ? 100 : selItem.fillAlpha}
-                      min={0} max={100} onCommit={v => set("fillAlpha", v)}
-                      style={{ width: 30, border: "none", outline: "none", background: "transparent",
-                        color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
-                    <span style={{ fontSize: 11.5, color: theme.textFaint }}>%</span>
-                  </div>
+                  {/* The opacity belongs to a colour. A gradient carries it per
+                      stop, an image and a pattern have none at all — leaving the
+                      field there would be a control that does nothing. */}
+                  {!paintLabel(cur) && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0,
+                      paddingLeft: 8, borderLeft: `1px solid ${line}` }}>
+                      <NumberField value={selItem.fillAlpha == null ? 100 : selItem.fillAlpha}
+                        min={0} max={100} onCommit={v => set("fillAlpha", v)}
+                        style={{ width: 30, border: "none", outline: "none", background: "transparent",
+                          color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
+                      <span style={{ fontSize: 11.5, color: theme.textFaint }}>%</span>
+                    </div>
+                  )}
                 </div>
               </>);
             })()}
@@ -20597,6 +20884,21 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             ))}
           </div>
         </div>
+      )}
+
+      {/* The same asset browser, asked for a fill rather than for an object. */}
+      {fillImgFor && (
+        <ImageInsertModal
+          orgId={orgId} session={session} userOrg={userOrg} appLanguage={appLanguage}
+          uploadFile={onUpload} theme={theme} darkMode={darkMode} accent={theme.accent}
+          onPick={(url) => {
+            markChange();
+            const v = { src: url, fit: "cover" };
+            if (fillImgFor.what === "bg") setBg(v);
+            else if (selItem) patch(selItem.id, { [fillImgFor.key]: v });
+            setFillImgFor(null);
+          }}
+          onClose={() => setFillImgFor(null)} />
       )}
 
       {imgMenuOpen && (
@@ -23590,7 +23892,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
   useEffect(() => {
     if (!userOrg?.id) { setLoading(false); return; }
     (async () => {
-      const { data } = await tpScope(supabase.from("brand_profile").select("id, channels, website_url, name, claim, description, logo_url, logos, channel_previews").eq("org_id", userOrg.id)).maybeSingle();
+      const { data } = await tpScope(supabase.from("brand_profile").select("id, channels, website_url, name, claim, description, logo_url, logos, channel_previews, color_palette, colors, gradients").eq("org_id", userOrg.id)).maybeSingle();
       setProfile(data || null);
       const ch = { ...(data?.channels && typeof data.channels === "object" ? data.channels : {}) };
       if (data?.website_url && !ch.website) ch.website = data.website_url;
