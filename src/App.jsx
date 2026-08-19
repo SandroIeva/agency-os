@@ -17230,6 +17230,160 @@ const BLEND_MODES = [
   ["hue", "Hue"], ["saturation", "Saturation"], ["color", "Color"], ["luminosity", "Luminosity"],
 ];
 
+// ── Gradients ────────────────────────────────────────────────────────────────
+// A fill is either a colour string or one of these. Three types, because these
+// are the three both CSS and the canvas draw natively — checked, including that
+// a conic gradient actually paints rather than merely existing. Figma's
+// "Diamond" has no native form on either side; faking it would mean two
+// approximations that have to agree, which is how screen and file drift apart.
+const GRADIENT_TYPES = [
+  ["linear", "Linear"],
+  ["radial", "Radial"],
+  ["angular", { de: "Winkel", en: "Angular" }],
+];
+const isGradient = (v) => !!v && typeof v === "object" && Array.isArray(v.stops);
+const gradStops = (g) => [...(g.stops || [])].sort((a, b) => a.at - b.at);
+const gradColor = (st) => {
+  const a = st.alpha == null ? 100 : st.alpha;
+  if (a >= 100) return st.color;
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(st.color || ""));
+  if (!m) return st.color;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a / 100})`;
+};
+const gradientCss = (g) => {
+  const parts = gradStops(g).map(st => `${gradColor(st)} ${st.at}%`).join(", ");
+  if (g.type === "radial") return `radial-gradient(circle at 50% 50%, ${parts})`;
+  if (g.type === "angular") return `conic-gradient(from ${g.angle || 0}deg at 50% 50%, ${parts})`;
+  return `linear-gradient(${g.angle == null ? 90 : g.angle}deg, ${parts})`;
+};
+// The same gradient for the export. CSS measures its linear gradient line from
+// the box centre with length |w·sin| + |h·cos|, and 0deg points UP — get either
+// wrong and the export's colours land in the wrong place.
+const gradientCanvas = (ctx, g, b) => {
+  const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+  let grad;
+  if (g.type === "radial") {
+    // CSS defaults a radial gradient to farthest-corner, so the radius is the
+    // distance to a corner — not half the longer side. With max(w,h)/2 the
+    // export's gradient finished early and the corners came out flat.
+    grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.hypot(b.w / 2, b.h / 2));
+  } else if (g.type === "angular" && ctx.createConicGradient) {
+    grad = ctx.createConicGradient(((g.angle || 0) - 90) * Math.PI / 180, cx, cy);
+  } else {
+    const a = ((g.angle == null ? 90 : g.angle) - 90) * Math.PI / 180;
+    const len = Math.abs(b.w * Math.sin(a + Math.PI / 2)) + Math.abs(b.h * Math.cos(a + Math.PI / 2));
+    const dx = Math.cos(a) * len / 2, dy = Math.sin(a) * len / 2;
+    grad = ctx.createLinearGradient(cx - dx, cy - dy, cx + dx, cy + dy);
+  }
+  for (const st of gradStops(g)) grad.addColorStop(Math.min(1, Math.max(0, st.at / 100)), gradColor(st));
+  return grad;
+};
+
+// The canvas gradient editor: a type, an angle, and a list of stops, each with a
+// position, a colour and its own opacity.
+//
+// Named apart from the GradientEditor further down, which belongs to the brand
+// area and carries a different model — fixed stops, no type, no angle, no
+// per-stop opacity. Bending that one to serve both would change the brand UI to
+// suit the canvas, which is the wrong way round.
+function CanvasGradientEditor({ value, onChange, theme, darkMode, de }) {
+  const g = isGradient(value) ? value : {
+    type: "linear", angle: 90,
+    // Seeded from the colour that was there, so switching to a gradient starts
+    // from what you had rather than from an unrelated black-to-white.
+    stops: [{ at: 0, color: typeof value === "string" ? value : "#FFFFFF", alpha: 100 },
+            { at: 100, color: "#999999", alpha: 100 }],
+  };
+  const put = (patch) => onChange({ ...g, ...patch });
+  const setStop = (i, patch) => put({ stops: g.stops.map((st, k) => k === i ? { ...st, ...patch } : st) });
+  const field = { height: 30, borderRadius: 9, border: "none", outline: "none",
+    background: darkMode ? "rgba(255,255,255,0.07)" : "#F1F1F4", color: theme.text,
+    fontFamily: FONT, fontSize: 12.5, padding: "0 8px" };
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ position: "relative", flex: 1, display: "flex", alignItems: "center",
+          padding: "0 10px", height: 34, borderRadius: 9,
+          background: darkMode ? "rgba(255,255,255,0.07)" : "#F1F1F4" }}>
+          <select value={g.type} onChange={(e) => put({ type: e.target.value })}
+            style={{ width: "100%", border: "none", outline: "none", background: "transparent",
+              color: theme.text, fontFamily: FONT, fontSize: 12.5, appearance: "none", cursor: "pointer" }}>
+            {GRADIENT_TYPES.map(([v, l]) => (
+              <option key={v} value={v}>{typeof l === "string" ? l : (de ? l.de : l.en)}</option>
+            ))}
+          </select>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme.textFaint}
+            strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        {g.type !== "radial" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 3, height: 34, width: 74,
+            padding: "0 10px", borderRadius: 9,
+            background: darkMode ? "rgba(255,255,255,0.07)" : "#F1F1F4" }}>
+            <NumberField value={g.angle == null ? 90 : g.angle} onCommit={(v) => put({ angle: v })}
+              style={{ width: "100%", border: "none", outline: "none", background: "transparent",
+                color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
+            <span style={{ fontSize: 11.5, color: theme.textFaint }}>°</span>
+          </div>
+        )}
+      </div>
+
+      {/* The gradient itself, as it will look. */}
+      <div style={{ height: 46, borderRadius: 10, marginTop: 12,
+        border: `1px solid ${theme.borderFaint}`, background: gradientCss(g) }} />
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+        margin: "16px 0 6px" }}>
+        <span style={{ fontFamily: FONT, fontSize: 10.5, fontWeight: 600, letterSpacing: 0.8,
+          textTransform: "uppercase", color: theme.textFaint }}>{de ? "Stopps" : "Stops"}</span>
+        <div onClick={() => {
+            const sorted = gradStops(g);
+            const last = sorted[sorted.length - 1];
+            put({ stops: [...g.stops, { at: 50, color: last?.color || "#000000", alpha: 100 }] });
+          }}
+          style={{ cursor: "pointer", color: theme.textDim, padding: "2px 6px", fontSize: 15, lineHeight: 1 }}>＋</div>
+      </div>
+
+      {g.stops.map((st, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+          <div style={{ ...field, width: 52, display: "flex", alignItems: "center" }}>
+            <NumberField value={st.at} min={0} max={100} onCommit={(v) => setStop(i, { at: v })}
+              style={{ width: 28, border: "none", outline: "none", background: "transparent",
+                color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
+            <span style={{ fontSize: 11, color: theme.textFaint }}>%</span>
+          </div>
+          <div style={{ ...field, flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 7 }}>
+            <label style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, cursor: "pointer",
+              background: st.color, border: `1px solid ${theme.borderFaint}`, overflow: "hidden" }}>
+              <input type="color" value={st.color}
+                onChange={(e) => setStop(i, { color: e.target.value })}
+                style={{ opacity: 0, width: 1, height: 1 }} />
+            </label>
+            <input value={String(st.color).replace("#", "").toUpperCase()}
+              onChange={(e) => { const v = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
+                if (v.length === 6) setStop(i, { color: "#" + v }); }}
+              style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
+                color: theme.text, fontFamily: FONT, fontSize: 12.5, letterSpacing: 0.4 }} />
+          </div>
+          <div style={{ ...field, width: 54, display: "flex", alignItems: "center" }}>
+            <NumberField value={st.alpha == null ? 100 : st.alpha} min={0} max={100}
+              onCommit={(v) => setStop(i, { alpha: v })}
+              style={{ width: 28, border: "none", outline: "none", background: "transparent",
+                color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
+            <span style={{ fontSize: 11, color: theme.textFaint }}>%</span>
+          </div>
+          {/* Two is the minimum a gradient can be made of. */}
+          <div onClick={() => g.stops.length > 2 && put({ stops: g.stops.filter((_, k) => k !== i) })}
+            style={{ cursor: g.stops.length > 2 ? "pointer" : "default", padding: "0 4px",
+              color: theme.textFaint, opacity: g.stops.length > 2 ? 1 : 0.35, fontSize: 15 }}>−</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Colour picker ────────────────────────────────────────────────────────────
 // One picker for every colour in the editor — fill, stroke, text, background.
 // Two tabs: mix your own, or take one the brand already owns. The brand tab is
@@ -17265,15 +17419,19 @@ const hsvToRgb = ({ h, s, v }) => {
 };
 
 function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, theme, darkMode, de, onClose }) {
-  const [tab, setTab] = useState("custom");
-  const [hsv, setHsv] = useState(() => rgbToHsv(hexToRgb(value)));
-  const [hex, setHex] = useState(String(value || "#000000").replace("#", "").toUpperCase());
+  const [tab, setTab] = useState(() => isGradient(value) ? "gradient" : "custom");
+  // A gradient has no single hue, so the mixing square starts from its first
+  // stop rather than from the object itself.
+  const seed = isGradient(value) ? (gradStops(value)[0]?.color || "#000000") : value;
+  const [hsv, setHsv] = useState(() => rgbToHsv(hexToRgb(seed)));
+  const [hex, setHex] = useState(String(seed || "#000000").replace("#", "").toUpperCase());
   const svRef = useRef(null);
 
   // Follow the outside value, but not while this picker is the one changing it —
   // otherwise dragging in the square fights its own round-trip and the knob
   // jitters. Comparing the resulting hex is enough to tell the two apart.
   useEffect(() => {
+    if (isGradient(value)) return;
     const incoming = String(value || "#000000").toUpperCase();
     if (rgbToHex(hsvToRgb(hsv)).toUpperCase() !== incoming) {
       setHsv(rgbToHsv(hexToRgb(incoming)));
@@ -17324,10 +17482,11 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, theme
         border: `1px solid ${theme.borderFaint}`, boxShadow: "0 18px 48px rgba(0,0,0,0.3)" }}>
 
       <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
-        {[["custom", de ? "Eigene" : "Custom"], ["brand", "Brand"]].map(([k, l]) => (
+        {[["custom", de ? "Farbe" : "Colour"], ["gradient", de ? "Verlauf" : "Gradient"],
+          ["brand", "Brand"]].map(([k, l]) => (
           <div key={k} onClick={() => setTab(k)}
-            style={{ padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontFamily: FONT,
-              fontSize: 12.5, fontWeight: 600,
+            style={{ padding: "6px 10px", borderRadius: 8, cursor: "pointer", fontFamily: FONT,
+              fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap",
               color: tab === k ? theme.text : theme.textDim,
               background: tab === k ? (darkMode ? "rgba(255,255,255,0.10)" : "#EDEDF0") : "transparent" }}>
             {l}
@@ -17374,6 +17533,9 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, theme
             </div>
           </div>
         </>
+      ) : tab === "gradient" ? (
+        <CanvasGradientEditor value={value} onChange={onChange}
+          theme={theme} darkMode={darkMode} de={de} />
       ) : (
         <div>
           {groups.length === 0 && flat.length === 0 ? (
@@ -17425,10 +17587,12 @@ function Track({ bg, pos, onSet, size }) {
     <div ref={ref}
       onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); set(e.clientX); }}
       onPointerMove={(e) => { if (e.buttons) set(e.clientX); }}
-      style={{ position: "relative", height: 12, borderRadius: 999, marginTop: 10, cursor: "ew-resize",
+      // Taller and further apart: at 12px with 10px between them the hue and
+      // alpha tracks were two lines you had to aim at.
+      style={{ position: "relative", height: 16, borderRadius: 999, marginTop: 16, cursor: "ew-resize",
         background: bg, backgroundSize: size ? `auto, ${size}` : undefined }}>
       <div style={{ position: "absolute", left: `${pos * 100}%`, top: "50%",
-        transform: "translate(-50%, -50%)", width: 15, height: 15, borderRadius: "50%",
+        transform: "translate(-50%, -50%)", width: 19, height: 19, borderRadius: "50%",
         background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.45)", pointerEvents: "none" }} />
     </div>
   );
@@ -17664,7 +17828,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const n = parseInt(m[1], 16);
     return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
   };
-  const fillOf = (it) => withAlpha(it.fill, it.fillAlpha);
+  const fillOf = (it) => isGradient(it.fill) ? gradientCss(it.fill) : withAlpha(it.fill, it.fillAlpha);
   // A CSS border draws INSIDE the box; a canvas stroke straddles the path. The
   // export therefore traces a box inset by half the width, or the outline would
   // sit half outside and the two would not match.
@@ -18390,7 +18554,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     }
     // JPEG has no alpha channel: a transparent frame would come out black
     // rather than empty, so it gets white to sit on.
-    if (bg !== "transparent") { ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H); }
+    if (bg !== "transparent") {
+      ctx.fillStyle = isGradient(bg) ? gradientCanvas(ctx, bg, { x: 0, y: 0, w: W, h: H }) : bg;
+      ctx.fillRect(0, 0, W, H);
+    }
     else if (type === "image/jpeg") { ctx.fillStyle = "#FFFFFF"; ctx.fillRect(0, 0, W, H); }
     for (const it of items) {
       // Comments are notes ABOUT the design. Exporting one would print a review
@@ -18430,7 +18597,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         const img = await loadImage(it.url);
         drawFitted(ctx, img, it);
       } else if (it.type === "sticky") {
-        ctx.fillStyle = fillOf(it); ctx.fillRect(it.x, it.y, it.w, it.h);
+        ctx.fillStyle = isGradient(it.fill) ? gradientCanvas(ctx, it.fill, boxOf(it)) : fillOf(it); ctx.fillRect(it.x, it.y, it.w, it.h);
         const pad = Math.round(it.w * 0.08);
         ctx.fillStyle = it.color; ctx.font = canvasFont(it);
         const ms = ctx.measureText("Hg"), Ls = canvasLH(it);
@@ -18441,18 +18608,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           ctx.fillText(line, it.x + pad, it.y + pad + i2 * Ls + bs));
         ctx.restore();
       } else if (it.type === "rect") {
-        ctx.fillStyle = fillOf(it);
+        ctx.fillStyle = isGradient(it.fill) ? gradientCanvas(ctx, it.fill, boxOf(it)) : fillOf(it);
         const cap = Math.min(it.w, it.h) / 2;
         const rr = radiiOf(it).map(v => Math.min(v, cap));
         if (rr.some(v => v > 0) && ctx.roundRect) {
           ctx.beginPath(); ctx.roundRect(it.x, it.y, it.w, it.h, rr); ctx.fill();
         } else ctx.fillRect(it.x, it.y, it.w, it.h);
       } else if (it.type === "ellipse") {
-        ctx.fillStyle = fillOf(it); ctx.beginPath();
+        ctx.fillStyle = isGradient(it.fill) ? gradientCanvas(ctx, it.fill, boxOf(it)) : fillOf(it); ctx.beginPath();
         ctx.ellipse(it.x + it.w / 2, it.y + it.h / 2, it.w / 2, it.h / 2, 0, 0, Math.PI * 2);
         ctx.fill();
       } else if (polyOf(it)) {
-        ctx.fillStyle = fillOf(it); ctx.beginPath();
+        ctx.fillStyle = isGradient(it.fill) ? gradientCanvas(ctx, it.fill, boxOf(it)) : fillOf(it); ctx.beginPath();
         polyOf(it).forEach(([fx, fy], i) => {
           const x = it.x + fx * it.w, y = it.y + fy * it.h;
           i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
@@ -18746,7 +18913,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               ? { backgroundColor: "#fff",
                   backgroundImage: "conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)",
                   backgroundSize: "18px 18px" }
-              : { background: bg }),
+              : { background: isGradient(bg) ? gradientCss(bg) : bg }),
             transformOrigin: "0 0",
             transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`,
             transition: flying ? "transform 620ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
