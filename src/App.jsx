@@ -17319,7 +17319,7 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, theme
 
   return (
     <div onPointerDown={e => e.stopPropagation()}
-      style={{ width: 244, borderRadius: 14, padding: 12,
+      style={{ width: 292, borderRadius: 16, padding: 14,
         background: darkMode ? "#1B1B23" : "#fff",
         border: `1px solid ${theme.borderFaint}`, boxShadow: "0 18px 48px rgba(0,0,0,0.3)" }}>
 
@@ -17342,7 +17342,7 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, theme
           {/* Saturation across, brightness down, over the pure hue. */}
           <div ref={svRef}
             onPointerDown={dragIn(svRef, (x, y) => commit({ ...hsv, s: x, v: 1 - y }))}
-            style={{ position: "relative", height: 150, borderRadius: 10, cursor: "crosshair",
+            style={{ position: "relative", height: 180, borderRadius: 11, cursor: "crosshair",
               background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, ${pure})` }}>
             <div style={{ position: "absolute", left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%`,
               transform: "translate(-50%, -50%)", width: 14, height: 14, borderRadius: "50%",
@@ -17375,24 +17375,35 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, theme
       ) : (
         <div>
           {groups.length === 0 && flat.length === 0 ? (
-            <div style={{ fontFamily: FONT, fontSize: 12, color: theme.textDim, lineHeight: 1.5,
-              padding: "18px 4px" }}>
+            <div style={{ fontFamily: FONT, fontSize: 12.5, color: theme.textDim, lineHeight: 1.55,
+              padding: "22px 4px" }}>
               {de ? "Für diese Marke sind noch keine Farben hinterlegt. Unter Brand → Identität lassen sie sich festlegen."
                   : "No colours defined for this brand yet. Set them under Brand → Identity."}
             </div>
-          ) : (groups.length ? groups : [[de ? "Farben" : "Colours", flat]]).map(([name, list]) => (
-            <div key={name} style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 10.5, letterSpacing: 0.6, textTransform: "uppercase",
-                color: theme.textFaint, marginBottom: 6 }}>{name}</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {list.map((c, i) => (
-                  <div key={c + i} title={c}
+          ) : (groups.length ? groups : [[de ? "Farben" : "Colours", flat]]).map(([name, list], gi) => (
+            <div key={name} style={{ marginTop: gi ? 22 : 4 }}>
+              {/* fontFamily was missing here, so these headings fell back to the
+                  browser's default face while everything around them used ours. */}
+              <div style={{ fontFamily: FONT, fontSize: 10.5, fontWeight: 600, letterSpacing: 0.8,
+                textTransform: "uppercase", color: theme.textFaint, marginBottom: 8 }}>{name}</div>
+              {list.map((c, i) => {
+                const on = String(value || "").toLowerCase() === String(c).toLowerCase();
+                return (
+                  <div key={c + i}
                     onClick={() => { setHsv(rgbToHsv(hexToRgb(c))); setHex(String(c).replace("#", "").toUpperCase()); onChange(c); }}
-                    style={{ width: 30, height: 30, borderRadius: 8, background: c, cursor: "pointer",
-                      border: String(value || "").toLowerCase() === String(c).toLowerCase()
-                        ? "2.5px solid #2F6BFF" : `1px solid ${theme.borderFaint}` }} />
-                ))}
-              </div>
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px",
+                      marginBottom: 2, borderRadius: 9, cursor: "pointer",
+                      background: on ? (darkMode ? "rgba(255,255,255,0.08)" : "#EDEDF0") : "transparent" }}>
+                    <div style={{ width: 26, height: 26, borderRadius: 8, background: c, flexShrink: 0,
+                      border: on ? "2.5px solid #2F6BFF" : `1px solid ${theme.borderFaint}` }} />
+                    {/* The stored palette is hex values with no names attached, so
+                        the value IS the name — inventing one would be prettier and
+                        would not match what is in the brand profile. */}
+                    <span style={{ fontFamily: FONT, fontSize: 12.5, color: theme.text,
+                      letterSpacing: 0.4 }}>{String(c).toUpperCase()}</span>
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>
@@ -18944,7 +18955,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           <div onPointerDown={() => setPicker(null)}
             style={{ position: "fixed", inset: 0, zIndex: 100008 }} />
           <div style={{ position: "fixed", zIndex: 100009,
-            left: Math.max(12, picker.x - 258),
+            left: Math.max(12, picker.x - 306),
             top: Math.min(picker.y - 20, window.innerHeight - 340) }}>
             <ColorPicker
               value={picker.what === "stroke" ? (selItem.stroke || "#15151c") : (selItem[picker.key] || "#000000")}
@@ -19175,9 +19186,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: theme.text }}>
                 {de ? "Ebenen" : "Layers"}
               </span>
-              <span style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint }}>
-                {items.length}
-              </span>
+
             </div>
 
             {/* Topmost first, because that is the order the eye sees them in.
