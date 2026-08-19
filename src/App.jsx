@@ -6163,7 +6163,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
   lastLineTool, setLastLineTool, lineToolOpen, setLineToolOpen,
   mediaOpen, setMediaOpen, mediaBtnRef, imgMenuOpen, setImgMenuOpen, imgBtnRef,
   fileRef, onFiles, zoomPct, onZoom, onResetZoom,
-  shapes = WB_SHAPE_TYPES, hide = [], theme, darkMode, de }) {
+  shapes = WB_SHAPE_TYPES, hide = [], extra = null, theme, darkMode, de }) {
 
   const vertical = orientation === "vertical";
   const sw = 1.9;
@@ -6350,6 +6350,9 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       </motion.div>
       </>}
+      {/* A slot at the end for tools only one board has. The whiteboard passes
+          nothing and is untouched. */}
+      {extra}
     </div>
   );
 }
@@ -17365,6 +17368,64 @@ const gradientCanvas = (ctx, g, b) => {
   return grad;
 };
 
+// ── Repeat ───────────────────────────────────────────────────────────────────
+// A repeat is not copies in the document: it is one object drawn several times.
+// It stays one thing to select, to restyle and to undo, and changing the count
+// changes a number rather than adding and removing rows.
+//
+// The placements are computed ONCE, here, and the editor and the export both
+// walk the same list. The alternative is the same picture built from two sets
+// of arithmetic, which is how a screen and a file drift apart.
+const REPEAT_MODES = [
+  ["linear", { de: "Reihe", en: "Row" }],
+  ["radial", { de: "Radial", en: "Radial" }],
+];
+// Shapes and images. A line, a pen stroke or a text box is drawn from something
+// other than a box, and repeating those means answering a different question
+// for each — not worth guessing at before anyone asks.
+const REPEATABLE = ["rect", "ellipse", "triangle", "diamond", "star", "image"];
+const canRepeat = (it) => !!it && REPEATABLE.includes(it.type);
+const isRepeating = (it) => !!it?.repeat && (it.repeat.count || 0) > 1;
+const defaultRepeat = (mode, it) => mode === "radial"
+  ? { mode: "radial", count: 6, radius: Math.round(Math.max(it?.w || 120, it?.h || 120) * 1.1),
+      spread: 360, follow: true, scaleFrom: 100, scaleTo: 100 }
+  : { mode: "linear", count: 4, dx: Math.round((it?.w || 120) * 1.25), dy: 0, spin: 0,
+      scaleFrom: 100, scaleTo: 100 };
+
+const REPEAT_MAX = 200;
+// Every placement, relative to the object's own centre. The first is always the
+// identity: switching the tool on must not move what you already placed.
+//
+// Radial turns the object AROUND A PIVOT sitting `radius` above it, rather than
+// scattering it onto a ring centred on itself — same figure, but the object
+// stays where you put it and the ring grows out of it.
+const repeatPlacements = (r) => {
+  const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+  const n = Math.min(REPEAT_MAX, Math.max(1, Math.round(num(r?.count, 1))));
+  if (!r || n < 2) return [{ x: 0, y: 0, rot: 0, s: 1 }];
+  const from = num(r.scaleFrom, 100), to = num(r.scaleTo, 100);
+  const out = [];
+  for (let k = 0; k < n; k++) {
+    const s = (from + (to - from) * (n > 1 ? k / (n - 1) : 0)) / 100;
+    if (r.mode === "radial") {
+      const spread = num(r.spread, 360);
+      // A full turn has no last step — it would land on top of the first.
+      const step = Math.abs(spread) >= 360 ? spread / n : spread / (n - 1);
+      const deg = step * k, a = (deg * Math.PI) / 180;
+      const rad = num(r.radius, 0);
+      out.push({ x: Math.sin(a) * rad, y: rad - Math.cos(a) * rad,
+                 rot: r.follow === false ? 0 : deg, s });
+    } else {
+      out.push({ x: num(r.dx, 0) * k, y: num(r.dy, 0) * k, rot: num(r.spin, 0) * k, s });
+    }
+  }
+  return out;
+};
+// CSS applies these left to right about the element's centre, which is the
+// default transform-origin. The canvas does the same by translating to that
+// centre first — see paintRepeat.
+const repeatCss = (p) => `translate(${p.x}px, ${p.y}px) rotate(${p.rot}deg) scale(${p.s})`;
+
 // ── the other two kinds of fill: an image, and a pattern ─────────────────────
 // A fill is one of four things — a colour, a gradient, an image, or a pattern —
 // and every one of them has to exist twice over: once in CSS for the editor,
@@ -18158,6 +18219,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // Set while the asset browser is open ON BEHALF of the picker, so the chosen
   // picture lands in a fill instead of becoming an image of its own.
   const [fillImgFor, setFillImgFor] = useState(null);
+  const [repeatOpen, setRepeatOpen] = useState(false);
   // Space held = the hand, borrowed. The chosen tool is untouched, so letting go
   // puts you back where you were rather than making you re-pick the arrow.
   const [spacePan, setSpacePan] = useState(false);
@@ -19357,6 +19419,22 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       const maskShape = maskOf(it);
       if (maskShape) { ctx.save(); tracePath(ctx, maskShape, boxOf(maskShape)); ctx.clip(); }
       if (spun) { ctx.save(); applySpin(ctx, it); }
+      // The same list the editor walks. Each placement is applied about the
+      // object's centre, because that is where CSS puts its transform origin —
+      // get that wrong and every copy lands somewhere else in the file than on
+      // the screen.
+      const places = repeatPlacements(it.repeat);
+      const home = boxOf(it);
+      const cx0 = home.x + home.w / 2, cy0 = home.y + home.h / 2;
+      for (const pl of places) {
+        const moved = pl.x || pl.y || pl.rot || pl.s !== 1;
+        if (moved) {
+          ctx.save();
+          ctx.translate(cx0 + pl.x, cy0 + pl.y);
+          ctx.rotate((pl.rot * Math.PI) / 180);
+          ctx.scale(pl.s, pl.s);
+          ctx.translate(-cx0, -cy0);
+        }
       if (it.type === "image" && it.url) {
         const img = await loadImage(it.url);
         drawFitted(ctx, img, it);
@@ -19484,6 +19562,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         ctx.fillStyle = "#000";
         ctx.fill("evenodd");
         ctx.restore();
+      }
+        if (moved) ctx.restore();
       }
       ctx.filter = "none";
       ctx.globalCompositeOperation = "source-over";
@@ -20063,11 +20143,23 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 <div key={it.id} onPointerDown={e => onItemDown(e, it)}
                   onDoubleClick={() => enterGroup(it)}
                   style={{ ...common, width: it.w, height: it.h }}>
+                  {/* One wrapper per placement, carrying the transform; the
+                      picture and its outline sit inside so a copy is the whole
+                      shape and not just its fill. inset:0 puts the transform
+                      origin at the object's centre, which is the point the
+                      export rotates and scales about too. */}
+                  {repeatPlacements(it.repeat).map((pl, ri) => (
+                  <div key={ri} style={{ position: "absolute", inset: 0,
+                    transform: ri ? repeatCss(pl) : undefined, pointerEvents: "none" }}>
                   <div style={{ position: "absolute", inset: 0, clipPath: maskClip(it) || polyClip(it),
                     opacity: it.opacity == null ? 1 : it.opacity,
                     mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
                     filter: effectFilter(it),
-                    ...(it.bgBlur ? { backdropFilter: `blur(${it.bgBlur}px)`,
+                    // Only the original blurs what is behind it. The export
+                    // takes that blur from the canvas as it stands, at identity,
+                    // before any placement transform — so a blurring copy is one
+                    // the file could not reproduce. One place, both sides agree.
+                    ...(it.bgBlur && !ri ? { backdropFilter: `blur(${it.bgBlur}px)`,
                       WebkitBackdropFilter: `blur(${it.bgBlur}px)` } : {}),
                     boxShadow: (it.innerShadow && canInnerShadow(it))
                       ? `inset ${it.innerShadow.x || 0}px ${it.innerShadow.y || 0}px ${it.innerShadow.blur || 0}px ${shadowColor(it.innerShadow)}`
@@ -20092,6 +20184,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         stroke={withAlpha(it.stroke || "#15151c", it.strokeAlpha)} />
                     </svg>
                   )}
+                  </div>
+                  ))}
                   {on && !editing && (() => {
                       const k = 1 / cam.s, hs = 9 * k, rs = 15 * k, bw = 1.6 * k;
                       const bh = it.h || (String(it.text ?? "").split("\n").length || 1) * canvasLH(it);
@@ -20577,6 +20671,61 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           onResetZoom={() => setCam(fitCam())}
           shapes={[...WB_SHAPE_TYPES, "star"]}
           hide={["zoom"]}
+          extra={(() => {
+            const target = canRepeat(selItem) ? selItem : null;
+            const put = (mode) => {
+              if (!target) return;
+              patch(target.id, { repeat: mode ? defaultRepeat(mode, target) : undefined });
+              setRepeatOpen(false);
+            };
+            return (
+              <div style={{ position: "relative" }}>
+                <div style={{ height: 1, width: 22, margin: "3px auto",
+                  background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)" }} />
+                <motion.div whileTap={{ scale: 0.9 }}
+                  onClick={() => target && setRepeatOpen(o => !o)}
+                  title={target ? (de ? "Wiederholen" : "Repeat")
+                                : (de ? "Erst eine Form oder ein Bild wählen"
+                                      : "Select a shape or an image first")}
+                  style={{ width: 38, height: 38, borderRadius: 11, display: "flex",
+                    alignItems: "center", justifyContent: "center",
+                    cursor: target ? "pointer" : "default", opacity: target ? 1 : 0.35,
+                    background: isRepeating(selItem) ? "#15151c" : "transparent",
+                    color: isRepeating(selItem) ? "#fff" : theme.text }}>
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="8" cy="8" r="3.2" /><circle cx="16.5" cy="8" r="3.2" />
+                    <circle cx="8" cy="16.5" r="3.2" /><circle cx="16.5" cy="16.5" r="3.2" />
+                  </svg>
+                </motion.div>
+                {repeatOpen && target && (<>
+                  <div onPointerDown={() => setRepeatOpen(false)}
+                    style={{ position: "fixed", inset: 0, zIndex: 30 }} />
+                  <div style={{ position: "absolute", left: "calc(100% + 12px)", top: "50%",
+                    transform: "translateY(-50%)", zIndex: 31, width: 180, padding: 6,
+                    borderRadius: 14, background: panel, border: `1px solid ${line}`,
+                    boxShadow: "0 14px 40px rgba(0,0,0,0.18)" }}>
+                    {REPEAT_MODES.map(([m, l]) => (
+                      <div key={m} onClick={() => put(m)}
+                        style={{ padding: "9px 12px", borderRadius: 9, cursor: "pointer",
+                          fontFamily: FONT, fontSize: 13, color: theme.text,
+                          background: target.repeat?.mode === m
+                            ? (darkMode ? "rgba(255,255,255,0.08)" : "#EDEDF0") : "transparent" }}>
+                        {de ? l.de : l.en}
+                      </div>
+                    ))}
+                    {target.repeat && (
+                      <div onClick={() => put(null)}
+                        style={{ padding: "9px 12px", borderRadius: 9, cursor: "pointer",
+                          fontFamily: FONT, fontSize: 13, color: theme.textDim }}>
+                        {de ? "Aufheben" : "Remove"}
+                      </div>
+                    )}
+                  </div>
+                </>)}
+              </div>
+            );
+          })()}
           theme={theme} darkMode={darkMode} de={de} />
 
         {/* Layers. Collapsed by default — a panel you reach for when the stack
@@ -21083,6 +21232,92 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   under it". Available on everything — text, emoji, shapes alike. */}
               {dropdown(selItem.blend || "normal", BLEND_MODES, v => set("blend", v))}
             </div>
+            {canRepeat(selItem) && selItem.repeat && (() => {
+              const r = selItem.repeat;
+              const put = (o) => set2({ repeat: { ...r, ...o } });
+              const radial = r.mode === "radial";
+              return (<>
+                {label(de ? "Wiederholen" : "Repeat")}
+                <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
+                  {REPEAT_MODES.map(([m, l]) => (
+                    <div key={m} onClick={() => set2({ repeat: { ...defaultRepeat(m, selItem), count: r.count,
+                        scaleFrom: r.scaleFrom, scaleTo: r.scaleTo } })}
+                      style={{ flex: 1, height: 32, borderRadius: 8, display: "flex", alignItems: "center",
+                        justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontSize: 12.5,
+                        color: theme.text,
+                        background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5",
+                        border: `1px solid ${r.mode === m ? "#15151c" : "transparent"}` }}>
+                      {de ? l.de : l.en}
+                    </div>
+                  ))}
+                  <div onClick={() => set2({ repeat: undefined })}
+                    title={de ? "Aufheben" : "Remove"}
+                    style={{ width: 32, height: 32, borderRadius: 8, display: "flex", alignItems: "center",
+                      justifyContent: "center", cursor: "pointer", color: theme.textDim,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      strokeWidth="2.2" strokeLinecap="round"><path d="M5 5l14 14M19 5L5 19" /></svg>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 8 }}>
+                  <SliderField label={de ? "Anzahl" : "Count"} value={Math.round(r.count || 2)}
+                    min={2} max={40} editMax={REPEAT_MAX}
+                    onChange={(v) => put({ count: v })} onCommit={(v) => put({ count: v })}
+                    theme={theme} darkMode={darkMode} />
+                </div>
+
+                {radial ? (<>
+                  <div style={{ marginTop: 8 }}>
+                    <SliderField label={de ? "Radius" : "Radius"} suffix=" px"
+                      value={Math.round(r.radius || 0)} min={0} max={1200} editMax={20000}
+                      onChange={(v) => put({ radius: v })} onCommit={(v) => put({ radius: v })}
+                      theme={theme} darkMode={darkMode} />
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <SliderField label={de ? "Winkel" : "Sweep"} suffix="°"
+                      value={Math.round(r.spread == null ? 360 : r.spread)} min={-360} max={360}
+                      onChange={(v) => put({ spread: v })} onCommit={(v) => put({ spread: v })}
+                      theme={theme} darkMode={darkMode} />
+                  </div>
+                  {/* Along the path, or all facing the same way — the difference
+                      between a garland and a scatter. */}
+                  <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
+                    {[[true, de ? "Dem Pfad folgen" : "Follow path"],
+                      [false, de ? "Aufrecht" : "Upright"]].map(([v, l]) => (
+                      <div key={String(v)} onClick={() => put({ follow: v })}
+                        style={{ flex: 1, height: 32, borderRadius: 8, display: "flex", alignItems: "center",
+                          justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontSize: 12,
+                          color: theme.text, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5",
+                          border: `1px solid ${(r.follow !== false) === v ? "#15151c" : "transparent"}` }}>
+                        {l}
+                      </div>
+                    ))}
+                  </div>
+                </>) : (<>
+                  <div style={two}>
+                    {num(Math.round(r.dx || 0), v => put({ dx: Math.round(v) }), "X")}
+                    {num(Math.round(r.dy || 0), v => put({ dy: Math.round(v) }), "Y")}
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <SliderField label={de ? "Drehung je Schritt" : "Spin per step"} suffix="°"
+                      value={Math.round(r.spin || 0)} min={-180} max={180}
+                      onChange={(v) => put({ spin: v })} onCommit={(v) => put({ spin: v })}
+                      theme={theme} darkMode={darkMode} />
+                  </div>
+                </>)}
+
+                {/* Start and end size; everything between is interpolated, which
+                    is what turns a repeat into a spiral or a fade. */}
+                <div style={two}>
+                  {num(Math.round(r.scaleFrom == null ? 100 : r.scaleFrom),
+                    v => put({ scaleFrom: Math.max(1, Math.round(v)) }), de ? "Von" : "From", "%")}
+                  {num(Math.round(r.scaleTo == null ? 100 : r.scaleTo),
+                    v => put({ scaleTo: Math.max(1, Math.round(v)) }), de ? "Bis" : "To", "%")}
+                </div>
+              </>);
+            })()}
+
             {selItem.type === "rect" && (<>
               <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 12 }}>
                 {de ? "Eckenradius" : "Corner radius"}
