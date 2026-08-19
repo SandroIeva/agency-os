@@ -17672,6 +17672,26 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     : it.type);
 
   const maskOf = (it) => it.maskId ? items.find(o => o.id === it.maskId) : null;
+  // The LOWER of the two always becomes the mask — the rule Figma uses and the
+  // one people expect, so it is not offered as a choice.
+  const maskPair = (ids) => {
+    if (ids.length !== 2) return;
+    const [lo, hi] = [...ids].sort(
+      (a, b) => items.findIndex(i => i.id === a) - items.findIndex(i => i.id === b));
+    markChange();
+    setItems(list => list.map(i =>
+      i.id === lo ? { ...i, isMask: true, rot: 0 }
+      : i.id === hi ? { ...i, maskId: lo } : i));
+    setPick([]); setSel(hi);
+  };
+  const unmask = (id) => {
+    const it = items.find(o => o.id === id);
+    if (!it?.maskId) return;
+    markChange();
+    setItems(list => list.map(o =>
+      o.id === id ? { ...o, maskId: undefined }
+      : o.id === it.maskId ? { ...o, isMask: undefined } : o));
+  };
   // Expressed for CSS in the MASKED item's own pixels, since clip-path counts
   // from the element's own corner, not the artboard's.
   const maskClip = (it) => {
@@ -18118,6 +18138,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const onItemDown = (e, it) => {
     if (tool !== "select" || editing) return;
     e.stopPropagation();
+    // ⌘/Shift collects a second object without starting a drag, so a pair can be
+    // picked on the canvas itself and not only in the layers list.
+    if (e.metaKey || e.ctrlKey || e.shiftKey) {
+      setPick(p => p.includes(it.id) ? p.filter(x => x !== it.id) : [...p, it.id]);
+      setSel(it.id);
+      return;
+    }
+    setPick([]);
     pushUndo(takeSnap());
     setSel(it.id);
     dragRef.current = { mode: "move", id: it.id, sx: e.clientX, sy: e.clientY,
@@ -18447,7 +18475,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           if (editing) return;               // let the browser's own menu handle text
           e.preventDefault();
           const hit = cam ? itemAt(toArt(e)) : null;
-          if (hit) setSel(hit.id);
+          // Right-clicking one of a picked pair must not throw the pair away —
+          // that is precisely when the mask command is wanted.
+          if (hit && !pick.includes(hit.id)) { setSel(hit.id); setPick([]); }
+          else if (hit) setSel(hit.id);
           setCtxMenu({ x: e.clientX, y: e.clientY, id: hit?.id || null,
             at: cam ? toArt(e) : null });
         }}
@@ -18482,7 +18513,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       width: Math.abs(g.b - g.a) }) }} />
             ))}
             {items.filter(it => !it.isMask && !it.hidden).map(it => {
-              const on = it.id === sel;
+              const on = it.id === sel || pick.includes(it.id);
               const xf = [it.rot ? `rotate(${it.rot}deg)` : "",
                 it.flipX ? "scaleX(-1)" : "", it.flipY ? "scaleY(-1)" : ""].filter(Boolean).join(" ");
               const common = {
@@ -18522,7 +18553,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   <div key={it.id} onPointerDown={e => onItemDown(e, it)}
                     onDoubleClick={() => { setEditing(it.id); setSel(it.id); }}
                     style={{ ...common, width: it.w, height: it.h }}>
-                    <div style={{ position: "absolute", inset: 0, background: it.fill,
+                    <div style={{ position: "absolute", inset: 0, clipPath: maskClip(it), background: it.fill,
                       padding: Math.round(it.w * 0.08), boxSizing: "border-box",
                       opacity: it.opacity == null ? 1 : it.opacity,
                       mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
@@ -18609,7 +18640,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   <div key={it.id} onPointerDown={e => onItemDown(e, it)}
                     onDoubleClick={() => { setEditing(it.id); setSel(it.id); }}
                     style={{ ...common, width: it.w }}>
-                    <div style={{ font: canvasFont(it), color: it.color,
+                    <div style={{ clipPath: maskClip(it), font: canvasFont(it), color: it.color,
                       lineHeight: `${canvasLH(it)}px`, textAlign: it.align || "left",
                       letterSpacing: `${canvasLS(it)}px`, opacity: it.opacity == null ? 1 : it.opacity,
                       mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
@@ -18995,6 +19026,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         const sep = (k) => <div key={k} style={{ height: 1, background: "rgba(255,255,255,0.1)", margin: "5px 0" }} />;
         const mod = navigator.platform?.toLowerCase().includes("mac") ? "⌘" : "Ctrl+";
         const rows = [];
+        const clicked = items.find(i => i.id === ctxMenu.id);
+        if (pick.length === 2) {
+          rows.push(row(de ? "Objekte maskieren" : "Use as mask", "", () => maskPair(pick)));
+          rows.push(sep("s0"));
+        }
+        if (clicked?.maskId) {
+          rows.push(row(de ? "Maske lösen" : "Release mask", "", () => unmask(clicked.id)));
+          rows.push(sep("s0b"));
+        }
         if (has) {
           rows.push(row(de ? "Kopieren" : "Copy", `${mod}C`, () => copySel(ctxMenu.id)));
           rows.push(row(de ? "Duplizieren" : "Duplicate", `${mod}D`, () => duplicateSel(ctxMenu.id)));
@@ -19245,9 +19285,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   )}
 
                   {it.maskId && (
-                    <span onClick={(e) => { e.stopPropagation(); const mm = maskOf(it);
-                      patch(it.id, { maskId: undefined });
-                      if (mm) patch(mm.id, { isMask: undefined }); }}
+                    <span onClick={(e) => { e.stopPropagation(); unmask(it.id); }}
                       title={de ? "Maske lösen" : "Release mask"}
                       style={{ fontSize: 11, color: theme.textFaint, padding: "0 3px" }}>✕</span>
                   )}
@@ -19285,16 +19323,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             })}
 
             {pick.length === 2 && (
-              <div onClick={() => {
-                  // Figma's rule: the LOWER of the two becomes the mask.
-                  const [lo, hi] = [...pick].sort(
-                    (a, b) => items.findIndex(i => i.id === a) - items.findIndex(i => i.id === b));
-                  markChange();
-                  setItems(list => list.map(i =>
-                    i.id === lo ? { ...i, isMask: true, rot: 0 }
-                    : i.id === hi ? { ...i, maskId: lo } : i));
-                  setPick([]); setSel(hi);
-                }}
+              <div onClick={() => maskPair(pick)}
                 style={{ marginTop: 8, padding: "9px 12px", borderRadius: 9, textAlign: "center",
                   background: "#15151c", color: "#fff", fontFamily: FONT, fontSize: 12,
                   fontWeight: 600, cursor: "pointer" }}>
