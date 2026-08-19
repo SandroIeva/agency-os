@@ -20028,6 +20028,21 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     </div>
   );
 
+  // The depth wrapper. Shapes, images, stickies and text each draw through a
+  // different branch below, and the transform has to reach all of them — the
+  // export never asked which type it was, so a text that stays flat on screen
+  // while it turns in the file is the two disagreeing about one design.
+  const depthWrap = (it, children) => {
+    if (!has3d(it)) return children;
+    const b = boxOf(it);
+    return (
+      <div style={{ transform: d3Transform(d3Of(it), it),
+        transformOrigin: d3Origin(d3Of(it), it, b.w, b.h) }}>
+        {children}
+      </div>
+    );
+  };
+
   const num = (value, onChange, glyph, suffix = "") => (
           <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
             borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
@@ -20211,10 +20226,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   <div key={it.id} onPointerDown={e => onItemDown(e, it)}
                     onDoubleClick={() => { setEditing(it.id); setSel(it.id); }}
                     style={{ ...common, width: it.w, height: it.h }}>
-                    {/* Through fillOf like every other shape. Reading it.fill
-                        straight meant a sticky was the one thing that could be
-                        given a gradient and not show it — the export painted it,
-                        the editor did not. */}
+                    {depthWrap(it,
+                    /* Through fillOf like every other shape: inside a call the
+                       comment is plain JS, not a JSX one. Reading it.fill
+                       straight meant a sticky was the one thing that could be
+                       given a gradient and not show it. */
                     <div style={{ position: "absolute", inset: 0, clipPath: maskClip(it), background: fillOf(it),
                       padding: Math.round(it.w * 0.08), boxSizing: "border-box",
                       opacity: it.opacity == null ? 1 : it.opacity,
@@ -20235,6 +20251,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                           lineHeight: "inherit", padding: 0, margin: 0 }} />
                     ) : String(it.text)}
                     </div>
+                    )}
                     {on && !editing && (() => {
                       const k = 1 / cam.s, hs = 9 * k, rs = 15 * k, bw = 1.6 * k;
                       const bh = it.h || (String(it.text ?? "").split("\n").length || 1) * canvasLH(it);
@@ -20302,6 +20319,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   <div key={it.id} onPointerDown={e => onItemDown(e, it)}
                     onDoubleClick={() => { setEditing(it.id); setSel(it.id); }}
                     style={{ ...common, width: it.w }}>
+                    {depthWrap(it,
                     <div style={{ clipPath: maskClip(it), font: canvasFont(it), color: it.color,
                       lineHeight: `${canvasLH(it)}px`, textAlign: it.align || "left",
                       letterSpacing: `${canvasLS(it)}px`, opacity: it.opacity == null ? 1 : it.opacity,
@@ -20319,6 +20337,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                           height: `${(String(it.text).split("\n").length || 1) * it.size * CANVAS_LH}px` }} />
                     ) : String(it.text)}
                     </div>
+                    )}
                     {on && !editing && (() => {
                       const k = 1 / cam.s, hs = 9 * k, rs = 15 * k, bw = 1.6 * k;
                       const bh = it.h || (String(it.text ?? "").split("\n").length || 1) * canvasLH(it);
