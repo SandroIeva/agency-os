@@ -19067,13 +19067,25 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // the layers list highlighted the one part that happened to be clicked — on a
   // mask that read as "the image is selected" while the whole group was what
   // would move.
+  // Read from `pick` alone, and that is the whole distinction: a click on the
+  // CANVAS picks every member, so the group is what is selected. The layers
+  // list is the place you go to reach a single part — clicking a row there sets
+  // `sel` and leaves `pick` empty, which lands here as "not a group selection"
+  // and lets that one row light up and drive the panel.
   const selGid = (() => {
-    const ids = pick.length ? pick : (sel && sel !== "frame" ? [sel] : []);
-    if (!ids.length) return null;
-    const gid = groupOf(ids[0]);
+    if (!pick.length) return null;
+    const gid = groupOf(pick[0]);
     if (!gid || enteredGroup === gid) return null;
-    return ids.every(id => groupOf(id) === gid) ? gid : null;
+    return pick.every(id => groupOf(id) === gid) ? gid : null;
   })();
+  // The panel shows the group either way — reaching a part through the layers
+  // list is still the way you release its mask.
+  // Not while several unrelated things are picked: naming the last-clicked
+  // item's group there would put a Group section above a multi-selection that
+  // is mostly not in it.
+  const panelGid = selGid
+    || (pick.length < 2 && selItem?.groupId && enteredGroup !== selItem.groupId
+        ? selItem.groupId : null);
 
   const ungroupSel = (gid) => {
     if (!canUngroup(gid)) return;
@@ -20581,11 +20593,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   onClick={(e) => {
                     if (e.metaKey || e.ctrlKey || e.shiftKey) {
                       setPick(p => p.includes(it.id) ? p.filter(x => x !== it.id) : [...p, it.id]);
-                    } else if (gid && enteredGroup !== gid) {
-                      // Same rule as the canvas: the group is the thing you get
-                      // until you open it.
-                      setPick(items.filter(o => o.groupId === gid).map(o => o.id));
-                      setSel(it.id);
                     } else { setSel(it.id); setPick([]); }
                   }}
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px",
@@ -20725,8 +20732,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             offers the one thing that only applies to a group. Stepping inside is
             a double-click on the canvas, which is worth saying once here rather
             than leaving to be discovered. */}
-        {!!selGid && (() => {
-          const gid = selGid;
+        {!!panelGid && (() => {
+          const gid = panelGid;
           const members = items.filter(i => i.groupId === gid);
           const inside = enteredGroup === gid;
           return (
@@ -20738,20 +20745,27 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                               : "Inside — click outside to leave")
                         : (de ? "Doppelklick öffnet sie" : "Double-click to open")}
               </div>
-              <div onClick={() => (canUngroup(gid) ? ungroupSel(gid) : null)}
-                title={canUngroup(gid) ? "" : (de ? "Maskenpaare werden über \u00ABMaske lösen\u00BB getrennt"
-                                                  : "Mask pairs come apart with \u00ABRelease mask\u00BB")}
-                style={{ marginTop: 10, height: 34, borderRadius: 9, display: "flex",
-                  alignItems: "center", justifyContent: "center", gap: 8,
-                  cursor: canUngroup(gid) ? "pointer" : "default",
-                  fontFamily: FONT, fontSize: 12.5, color: theme.text,
-                  background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5",
-                  opacity: canUngroup(gid) ? 1 : 0.45 }}>
-                {de ? "Gruppierung aufheben" : "Ungroup"}
-                <span style={{ color: theme.textFaint, fontSize: 11.5 }}>
-                  {navigator.platform?.toLowerCase().includes("mac") ? "⌘" : "Ctrl+"}⇧G
-                </span>
-              </div>
+              {/* A mask pair is held together BY this group, so releasing the
+                  mask IS how it comes apart — a greyed-out "Ungroup" only told
+                  you what you could not do. */}
+              {(() => {
+                const content = members.find(m => m.maskId);
+                return (
+                  <div onClick={() => (content ? unmask(content.id) : ungroupSel(gid))}
+                    style={{ marginTop: 10, height: 34, borderRadius: 9, display: "flex",
+                      alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer",
+                      fontFamily: FONT, fontSize: 12.5, color: theme.text,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                    {content ? (de ? "Maske lösen" : "Release mask")
+                             : (de ? "Gruppierung aufheben" : "Ungroup")}
+                    {!content && (
+                      <span style={{ color: theme.textFaint, fontSize: 11.5 }}>
+                        {navigator.platform?.toLowerCase().includes("mac") ? "⌘" : "Ctrl+"}⇧G
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}
