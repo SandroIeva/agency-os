@@ -19788,14 +19788,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     </>
   );
   const ALIGN_DEFS = [
-    ["l",  alignMark("M5 3.5V20.5", "M8.5 8.75H18.5", "M8.5 15.25H14.5"), "Links", "Left"],
+    ["l",  alignMark("M5 3.5V20.5", "M9.5 8.75H18.5", "M9.5 15.25H15"), "Links", "Left"],
     ["cx", alignMark("M12 3V21", "M6 8.75H18", "M8.25 15.25H15.75"),
      "Horizontal zentrieren", "Centre horizontally"],
-    ["r",  alignMark("M19 3.5V20.5", "M5.5 8.75H15.5", "M9.5 15.25H15.5"), "Rechts", "Right"],
-    ["t",  alignMark("M3.5 5H20.5", "M8.75 8.5V18.5", "M15.25 8.5V14.5"), "Oben", "Top"],
+    ["r",  alignMark("M19 3.5V20.5", "M5.5 8.75H14.5", "M9 15.25H14.5"), "Rechts", "Right"],
+    ["t",  alignMark("M3.5 5H20.5", "M8.75 9.5V18.5", "M15.25 9.5V15"), "Oben", "Top"],
     ["cy", alignMark("M3 12H21", "M8.75 6V18", "M15.25 8.25V15.75"),
      "Vertikal zentrieren", "Centre vertically"],
-    ["b",  alignMark("M3.5 19H20.5", "M8.75 5.5V15.5", "M15.25 9.5V15.5"), "Unten", "Bottom"],
+    ["b",  alignMark("M3.5 19H20.5", "M8.75 5.5V14.5", "M15.25 9V14.5"), "Unten", "Bottom"],
   ];
   const alignBtn = (k, act) => {
     const [, glyph, dde, een] = ALIGN_DEFS.find(d => d[0] === k);
