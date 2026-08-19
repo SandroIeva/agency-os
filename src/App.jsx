@@ -19056,6 +19056,26 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setEnteredGroup(null);
   };
 
+  // Moving something means moving whatever it is drawn from: a pen stroke has
+  // an offset, a line has two ends, everything else has a corner.
+  const shiftItem = (i, dx, dy) =>
+    (!dx && !dy) ? i
+    : i.type === "draw" ? { ...i, ox: (i.ox || 0) + dx, oy: (i.oy || 0) + dy }
+    : (i.type === "arrow" || i.type === "line")
+      ? { ...i, x1: i.x1 + dx, y1: i.y1 + dy, x2: i.x2 + dx, y2: i.y2 + dy }
+    : { ...i, x: Math.round(i.x + dx), y: Math.round(i.y + dy) };
+  // What moves together with this one — the whole group, unless you have
+  // stepped inside it. The same rule moveSetFor uses for a drag, so a group
+  // cannot align one way and drag another.
+  const unitOf = (it) => (it?.groupId && enteredGroup !== it.groupId)
+    ? items.filter(q => q.groupId === it.groupId) : (it ? [it] : []);
+  const unionBox = (list) => {
+    const bs = list.map(boxOf);
+    const x = Math.min(...bs.map(b => b.x)), y = Math.min(...bs.map(b => b.y));
+    return { x, y, w: Math.max(...bs.map(b => b.x + b.w)) - x,
+             h: Math.max(...bs.map(b => b.y + b.h)) - y };
+  };
+
   // Aligning several things to EACH OTHER, against the box they all sit in.
   // Units, not items: a group aligns as one thing for the same reason it drags
   // as one thing — moving its members apart is the opposite of what it is for.
@@ -19065,13 +19085,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       if (seen.has(id)) continue;
       const o = items.find(q => q.id === id);
       if (!o) continue;
-      const members = (o.groupId && enteredGroup !== o.groupId)
-        ? items.filter(q => q.groupId === o.groupId) : [o];
+      const members = unitOf(o);
       members.forEach(m => seen.add(m.id));
-      const bs = members.map(boxOf);
-      const x = Math.min(...bs.map(b => b.x)), y = Math.min(...bs.map(b => b.y));
-      units.push({ ids: members.map(m => m.id),
-        box: { x, y, w: Math.max(...bs.map(b => b.x + b.w)) - x, h: Math.max(...bs.map(b => b.y + b.h)) - y } });
+      units.push({ ids: members.map(m => m.id), box: unionBox(members) });
     }
     return units;
   };
@@ -19094,12 +19110,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     markChange();
     setItems(list => list.map(i => {
       const d = shift.get(i.id);
-      if (!d || (!d[0] && !d[1])) return i;
-      const [dx, dy] = d;
-      if (i.type === "draw") return { ...i, ox: (i.ox || 0) + dx, oy: (i.oy || 0) + dy };
-      if (i.type === "arrow" || i.type === "line")
-        return { ...i, x1: i.x1 + dx, y1: i.y1 + dy, x2: i.x2 + dx, y2: i.y2 + dy };
-      return { ...i, x: Math.round(i.x + dx), y: Math.round(i.y + dy) };
+      return d ? shiftItem(i, d[0], d[1]) : i;
     }));
   };
 
@@ -20665,6 +20676,41 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           );
         })()}
 
+        {/* A group selected behaves as one object, so the panel says so and
+            offers the one thing that only applies to a group. Stepping inside is
+            a double-click on the canvas, which is worth saying once here rather
+            than leaving to be discovered. */}
+        {pick.length < 2 && !!selItem?.groupId && (() => {
+          const gid = selItem.groupId;
+          const members = items.filter(i => i.groupId === gid);
+          const inside = enteredGroup === gid;
+          return (
+            <div style={{ paddingBottom: 14, marginBottom: 4, borderBottom: `1px solid ${line}` }}>
+              {label(de ? "Gruppe" : "Group")}
+              <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 10, lineHeight: 1.45 }}>
+                {members.length} {de ? "Objekte" : "objects"} ·{" "}
+                {inside ? (de ? "In der Gruppe — daneben klicken zum Verlassen"
+                              : "Inside — click outside to leave")
+                        : (de ? "Doppelklick öffnet sie" : "Double-click to open")}
+              </div>
+              <div onClick={() => (canUngroup(gid) ? ungroupSel(gid) : null)}
+                title={canUngroup(gid) ? "" : (de ? "Maskenpaare werden über \u00ABMaske lösen\u00BB getrennt"
+                                                  : "Mask pairs come apart with \u00ABRelease mask\u00BB")}
+                style={{ marginTop: 10, height: 34, borderRadius: 9, display: "flex",
+                  alignItems: "center", justifyContent: "center", gap: 8,
+                  cursor: canUngroup(gid) ? "pointer" : "default",
+                  fontFamily: FONT, fontSize: 12.5, color: theme.text,
+                  background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5",
+                  opacity: canUngroup(gid) ? 1 : 0.45 }}>
+                {de ? "Gruppierung aufheben" : "Ungroup"}
+                <span style={{ color: theme.textFaint, fontSize: 11.5 }}>
+                  {navigator.platform?.toLowerCase().includes("mac") ? "⌘" : "Ctrl+"}⇧G
+                </span>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* With the frame in view the panel has two jobs — set it up, or replace
             it with a layout — so they get a tab each instead of stacking. With an
             element selected the panel is about that element, and a grid of
@@ -20841,13 +20887,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               {de ? "Ausrichten am Frame" : "Align to frame"}
             </div>
             {(() => {
-              const b = boxOf(selItem);
+              // The whole group, when one is selected: centring a grouped
+              // element on the frame used to pull it out of its own group.
+              const unit = unitOf(selItem);
+              const ids = new Set(unit.map(u => u.id));
+              const b = unionBox(unit);
               const move = (nx, ny) => {
                 const dx = nx == null ? 0 : nx - b.x, dy = ny == null ? 0 : ny - b.y;
-                if (selItem.type === "draw") set2({ ox: (selItem.ox || 0) + dx, oy: (selItem.oy || 0) + dy });
-                else if (selItem.type === "arrow" || selItem.type === "line")
-                  set2({ x1: selItem.x1 + dx, y1: selItem.y1 + dy, x2: selItem.x2 + dx, y2: selItem.y2 + dy });
-                else set2({ x: Math.round(selItem.x + dx), y: Math.round(selItem.y + dy) });
+                if (!dx && !dy) return;
+                markChange();
+                setItems(list => list.map(i => (ids.has(i.id) ? shiftItem(i, dx, dy) : i)));
               };
               const act = (k) =>
                 k === "l" ? move(0, null)
