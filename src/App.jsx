@@ -6329,6 +6329,11 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
           onChange={(e) => { onFiles?.(e.target.files); e.target.value = ""; }} />
       )}
 
+      {/* A slot for tools only one board has, above the comment button —
+          comments are notes ABOUT the design, so they sit at the end, after
+          everything that makes it. The whiteboard passes nothing. */}
+      {extra}
+
       {!skip("comment") && <>
         {sep}
         {toolBtn("comment", de ? "Kommentar" : "Comment", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>)}
@@ -6350,9 +6355,6 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       </motion.div>
       </>}
-      {/* A slot at the end for tools only one board has. The whiteboard passes
-          nothing and is untouched. */}
-      {extra}
     </div>
   );
 }
@@ -20680,8 +20682,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             };
             return (
               <div style={{ position: "relative" }}>
-                <div style={{ height: 1, width: 22, margin: "3px auto",
-                  background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)" }} />
                 <motion.div whileTap={{ scale: 0.9 }}
                   onClick={() => target && setRepeatOpen(o => !o)}
                   title={target ? (de ? "Wiederholen" : "Repeat")
