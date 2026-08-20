@@ -17580,8 +17580,12 @@ const has3d = (it) => {
   const d = it?.d3;
   return !!d && !!(Number(d.rx) || Number(d.ry) || Number(d.z));
 };
+// translateZ comes AFTER the rotations in the list, so a point meets it FIRST:
+// the depth is measured along the object's own normal, not along the line to
+// the viewer. With it the other way round a layer merely got closer and larger,
+// and a tilted stack of them stayed concentric — a zoom, not a pile.
 const d3Css = (d) =>
-  `perspective(${d.persp}px) translateZ(${d.z}px) rotateX(${d.rx}deg) rotateY(${d.ry}deg)`;
+  `perspective(${d.persp}px) rotateX(${d.rx}deg) rotateY(${d.ry}deg) translateZ(${d.z}px)`;
 // Where CSS should turn from, written relative to the element's own box — the
 // transform origin IS the projection origin.
 //
@@ -17621,17 +17625,18 @@ const d3Transform = (d, it) => {
 // where CSS puts the transform origin, and therefore where the projection
 // happens from.
 //
-// The transform list reads translateZ, rotateX, rotateY, so a point goes
-// through rotateY first and translateZ last; then perspective divides by the
-// depth it ended up at. Getting that ORDER wrong still produces a plausible
+// The list reads perspective, rotateX, rotateY, translateZ — so a point is
+// lifted along the object's normal first, then turned, and finally divided by
+// the depth it ended up at. Getting that ORDER wrong still produces a plausible
 // picture, which is exactly why it is checked against the browser's own matrix
 // rather than trusted.
 const d3Project = (d, x, y) => {
   const rx = (d.rx * Math.PI) / 180, ry = (d.ry * Math.PI) / 180;
   const cx = Math.cos(rx), sx = Math.sin(rx), cy = Math.cos(ry), sy = Math.sin(ry);
-  const X = x * cy;
-  const Y = y * cx + x * sy * sx;
-  const Z = y * sx - x * sy * cx + Number(d.z || 0);
+  const z0 = Number(d.z || 0);
+  const X = x * cy + z0 * sy;
+  const Y = y * cx + x * sy * sx - z0 * cy * sx;
+  const Z = y * sx - x * sy * cx + z0 * cy * cx;
   const P = Math.max(1, Number(d.persp) || 800);
   // Behind the eye there is no picture. Clamped rather than allowed to flip,
   // because a sign change here turns the object inside out.
@@ -19606,6 +19611,54 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setEnteredGroup(null);
   };
 
+  // Depth applied to SEVERAL things at once: the same rotation for all, and for
+  // each one the offset that puts the pivot on the middle of the set. That is
+  // what makes them turn as one body instead of each about itself.
+  const setManyD3 = (ids, o) => {
+    const list = items.filter(i => ids.includes(i.id));
+    if (!list.length) return;
+    const gb = unionBox(list);
+    const gx = gb.x + gb.w / 2, gy = gb.y + gb.h / 2;
+    const base = d3Of(list.find(m => m.d3) || null);
+    markChange();
+    setItems(prev => prev.map(i => {
+      if (!ids.includes(i.id)) return i;
+      if (o === null) return { ...i, d3: undefined };
+      const b = boxOf(i);
+      return { ...i, d3: { ...base, ...(i.d3 || {}), ...o,
+        ox: gx - (b.x + b.w / 2), oy: gy - (b.y + b.h / 2) } };
+    }));
+  };
+
+  // A 3D stack: the objects share one centre and are spread along the axis
+  // pointing at the viewer. Centring them first is what makes the stack work —
+  // once every centre is the same point, turning each object about ITS OWN
+  // centre is turning them all about the one they share, and no group or pivot
+  // bookkeeping is needed for the pile to hold together.
+  //
+  // Order is the layer order: what is drawn on top is nearest, so it is also
+  // the one perspective makes largest.
+  const isStack = (ids) => ids.length > 1
+    && ids.every(id => items.find(i => i.id === id)?.d3?.stackGap != null);
+  const stack3d = (ids, gapIn) => {
+    const list = items.filter(i => ids.includes(i.id));
+    if (list.length < 2) return;
+    const gap = Number.isFinite(Number(gapIn)) ? Number(gapIn)
+      : (Number(list.find(i => i.d3?.stackGap != null)?.d3.stackGap) || 60);
+    const gb = unionBox(list);
+    const cx = gb.x + gb.w / 2, cy = gb.y + gb.h / 2;
+    const order = new Map(list.map((it, k) => [it.id, k]));
+    const base = d3Of(list.find(m => m.d3) || null);
+    markChange();
+    setItems(prev => prev.map(i => {
+      if (!ids.includes(i.id)) return i;
+      const b = boxOf(i);
+      const moved = shiftItem(i, cx - (b.x + b.w / 2), cy - (b.y + b.h / 2));
+      return { ...moved, d3: { ...base, ...(i.d3 || {}),
+        z: order.get(i.id) * gap, stackGap: gap, ox: 0, oy: 0 } };
+    }));
+  };
+
   // Depth applied to a GROUP: every member gets the same rotation, and each one
   // gets the offset that puts the pivot on the middle of the group. Written to
   // the members rather than to a group object, because a group here is a shared
@@ -20959,6 +21012,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         if (pick.length > 1 && !selGid) {
           rows.push(row(de ? "Gruppieren" : "Group", `${mod}G`, () => groupSel()));
         }
+        if (pick.length > 1) {
+          rows.push(isStack(pick)
+            ? row(de ? "Stapel auflösen" : "Unstack", "", () => setManyD3(pick, null))
+            : row(de ? "3D-Stapel" : "3D stack", "", () => stack3d(pick)));
+        }
         if (canUngroup(clicked?.groupId)) {
           rows.push(row(de ? "Gruppierung aufheben" : "Ungroup", `${mod}⇧G`,
             () => ungroupSel(clicked.groupId)));
@@ -21430,6 +21488,52 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                        : (de ? "Eine Gruppe — nichts auszurichten" : "One group — nothing to align")}
               </div>
               {n > 1 && alignGrid(alignPick)}
+              {/* Stacking is the one thing that only makes sense with several
+                  selected, so it lives with the other things that do. */}
+              {(() => {
+                const on = isStack(pick);
+                const gap = on
+                  ? Number(items.find(i => pick.includes(i.id))?.d3?.stackGap) || 60 : 60;
+                return (<>
+                  <div onClick={() => (on ? setManyD3(pick, null) : stack3d(pick))}
+                    style={{ marginTop: 10, height: 34, borderRadius: 9, display: "flex",
+                      alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer",
+                      fontFamily: FONT, fontSize: 12.5,
+                      color: on ? "#fff" : theme.text,
+                      background: on ? "#15151c"
+                        : (darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5") }}>
+                    {on ? (de ? "Stapel auflösen" : "Unstack") : (de ? "3D-Stapel" : "3D stack")}
+                  </div>
+                  {on && (<>
+                    <div style={{ marginTop: 8 }}>
+                      <SliderField label={de ? "Z-Abstand" : "Z spacing"} suffix=" px"
+                        value={Math.round(gap)} min={0} max={400} editMax={4000}
+                        onChange={(v) => stack3d(pick, v)} onCommit={(v) => stack3d(pick, v)}
+                        theme={theme} darkMode={darkMode} />
+                    </div>
+                    {/* The same two turns the Advanced panel offers, writing to
+                        the whole pile — a stack you can only tilt one layer of
+                        is not a stack. */}
+                    <div style={{ marginTop: 8 }}>
+                      <SliderField label={de ? "Kippen (X)" : "Tilt (X)"} suffix="°"
+                        value={Math.round(d3Of(items.find(i => pick.includes(i.id))).rx)}
+                        min={-80} max={80}
+                        onChange={(v) => setManyD3(pick, { rx: v })}
+                        onCommit={(v) => setManyD3(pick, { rx: v })}
+                        theme={theme} darkMode={darkMode} />
+                    </div>
+                    <div style={{ marginTop: 8 }}>
+                      <SliderField label={de ? "Drehen (Y)" : "Turn (Y)"} suffix="°"
+                        value={Math.round(d3Of(items.find(i => pick.includes(i.id))).ry)}
+                        min={-80} max={80}
+                        onChange={(v) => setManyD3(pick, { ry: v })}
+                        onCommit={(v) => setManyD3(pick, { ry: v })}
+                        theme={theme} darkMode={darkMode} />
+                    </div>
+                  </>)}
+                </>);
+              })()}
+
               <div onClick={() => (grouped ? ungroupSel(gid) : groupSel())}
                 style={{ marginTop: 10, height: 34, borderRadius: 9, display: "flex",
                   alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer",
