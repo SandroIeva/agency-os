@@ -19698,14 +19698,33 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const cx = gb.x + gb.w / 2, cy = gb.y + gb.h / 2;
     const order = new Map(list.map((it, k) => [it.id, k]));
     const base = d3Of(list.find(m => m.d3) || null);
+    // A stack IS one object: grabbing any layer has to move the pile. That is
+    // what a group already means here, so the stack becomes one rather than
+    // growing a second idea of "these belong together" beside it. An existing
+    // group is kept — re-stacking must not hand it a new identity.
+    const shared = list[0].groupId;
+    const gid = (shared && list.every(i => i.groupId === shared)) ? shared : crypto.randomUUID();
     markChange();
     setItems(prev => prev.map(i => {
       if (!ids.includes(i.id)) return i;
       const b = boxOf(i);
       const moved = shiftItem(i, cx - (b.x + b.w / 2), cy - (b.y + b.h / 2));
-      return { ...moved, d3: { ...base, ...(i.d3 || {}),
+      return { ...moved, groupId: gid, d3: { ...base, ...(i.d3 || {}),
         z: order.get(i.id) * gap, stackGap: gap, ox: 0, oy: 0 } };
     }));
+    setEnteredGroup(null);
+    openGroup(gid);
+  };
+  // Undoing a stack undoes both halves of it: the depth and the fact that the
+  // layers were one object. A mask pair keeps its group — that one is not ours
+  // to take apart.
+  const unstack = (ids) => {
+    markChange();
+    setItems(prev => prev.map(i => (ids.includes(i.id)
+      ? { ...i, d3: undefined,
+          groupId: (i.isMask || i.maskId) ? i.groupId : undefined }
+      : i)));
+    setEnteredGroup(null);
   };
 
   // Depth applied to a GROUP: every member gets the same rotation, and each one
@@ -21066,7 +21085,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         }
         if (pick.length > 1) {
           rows.push(isStack(pick)
-            ? row(de ? "Stapel auflösen" : "Unstack", "", () => setManyD3(pick, null))
+            ? row(de ? "Stapel auflösen" : "Unstack", "", () => unstack(pick))
             : row(de ? "3D-Stapel" : "3D stack", "", () => stack3d(pick)));
         }
         if (canUngroup(clicked?.groupId)) {
@@ -21540,62 +21559,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                        : (de ? "Eine Gruppe — nichts auszurichten" : "One group — nothing to align")}
               </div>
               {n > 1 && alignGrid(alignPick)}
-              {/* Stacking is the one thing that only makes sense with several
-                  selected, so it lives with the other things that do. */}
-              {(() => {
-                const on = isStack(pick);
-                const gap = on
-                  ? Number(items.find(i => pick.includes(i.id))?.d3?.stackGap) || 60 : 60;
-                return (<>
-                  <div onClick={() => (on ? setManyD3(pick, null) : stack3d(pick))}
-                    style={{ marginTop: 10, height: 34, borderRadius: 9, display: "flex",
-                      alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer",
-                      fontFamily: FONT, fontSize: 12.5,
-                      color: on ? "#fff" : theme.text,
-                      background: on ? "#15151c"
-                        : (darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5") }}>
-                    {on ? (de ? "Stapel auflösen" : "Unstack") : (de ? "3D-Stapel" : "3D stack")}
-                  </div>
-                  {on && (<>
-                    <div style={{ marginTop: 8 }}>
-                      <SliderField label={de ? "Z-Abstand" : "Z spacing"} suffix=" px"
-                        value={Math.round(gap)} min={0} max={400} editMax={4000}
-                        onChange={(v) => stack3d(pick, v)} onCommit={(v) => stack3d(pick, v)}
-                        theme={theme} darkMode={darkMode} />
-                    </div>
-                    {/* The same two turns the Advanced panel offers, writing to
-                        the whole pile — a stack you can only tilt one layer of
-                        is not a stack. */}
-                    <div style={{ marginTop: 8 }}>
-                      <SliderField label={de ? "Kippen (X)" : "Tilt (X)"} suffix="°"
-                        value={Math.round(d3Of(items.find(i => pick.includes(i.id))).rx)}
-                        min={-80} max={80}
-                        onChange={(v) => setManyD3(pick, { rx: v })}
-                        onCommit={(v) => setManyD3(pick, { rx: v })}
-                        theme={theme} darkMode={darkMode} />
-                    </div>
-                    <div style={{ marginTop: 8 }}>
-                      <SliderField label={de ? "Drehen (Y)" : "Turn (Y)"} suffix="°"
-                        value={Math.round(d3Of(items.find(i => pick.includes(i.id))).ry)}
-                        min={-80} max={80}
-                        onChange={(v) => setManyD3(pick, { ry: v })}
-                        onCommit={(v) => setManyD3(pick, { ry: v })}
-                        theme={theme} darkMode={darkMode} />
-                    </div>
-                    {/* How near the eye is — the same control the single-object
-                        panel has. On a stack it is the one that decides whether
-                        the pile reads as deep or as flat cards. */}
-                    <div style={{ marginTop: 8 }}>
-                      <SliderField label={de ? "Perspektive" : "Perspective"} suffix=" px"
-                        value={Math.round(d3Of(items.find(i => pick.includes(i.id))).persp)}
-                        min={200} max={2400} editMax={20000}
-                        onChange={(v) => setManyD3(pick, { persp: Math.max(50, v) })}
-                        onCommit={(v) => setManyD3(pick, { persp: Math.max(50, v) })}
-                        theme={theme} darkMode={darkMode} />
-                    </div>
-                  </>)}
-                </>);
-              })()}
+              {/* Creating one belongs with the other things that need several
+                  selected. Everything about an existing stack is in its own
+                  section below — a stack is a group, and this one is not. */}
+              {!isStack(pick) && (
+                <div onClick={() => stack3d(pick)}
+                  style={{ marginTop: 10, height: 34, borderRadius: 9, display: "flex",
+                    alignItems: "center", justifyContent: "center", cursor: "pointer",
+                    fontFamily: FONT, fontSize: 12.5, color: theme.text,
+                    background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                  {de ? "3D-Stapel" : "3D stack"}
+                </div>
+              )}
 
               <div onClick={() => (grouped ? ungroupSel(gid) : groupSel())}
                 style={{ marginTop: 10, height: 34, borderRadius: 9, display: "flex",
@@ -21607,6 +21582,61 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 <span style={{ color: theme.textFaint, fontSize: 11.5 }}>
                   {navigator.platform?.toLowerCase().includes("mac") ? "⌘" : "Ctrl+"}{grouped ? "⇧G" : "G"}
                 </span>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* A stack has its own section, shown whenever one is selected — it is a
+            group, so it would otherwise fall through the gap between "several
+            selected" and "a group selected" and become unreachable the moment
+            it worked properly. */}
+        {isStack(pick) && (() => {
+          const first = items.find(i => pick.includes(i.id));
+          const d = d3Of(first);
+          const gap = Number(first?.d3?.stackGap) || 60;
+          return (
+            <div style={{ paddingBottom: 14, marginBottom: 4, borderBottom: `1px solid ${line}` }}>
+              {label(de ? "3D-Stapel" : "3D stack")}
+              <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 10, lineHeight: 1.45 }}>
+                {pick.length} {de ? "Ebenen · am Griff über der Auswahl frei drehen"
+                                  : "layers · orbit freely from the grip above the selection"}
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <SliderField label={de ? "Z-Abstand" : "Z spacing"} suffix=" px"
+                  value={Math.round(gap)} min={0} max={400} editMax={4000}
+                  onChange={(v) => stack3d(pick, v)} onCommit={(v) => stack3d(pick, v)}
+                  theme={theme} darkMode={darkMode} />
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <SliderField label={de ? "Kippen (X)" : "Tilt (X)"} suffix="°"
+                  value={Math.round(d.rx)} min={-80} max={80}
+                  onChange={(v) => setManyD3(pick, { rx: v })}
+                  onCommit={(v) => setManyD3(pick, { rx: v })}
+                  theme={theme} darkMode={darkMode} />
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <SliderField label={de ? "Drehen (Y)" : "Turn (Y)"} suffix="°"
+                  value={Math.round(d.ry)} min={-80} max={80}
+                  onChange={(v) => setManyD3(pick, { ry: v })}
+                  onCommit={(v) => setManyD3(pick, { ry: v })}
+                  theme={theme} darkMode={darkMode} />
+              </div>
+              {/* On a stack this is the control that decides whether the pile
+                  reads as deep or as flat cards. */}
+              <div style={{ marginTop: 8 }}>
+                <SliderField label={de ? "Perspektive" : "Perspective"} suffix=" px"
+                  value={Math.round(d.persp)} min={200} max={2400} editMax={20000}
+                  onChange={(v) => setManyD3(pick, { persp: Math.max(50, v) })}
+                  onCommit={(v) => setManyD3(pick, { persp: Math.max(50, v) })}
+                  theme={theme} darkMode={darkMode} />
+              </div>
+              <div onClick={() => unstack(pick)}
+                style={{ marginTop: 10, height: 34, borderRadius: 9, display: "flex",
+                  alignItems: "center", justifyContent: "center", cursor: "pointer",
+                  fontFamily: FONT, fontSize: 12.5, color: theme.textDim,
+                  background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                {de ? "Stapel auflösen" : "Unstack"}
               </div>
             </div>
           );
