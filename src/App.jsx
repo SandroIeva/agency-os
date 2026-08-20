@@ -19290,6 +19290,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       return;
     }
     if (d.mode === "arrow") { patch(d.id, { x2: p.x, y2: p.y }); return; }
+    if (d.mode === "orbit") {
+      const clamp = (v) => Math.max(-80, Math.min(80, Math.round(v)));
+      const ry = clamp(d.base.ry + (e.clientX - d.sx) * 0.5);
+      const rx = clamp(d.base.rx - (e.clientY - d.sy) * 0.5);
+      // Through the same writer the panel uses, so a pile stays a pile: one
+      // pivot for the whole set, not one each.
+      setManyD3(d.ids, { rx, ry });
+      return;
+    }
     if (d.mode === "marquee") {
       setMarquee({ x: Math.min(d.ox, p.x), y: Math.min(d.oy, p.y),
         w: Math.abs(p.x - d.ox), h: Math.abs(p.y - d.oy) });
@@ -19478,6 +19487,46 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       baseBox: boxOf(it),
       targets: [{ x: 0, y: 0, w: W, h: H }, ...items.filter(o => !ids.includes(o.id)).map(boxOf)] };
   };
+
+  // Orbiting is a handle rather than a held key: every modifier here is spoken
+  // for — Shift adds to the selection and constrains a resize, Alt suspends
+  // snapping mid-drag, Ctrl is a right-click on a Mac — and a shortcut that
+  // quietly takes over one of those is worse than a grip you can see.
+  //
+  // Sideways turns around the upright axis, up and down tips the object towards
+  // or away from you. Half a degree per pixel: a full sweep of the frame is
+  // about one turn, which is fine enough to aim and coarse enough to be quick.
+  const orbitIdsFor = (it) => {
+    if (pick.length > 1) return [...pick];
+    if (it.groupId && enteredGroup !== it.groupId)
+      return items.filter(q => q.groupId === it.groupId).map(q => q.id);
+    return [it.id];
+  };
+  const onOrbitDown = (e, it) => {
+    e.stopPropagation();
+    pushUndo(takeSnap());
+    const d = d3Of(it);
+    dragRef.current = { mode: "orbit", id: it.id, ids: orbitIdsFor(it),
+      sx: e.clientX, sy: e.clientY, base: { rx: d.rx, ry: d.ry } };
+  };
+
+  // Drawn at a constant SCREEN size like the other handles, above the top edge
+  // where nothing else sits — the rotate zones are at the corners and the size
+  // badge is below.
+  const orbitGrip = (it, k) => (
+    <div key="orbit" onPointerDown={e2 => onOrbitDown(e2, it)}
+      title={de ? "3D drehen" : "Orbit in 3D"}
+      style={{ position: "absolute", left: "50%", top: -26 * k,
+        transform: "translateX(-50%)", width: 17 * k, height: 17 * k, borderRadius: "50%",
+        background: "#fff", border: `${1.6 * k}px solid #2F6BFF`, cursor: "all-scroll",
+        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 3 }}>
+      <svg width={10 * k} height={10 * k} viewBox="0 0 24 24" fill="none" stroke="#2F6BFF"
+        strokeWidth="2.4">
+        <circle cx="12" cy="12" r="8.5" />
+        <ellipse cx="12" cy="12" rx="8.5" ry="3.4" />
+      </svg>
+    </div>
+  );
 
   const onHandleDown = (e, it, handle) => {
     e.stopPropagation();
@@ -20505,6 +20554,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                                 borderRadius: 1.5 * k, background: "#fff",
                                 border: `${bw}px solid #2F6BFF`, cursor: CURSORS[hd], zIndex: 2 }} />
                           ))}
+                          {orbitGrip(it, k)}
                           {!edgeOnly && [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => (
                             <div key={"r" + hd} onPointerDown={e2 => onRotateDown(e2, it)}
                               title={de ? "Drehen" : "Rotate"}
@@ -20591,6 +20641,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                                 borderRadius: 1.5 * k, background: "#fff",
                                 border: `${bw}px solid #2F6BFF`, cursor: CURSORS[hd], zIndex: 2 }} />
                           ))}
+                          {orbitGrip(it, k)}
                           {!edgeOnly && [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => (
                             <div key={"r" + hd} onPointerDown={e2 => onRotateDown(e2, it)}
                               title={de ? "Drehen" : "Rotate"}
@@ -20758,6 +20809,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                                 borderRadius: 1.5 * k, background: "#fff",
                                 border: `${bw}px solid #2F6BFF`, cursor: CURSORS[hd], zIndex: 2 }} />
                           ))}
+                          {orbitGrip(it, k)}
                           {!edgeOnly && [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => (
                             <div key={"r" + hd} onPointerDown={e2 => onRotateDown(e2, it)}
                               title={de ? "Drehen" : "Rotate"}
@@ -21528,6 +21580,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         min={-80} max={80}
                         onChange={(v) => setManyD3(pick, { ry: v })}
                         onCommit={(v) => setManyD3(pick, { ry: v })}
+                        theme={theme} darkMode={darkMode} />
+                    </div>
+                    {/* How near the eye is — the same control the single-object
+                        panel has. On a stack it is the one that decides whether
+                        the pile reads as deep or as flat cards. */}
+                    <div style={{ marginTop: 8 }}>
+                      <SliderField label={de ? "Perspektive" : "Perspective"} suffix=" px"
+                        value={Math.round(d3Of(items.find(i => pick.includes(i.id))).persp)}
+                        min={200} max={2400} editMax={20000}
+                        onChange={(v) => setManyD3(pick, { persp: Math.max(50, v) })}
+                        onCommit={(v) => setManyD3(pick, { persp: Math.max(50, v) })}
                         theme={theme} darkMode={darkMode} />
                     </div>
                   </>)}
