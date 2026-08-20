@@ -25340,9 +25340,15 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
           onClose={() => setEditing(null)} />
       )}
 
-      {/* One to one with the file manager's, down to the radii and the wording:
-          two dialogs for one job is how an app starts feeling assembled rather
-          than designed. */}
+      {/* Portalled to the body, and that is not tidiness: this view's root is a
+          motion.div that animates scale and y, so it carries a transform — and
+          a transformed ancestor becomes the containing block for anything
+          position: fixed inside it. The backdrop was being clipped to the view
+          instead of covering the screen.
+
+          AnimatePresence sits INSIDE the portal. The other way round it drops
+          the portal it cannot track and the dialog never reaches the DOM. */}
+      {createPortal(
       <AnimatePresence>
         {folderModal && (
           <motion.div
@@ -25405,7 +25411,8 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body)}
       </div>
     </motion.div>
   );
