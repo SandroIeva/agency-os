@@ -19294,6 +19294,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       return;
     }
     if (d.mode === "arrow") { patch(d.id, { x2: p.x, y2: p.y }); return; }
+    if (d.mode === "arrowend") {
+      patch(d.id, d.which === 1 ? { x1: p.x, y1: p.y } : { x2: p.x, y2: p.y });
+      return;
+    }
     if (d.mode === "orbit") {
       const clamp = (v) => Math.max(-80, Math.min(80, Math.round(v)));
       const ry = clamp(d.base.ry + (e.clientX - d.sx) * 0.5);
@@ -19827,6 +19831,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   // Moving something means moving whatever it is drawn from: a pen stroke has
   // an offset, a line has two ends, everything else has a corner.
+  // Where the two strokes of an arrowhead end. One function, because the
+  // editor and the export both draw it and a head that differs between them is
+  // the whole point of having a single source.
+  const arrowHead = (it) => {
+    const a = Math.atan2(it.y2 - it.y1, it.x2 - it.x1);
+    const hl = WB_ARROW_HEAD_SIZES[it.hs] || WB_ARROW_HEAD_SIZES.m;
+    return { x1: it.x2 - hl * Math.cos(a - 0.46), y1: it.y2 - hl * Math.sin(a - 0.46),
+             x2: it.x2 - hl * Math.cos(a + 0.46), y2: it.y2 - hl * Math.sin(a + 0.46) };
+  };
+
   const shiftItem = (i, dx, dy) =>
     (!dx && !dy) ? i
     : i.type === "draw" ? { ...i, ox: (i.ox || 0) + dx, oy: (i.oy || 0) + dy }
@@ -20097,11 +20111,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           // code sat in a loop; in a function of its own it is a return, and it
           // skips exactly the same rest.
           if (it.type === "line") return;
-          const a = Math.atan2(it.y2 - it.y1, it.x2 - it.x1), L = it.width * 4.5;
-          ctx.beginPath(); ctx.moveTo(it.x2, it.y2);
-          ctx.lineTo(it.x2 - L * Math.cos(a - 0.42), it.y2 - L * Math.sin(a - 0.42));
-          ctx.lineTo(it.x2 - L * Math.cos(a + 0.42), it.y2 - L * Math.sin(a + 0.42));
-          ctx.closePath(); ctx.fill();
+          // Two strokes to the tip, the same ones the editor draws.
+          const hd = arrowHead(it);
+          ctx.beginPath();
+          ctx.moveTo(hd.x1, hd.y1); ctx.lineTo(it.x2, it.y2); ctx.lineTo(hd.x2, hd.y2);
+          ctx.stroke();
         } else if (it.type === "text") {
           ctx.fillStyle = it.color; ctx.font = canvasFont(it);
           ctx.textAlign = it.align === "center" ? "center" : it.align === "right" ? "right" : "left";
@@ -20677,13 +20691,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 const pts = it.type === "draw"
                   ? it.pts.map(([x, y]) => `${x + (it.ox || 0)},${y + (it.oy || 0)}`).join(" ")
                   : "";
-                const head = it.type === "arrow" ? (() => {
-                  const a = Math.atan2(it.y2 - it.y1, it.x2 - it.x1), L = it.width * 4.5;
-                  return [[it.x2, it.y2],
-                    [it.x2 - L * Math.cos(a - 0.42), it.y2 - L * Math.sin(a - 0.42)],
-                    [it.x2 - L * Math.cos(a + 0.42), it.y2 - L * Math.sin(a + 0.42)]]
-                    .map(q => q.join(",")).join(" ");
-                })() : "";
+                // Brainstorm's head, not an approximation of it: two strokes
+                // meeting at the tip rather than a filled triangle, opened at
+                // the same 0.46 rad, and its length a CHOICE — s, m or l —
+                // instead of a multiple of the stroke width. A filled wedge
+                // that grows with the line is what made these look wrong beside
+                // the same arrow drawn on a board.
+                const hd = it.type === "arrow" ? arrowHead(it) : null;
                 return (
                   <svg key={it.id} width={W} height={H} viewBox={`0 0 ${W} ${H}`}
                     style={{ position: "absolute", left: 0, top: 0, overflow: "visible",
@@ -20696,11 +20710,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                           cursor: "move", filter: on ? "drop-shadow(0 0 2px #15151c)" : "none" }} />
                     ) : (
                       <g onPointerDown={e => onItemDown(e, it)}
-                        style={{ pointerEvents: tool === "select" ? "visiblePainted" : "none",
+                        stroke={it.color} strokeWidth={it.width} strokeLinecap="round"
+                        strokeLinejoin="round" fill="none"
+                        style={{ pointerEvents: tool === "select" ? "stroke" : "none",
                           cursor: "move", filter: on ? "drop-shadow(0 0 2px #15151c)" : "none" }}>
-                        <line x1={it.x1} y1={it.y1} x2={it.x2} y2={it.y2} stroke={it.color}
-                          strokeWidth={it.width} strokeLinecap="round" />
-                        <polygon points={head} fill={it.color} />
+                        <line x1={it.x1} y1={it.y1} x2={it.x2} y2={it.y2} />
+                        {hd && <line x1={it.x2} y1={it.y2} x2={hd.x1} y2={hd.y1} />}
+                        {hd && <line x1={it.x2} y1={it.y2} x2={hd.x2} y2={hd.y2} />}
                       </g>
                     )}
                   </svg>
@@ -20786,6 +20802,30 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 cannot use to pull it back. The wrapper lets pointers through —
                 only the grips themselves take them, or this box would swallow
                 every click on the object underneath. */}
+            {/* A line and an arrow are two points, so that is what they are
+                edited by. Brainstorm has always let you grab either end
+                afterwards; here they were fixed the moment you let go. */}
+            {!editing && tool === "select"
+              && items.filter(it => (it.id === sel || pick.includes(it.id))
+                && (it.type === "arrow" || it.type === "line")).map(it => {
+              const k = 1 / cam.s;
+              const grip = (which, gx, gy) => (
+                <div key={which}
+                  onPointerDown={(e) => { e.stopPropagation(); pushUndo(takeSnap());
+                    dragRef.current = { mode: "arrowend", id: it.id, which }; }}
+                  style={{ position: "absolute", left: gx - 7 * k, top: gy - 7 * k,
+                    width: 14 * k, height: 14 * k, borderRadius: "50%", background: "#fff",
+                    border: `${2 * k}px solid #2F6BFF`, cursor: "crosshair", pointerEvents: "auto",
+                    boxShadow: `0 ${1 * k}px ${4 * k}px rgba(0,0,0,0.25)` }} />
+              );
+              return (
+                <Fragment key={"ends" + it.id}>
+                  {grip(1, it.x1, it.y1)}
+                  {grip(2, it.x2, it.y2)}
+                </Fragment>
+              );
+            })}
+
             {!editing && items.filter(it => (it.id === sel || pick.includes(it.id))
               && !["comment", "draw", "arrow", "line"].includes(it.type)).map(it => {
               const b = boxOf(it);
@@ -20829,6 +20869,38 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             onPointerDown={e => e.stopPropagation()}>
             <div style={{ display: "flex", alignItems: "center", gap: 3, padding: 5, borderRadius: 11,
               background: "#15151c", boxShadow: "0 8px 24px rgba(0,0,0,0.28)" }}>
+              {/* The same two choices Brainstorm's bar carries for a stroke:
+                  the width as a set of thicknesses rather than a number to
+                  guess at, and — on an arrow — the size of its head. */}
+              {isStroke && (<>
+                {WB_STROKE_WIDTHS.map(w => (
+                  <div key={w} onClick={() => patch(selItem.id, { width: w })}
+                    title={de ? `Strichstärke ${w}` : `Stroke ${w}`}
+                    style={{ ...iconBtn, background: (selItem.width || 4) === w
+                      ? "rgba(255,255,255,0.22)" : "transparent" }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff"
+                      strokeLinecap="round"><line x1="4" y1="12" x2="20" y2="12" strokeWidth={w} /></svg>
+                  </div>
+                ))}
+                {selItem.type === "arrow" && (<>
+                  {div2}
+                  <span style={{ fontSize: 10, fontFamily: FONT, color: "rgba(255,255,255,0.55)",
+                    fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    {de ? "Spitze" : "Head"}
+                  </span>
+                  {["s", "m", "l"].map(hk => (
+                    <div key={hk} onClick={() => patch(selItem.id, { hs: hk })}
+                      title={de ? `Spitze ${hk.toUpperCase()}` : `Head ${hk.toUpperCase()}`}
+                      style={{ padding: "3px 7px", borderRadius: 7, cursor: "pointer", fontSize: 11,
+                        fontFamily: FONT, fontWeight: 600, color: "#fff", textTransform: "uppercase",
+                        background: (selItem.hs || "m") === hk ? "rgba(255,255,255,0.22)" : "transparent" }}>
+                      {hk}
+                    </div>
+                  ))}
+                </>)}
+                {div2}
+              </>)}
+
               {selItem.type === "star" && (<>
                 <div title={de ? "Zacken" : "Points"}
                   style={{ display: "flex", alignItems: "center", gap: 4, padding: "0 10px 0 8px",
