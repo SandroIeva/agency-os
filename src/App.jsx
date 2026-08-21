@@ -19266,13 +19266,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     }
     const p = toArt(e);
     if (d.mode === "create") {
-      // Brainstorm's contract, not an approximation of it: proportional by
-      // default so an ellipse drags out as a real circle, Shift to deform, and
-      // anchored at the point the drag started so pulling up or left grows away
+      // Anchored at the point the drag started, so pulling up or left grows away
       // from it instead of sliding the shape around.
+      //
+      // Only the ellipse holds its proportion by default — that is the one
+      // whose everyday case is a circle. A rectangle dragged out square is a
+      // rectangle you then have to fix. Shift reverses it either way, so both
+      // shapes stay reachable with one hand.
       const dx = p.x - d.ox, dy = p.y - d.oy;
       let w = Math.abs(dx), h = Math.abs(dy);
-      if (!e.shiftKey) w = h = Math.max(w, h);
+      const square = (d.type === "ellipse") !== e.shiftKey;
+      if (square) w = h = Math.max(w, h);
       const box = { w: Math.round(w), h: Math.round(h),
         x: Math.round(dx >= 0 ? d.ox : d.ox - w), y: Math.round(dy >= 0 ? d.oy : d.oy - h) };
       d.live = box;
@@ -19510,23 +19514,97 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       sx: e.clientX, sy: e.clientY, base: { rx: d.rx, ry: d.ry } };
   };
 
-  // Drawn at a constant SCREEN size like the other handles, above the top edge
-  // where nothing else sits — the rotate zones are at the corners and the size
-  // badge is below.
+  // Drawn at a constant SCREEN size like the other handles, and OUTSIDE the
+  // right edge. Above the top edge was where it belonged by shape and where it
+  // could not be seen: the floating toolbar hangs 46 screen pixels over the top
+  // of a selection and covered it completely. Beside the box nothing else sits
+  // — the resize handle is ON the edge, the rotate zones are at the corners,
+  // the size badge is below.
   const orbitGrip = (it, k) => (
     <div key="orbit" onPointerDown={e2 => onOrbitDown(e2, it)}
-      title={de ? "3D drehen" : "Orbit in 3D"}
-      style={{ position: "absolute", left: "50%", top: -26 * k,
-        transform: "translateX(-50%)", width: 17 * k, height: 17 * k, borderRadius: "50%",
+      title={de ? "3D drehen — in alle Richtungen ziehen" : "Orbit in 3D — drag any direction"}
+      style={{ position: "absolute", left: "100%", marginLeft: 15 * k, top: "50%",
+        transform: "translateY(-50%)", width: 19 * k, height: 19 * k, borderRadius: "50%",
         background: "#fff", border: `${1.6 * k}px solid #2F6BFF`, cursor: "all-scroll",
-        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 3 }}>
-      <svg width={10 * k} height={10 * k} viewBox="0 0 24 24" fill="none" stroke="#2F6BFF"
-        strokeWidth="2.4">
+        boxShadow: `0 ${1 * k}px ${3 * k}px rgba(0,0,0,0.18)`,
+        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 4,
+        pointerEvents: "auto" }}>
+      <svg width={11 * k} height={11 * k} viewBox="0 0 24 24" fill="none" stroke="#2F6BFF"
+        strokeWidth="2.6">
         <circle cx="12" cy="12" r="8.5" />
         <ellipse cx="12" cy="12" rx="8.5" ry="3.4" />
       </svg>
     </div>
   );
+
+  // The selection's handles, outline, grips and size badge — one copy instead
+  // of the three identical ones the shape, sticky and text branches each
+  // carried. It is rendered in a layer of its OWN, above the artboard's clip:
+  // the drawing has to be cut at the edge of the canvas, but the frame around
+  // it must not be, or a shape pulled past the edge can no longer be grabbed.
+  const selectionChrome = (it) => {
+                      const k = 1 / cam.s, hs = 9 * k, rs = 15 * k, bw = 1.6 * k;
+                      const bh = it.h || (String(it.text ?? "").split("\n").length || 1) * canvasLH(it);
+                      const edgeOnly = it.type === "text";
+                      return (
+                        <>
+                          <div style={{ position: "absolute", inset: 0, pointerEvents: "none",
+                            outline: `${bw}px solid #2F6BFF`, outlineOffset: 0 }} />
+                          {HANDLES.filter(([hd]) => !edgeOnly || hd === "e" || hd === "w").map(([hd, fx, fy]) => (
+                            <div key={hd} onPointerDown={e2 => onHandleDown(e2, it, hd)}
+                              style={{ position: "absolute", left: `calc(${fx * 100}% - ${hs / 2}px)`,
+                                top: `calc(${fy * 100}% - ${hs / 2}px)`, width: hs, height: hs,
+                                borderRadius: 1.5 * k, background: "#fff",
+                                border: `${bw}px solid #2F6BFF`, cursor: CURSORS[hd], zIndex: 2,
+                                pointerEvents: "auto" }} />
+                          ))}
+                          {orbitGrip(it, k)}
+                          {!edgeOnly && [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => (
+                            <div key={"r" + hd} onPointerDown={e2 => onRotateDown(e2, it)}
+                              title={de ? "Drehen" : "Rotate"}
+                              style={{ position: "absolute", left: `calc(${fx * 100}% - ${rs / 2}px)`,
+                                top: `calc(${fy * 100}% - ${rs / 2}px)`, width: rs, height: rs,
+                                transform: `translate(${(fx ? 1 : -1) * rs * 0.75}px, ${(fy ? 1 : -1) * rs * 0.75}px)`,
+                                borderRadius: "50%", cursor: "grab", zIndex: 1, pointerEvents: "auto" }} />
+                          ))}
+                          {/* Corner-radius grips: small circles just inside each
+                              corner. Dragging one inward rounds that corner, and by
+                              default all four follow — only a shape switched to
+                              per-corner radii moves one alone. */}
+                          {it.type === "rect" && (() => {
+                            const rr = radiiOf(it);
+                            const cap = Math.min(it.w, bh) / 2;
+                            // Held a constant distance from the corner on screen while
+                            // the radius is small, or the grip would sit under the
+                            // resize handle and be impossible to hit.
+                            const minIn = 14 * k;
+                            return [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => {
+                              const off = Math.max(Math.min(rr[RADIUS_CORNER[hd]], cap), minIn);
+                              return (
+                                <div key={"rad" + hd} onPointerDown={e2 => onRadiusDown(e2, it, hd)}
+                                  title="Radius"
+                                  style={{ position: "absolute",
+                                    left: fx ? undefined : off, right: fx ? off : undefined,
+                                    top: fy ? undefined : off, bottom: fy ? off : undefined,
+                                    transform: `translate(${fx ? 50 : -50}%, ${fy ? 50 : -50}%)`,
+                                    width: 8 * k, height: 8 * k, borderRadius: "50%",
+                                    background: "#fff", border: `${1.6 * k}px solid #2F6BFF`,
+                                    cursor: "nwse-resize", zIndex: 3, pointerEvents: "auto" }} />
+                              );
+                            });
+                          })()}
+                          {/* The size, under the box. Last, so nothing else has
+                              to leave room for it. */}
+                          <div style={{ position: "absolute", left: "50%", top: `calc(100% + ${9 * k}px)`,
+                            transform: "translateX(-50%)", padding: `${3 * k}px ${7 * k}px`,
+                            borderRadius: 4 * k, background: "#2F6BFF", color: "#fff",
+                            fontFamily: FONT, fontSize: 11 * k, fontWeight: 600, whiteSpace: "nowrap",
+                            pointerEvents: "none" }}>
+                            {Math.round(it.w)} × {Math.round(bh)}
+                          </div>
+                        </>
+    );
+  };
 
   const onHandleDown = (e, it, handle) => {
     e.stopPropagation();
@@ -20471,9 +20549,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             // Selected frames say so. Without this the sidebar changed and
             // nothing on the canvas did, which reads as nothing having happened.
             borderRadius: frameCorners().map(v => `${v}px`).join(" "),
-            // Until now the editor showed the overhang and the file cut it off,
-            // so the two disagreed about the same design.
-            overflow: frameClip ? "hidden" : "visible",
+            // The clip moved one layer in, onto the drawing alone. On the frame
+            // it also cut the selection's own frame, so a shape pulled past the
+            // edge could no longer be grabbed.
+            overflow: "visible",
             outline: sel === "frame" ? `${Math.max(1, 2 / cam.s)}px solid #15151c` : "none",
             outlineOffset: 0,
             boxShadow: "0 18px 60px rgba(0,0,0,0.28)" }}>
@@ -20491,6 +20570,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   : { top: g.pos, left: Math.min(g.a, g.b), height: Math.max(1, 1 / cam.s),
                       width: Math.abs(g.b - g.a) }) }} />
             ))}
+            {/* The drawing, and only the drawing, is cut at the canvas edge. */}
+            <div style={{ position: "absolute", inset: 0, borderRadius: "inherit",
+              overflow: frameClip ? "hidden" : "visible" }}>
             {items.filter(it => !it.isMask && !it.hidden).map(it => {
               const on = it.id === sel || pick.includes(it.id);
               const xf = [it.rot ? `rotate(${it.rot}deg)` : "",
@@ -20558,66 +20640,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     ) : String(it.text)}
                     </div>
                     )}
-                    {on && !editing && (() => {
-                      const k = 1 / cam.s, hs = 9 * k, rs = 15 * k, bw = 1.6 * k;
-                      const bh = it.h || (String(it.text ?? "").split("\n").length || 1) * canvasLH(it);
-                      const edgeOnly = it.type === "text";
-                      return (
-                        <>
-                          <div style={{ position: "absolute", inset: 0, pointerEvents: "none",
-                            outline: `${bw}px solid #2F6BFF`, outlineOffset: 0 }} />
-                          {HANDLES.filter(([hd]) => !edgeOnly || hd === "e" || hd === "w").map(([hd, fx, fy]) => (
-                            <div key={hd} onPointerDown={e2 => onHandleDown(e2, it, hd)}
-                              style={{ position: "absolute", left: `calc(${fx * 100}% - ${hs / 2}px)`,
-                                top: `calc(${fy * 100}% - ${hs / 2}px)`, width: hs, height: hs,
-                                borderRadius: 1.5 * k, background: "#fff",
-                                border: `${bw}px solid #2F6BFF`, cursor: CURSORS[hd], zIndex: 2 }} />
-                          ))}
-                          {orbitGrip(it, k)}
-                          {!edgeOnly && [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => (
-                            <div key={"r" + hd} onPointerDown={e2 => onRotateDown(e2, it)}
-                              title={de ? "Drehen" : "Rotate"}
-                              style={{ position: "absolute", left: `calc(${fx * 100}% - ${rs / 2}px)`,
-                                top: `calc(${fy * 100}% - ${rs / 2}px)`, width: rs, height: rs,
-                                transform: `translate(${(fx ? 1 : -1) * rs * 0.75}px, ${(fy ? 1 : -1) * rs * 0.75}px)`,
-                                borderRadius: "50%", cursor: "grab", zIndex: 1 }} />
-                          ))}
-                          {/* Corner-radius grips: small circles just inside each
-                              corner. Dragging one inward rounds that corner, and by
-                              default all four follow — only a shape switched to
-                              per-corner radii moves one alone. */}
-                          {it.type === "rect" && (() => {
-                            const rr = radiiOf(it);
-                            const cap = Math.min(it.w, bh) / 2;
-                            // Held a constant distance from the corner on screen while
-                            // the radius is small, or the grip would sit under the
-                            // resize handle and be impossible to hit.
-                            const minIn = 14 * k;
-                            return [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => {
-                              const off = Math.max(Math.min(rr[RADIUS_CORNER[hd]], cap), minIn);
-                              return (
-                                <div key={"rad" + hd} onPointerDown={e2 => onRadiusDown(e2, it, hd)}
-                                  title="Radius"
-                                  style={{ position: "absolute",
-                                    left: fx ? undefined : off, right: fx ? off : undefined,
-                                    top: fy ? undefined : off, bottom: fy ? off : undefined,
-                                    transform: `translate(${fx ? 50 : -50}%, ${fy ? 50 : -50}%)`,
-                                    width: 8 * k, height: 8 * k, borderRadius: "50%",
-                                    background: "#fff", border: `${1.6 * k}px solid #2F6BFF`,
-                                    cursor: "nwse-resize", zIndex: 3 }} />
-                              );
-                            });
-                          })()}
-                          <div style={{ position: "absolute", left: "50%", top: `calc(100% + ${9 * k}px)`,
-                            transform: "translateX(-50%)", padding: `${3 * k}px ${7 * k}px`,
-                            borderRadius: 4 * k, background: "#2F6BFF", color: "#fff",
-                            fontFamily: FONT, fontSize: 11 * k, fontWeight: 600, whiteSpace: "nowrap",
-                            pointerEvents: "none" }}>
-                            {Math.round(it.w)} × {Math.round(bh)}
-                          </div>
-                        </>
-                      );
-                    })()}
                   </div>
                 );
               }
@@ -20645,66 +20667,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     ) : String(it.text)}
                     </div>
                     )}
-                    {on && !editing && (() => {
-                      const k = 1 / cam.s, hs = 9 * k, rs = 15 * k, bw = 1.6 * k;
-                      const bh = it.h || (String(it.text ?? "").split("\n").length || 1) * canvasLH(it);
-                      const edgeOnly = it.type === "text";
-                      return (
-                        <>
-                          <div style={{ position: "absolute", inset: 0, pointerEvents: "none",
-                            outline: `${bw}px solid #2F6BFF`, outlineOffset: 0 }} />
-                          {HANDLES.filter(([hd]) => !edgeOnly || hd === "e" || hd === "w").map(([hd, fx, fy]) => (
-                            <div key={hd} onPointerDown={e2 => onHandleDown(e2, it, hd)}
-                              style={{ position: "absolute", left: `calc(${fx * 100}% - ${hs / 2}px)`,
-                                top: `calc(${fy * 100}% - ${hs / 2}px)`, width: hs, height: hs,
-                                borderRadius: 1.5 * k, background: "#fff",
-                                border: `${bw}px solid #2F6BFF`, cursor: CURSORS[hd], zIndex: 2 }} />
-                          ))}
-                          {orbitGrip(it, k)}
-                          {!edgeOnly && [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => (
-                            <div key={"r" + hd} onPointerDown={e2 => onRotateDown(e2, it)}
-                              title={de ? "Drehen" : "Rotate"}
-                              style={{ position: "absolute", left: `calc(${fx * 100}% - ${rs / 2}px)`,
-                                top: `calc(${fy * 100}% - ${rs / 2}px)`, width: rs, height: rs,
-                                transform: `translate(${(fx ? 1 : -1) * rs * 0.75}px, ${(fy ? 1 : -1) * rs * 0.75}px)`,
-                                borderRadius: "50%", cursor: "grab", zIndex: 1 }} />
-                          ))}
-                          {/* Corner-radius grips: small circles just inside each
-                              corner. Dragging one inward rounds that corner, and by
-                              default all four follow — only a shape switched to
-                              per-corner radii moves one alone. */}
-                          {it.type === "rect" && (() => {
-                            const rr = radiiOf(it);
-                            const cap = Math.min(it.w, bh) / 2;
-                            // Held a constant distance from the corner on screen while
-                            // the radius is small, or the grip would sit under the
-                            // resize handle and be impossible to hit.
-                            const minIn = 14 * k;
-                            return [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => {
-                              const off = Math.max(Math.min(rr[RADIUS_CORNER[hd]], cap), minIn);
-                              return (
-                                <div key={"rad" + hd} onPointerDown={e2 => onRadiusDown(e2, it, hd)}
-                                  title="Radius"
-                                  style={{ position: "absolute",
-                                    left: fx ? undefined : off, right: fx ? off : undefined,
-                                    top: fy ? undefined : off, bottom: fy ? off : undefined,
-                                    transform: `translate(${fx ? 50 : -50}%, ${fy ? 50 : -50}%)`,
-                                    width: 8 * k, height: 8 * k, borderRadius: "50%",
-                                    background: "#fff", border: `${1.6 * k}px solid #2F6BFF`,
-                                    cursor: "nwse-resize", zIndex: 3 }} />
-                              );
-                            });
-                          })()}
-                          <div style={{ position: "absolute", left: "50%", top: `calc(100% + ${9 * k}px)`,
-                            transform: "translateX(-50%)", padding: `${3 * k}px ${7 * k}px`,
-                            borderRadius: 4 * k, background: "#2F6BFF", color: "#fff",
-                            fontFamily: FONT, fontSize: 11 * k, fontWeight: 600, whiteSpace: "nowrap",
-                            pointerEvents: "none" }}>
-                            {Math.round(it.w)} × {Math.round(bh)}
-                          </div>
-                        </>
-                      );
-                    })()}
                   </div>
                 );
               }
@@ -20813,66 +20775,28 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   </div>
                   </div>
                   ))}
-                  {on && !editing && (() => {
-                      const k = 1 / cam.s, hs = 9 * k, rs = 15 * k, bw = 1.6 * k;
-                      const bh = it.h || (String(it.text ?? "").split("\n").length || 1) * canvasLH(it);
-                      const edgeOnly = it.type === "text";
-                      return (
-                        <>
-                          <div style={{ position: "absolute", inset: 0, pointerEvents: "none",
-                            outline: `${bw}px solid #2F6BFF`, outlineOffset: 0 }} />
-                          {HANDLES.filter(([hd]) => !edgeOnly || hd === "e" || hd === "w").map(([hd, fx, fy]) => (
-                            <div key={hd} onPointerDown={e2 => onHandleDown(e2, it, hd)}
-                              style={{ position: "absolute", left: `calc(${fx * 100}% - ${hs / 2}px)`,
-                                top: `calc(${fy * 100}% - ${hs / 2}px)`, width: hs, height: hs,
-                                borderRadius: 1.5 * k, background: "#fff",
-                                border: `${bw}px solid #2F6BFF`, cursor: CURSORS[hd], zIndex: 2 }} />
-                          ))}
-                          {orbitGrip(it, k)}
-                          {!edgeOnly && [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => (
-                            <div key={"r" + hd} onPointerDown={e2 => onRotateDown(e2, it)}
-                              title={de ? "Drehen" : "Rotate"}
-                              style={{ position: "absolute", left: `calc(${fx * 100}% - ${rs / 2}px)`,
-                                top: `calc(${fy * 100}% - ${rs / 2}px)`, width: rs, height: rs,
-                                transform: `translate(${(fx ? 1 : -1) * rs * 0.75}px, ${(fy ? 1 : -1) * rs * 0.75}px)`,
-                                borderRadius: "50%", cursor: "grab", zIndex: 1 }} />
-                          ))}
-                          {/* Corner-radius grips: small circles just inside each
-                              corner. Dragging one inward rounds that corner, and by
-                              default all four follow — only a shape switched to
-                              per-corner radii moves one alone. */}
-                          {it.type === "rect" && (() => {
-                            const rr = radiiOf(it);
-                            const cap = Math.min(it.w, bh) / 2;
-                            // Held a constant distance from the corner on screen while
-                            // the radius is small, or the grip would sit under the
-                            // resize handle and be impossible to hit.
-                            const minIn = 14 * k;
-                            return [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => {
-                              const off = Math.max(Math.min(rr[RADIUS_CORNER[hd]], cap), minIn);
-                              return (
-                                <div key={"rad" + hd} onPointerDown={e2 => onRadiusDown(e2, it, hd)}
-                                  title="Radius"
-                                  style={{ position: "absolute",
-                                    left: fx ? undefined : off, right: fx ? off : undefined,
-                                    top: fy ? undefined : off, bottom: fy ? off : undefined,
-                                    transform: `translate(${fx ? 50 : -50}%, ${fy ? 50 : -50}%)`,
-                                    width: 8 * k, height: 8 * k, borderRadius: "50%",
-                                    background: "#fff", border: `${1.6 * k}px solid #2F6BFF`,
-                                    cursor: "nwse-resize", zIndex: 3 }} />
-                              );
-                            });
-                          })()}
-                          <div style={{ position: "absolute", left: "50%", top: `calc(100% + ${9 * k}px)`,
-                            transform: "translateX(-50%)", padding: `${3 * k}px ${7 * k}px`,
-                            borderRadius: 4 * k, background: "#2F6BFF", color: "#fff",
-                            fontFamily: FONT, fontSize: 11 * k, fontWeight: 600, whiteSpace: "nowrap",
-                            pointerEvents: "none" }}>
-                            {Math.round(it.w)} × {Math.round(bh)}
-                          </div>
-                        </>
-                      );
-                    })()}
+                  
+                </div>
+              );
+            })}
+            </div>
+
+            {/* The selection's own frame, in a layer ABOVE the clip: handles
+                that vanish the moment a shape crosses the edge are handles you
+                cannot use to pull it back. The wrapper lets pointers through —
+                only the grips themselves take them, or this box would swallow
+                every click on the object underneath. */}
+            {!editing && items.filter(it => (it.id === sel || pick.includes(it.id))
+              && !["comment", "draw", "arrow", "line"].includes(it.type)).map(it => {
+              const b = boxOf(it);
+              const xf = [it.rot ? `rotate(${it.rot}deg)` : "",
+                it.flipX ? "scaleX(-1)" : "", it.flipY ? "scaleY(-1)" : ""].filter(Boolean).join(" ");
+              return (
+                <div key={"chrome" + it.id}
+                  style={{ position: "absolute", left: b.x, top: b.y, width: b.w, height: b.h,
+                    pointerEvents: "none",
+                    ...(xf ? { transform: xf, transformOrigin: "center" } : {}) }}>
+                  {selectionChrome(it)}
                 </div>
               );
             })}
