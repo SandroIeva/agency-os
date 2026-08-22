@@ -18703,13 +18703,43 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const b = {
       id: crypto.randomUUID(), name: `Artboard ${list.length + 1}`,
       x: nextBoardX(list), y: 0, w: W, h: H,
-      bg: palette[1] || "#FFFFFF", radius: 0, radii: undefined, clip: true, items: [],
+      // White, not the brand's second colour: a new board should start from
+      // the same ground every time, whichever brand is open.
+      bg: "#FFFFFF", radius: 0, radii: undefined, clip: true, items: [],
     };
     markChange();
     setBoards([...list, b]);
     setActive(list.length);
     loadBoard(b);
   };
+  // A copy of a board, with new ids throughout. Reusing them would give two
+  // boards items that answer to the same id, and every patch, selection and
+  // delete would reach into both. The ids that POINT at other items — a group's
+  // shared id, a mask's target — are remapped through the same table, or the
+  // copy's mask would still be clipped by the original's shape.
+  const duplicateBoard = () => {
+    const list = boardsNow();
+    const src = list[active];
+    const map = new Map((src.items || []).map(o => [o.id, crypto.randomUUID()]));
+    const groups = new Map();
+    const items2 = (src.items || []).map(o => {
+      const copy = { ...o, id: map.get(o.id) };
+      if (o.groupId) {
+        if (!groups.has(o.groupId)) groups.set(o.groupId, crypto.randomUUID());
+        copy.groupId = groups.get(o.groupId);
+      }
+      if (o.maskId && map.has(o.maskId)) copy.maskId = map.get(o.maskId);
+      return copy;
+    });
+    const b = { ...src, id: crypto.randomUUID(),
+      name: `${src.name} ${de ? "Kopie" : "copy"}`,
+      x: nextBoardX(list), y: 0, items: items2 };
+    markChange();
+    setBoards([...list, b]);
+    setActive(list.length);
+    loadBoard(b);
+  };
+
   const removeBoard = (i) => {
     if (boards.length < 2) return;
     const list = boardsNow().filter((_, k) => k !== i);
@@ -20723,16 +20753,25 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 {/* Flush with the board's right edge, and quiet: an outline
                     and a grey plus. It is a thing you reach for now and then,
                     not the loudest object on the screen. */}
-                <div onPointerDown={(e) => { e.stopPropagation(); addBoard(); }}
-                  title={de ? "Artboard hinzufügen" : "Add artboard"}
-                  style={{ position: "absolute", right: 0, bottom: "100%",
-                    marginBottom: 8 * k,
-                    width: 20 * k, height: 20 * k, borderRadius: 6 * k,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    cursor: "pointer", background: "transparent",
-                    border: `${1 * k}px solid ${theme.borderFaint}`, color: theme.textFaint,
-                    fontFamily: FONT, fontSize: 14 * k, lineHeight: 1 }}>
-                    +
+                <div style={{ position: "absolute", right: 0, bottom: "100%",
+                  marginBottom: 8 * k, display: "flex", alignItems: "center", gap: 6 * k }}>
+                  {[["dup", de ? "Artboard duplizieren" : "Duplicate artboard", duplicateBoard,
+                     <><rect x="9" y="9" width="11" height="11" rx="2" />
+                       <path d="M5 15V6a1 1 0 011-1h9" /></>],
+                    ["add", de ? "Artboard hinzufügen" : "Add artboard", addBoard,
+                     <><path d="M12 5v14M5 12h14" /></>],
+                  ].map(([key, title, act, glyph]) => (
+                    <div key={key} onPointerDown={(e) => { e.stopPropagation(); act(); }} title={title}
+                      style={{ width: 20 * k, height: 20 * k, borderRadius: 6 * k,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        cursor: "pointer", background: "transparent",
+                        border: `${1.4 * k}px solid ${theme.border}`,
+                        color: theme.textDim }}>
+                      <svg width={11 * k} height={11 * k} viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"
+                        strokeLinejoin="round">{glyph}</svg>
+                    </div>
+                  ))}
                 </div>
               </>);
             })()}
