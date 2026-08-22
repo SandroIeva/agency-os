@@ -20720,14 +20720,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         cursor: "pointer" }}>✕</span>
                   )}
                 </div>
+                {/* Flush with the board's right edge, and quiet: an outline
+                    and a grey plus. It is a thing you reach for now and then,
+                    not the loudest object on the screen. */}
                 <div onPointerDown={(e) => { e.stopPropagation(); addBoard(); }}
                   title={de ? "Artboard hinzufügen" : "Add artboard"}
-                  style={{ position: "absolute", left: "100%", bottom: "100%",
-                    marginLeft: 10 * k, marginBottom: 8 * k,
-                    width: 22 * k, height: 22 * k, borderRadius: 7 * k,
+                  style={{ position: "absolute", right: 0, bottom: "100%",
+                    marginBottom: 8 * k,
+                    width: 20 * k, height: 20 * k, borderRadius: 6 * k,
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    cursor: "pointer", background: "#15151c", color: "#fff",
-                    fontFamily: FONT, fontSize: 15 * k, lineHeight: 1 }}>
+                    cursor: "pointer", background: "transparent",
+                    border: `${1 * k}px solid ${theme.borderFaint}`, color: theme.textFaint,
+                    fontFamily: FONT, fontSize: 14 * k, lineHeight: 1 }}>
                     +
                 </div>
               </>);
