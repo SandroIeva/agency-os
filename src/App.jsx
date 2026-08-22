@@ -17466,6 +17466,31 @@ const radiiOf = (it) => Array.isArray(it.radii) && it.radii.length === 4
   ? it.radii.map(v => Math.max(0, Number(v) || 0))
   : [0, 1, 2, 3].map(() => Math.max(0, Number(it.radius) || 0));
 
+// ── Artboards ────────────────────────────────────────────────────────────────
+// A document is a list of boards laid out side by side. Older ones are a single
+// frame with its fields at the top level; they become one board at the origin,
+// so nothing saved before this needs converting.
+const BOARD_GAP = 120;
+const boardsFromDoc = (doc, size, de) => {
+  const name = (i) => `${de ? "Artboard" : "Artboard"} ${i + 1}`;
+  const norm = (b, i) => ({
+    id: b?.id || crypto.randomUUID(),
+    name: b?.name || name(i),
+    x: Number(b?.x) || 0, y: Number(b?.y) || 0,
+    w: Number(b?.w) || size[0], h: Number(b?.h) || size[1],
+    bg: b?.bg ?? null,
+    radius: Number(b?.radius) || 0,
+    radii: Array.isArray(b?.radii) && b.radii.length === 4 ? b.radii : undefined,
+    clip: b?.clip !== false,
+    items: Array.isArray(b?.items) ? b.items : [],
+  });
+  if (Array.isArray(doc?.boards) && doc.boards.length) return doc.boards.map(norm);
+  return [norm(doc, 0)];
+};
+// Where a new board goes: to the right of the rightmost one, on the same line.
+const nextBoardX = (list) =>
+  list.reduce((acc, b) => Math.max(acc, (Number(b.x) || 0) + (Number(b.w) || 0)), 0) + BOARD_GAP;
+
 // ── Canvas preview ───────────────────────────────────────────────────────────
 // A real picture of a canvas, small. Built from the saved document rather than
 // from a stored image, so it is never a version behind what is in the file and
@@ -17476,8 +17501,11 @@ const radiiOf = (it) => Array.isArray(it.radii) && it.radii.length === 4
 // export use. What it leaves out, it leaves out visibly: pen strokes, arrows
 // and comments are not in a thumbnail worth 200 pixels.
 function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
-  const W = Number(doc?.w) || Number(w) || 1;
-  const H = Number(doc?.h) || Number(h) || 1;
+  // A document may hold several artboards; the card shows the first. Older
+  // documents are the board itself, which is why this reads either shape.
+  const bd = (Array.isArray(doc?.boards) && doc.boards[0]) || doc || null;
+  const W = Number(bd?.w) || Number(w) || 1;
+  const H = Number(bd?.h) || Number(h) || 1;
   // Measured, not computed in CSS. `scale()` wants a number and 100cqw is a
   // length — `scale(calc(100cqw / 1600))` parses as nothing and silently draws
   // the canvas at full size inside a 240px card. Checked in the browser before
@@ -17493,12 +17521,12 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, [W]);
-  const items = Array.isArray(doc?.items) ? doc.items : [];
-  const bg = doc?.bg;
+  const items = Array.isArray(bd?.items) ? bd.items : [];
+  const bg = bd?.bg;
   const chequer = "conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)";
   return (
     <div ref={boxRef} style={{ position: "relative", width: "100%", aspectRatio: `${W} / ${H}`,
-      maxHeight: "100%", borderRadius: radius, overflow: doc?.clip === false ? "visible" : "hidden",
+      maxHeight: "100%", borderRadius: radius, overflow: bd?.clip === false ? "visible" : "hidden",
       ...style,
       ...(bg && bg !== "transparent"
         ? { background: paintCss(bg, 100) }
@@ -18526,28 +18554,42 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // The frame can be resized and swapped for another format, so its size is
   // state rather than a fixed prop — and it travels in the document, or the
   // canvas would open at the old size next time.
+  // Several artboards in one document. The one being worked on keeps living in
+  // the state below — items, bg, the frame's size and shape — because every
+  // coordinate in this editor is written in the active board's own frame.
+  // Switching writes that state back into the list and loads the next board, so
+  // nothing else in here has to learn that there is more than one.
+  //
+  // Computed once into a ref rather than inside two useState initialisers: they
+  // would each build their own list, with their own ids.
+  const bootRef = useRef(null);
+  if (!bootRef.current) bootRef.current = boardsFromDoc(doc, size, de);
+  const [boards, setBoards] = useState(bootRef.current);
+  const [active, setActive] = useState(0);
+  const board = boards[active] || bootRef.current[0];
+
   const [frame, setFrame] = useState(() => ({
-    w: Number(doc?.w) || size[0], h: Number(doc?.h) || size[1] }));
+    w: bootRef.current[0].w, h: bootRef.current[0].h }));
   const W = frame.w, H = frame.h;
   const palette = (Array.isArray(brand?.colors) && brand.colors.length >= 2)
     ? brand.colors : ["#15151c", "#F4F4F7", "#E60023", "#0A66C2", "#FFFFFF"];
 
-  const [bg, setBg] = useState(doc?.bg || palette[1] || "#FFFFFF");
-  const [frameRadius, setFrameRadius] = useState(Number(doc?.radius) || 0);
+  const [bg, setBg] = useState(bootRef.current[0].bg || palette[1] || "#FFFFFF");
+  const [frameRadius, setFrameRadius] = useState(Number(bootRef.current[0].radius) || 0);
   // null = all four corners share the one radius above. An array is the frame
   // saying its corners differ — the same shape a rectangle's radii already had,
   // so both ends of the panel can drive one control.
   // Whether the frame cuts what hangs over its edge. Older documents have no
   // such field and clip — which is what the export has always done, so reading
   // a missing value as "on" keeps them looking the way they were saved.
-  const [frameClip, setFrameClip] = useState(doc?.clip !== false);
+  const [frameClip, setFrameClip] = useState(bootRef.current[0].clip !== false);
   // The colour of the area AROUND the canvas. It is not in the exported file —
   // the file is the canvas — but it decides whether what you are making reads
   // the way it will where it ends up, so it belongs to the document.
   const [stageBg, setStageBg] = useState(doc?.stage || null);
   const [frameRadii, setFrameRadii] = useState(
-    Array.isArray(doc?.radii) && doc.radii.length === 4
-      ? doc.radii.map(v => Math.max(0, Number(v) || 0)) : null);
+    Array.isArray(bootRef.current[0].radii) && bootRef.current[0].radii.length === 4
+      ? bootRef.current[0].radii.map(v => Math.max(0, Number(v) || 0)) : null);
   const [items, setItems] = useState(() => (Array.isArray(doc?.items) ? doc.items : []));
   const [sel, setSel] = useState(null);
   const [tool, setTool] = useState("select");
@@ -18629,12 +18671,65 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     coalesceRef.current = now;
     if (fresh) pushUndo(takeSnap());
   };
+  // The active board's live state, in the shape a stored board has. Written
+  // back whenever the list is needed — for saving, for switching, for anything
+  // that has to see all boards at once.
+  const liveBoard = () => ({
+    w: W, h: H, bg, radius: frameRadius,
+    radii: frameRadii || undefined, clip: frameClip, items,
+  });
+  const boardsNow = () => boards.map((b, k) => (k === active ? { ...b, ...liveBoard() } : b));
+  const loadBoard = (b) => {
+    setFrame({ w: b.w, h: b.h });
+    setBg(b.bg || palette[1] || "#FFFFFF");
+    setFrameRadius(Number(b.radius) || 0);
+    setFrameRadii(Array.isArray(b.radii) && b.radii.length === 4 ? b.radii : null);
+    setFrameClip(b.clip !== false);
+    setItems(Array.isArray(b.items) ? b.items : []);
+    // A selection belongs to the board it was made on. Carrying ids across is
+    // how a Delete on one board reaches into another — the whiteboard learned
+    // that the hard way and it is written down in CLAUDE.md.
+    setSel(null); setPick([]); setEnteredGroup(null); setEditing(null);
+  };
+  const switchBoard = (i) => {
+    if (i === active || !boards[i]) return;
+    const next = boardsNow();
+    setBoards(next);
+    setActive(i);
+    loadBoard(next[i]);
+  };
+  const addBoard = () => {
+    const list = boardsNow();
+    const b = {
+      id: crypto.randomUUID(), name: `Artboard ${list.length + 1}`,
+      x: nextBoardX(list), y: 0, w: W, h: H,
+      bg: palette[1] || "#FFFFFF", radius: 0, radii: undefined, clip: true, items: [],
+    };
+    markChange();
+    setBoards([...list, b]);
+    setActive(list.length);
+    loadBoard(b);
+  };
+  const removeBoard = (i) => {
+    if (boards.length < 2) return;
+    const list = boardsNow().filter((_, k) => k !== i);
+    markChange();
+    setBoards(list);
+    const nx = Math.max(0, Math.min(i, list.length - 1));
+    setActive(nx);
+    loadBoard(list[nx]);
+  };
+
+  // Undo and redo restore the whole document, boards and all — a step that put
+  // back one board's items while the list still held the old ones would leave
+  // the two disagreeing the moment anything was saved.
   const applyDoc = (d) => {
-    setBg(d.bg); setItems(d.items || []); setFrameRadius(d.radius || 0);
-    setFrameRadii(Array.isArray(d.radii) && d.radii.length === 4 ? d.radii : null);
-    setFrameClip(d.clip !== false);
+    const list = Array.isArray(d.boards) && d.boards.length ? d.boards : bootRef.current;
+    setBoards(list);
     setStageBg(d.stage || null);
-    setSel(null); setEditing(null);
+    const k = Math.max(0, Math.min(active, list.length - 1));
+    setActive(k);
+    loadBoard(list[k]);
   };
   const undo = () => {
     const h = histRef.current;
@@ -18662,9 +18757,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // document unchanged and does nothing — and it also means simply opening a
   // canvas never writes a row.
   const [saveState, setSaveState] = useState("");     // "" | "saving" | "saved"
-  const baselineRef = useRef(JSON.stringify({ bg: doc?.bg || null, items: doc?.items || [], radius: Number(doc?.radius) || 0, radii: Array.isArray(doc?.radii) ? doc.radii : undefined, clip: doc?.clip !== false, stage: doc?.stage || undefined, w: Number(doc?.w) || size[0], h: Number(doc?.h) || size[1] }));
-  const latestRef = useRef({ bg, items, radius: frameRadius, radii: frameRadii || undefined, clip: frameClip, stage: stageBg || undefined, w: W, h: H });
-  latestRef.current = { bg, items, radius: frameRadius, radii: frameRadii || undefined, clip: frameClip, stage: stageBg || undefined, w: W, h: H };
+  const baselineRef = useRef(JSON.stringify({ boards: bootRef.current, stage: doc?.stage || undefined }));
+  const latestRef = useRef({ boards: bootRef.current, stage: doc?.stage || undefined });
+  latestRef.current = { boards: boardsNow(), stage: stageBg || undefined };
   const saveTimer = useRef(null);
 
   const flush = async (payload) => {
@@ -18679,13 +18774,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   useEffect(() => {
     if (!onAutoSave) return;
-    const payload = { bg, items, radius: frameRadius, radii: frameRadii || undefined, clip: frameClip, stage: stageBg || undefined, w: W, h: H };
+    const payload = { boards: boardsNow(), stage: stageBg || undefined };
     if (JSON.stringify(payload) === baselineRef.current) return;
     setSaveState("saving");
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => flush(payload), 700);
     return () => clearTimeout(saveTimer.current);
-  }, [items, bg, frameRadius, frameRadii, frameClip, stageBg, W, H]);
+  }, [items, bg, frameRadius, frameRadii, frameClip, stageBg, boards, active, W, H]);
 
   // Closing must not drop the last few hundred milliseconds of work, so the
   // pending save is flushed on the way out.
@@ -18989,7 +19084,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     // would claim a scale nobody asked for.
     const raw = Math.min(aw / W, ah / H);
     const s = raw >= 1 ? 1 : raw * 0.92;
-    return { s, x: padL + (aw - W * s) / 2, y: padT + (ah - H * s) / 2 };
+    // Centred on the ACTIVE board, wherever it sits in the row — otherwise
+    // switching to the second one fits the first and leaves you looking at
+    // empty canvas beside it.
+    return { s, x: padL + (aw - W * s) / 2 - (board.x || 0) * s,
+      y: padT + (ah - H * s) / 2 - (board.y || 0) * s };
   };
 
   // The flight. The frame starts exactly over the picture that was clicked and
@@ -19182,7 +19281,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     return null;
   };
 
-  const toArt = (e) => (cam ? { x: (e.clientX - cam.x) / cam.s, y: (e.clientY - cam.y) / cam.s } : { x: 0, y: 0 });
+  // Everything inside a board is written in that board's own coordinates, so a
+  // pointer has to have the board's position taken off it. This is the only
+  // place the layout of the boards touches the drawing code at all.
+  const toArt = (e) => (cam
+    ? { x: (e.clientX - cam.x) / cam.s - (board.x || 0),
+        y: (e.clientY - cam.y) / cam.s - (board.y || 0) }
+    : { x: 0, y: 0 });
 
   const onStageDown = (e) => {
     // Only the primary button starts anything. A right-click fires pointerdown
@@ -20302,7 +20407,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         { type: "image/png" });
       const url = await onUpload(file);
       if (!url) throw new Error("upload");
-      onDone(url, { bg, items, radius: frameRadius, radii: frameRadii || undefined, clip: frameClip, stage: stageBg || undefined, w: W, h: H });
+      onDone(url, { boards: boardsNow(), stage: stageBg || undefined });
     } catch (e) {
       // A tainted canvas and a failed upload look identical to the user unless
       // they are told apart, and both end with nothing saved.
@@ -20550,6 +20655,28 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             ? `radial-gradient(${darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)"} 1px, transparent 1px)`
             : "none",
           backgroundSize: "22px 22px" }}>
+        {/* The other boards. Drawn, not run: they are a real picture of what
+            is on them, through the same component the Creations list uses, and
+            a click makes one active. Only the active board is interactive —
+            two live editors on one screen would need every drag, every
+            shortcut and every selection to know which board it belongs to. */}
+        {cam && boards.map((b, i) => (i === active ? null : (
+          <div key={b.id} onPointerDown={(e) => { e.stopPropagation(); switchBoard(i); }}
+            style={{ position: "absolute", left: 0, top: 0, width: b.w, height: b.h,
+              transformOrigin: "0 0", cursor: "pointer",
+              transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s}) translate(${b.x || 0}px, ${b.y || 0}px)`,
+              transition: flying ? "transform 620ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
+              boxShadow: "0 18px 60px rgba(0,0,0,0.28)",
+              borderRadius: `${Math.max(0, Number(b.radius) || 0)}px` }}>
+            <CanvasThumb doc={b} theme={theme} />
+            <div style={{ position: "absolute", left: 0, bottom: "100%",
+              marginBottom: 8 / cam.s, fontFamily: FONT, fontSize: 12 / cam.s,
+              color: theme.textDim, whiteSpace: "nowrap", pointerEvents: "none" }}>
+              {b.name}
+            </div>
+          </div>
+        )))}
+
         {cam && (
           <div style={{ position: "absolute", left: 0, top: 0, width: W, height: H,
             ...(bg === "transparent"
@@ -20558,7 +20685,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   backgroundSize: "18px 18px" }
               : { background: paintCss(bg, 100) }),
             transformOrigin: "0 0",
-            transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`,
+            // The board's place in the row goes INSIDE the camera transform, so
+            // it scales with the zoom. As left/top it would be screen pixels
+            // applied before the camera, and the boards would drift apart as you
+            // zoomed out.
+            transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s}) translate(${board.x || 0}px, ${board.y || 0}px)`,
             transition: flying ? "transform 620ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
             // Selected frames say so. Without this the sidebar changed and
             // nothing on the canvas did, which reads as nothing having happened.
@@ -20570,6 +20701,38 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             outline: sel === "frame" ? `${Math.max(1, 2 / cam.s)}px solid #15151c` : "none",
             outlineOffset: 0,
             boxShadow: "0 18px 60px rgba(0,0,0,0.28)" }}>
+            {/* The board's name above it, and the plus that adds the next one.
+                Both are held at a constant SCREEN size, like the handles: a
+                label that grows with the zoom stops being a label. */}
+            {(() => {
+              const k = 1 / cam.s;
+              return (<>
+                <div style={{ position: "absolute", left: 0, bottom: "100%", marginBottom: 8 * k,
+                  display: "flex", alignItems: "center", gap: 8 * k }}>
+                  <span style={{ fontFamily: FONT, fontSize: 12 * k, fontWeight: 600,
+                    color: theme.text, whiteSpace: "nowrap" }}>
+                    {board.name}
+                  </span>
+                  {boards.length > 1 && (
+                    <span onPointerDown={(e) => { e.stopPropagation(); removeBoard(active); }}
+                      title={de ? "Artboard entfernen" : "Remove artboard"}
+                      style={{ fontFamily: FONT, fontSize: 12 * k, color: theme.textFaint,
+                        cursor: "pointer" }}>✕</span>
+                  )}
+                </div>
+                <div onPointerDown={(e) => { e.stopPropagation(); addBoard(); }}
+                  title={de ? "Artboard hinzufügen" : "Add artboard"}
+                  style={{ position: "absolute", left: "100%", bottom: "100%",
+                    marginLeft: 10 * k, marginBottom: 8 * k,
+                    width: 22 * k, height: 22 * k, borderRadius: 7 * k,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    cursor: "pointer", background: "#15151c", color: "#fff",
+                    fontFamily: FONT, fontSize: 15 * k, lineHeight: 1 }}>
+                    +
+                </div>
+              </>);
+            })()}
+
             {marquee && (
               <div style={{ position: "absolute", left: marquee.x, top: marquee.y,
                 width: marquee.w, height: marquee.h, pointerEvents: "none",
@@ -25137,8 +25300,9 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   // A canvas is any shape; the tile it sits in is not. Fitting is a choice of
   // which side touches the edge, and the aspect decides it.
   const fitStyle = (r) => {
-    const w = Number(r?.doc?.w) || Number(r?.w) || 1;
-    const h = Number(r?.doc?.h) || Number(r?.h) || 1;
+    const b = (Array.isArray(r?.doc?.boards) && r.doc.boards[0]) || r?.doc || null;
+    const w = Number(b?.w) || Number(r?.w) || 1;
+    const h = Number(b?.h) || Number(r?.h) || 1;
     return w / h >= 4 / 3 ? { width: "100%", height: "auto" } : { height: "100%", width: "auto" };
   };
   const [kind, setKind] = useState("social");
