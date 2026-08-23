@@ -124,7 +124,12 @@ async function scfetch(path, query, fresh) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data?.success === false) {
-    const msg = data?.error || data?.message || `SocialCrawl ${res.status}`;
+    // SocialCrawl puts its error in an OBJECT ({type, message, status}), so a
+    // plain string concat turned every failure into "[object Object]" — which
+    // is how a wrong URL form stayed invisible for two rounds.
+    const e = data?.error;
+    const msg = (e && typeof e === "object" ? e.message || e.type : e)
+      || data?.message || `SocialCrawl ${res.status}`;
     throw new HttpError(res.status === 200 ? 502 : res.status, msg, "socialcrawl_error");
   }
   return data;
@@ -279,6 +284,15 @@ export default async function handler(req, res) {
       // with no author — and the UI then shows a list of "Unknown" that looks
       // like a bug instead of an unset variable.
       const scReady = !!process.env.SOCIALCRAWL_API_KEY;
+      // Zernio's permalink carries `urn:li:share:…`; SocialCrawl answers 502 on
+      // that and wants `urn:li:activity:…`, which is a DIFFERENT number, not the
+      // same one relabelled. The activity id is inside the comment ids Zernio
+      // returns, so the thread has to be fetched first and the URL built from
+      // what it says. Verified against the live API: share → 502, activity → 200.
+      const activityUrl = (thread) => {
+        const hit = JSON.stringify(thread || {}).match(/urn:li:activity:\d+/);
+        return hit ? `https://www.linkedin.com/feed/update/${hit[0]}` : null;
+      };
       // On LinkedIn the thread comes from SocialCrawl instead. Zernio returns
       // the comments but not who wrote them — the author object arrives without
       // a name, which is why every row read "Unknown". The public post page has
@@ -286,36 +300,40 @@ export default async function handler(req, res) {
       // post with a permalink that is the better source; everywhere else Zernio
       // stays, because it needs no second vendor and costs no credit.
       const threads = await Promise.all(posts.map(async (p) => {
-        if (p.platform === "linkedin" && p.permalink && process.env.SOCIALCRAWL_API_KEY) {
-          const sc = await scSoft("/linkedin/post/comments", { url: p.permalink });
-          const items = sc?.data?.items;
-          if (Array.isArray(items) && items.length) {
-            // Folded into the shape the rest of this already speaks, so the UI
-            // does not need to know which vendor a comment came from.
-            const conv = (n) => {
-              const c = n?.comment || n || {};
-              const a = c.author || {};
-              return {
-                id: c.id || c.url || Math.random().toString(36).slice(2),
-                message: c.text || c.message || "",
-                createdTime: c.published_at || c.createdTime || null,
-                url: c.url || null,
-                platform: "linkedin",
-                likeCount: c.engagement?.likes ?? 0,
-                replyCount: c.engagement?.replies ?? 0,
-                from: {
-                  name: a.display_name || a.username || null,
-                  username: a.username || null,
-                  picture: a.avatar_url || null,
-                  verified: a.verified ?? null,
-                },
-                replies: Array.isArray(c.replies) ? c.replies.map(conv) : [],
-              };
-            };
-            return { comments: items.map(conv) };
-          }
-        }
-        return zfetchSoft(`/inbox/comments/${encodeURIComponent(p.id)}?accountId=${encodeURIComponent(p.accountId || "")}`);
+        const zern = await zfetchSoft(
+          `/inbox/comments/${encodeURIComponent(p.id)}?accountId=${encodeURIComponent(p.accountId || "")}`);
+        if (p.platform !== "linkedin" || !scReady) return zern;
+        // LinkedIn comments come back from Zernio without a name on the author —
+        // only a person URN — which is why every row read "Unknown". The public
+        // post page has the display name, the picture and the headline.
+        const url = activityUrl(zern);
+        if (!url) return zern;
+        const sc = await scSoft("/linkedin/post/comments", { url });
+        const items = sc?.data?.items;
+        if (!Array.isArray(items) || !items.length) return zern;
+        const conv = (n) => {
+          const c = n?.comment || n || {};
+          const a = c.author || c.user || {};
+          return {
+            id: c.id || c.url || `${Math.random()}`,
+            message: c.text || c.message || "",
+            createdTime: c.published_at || c.createdTime || null,
+            url: c.url || null,
+            platform: "linkedin",
+            likeCount: c.engagement?.likes ?? c.likes ?? 0,
+            replyCount: c.engagement?.replies ?? 0,
+            from: {
+              name: a.display_name || a.name || a.username || null,
+              username: a.username || null,
+              picture: a.avatar_url || a.picture || null,
+              headline: a.description || a.headline || null,
+              url: a.url || null,
+              verified: a.verified ?? null,
+            },
+            replies: Array.isArray(c.replies) ? c.replies.map(conv) : [],
+          };
+        };
+        return { comments: items.map(conv) };
       }));
       const flat = [];
       posts.forEach((p, i) => {
@@ -395,9 +413,19 @@ export default async function handler(req, res) {
         throw new HttpError(400, "A LinkedIn post URL is required", "invalid_url");
       }
       const data = await scfetch("/linkedin/post/reactions", { url }, !!body.fresh);
-      const items = data?.data?.items;
+      // Shape confirmed against the live API rather than the spec, which types
+      // these only as "search result item": { reaction_type, user: { name,
+      // description, url, … } }. The person is nested, so a reader looking for
+      // a name at the top level finds nothing and shows an empty list.
+      const items = (data?.data?.items || []).map(x => ({
+        reaction: x.reaction_type || null,
+        name: x.user?.name || x.name || null,
+        headline: x.user?.description || x.description || null,
+        url: x.user?.url || x.url || null,
+        avatar: x.user?.avatar_url || x.avatar_url || null,
+      })).filter(x => x.name);
       return res.status(200).json({
-        reactors: Array.isArray(items) ? items.slice(0, 50) : [],
+        reactors: items.slice(0, 50),
         total: data?.data?.total ?? null,
         credits: { used: data?.credits_used ?? null, remaining: data?.credits_remaining ?? null },
       });

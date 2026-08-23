@@ -24966,6 +24966,12 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
                     fontSize: 11, color: theme.textFaint, alignItems: "baseline" }}>
                     {/* LinkedIn only: this is the platform whose public profiles
                         SocialCrawl can read by handle. */}
+                    {/* SocialCrawl already sends the headline with the comment,
+                        so the row can say who this is without a second call. */}
+                    {from.headline && (
+                      <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis",
+                        whiteSpace: "nowrap" }}>{from.headline}</span>
+                    )}
                     {c.platform === "linkedin" && from.username && !people[from.username] && (
                       <span onClick={() => whoIs(from.username)}
                         style={{ cursor: "pointer", color: theme.textDim }}>
@@ -25327,11 +25333,10 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
                         // The item shape is not pinned down upstream, so every
                         // field is read defensively and a row that yields no
                         // name is left out rather than shown as a blank.
+                        // Normalised server-side against the live shape, so
+                        // this only renders.
                         const people = (r.list || []).map(x => ({
-                          name: x.display_name || x.name || x.full_name || x.username || null,
-                          sub: x.bio || x.headline || x.subtitle || x.occupation || null,
-                          avatar: x.avatar_url || x.picture || x.profile_picture || null,
-                          url: x.url || x.profile_url || null,
+                          name: x.name, sub: x.headline, avatar: x.avatar, url: x.url,
                         })).filter(x => x.name);
                         if (!people.length) return (
                           <div style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint,
