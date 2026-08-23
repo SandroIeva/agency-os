@@ -24238,9 +24238,15 @@ const plainField = (v, de = true) => {
       return null;
     }
     // An address, a place, a company — whatever names itself, in the order it
-    // would be written.
+    // would be written. The same word can arrive in several of these fields
+    // (LinkedIn returns Hamburg as both city and region), so a repeat is
+    // dropped rather than printed twice.
+    const seen = new Set();
     const parts = [v.name, v.line1, v.line2, v.postal_code, v.city, v.region,
-      v.state, v.country, v.year].filter(x => x != null && x !== "");
+      v.state, v.country, v.year]
+      .filter(x => x != null && x !== "")
+      .map(String)
+      .filter(x => { const k = x.trim().toLowerCase(); return seen.has(k) ? false : seen.add(k); });
     return parts.length ? parts.join(", ") : null;
   }
   return String(v);
@@ -24955,9 +24961,15 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
             // once.
             const pKey = from.url || label;
             const who = pKey ? people[pKey] : null;
-            // LinkedIn sends no picture with a comment. Once the profile has
-            // been fetched it has one, and the row uses it.
-            const avatar = from.picture || from.avatar_url || who?.data?.avatar_url || null;
+            // LinkedIn sends no picture with a comment, so the row's face can
+            // only come from the profile behind it — and that profile does not
+            // always carry one either. Checked on the live API: a reaction's
+            // person object has no image field at all (id, urn, url, name,
+            // description), and this profile's avatar_url came back empty,
+            // while the company logo does load. So the initial is the normal
+            // case here, not a failure, and any of these that does arrive wins.
+            const avatar = from.picture || from.avatar_url
+              || who?.data?.avatar_url || who?.data?.ext?.avatar_url || null;
             return (
               <div key={c.id + i} style={{ display: "flex", gap: 12, padding: "12px 0",
                 borderBottom: i < Math.min(shown, list.length) - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
