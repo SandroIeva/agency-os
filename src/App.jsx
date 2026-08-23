@@ -24525,6 +24525,140 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }
 // promise the tab cannot keep.
 const COMMENT_PLATFORMS = ["linkedin", "instagram", "facebook", "threads", "youtube", "twitter"];
 
+// ── Benchmark ────────────────────────────────────────────────────────────────
+// Zernio reads the accounts this workspace owns. SocialCrawl reads anyone's
+// public page — which is the only way to answer "how do we compare". Same
+// unified shape across platforms, so one card renders all of them.
+//
+// Every lookup costs a credit upstream, so it happens when asked for and the
+// result stays on screen rather than refetching on every render.
+const BENCH_PLATFORMS = [
+  ["linkedin", "LinkedIn", "linkedin.com/company/…"],
+  ["linkedinperson", de => (de ? "LinkedIn (Person)" : "LinkedIn (person)"), "linkedin.com/in/…"],
+  ["instagram", "Instagram", "@handle"],
+  ["tiktok", "TikTok", "@handle"],
+  ["youtube", "YouTube", "@handle"],
+  ["threads", "Threads", "@handle"],
+  ["twitter", "X", "@handle"],
+  ["facebook", "Facebook", "facebook.com/…"],
+];
+
+function SocialBenchmarkPanel({ theme, darkMode, de, session, orgId, card, secLabel, ownFollowers }) {
+  const [platform, setPlatform] = useState("linkedin");
+  const [handle, setHandle] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [rows, setRows] = useState([]);      // looked up profiles, newest first
+
+  const look = async () => {
+    const h = handle.trim();
+    if (!h || busy) return;
+    setBusy(true); setError(null);
+    try {
+      const r = await zernioRequest(session, { mode: "lookup", orgId, platform, handle: h });
+      if (r.profile) {
+        setRows(list => [{ ...r.profile, __platform: platform, __credits: r.credits },
+          ...list.filter(x => x.url !== r.profile.url)].slice(0, 6));
+        setHandle("");
+      } else setError({ message: de ? "Kein Profil gefunden." : "No profile found." });
+    } catch (e) { setError(e); }
+    setBusy(false);
+  };
+
+  const label = (v) => (typeof v === "function" ? v(de) : v);
+  const spec = BENCH_PLATFORMS.find(([k]) => k === platform);
+  const field = { height: 36, borderRadius: 10, border: `1px solid ${theme.borderFaint}`,
+    background: darkMode ? "rgba(255,255,255,0.04)" : "#fff", color: theme.text,
+    fontFamily: FONT, fontSize: 13, padding: "0 12px", outline: "none" };
+
+  return (
+    <div style={card}>
+      <div style={secLabel}>{de ? "Benchmark" : "Benchmark"}</div>
+      <div style={{ fontFamily: FONT, fontSize: 12, color: theme.textDim, lineHeight: 1.55,
+        marginBottom: 12 }}>
+        {de ? "Öffentliche Profile nachschlagen — auch die, die hier niemand verbunden hat."
+            : "Look up public profiles — including ones nobody connected here."}
+      </div>
+
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+        {BENCH_PLATFORMS.map(([k, l]) => (
+          <div key={k} onClick={() => setPlatform(k)}
+            style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", fontFamily: FONT,
+              fontSize: 12, fontWeight: platform === k ? 600 : 500,
+              color: platform === k ? "#fff" : theme.textDim,
+              background: platform === k ? "#15151c"
+                : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)") }}>
+            {label(l)}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 8 }}>
+        <input value={handle} onChange={e => setHandle(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") look(); }}
+          placeholder={spec ? spec[2] : ""}
+          style={{ ...field, flex: 1, minWidth: 0 }} />
+        <div onClick={look}
+          style={{ height: 36, padding: "0 18px", borderRadius: 10, display: "flex",
+            alignItems: "center", cursor: busy ? "default" : "pointer", background: "#15151c",
+            color: "#fff", fontFamily: FONT, fontSize: 12.5, fontWeight: 600, opacity: busy ? 0.6 : 1 }}>
+          {busy ? (de ? "Sucht…" : "Looking…") : (de ? "Nachschlagen" : "Look up")}
+        </div>
+      </div>
+
+      {error && (
+        <div style={{ marginTop: 10, fontFamily: FONT, fontSize: 12.5, color: theme.textDim,
+          lineHeight: 1.55 }}>
+          {error.code === "socialcrawl_not_configured"
+            ? (de ? "SocialCrawl ist noch nicht konfiguriert — SOCIALCRAWL_API_KEY als Env-Var hinterlegen."
+                  : "SocialCrawl is not configured yet — set the SOCIALCRAWL_API_KEY env var.")
+            : zernioErrorText(error, de)}
+        </div>
+      )}
+
+      {rows.map((p, i) => {
+        const diff = ownFollowers && p.followers
+          ? Math.round((p.followers / ownFollowers - 1) * 100) : null;
+        return (
+          <div key={(p.url || p.username || "") + i}
+            style={{ display: "flex", gap: 12, alignItems: "center", padding: "14px 0",
+              borderTop: `1px solid ${theme.borderFaint}`, marginTop: i ? 0 : 14 }}>
+            <div style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
+              background: p.avatar_url ? `center/cover no-repeat url(${p.avatar_url})` : "#15151c" }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: FONT, fontSize: 13.5, fontWeight: 600, color: theme.text,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {p.display_name || p.username || "—"}
+              </div>
+              <div style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textDim, marginTop: 2,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {[p.username && `@${p.username}`, p.location, p.bio].filter(Boolean).join(" · ")}
+              </div>
+            </div>
+            <div style={{ textAlign: "right", flexShrink: 0 }}>
+              <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: theme.text }}>
+                {fmtMetric(p.followers || 0, de)}
+              </div>
+              {/* The comparison is the point of looking someone up. Without your
+                  own number there is nothing to compare to, so it stays away. */}
+              <div style={{ fontFamily: FONT, fontSize: 11, color: theme.textDim }}>
+                {diff == null ? (de ? "Follower" : "followers")
+                  : `${diff > 0 ? "+" : ""}${diff} % ${de ? "ggü. euch" : "vs you"}`}
+              </div>
+            </div>
+            {p.url && (
+              <a href={p.url} target="_blank" rel="noreferrer"
+                style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textFaint, flexShrink: 0 }}>
+                {de ? "Öffnen" : "Open"}
+              </a>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, card, secLabel }) {
   const [recent, setRecent] = useState(null);   // null = loading
   const [error, setError] = useState(null);
@@ -24965,10 +25099,17 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
           {/* Under the ranking, because it belongs to the same question: the
               numbers above say how a post travelled, this says what it
               produced. Its own tab put it beside Website, where it is not. */}
-          <div style={{ marginTop: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) minmax(0, 1fr)",
+            gap: 14, alignItems: "start", marginTop: 14 }}>
             <SocialCommentsPanel theme={theme} darkMode={darkMode} de={de}
               session={session} orgId={orgId} platform={platform}
               card={card} secLabel={secLabel} />
+            {/* Beside the comments, in the column the connected accounts use
+                above: both answer "who else is out there", one from the people
+                already talking to you and one from everybody else. */}
+            <SocialBenchmarkPanel theme={theme} darkMode={darkMode} de={de}
+              session={session} orgId={orgId} card={card} secLabel={secLabel}
+              ownFollowers={followersOk ? followerTotal : null} />
           </div>
         </>
       )}

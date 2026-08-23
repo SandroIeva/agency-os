@@ -1,10 +1,23 @@
-# Zernio-Integration (Social Media: Analytics + Posting)
+# Social-Integrationen (Zernio: Analytics + Posting · SocialCrawl: Benchmark)
 
 Stand: 2026-07-19 · Zernio-Doku: https://docs.zernio.com · OpenAPI: https://docs.zernio.com/api/openapi
 
 Zernio ist eine Unified-Social-API (LinkedIn, Instagram, Threads, X/Twitter, Pinterest u. v. m.).
 i7OS nutzt sie für **Audience → Analytics** (Performance-Dashboard) und **Erstellen →
 Social Media Post** (Veröffentlichen/Planen/Entwürfe).
+
+## Zwei Anbieter, zwei Fragen
+
+**Zernio** liest die Accounts, die dieser Workspace **besitzt** — verbunden per
+OAuth: eigene Analytics, eigene Kommentare, eigenes Posting. **SocialCrawl**
+(https://www.socialcrawl.dev) liest **öffentliche** Profile beliebiger Accounts,
+über 50 Plattformen in einem einheitlichen Schema. Das ist der einzige Weg zu
+„wie stehen wir im Vergleich" — Zernio kann darüber nichts sagen, weil ihm
+fremde Accounts nicht gehören.
+
+Beide hängen in **derselben** Function `api/zernio.js`. Nicht aus Ordnungsliebe,
+sondern wegen des Budgets: Vercel Hobby erlaubt 12 Node-Functions, wir stehen
+bei 11, und eine eigene Datei für einen Proxy hätte den letzten Platz verbraucht.
 
 ## Architektur
 
@@ -33,6 +46,7 @@ Browser ──POST /api/zernio (Supabase-Bearer + mode)──▶ api/zernio.js �
 | Variable | Wo | Zweck |
 |---|---|---|
 | `ZERNIO_API_KEY` | Vercel (alle Environments) + `.env.local` | Bearer-Key (`sk_…`) für alle Zernio-Aufrufe |
+| `SOCIALCRAWL_API_KEY` | Vercel (alle Environments) + `.env.local` | `x-api-key` (`sc_…`) für SocialCrawl. Fehlt er, antwortet nur der `lookup`-Modus mit `503 { code: "socialcrawl_not_configured" }` |
 
 Ohne Key antworten alle Modi mit `503 { code: "zernio_not_configured" }`; die UI
 zeigt einen entsprechenden Hinweis.
@@ -49,6 +63,7 @@ Body `{ mode, orgId, … }`.
 | `disconnect` | `accountId` | `{ ok }` | admin-only, `DELETE /v1/accounts/{id}` |
 | `analytics` | `platform?` | `{ top, followers, daily }` | 3 parallele Zernio-Calls; Teile, die das **Zernio Analytics-Add-on** brauchen (402/403), kommen als `{ __unavailable, status }` zurück statt zu failen |
 | `comments` | `platform?`, `recent?` **oder** `postId` + `accountId` | `{ list }`, `{ list, recent }` bzw. `{ thread }` | Ohne `postId`: `GET /v1/inbox/comments?minComments=1&limit=25` — die Beiträge, unter denen etwas steht. Mit `recent: true` holt die Function zusätzlich die Verläufe der 6 neuesten Beiträge parallel, flacht sie samt Antworten ab und sortiert nach Datum: **`recent[]` = die letzten Kommentare**, was Zernio selbst nicht anbietet (dort ist es eine Liste von Posts plus ein Call je Post). Mit `postId`: `GET /v1/inbox/comments/{postId}?accountId=…` — nur dieser Verlauf. Alles soft-gefetcht wie `analytics`, weil Kommentare auf manchen Plänen am selben Add-on hängen |
+| `lookup` | `platform`, `handle` | `{ profile, credits, cached }` | **SocialCrawl**, nicht Zernio: das öffentliche Profil eines beliebigen Accounts (`GET /v1/{platform}/profile`), für den Benchmark im Analytics-View. Plan-pflichtig (`requirePaidSocial`), weil jeder Aufruf upstream einen Credit kostet. LinkedIn und Facebook nehmen eine **URL**, der Rest einen Handle; Pinterest fehlt, weil SocialCrawl dort kein Profil-Endpoint hat |
 | `presign` | `filename, contentType, size` | `{ uploadUrl, publicUrl }` | Client PUTtet die Datei direkt zu Zernio-Storage (Bytes laufen nie durch unsere Function) |
 | `post` | `content?, platforms:[{platform, accountId}], mediaItems?, scheduledFor?, timezone?, isDraft?` | `{ id, status, platforms:[{platform, status, url, error}] }` | `publishNow` wenn kein `scheduledFor`; `x-request-id` (UUID) für Zernio-Idempotenz; Zernio dedupt identische Inhalte 24 h (409) |
 

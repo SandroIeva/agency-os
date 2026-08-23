@@ -12,6 +12,11 @@
 //   "disconnect" → { accountId } → remove a connected account (admin only)
 //   "analytics"  → { platform? } → overview + top posts + follower stats + daily series
 //   "comments"   → { platform? } → posts that have comments; with { postId, accountId } the thread
+//   "lookup"     → { platform, handle } → a PUBLIC profile via SocialCrawl (any
+//                  account, not just connected ones) — for benchmarking against
+//                  competitors. Second vendor in this file on purpose: Vercel
+//                  Hobby caps Node functions at 12 and we sit at 11, so a file
+//                  of its own would spend the last slot on a proxy.
 //   "presign"    → { filename, contentType, size } → direct-upload URL for post media
 //   "post"       → { content, platforms, mediaItems?, scheduledFor?, timezone?, isDraft? }
 //
@@ -76,6 +81,46 @@ async function zfetch(path, { method = "GET", body, headers = {} } = {}) {
     const err = new HttpError(res.status, msg, "zernio_error");
     err.upstream = data;
     throw err;
+  }
+  return data;
+}
+
+// ── SocialCrawl — public profiles of accounts nobody connected ──────────────
+// A different vendor with a different job: Zernio reads the accounts this
+// workspace OWNS, SocialCrawl reads anyone's public page. That is what makes a
+// benchmark possible. https://www.socialcrawl.dev · one unified schema across
+// platforms, auth by x-api-key, billed per call in credits.
+const SC_BASE = "https://www.socialcrawl.dev/v1";
+// Where each platform's profile lives, and what it wants to be told. LinkedIn
+// is the odd one: it takes a full URL rather than a handle, and a company page
+// is a different endpoint from a person.
+const SC_PROFILE = {
+  linkedin: { path: "/linkedin/company", by: "url",
+    url: (h) => (/^https?:/i.test(h) ? h : `https://www.linkedin.com/company/${encodeURIComponent(h)}`) },
+  linkedinperson: { path: "/linkedin/profile", by: "url",
+    url: (h) => (/^https?:/i.test(h) ? h : `https://www.linkedin.com/in/${encodeURIComponent(h)}`) },
+  instagram: { path: "/instagram/profile", by: "handle" },
+  tiktok: { path: "/tiktok/profile", by: "handle" },
+  youtube: { path: "/youtube/channel", by: "handle" },
+  threads: { path: "/threads/profile", by: "handle" },
+  twitter: { path: "/twitter/profile", by: "handle" },
+  // Facebook wants a URL like LinkedIn does. Pinterest is absent on purpose:
+  // SocialCrawl has boards, pins and search there, but no profile endpoint, and
+  // a mapping that 404s is worse than an honestly missing option.
+  facebook: { path: "/facebook/profile", by: "url",
+    url: (h) => (/^https?:/i.test(h) ? h : `https://www.facebook.com/${encodeURIComponent(h)}`) },
+};
+async function scfetch(path, query) {
+  const key = process.env.SOCIALCRAWL_API_KEY;
+  if (!key) throw new HttpError(503, "SOCIALCRAWL_API_KEY is not configured", "socialcrawl_not_configured");
+  const qs = new URLSearchParams(query).toString();
+  const res = await fetch(`${SC_BASE}${path}?${qs}`, {
+    headers: { "x-api-key": key, accept: "application/json" },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.success === false) {
+    const msg = data?.error || data?.message || `SocialCrawl ${res.status}`;
+    throw new HttpError(res.status === 200 ? 502 : res.status, msg, "socialcrawl_error");
   }
   return data;
 }
@@ -237,6 +282,28 @@ export default async function handler(req, res) {
       });
       flat.sort((a, b) => String(b.createdTime || "").localeCompare(String(a.createdTime || "")));
       return res.status(200).json({ list, recent: flat.slice(0, 40) });
+    }
+
+    // ── lookup — a public profile, for holding your numbers against someone
+    //    else's. Behind a plan, and that is the rule rather than a judgement:
+    //    every call costs a credit upstream, and what costs us per use is what
+    //    gets gated (docs/pricing — free stays for what is free to run).
+    if (mode === "lookup") {
+      await requireOrgMember(user.id, orgId);
+      await requirePaidSocial(orgId);
+      const platform = String(body.platform || "").toLowerCase();
+      const spec = SC_PROFILE[platform];
+      if (!spec) throw new HttpError(400, "Unsupported platform", "invalid_platform");
+      const handle = String(body.handle || "").trim().replace(/^@/, "");
+      if (!handle || handle.length > 200) throw new HttpError(400, "handle required", "invalid_handle");
+
+      const q = spec.by === "url" ? { url: spec.url(handle) } : { handle };
+      const data = await scfetch(spec.path, q);
+      return res.status(200).json({
+        profile: data?.data || null,
+        credits: { used: data?.credits_used ?? null, remaining: data?.credits_remaining ?? null },
+        cached: !!data?.cached,
+      });
     }
 
     // ── presign — direct-upload URL for post media (client PUTs the file itself,
