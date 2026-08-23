@@ -24876,22 +24876,29 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
             : "Nothing has been said under the recent posts yet.")
         : (<>
           {list.slice(0, shown).map((c, i) => {
-            const from = c.from || {};
-            const initial = (from.name || from.username || "?").trim()[0]?.toUpperCase() || "?";
+            // Read from whatever the vendor called it. A row that says
+            // "Unknown" is a row that had a name somewhere and lost it to a
+            // field name.
+            const from = c.from || c.author || c.user || {};
+            const label = from.name || from.display_name || from.username
+              || from.full_name || null;
+            const initial = (label || "?").trim()[0]?.toUpperCase() || "?";
             return (
               <div key={c.id + i} style={{ display: "flex", gap: 12, padding: "12px 0",
                 borderBottom: i < Math.min(shown, list.length) - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
                 <div style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0,
                   overflow: "hidden", color: "#fff", display: "flex", alignItems: "center",
                   justifyContent: "center", fontFamily: FONT, fontSize: 12, fontWeight: 600,
-                  background: from.picture ? `center/cover no-repeat url(${from.picture})` : "#15151c" }}>
-                  {from.picture ? "" : initial}
+                  background: (from.picture || from.avatar_url)
+                    ? `center/cover no-repeat url(${from.picture || from.avatar_url})` : "#15151c" }}>
+                  {(from.picture || from.avatar_url) ? "" : initial}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
                     <span style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: theme.text }}>
-                      {from.name || from.username || (de ? "Unbekannt" : "Unknown")}
+                      {label || (de ? "Unbekannt" : "Unknown")}
                     </span>
+                    {from.verified && <span style={{ fontSize: 10, color: theme.textDim }}>✓</span>}
                     {from.isOwner && (
                       <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600,
                         color: theme.textDim, border: `1px solid ${theme.borderFaint}`,

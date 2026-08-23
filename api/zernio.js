@@ -274,8 +274,44 @@ export default async function handler(req, res) {
       // seven, and the fan-out is capped — the newest handful of posts is where
       // the newest comments are.
       const posts = Array.isArray(list?.data) ? list.data.slice(0, 6) : [];
-      const threads = await Promise.all(posts.map(p =>
-        zfetchSoft(`/inbox/comments/${encodeURIComponent(p.id)}?accountId=${encodeURIComponent(p.accountId || "")}`)));
+      // On LinkedIn the thread comes from SocialCrawl instead. Zernio returns
+      // the comments but not who wrote them — the author object arrives without
+      // a name, which is why every row read "Unknown". The public post page has
+      // the display name, the picture and the verified flag, so for a LinkedIn
+      // post with a permalink that is the better source; everywhere else Zernio
+      // stays, because it needs no second vendor and costs no credit.
+      const threads = await Promise.all(posts.map(async (p) => {
+        if (p.platform === "linkedin" && p.permalink && process.env.SOCIALCRAWL_API_KEY) {
+          const sc = await scSoft("/linkedin/post/comments", { url: p.permalink });
+          const items = sc?.data?.items;
+          if (Array.isArray(items) && items.length) {
+            // Folded into the shape the rest of this already speaks, so the UI
+            // does not need to know which vendor a comment came from.
+            const conv = (n) => {
+              const c = n?.comment || n || {};
+              const a = c.author || {};
+              return {
+                id: c.id || c.url || Math.random().toString(36).slice(2),
+                message: c.text || c.message || "",
+                createdTime: c.published_at || c.createdTime || null,
+                url: c.url || null,
+                platform: "linkedin",
+                likeCount: c.engagement?.likes ?? 0,
+                replyCount: c.engagement?.replies ?? 0,
+                from: {
+                  name: a.display_name || a.username || null,
+                  username: a.username || null,
+                  picture: a.avatar_url || null,
+                  verified: a.verified ?? null,
+                },
+                replies: Array.isArray(c.replies) ? c.replies.map(conv) : [],
+              };
+            };
+            return { comments: items.map(conv) };
+          }
+        }
+        return zfetchSoft(`/inbox/comments/${encodeURIComponent(p.id)}?accountId=${encodeURIComponent(p.accountId || "")}`);
+      }));
       const flat = [];
       posts.forEach((p, i) => {
         const t = threads[i];
