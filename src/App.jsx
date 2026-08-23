@@ -24226,6 +24226,21 @@ const fmtMetric = (n, de = true) => {
 // straight into JSX is not a wrong label, it is a blank page (React error #31,
 // which is exactly how the size band announced itself). So nothing from a
 // vendor reaches a text node without passing through here.
+// A list already written out as one string — "Hamburg, Hamburg, Germany,
+// Germany" is what LinkedIn actually returns for a place — with the repeats
+// taken out. Only applied when every part is short and there are few of them,
+// which is the shape of a place or a list of tags; prose is left alone, since
+// a sentence may repeat a clause on purpose.
+const dedupeCsv = (str) => {
+  const parts = str.split(",").map(x => x.trim()).filter(Boolean);
+  if (parts.length < 2 || parts.length > 8 || parts.some(x => x.length > 40)) return str;
+  const seen = new Set();
+  const kept = parts.filter(x => {
+    const k = x.toLowerCase();
+    return seen.has(k) ? false : seen.add(k);
+  });
+  return kept.length === parts.length ? str : kept.join(", ");
+};
 const plainField = (v, de = true) => {
   if (v == null || v === "") return null;
   if (Array.isArray(v)) return v.map(x => plainField(x, de)).filter(Boolean).join(", ") || null;
@@ -24247,9 +24262,9 @@ const plainField = (v, de = true) => {
       .filter(x => x != null && x !== "")
       .map(String)
       .filter(x => { const k = x.trim().toLowerCase(); return seen.has(k) ? false : seen.add(k); });
-    return parts.length ? parts.join(", ") : null;
+    return parts.length ? dedupeCsv(parts.join(", ")) : null;
   }
-  return String(v);
+  return dedupeCsv(String(v));
 };
 
 // Website Presence — what a crawler and an AI agent find when they arrive.
