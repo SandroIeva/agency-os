@@ -293,12 +293,6 @@ export default async function handler(req, res) {
         const hit = JSON.stringify(thread || {}).match(/urn:li:activity:\d+/);
         return hit ? `https://www.linkedin.com/feed/update/${hit[0]}` : null;
       };
-      // On LinkedIn the thread comes from SocialCrawl instead. Zernio returns
-      // the comments but not who wrote them — the author object arrives without
-      // a name, which is why every row read "Unknown". The public post page has
-      // the display name, the picture and the verified flag, so for a LinkedIn
-      // post with a permalink that is the better source; everywhere else Zernio
-      // stays, because it needs no second vendor and costs no credit.
       const threads = await Promise.all(posts.map(async (p) => {
         const zern = await zfetchSoft(
           `/inbox/comments/${encodeURIComponent(p.id)}?accountId=${encodeURIComponent(p.accountId || "")}`);
