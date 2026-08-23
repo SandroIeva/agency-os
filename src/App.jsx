@@ -24525,205 +24525,113 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }
 // promise the tab cannot keep.
 const COMMENT_PLATFORMS = ["linkedin", "instagram", "facebook", "threads", "youtube", "twitter"];
 
-function SocialCommentsPanel({ theme, darkMode, de, session, orgId, accounts }) {
-  const connected = [...new Set((accounts || []).map(a => a.platform))]
-    .filter(p => COMMENT_PLATFORMS.includes(p));
-  const [platform, setPlatform] = useState(() =>
-    connected.includes("linkedin") ? "linkedin" : (connected[0] || "linkedin"));
-  const [list, setList] = useState(null);        // null = loading
+function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, card, secLabel }) {
+  const [recent, setRecent] = useState(null);   // null = loading
   const [error, setError] = useState(null);
-  const [openId, setOpenId] = useState(null);
-  const [threads, setThreads] = useState({});    // postId → { loading, comments, error }
+  const [shown, setShown] = useState(5);
 
   useEffect(() => {
     if (!orgId || !session) return;
     let alive = true;
-    setList(null); setError(null); setOpenId(null); setThreads({});
-    zernioRequest(session, { mode: "comments", orgId, platform })
-      .then(r => { if (alive) setList(r.list); })
+    setRecent(null); setError(null); setShown(5);
+    zernioRequest(session, { mode: "comments", orgId, recent: true,
+      platform: platform === "all" ? undefined : zernioKeyFor(platform) })
+      .then(r => { if (alive) setRecent(r.list?.__unavailable ? r.list : (r.recent || [])); })
       .catch(e => { if (alive) setError(e); });
     return () => { alive = false; };
   }, [orgId, session, platform]);
 
-  const openThread = async (post) => {
-    const id = post.id;
-    if (openId === id) { setOpenId(null); return; }
-    setOpenId(id);
-    if (threads[id]) return;
-    setThreads(t => ({ ...t, [id]: { loading: true } }));
-    try {
-      const r = await zernioRequest(session, { mode: "comments", orgId,
-        postId: id, accountId: post.accountId });
-      const th = r.thread || {};
-      setThreads(t => ({ ...t, [id]: th.__unavailable
-        ? { error: th } : { comments: th.comments || [] } }));
-    } catch (e) {
-      setThreads(t => ({ ...t, [id]: { error: e } }));
-    }
-  };
-
-  const card = { background: darkMode ? "rgba(255,255,255,0.03)" : "#fff",
-    border: `1px solid ${theme.borderFaint}`, borderRadius: 16 };
   const when = (iso) => {
     const d = new Date(iso);
     return Number.isNaN(d.getTime()) ? "" :
       d.toLocaleDateString(de ? "de-DE" : "en-GB", { day: "2-digit", month: "short" })
       + " · " + d.toLocaleTimeString(de ? "de-DE" : "en-GB", { hour: "2-digit", minute: "2-digit" });
   };
-  const note = (txt) => (
-    <div style={{ ...card, padding: 22, fontFamily: FONT, fontSize: 13, color: theme.textDim,
-      lineHeight: 1.55 }}>{txt}</div>
+  const msg = (txt) => (
+    <div style={{ padding: "18px 0", color: theme.textDim, fontSize: 12.5, fontFamily: FONT,
+      lineHeight: 1.6 }}>{txt}</div>
   );
-
-  // A missing add-on is not a failure, and saying "something went wrong" about
-  // a plan limit sends people looking for a bug that is not there.
-  const unavailable = list && list.__unavailable;
-  const rows = Array.isArray(list?.data) ? list.data : [];
+  const unavailable = recent && recent.__unavailable;
+  const list = Array.isArray(recent) ? recent : [];
 
   return (
-    <div>
-      {connected.length > 1 && (
-        <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-          {connected.map(pk => (
-            <div key={pk} onClick={() => setPlatform(pk)}
-              style={{ padding: "7px 14px", borderRadius: 999, cursor: "pointer",
-                fontFamily: FONT, fontSize: 12.5, fontWeight: platform === pk ? 600 : 500,
-                color: platform === pk ? "#fff" : theme.textDim,
-                background: platform === pk ? "#15151c"
-                  : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)") }}>
-              {pk.charAt(0).toUpperCase() + pk.slice(1)}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {error ? note(zernioErrorText(error, de))
-        : unavailable ? note(de
+    <div style={card}>
+      <div style={secLabel}>{de ? "Letzte Kommentare" : "Latest comments"}</div>
+      {error ? msg(zernioErrorText(error, de))
+        : unavailable ? msg(de
             ? "Kommentare gehören zum Analytics-Add-on von Zernio. Ohne das Add-on liefert die API sie nicht."
             : "Comments are part of Zernio's analytics add-on. Without it the API does not return them.")
-        : list === null ? note(de ? "Lädt …" : "Loading …")
-        : rows.length === 0 ? note(de
-            ? "Unter den letzten Beiträgen dieses Kanals steht noch nichts."
-            : "Nothing has been said under this channel's recent posts yet.")
-        : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {rows.map(post => {
-            const open = openId === post.id;
-            const th = threads[post.id];
+        : recent === null ? msg(de ? "Lädt…" : "Loading…")
+        : list.length === 0 ? msg(de
+            ? "Unter den letzten Beiträgen steht noch nichts."
+            : "Nothing has been said under the recent posts yet.")
+        : (<>
+          {list.slice(0, shown).map((c, i) => {
+            const from = c.from || {};
+            const initial = (from.name || from.username || "?").trim()[0]?.toUpperCase() || "?";
             return (
-              <div key={post.id} style={{ ...card, overflow: "hidden" }}>
-                <div onClick={() => openThread(post)}
-                  style={{ display: "flex", gap: 14, padding: 16, cursor: "pointer",
-                    alignItems: "flex-start" }}>
-                  {post.picture && (
-                    <div style={{ width: 54, height: 54, borderRadius: 10, flexShrink: 0,
-                      background: `center/cover no-repeat url(${post.picture})` }} />
-                  )}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: FONT, fontSize: 13.5, color: theme.text,
-                      lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2,
-                      WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                      {post.content || (de ? "Ohne Text" : "No text")}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6,
-                      fontFamily: FONT, fontSize: 11.5, color: theme.textDim }}>
-                      <span>{when(post.createdTime)}</span>
-                      {post.accountUsername && <span>· {post.accountUsername}</span>}
-                      {post.permalink && (
-                        <a href={post.permalink} target="_blank" rel="noreferrer"
-                          onClick={e => e.stopPropagation()}
-                          style={{ color: theme.textDim }}>
-                          {de ? "Original" : "Original"}
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0,
-                    fontFamily: FONT, fontSize: 12.5, color: theme.text }}>
-                    <span>{post.commentCount} {de ? "Kommentare" : "comments"}</span>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme.textDim}
-                      strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
-                      style={{ transform: open ? "rotate(90deg)" : "none", transition: "transform .15s" }}>
-                      <polyline points="9 6 15 12 9 18" /></svg>
-                  </div>
+              <div key={c.id + i} style={{ display: "flex", gap: 12, padding: "12px 0",
+                borderBottom: i < Math.min(shown, list.length) - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
+                <div style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0,
+                  overflow: "hidden", color: "#fff", display: "flex", alignItems: "center",
+                  justifyContent: "center", fontFamily: FONT, fontSize: 12, fontWeight: 600,
+                  background: from.picture ? `center/cover no-repeat url(${from.picture})` : "#15151c" }}>
+                  {from.picture ? "" : initial}
                 </div>
-
-                {open && (
-                  <div style={{ borderTop: `1px solid ${theme.borderFaint}`, padding: "6px 16px 14px" }}>
-                    {!th || th.loading ? (
-                      <div style={{ padding: "12px 0", fontFamily: FONT, fontSize: 12.5,
-                        color: theme.textDim }}>{de ? "Lädt …" : "Loading …"}</div>
-                    ) : th.error ? (
-                      <div style={{ padding: "12px 0", fontFamily: FONT, fontSize: 12.5,
-                        color: theme.textDim }}>
-                        {th.error.__unavailable
-                          ? (de ? "Für diesen Kanal liefert Zernio den Verlauf nicht."
-                                : "Zernio does not return the thread for this channel.")
-                          : zernioErrorText(th.error, de)}
-                      </div>
-                    ) : (th.comments || []).length === 0 ? (
-                      <div style={{ padding: "12px 0", fontFamily: FONT, fontSize: 12.5,
-                        color: theme.textDim }}>{de ? "Keine Kommentare." : "No comments."}</div>
-                    ) : (
-                      (th.comments || []).map(c => <CommentRow key={c.id} c={c} depth={0}
-                        theme={theme} de={de} when={when} />)
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: theme.text }}>
+                      {from.name || from.username || (de ? "Unbekannt" : "Unknown")}
+                    </span>
+                    {from.isOwner && (
+                      <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600,
+                        color: theme.textDim, border: `1px solid ${theme.borderFaint}`,
+                        borderRadius: 5, padding: "1px 5px" }}>{de ? "Ihr" : "You"}</span>
+                    )}
+                    {/* Which conversation this belongs to. A comment with no
+                        post attached to it is a sentence without a subject. */}
+                    {c.parentAuthor && (
+                      <span style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint }}>
+                        {de ? "antwortet " : "replying to "}{c.parentAuthor}
+                      </span>
+                    )}
+                    <span style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint }}>
+                      {when(c.createdTime)}
+                    </span>
+                  </div>
+                  <div style={{ fontFamily: FONT, fontSize: 13, color: theme.text, lineHeight: 1.55,
+                    marginTop: 3, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                    {c.message}
+                  </div>
+                  <div style={{ display: "flex", gap: 12, marginTop: 5, fontFamily: FONT,
+                    fontSize: 11, color: theme.textFaint, alignItems: "baseline" }}>
+                    {c.likeCount > 0 && <span>{c.likeCount} {de ? "Likes" : "likes"}</span>}
+                    {c.postContent && (
+                      <span style={{ flex: 1, minWidth: 0, overflow: "hidden",
+                        textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {de ? "zu: " : "on: "}{c.postContent}
+                      </span>
+                    )}
+                    {(c.url || c.postPermalink) && (
+                      <a href={c.url || c.postPermalink} target="_blank" rel="noreferrer"
+                        style={{ color: theme.textFaint, flexShrink: 0 }}>
+                        {de ? "Öffnen" : "Open"}
+                      </a>
                     )}
                   </div>
-                )}
+                </div>
               </div>
             );
           })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// One comment, and its replies under it. Replies come nested in the same shape,
-// so the row draws itself again one step in rather than a second component
-// existing to say the same thing with more padding.
-function CommentRow({ c, depth, theme, de, when }) {
-  const from = c.from || {};
-  const initial = (from.name || from.username || "?").trim()[0]?.toUpperCase() || "?";
-  return (
-    <div style={{ display: "flex", gap: 10, padding: "10px 0", marginLeft: depth * 34 }}>
-      <div style={{ width: 28, height: 28, borderRadius: "50%", flexShrink: 0, overflow: "hidden",
-        background: from.picture ? `center/cover no-repeat url(${from.picture})` : "#15151c",
-        color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
-        fontFamily: FONT, fontSize: 12, fontWeight: 600 }}>
-        {from.picture ? "" : initial}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: theme.text }}>
-            {from.name || from.username || (de ? "Unbekannt" : "Unknown")}
-          </span>
-          {from.isOwner && (
-            <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: theme.textDim,
-              border: `1px solid ${theme.borderFaint}`, borderRadius: 5, padding: "1px 5px" }}>
-              {de ? "Ihr" : "You"}
-            </span>
+          {shown < list.length && (
+            <div onClick={() => setShown(n => n + 10)}
+              style={{ marginTop: 12, padding: "9px 0", textAlign: "center", cursor: "pointer",
+                fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: theme.text,
+                borderTop: `1px solid ${theme.borderFaint}` }}>
+              {de ? "Mehr anzeigen" : "Show more"}
+            </div>
           )}
-          <span style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint }}>
-            {when(c.createdTime)}
-          </span>
-        </div>
-        <div style={{ fontFamily: FONT, fontSize: 13, color: theme.text, lineHeight: 1.55,
-          marginTop: 3, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-          {c.message}
-        </div>
-        {(c.likeCount > 0 || c.url) && (
-          <div style={{ display: "flex", gap: 12, marginTop: 5, fontFamily: FONT, fontSize: 11,
-            color: theme.textFaint }}>
-            {c.likeCount > 0 && <span>{c.likeCount} {de ? "Likes" : "likes"}</span>}
-            {c.url && <a href={c.url} target="_blank" rel="noreferrer"
-              style={{ color: theme.textFaint }}>{de ? "Auf der Plattform" : "On the platform"}</a>}
-          </div>
-        )}
-        {Array.isArray(c.replies) && c.replies.map(r => (
-          <CommentRow key={r.id} c={r} depth={depth + 1} theme={theme} de={de} when={when} />
-        ))}
-      </div>
+        </>)}
     </div>
   );
 }
@@ -24845,9 +24753,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
   const viewSwitch = (
     <div style={{ display: "inline-flex", padding: 4, borderRadius: 999, marginBottom: 20,
       background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-      {[["social", de ? "Social Media" : "Social media"],
-        ["comments", de ? "Kommentare" : "Comments"],
-        ["website", de ? "Website" : "Website"]].map(([key, label]) => {
+      {[["social", de ? "Social Media" : "Social media"], ["website", de ? "Website" : "Website"]].map(([key, label]) => {
         const on = view === key;
         return (
           <motion.div key={key} whileTap={{ scale: 0.97 }} onClick={() => setView(key)}
@@ -24863,14 +24769,6 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
           </motion.div>
         );
       })}
-    </div>
-  );
-
-  if (view === "comments") return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
-      {viewSwitch}
-      <SocialCommentsPanel theme={theme} darkMode={darkMode} de={de}
-        session={session} orgId={orgId} accounts={accounts} />
     </div>
   );
 
@@ -25062,6 +24960,15 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Under the ranking, because it belongs to the same question: the
+              numbers above say how a post travelled, this says what it
+              produced. Its own tab put it beside Website, where it is not. */}
+          <div style={{ marginTop: 14 }}>
+            <SocialCommentsPanel theme={theme} darkMode={darkMode} de={de}
+              session={session} orgId={orgId} platform={platform}
+              card={card} secLabel={secLabel} />
           </div>
         </>
       )}

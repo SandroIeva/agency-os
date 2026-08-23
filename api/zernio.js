@@ -209,7 +209,34 @@ export default async function handler(req, res) {
       // the default sort is the only one whose cursor paging is coherent.
       const list = await zfetchSoft(
         `/inbox/comments?profileId=${profileId}${pf}&minComments=1&limit=25`);
-      return res.status(200).json({ list });
+      if (!body.recent || list?.__unavailable) return res.status(200).json({ list });
+
+      // "The latest comments" is not something Zernio answers: it lists POSTS
+      // that have comments, and a thread is a second call per post. Doing that
+      // walk here rather than in the browser keeps it one request instead of
+      // seven, and the fan-out is capped — the newest handful of posts is where
+      // the newest comments are.
+      const posts = Array.isArray(list?.data) ? list.data.slice(0, 6) : [];
+      const threads = await Promise.all(posts.map(p =>
+        zfetchSoft(`/inbox/comments/${encodeURIComponent(p.id)}?accountId=${encodeURIComponent(p.accountId || "")}`)));
+      const flat = [];
+      posts.forEach((p, i) => {
+        const t = threads[i];
+        if (!t || t.__unavailable || !Array.isArray(t.comments)) return;
+        // Replies count as comments — they are the part of a conversation that
+        // usually needs answering, and hiding them behind their parent would
+        // make "the latest" quietly untrue.
+        const walk = (c, parent) => {
+          flat.push({ ...c, replies: undefined, postId: p.id, postContent: p.content,
+            postPermalink: p.permalink, platform: c.platform || p.platform,
+            accountUsername: p.accountUsername, parentAuthor: parent });
+          (Array.isArray(c.replies) ? c.replies : [])
+            .forEach(r => walk(r, c.from?.name || c.from?.username || null));
+        };
+        t.comments.forEach(c => walk(c, null));
+      });
+      flat.sort((a, b) => String(b.createdTime || "").localeCompare(String(a.createdTime || "")));
+      return res.status(200).json({ list, recent: flat.slice(0, 40) });
     }
 
     // ── presign — direct-upload URL for post media (client PUTs the file itself,
