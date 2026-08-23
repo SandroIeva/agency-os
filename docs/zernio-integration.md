@@ -162,3 +162,16 @@ Live-API gemessen:
   in den Kommentar-IDs, die Zernio zurückgibt.
 - **Fehler** sind Objekte (`{type, message, status}`). Als String verkettet
   ergeben sie „[object Object]" und machen jeden Fehlschlag unsichtbar.
+- **Personenfoto**: kommt grundsätzlich an — an der Live-API geprüft, das
+  Bild von `linkedin.com/in/williamhgates` rendert in der Benchmark-Zeile.
+  Es fehlt aber bei manchen Profilen: Felix Sander liefert Bio, Follower,
+  Following und Ort, nur `avatar_url` ist leer. Ein Kommentator ist über die
+  Reaktionsliste nur unter seiner verschleierten `/in/ACoAA…`-URL erreichbar,
+  nicht unter einem Vanity-Slug — ob daran das fehlende Bild hängt, ließ sich
+  ohne ein zweites Profil in beiden Formen nicht auseinanderhalten.
+- **Ort**: kommt als fertiger String und wiederholt sich darin
+  („Hamburg, Hamburg, Germany, Germany"). `plainField` in App.jsx zieht
+  Wiederholungen raus — auch aus Strings, nicht nur aus Objekten.
+- **Größenband**: `ext.employee_count_range` ist `{start, end}`. Roh in JSX
+  gesteckt ist das keine falsche Beschriftung, sondern eine weiße Seite
+  (React #31).
