@@ -110,12 +110,16 @@ const SC_PROFILE = {
   facebook: { path: "/facebook/profile", by: "url",
     url: (h) => (/^https?:/i.test(h) ? h : `https://www.facebook.com/${encodeURIComponent(h)}`) },
 };
-async function scfetch(path, query) {
+async function scfetch(path, query, fresh) {
   const key = process.env.SOCIALCRAWL_API_KEY;
   if (!key) throw new HttpError(503, "SOCIALCRAWL_API_KEY is not configured", "socialcrawl_not_configured");
   const qs = new URLSearchParams(query).toString();
   const res = await fetch(`${SC_BASE}${path}?${qs}`, {
-    headers: { "x-api-key": key, accept: "application/json" },
+    // Cached by default — a page's employee count does not change between two
+    // looks at a dashboard, and every live fetch is billed. `no-cache` is what
+    // the Refresh button sends.
+    headers: { "x-api-key": key, accept: "application/json",
+      ...(fresh ? { "Cache-Control": "no-cache" } : {}) },
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data?.success === false) {
@@ -123,6 +127,13 @@ async function scfetch(path, query) {
     throw new HttpError(res.status === 200 ? 502 : res.status, msg, "socialcrawl_error");
   }
   return data;
+}
+
+// The enrichment parts may be absent on a page or on a plan; one of them
+// failing must not take the card with it.
+async function scSoft(path, query, fresh) {
+  try { return await scfetch(path, query, fresh); }
+  catch (e) { return { __unavailable: true, status: e.status, error: e.message }; }
 }
 
 // Same call, but a tolerated failure returns a marker instead of throwing —
@@ -297,13 +308,33 @@ export default async function handler(req, res) {
       const handle = String(body.handle || "").trim().replace(/^@/, "");
       if (!handle || handle.length > 200) throw new HttpError(400, "handle required", "invalid_handle");
 
+      const fresh = !!body.fresh;
       const q = spec.by === "url" ? { url: spec.url(handle) } : { handle };
-      const data = await scfetch(spec.path, q);
-      return res.status(200).json({
+      const data = await scfetch(spec.path, q, fresh);
+      const out = {
         profile: data?.data || null,
         credits: { used: data?.credits_used ?? null, remaining: data?.credits_remaining ?? null },
         cached: !!data?.cached,
-      });
+      };
+
+      // Everything a LinkedIn company page carries that our own analytics
+      // cannot see. Zernio reads what a connected account DID — posts, reach,
+      // comments. None of it says how many people work there, what the page
+      // calls its industry, or whether it is hiring; that lives on the public
+      // page and comes from here.
+      //
+      // The follow-ups take the numeric company id the profile call returns, so
+      // they can only run after it, and they run in parallel with each other.
+      if (body.enrich && platform === "linkedin" && data?.data?.id) {
+        const company_id = String(data.data.id);
+        const [insights, jobs] = await Promise.all([
+          scSoft("/linkedin/company/insights", { company_id }, fresh),
+          scSoft("/linkedin/company/job-count", { company_id }, fresh),
+        ]);
+        out.insights = insights?.__unavailable ? null : (insights?.data || null);
+        out.jobs = jobs?.__unavailable ? null : (jobs?.data || null);
+      }
+      return res.status(200).json(out);
     }
 
     // ── presign — direct-upload URL for post media (client PUTs the file itself,

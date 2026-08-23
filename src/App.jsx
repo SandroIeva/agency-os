@@ -24525,6 +24525,148 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }
 // promise the tab cannot keep.
 const COMMENT_PLATFORMS = ["linkedin", "instagram", "facebook", "threads", "youtube", "twitter"];
 
+// ── The LinkedIn page itself ─────────────────────────────────────────────────
+// Zernio reads what a connected account DID: posts, reach, comments. It says
+// nothing about the page those posts sit on — how many people work there, what
+// industry it claims, where it is, whether it is hiring. That lives on the
+// public page, and SocialCrawl is how we read it.
+//
+// The URL comes from the brand profile, where the workspace already keeps its
+// channels; asking for it a second time here would be asking twice.
+function LinkedInPagePanel({ theme, darkMode, de, session, orgId, projectId, card, secLabel }) {
+  const [url, setUrl] = useState(undefined);   // undefined = looking it up
+  const [data, setData] = useState(null);      // null = loading, false = failed
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!orgId) return;
+      const q = supabase.from("brand_profile").select("channels").eq("org_id", orgId);
+      const { data: row } = await (projectId ? q.eq("project_id", projectId) : q).maybeSingle();
+      if (!alive) return;
+      const ch = row?.channels && typeof row.channels === "object" ? row.channels : {};
+      setUrl(ch.linkedin || null);
+    })();
+    return () => { alive = false; };
+  }, [orgId, projectId]);
+
+  const load = async (fresh) => {
+    if (!url || !session || busy) return;
+    setBusy(true); setError(null);
+    try {
+      const r = await zernioRequest(session, { mode: "lookup", orgId, platform: "linkedin",
+        handle: url, enrich: true, fresh: !!fresh });
+      setData(r);
+    } catch (e) { setError(e); setData(false); }
+    setBusy(false);
+  };
+  // Loaded once when the URL is known. Cached upstream, so opening the
+  // dashboard twice does not spend twice.
+  useEffect(() => { if (url && data === null && !busy) load(false); }, [url]);
+
+  const p = data && data.profile;
+  const ext = (p && p.ext) || {};
+  const ins = data && data.insights && data.insights.metrics;
+  const jobs = data && data.jobs && data.jobs.metrics;
+  const msg = (t) => (
+    <div style={{ padding: "18px 0", color: theme.textDim, fontSize: 12.5, fontFamily: FONT,
+      lineHeight: 1.6 }}>{t}</div>
+  );
+  const fact = (label, value) => (value == null || value === "" ? null : (
+    <div key={label} style={{ display: "flex", gap: 10, padding: "7px 0",
+      borderTop: `1px solid ${theme.borderFaint}` }}>
+      <span style={{ fontFamily: FONT, fontSize: 12, color: theme.textDim, width: 132,
+        flexShrink: 0 }}>{label}</span>
+      <span style={{ fontFamily: FONT, fontSize: 12.5, color: theme.text, minWidth: 0,
+        wordBreak: "break-word" }}>{value}</span>
+    </div>
+  ));
+  const list = (v) => (Array.isArray(v) ? v.filter(Boolean).join(", ") : v);
+
+  return (
+    <div style={card}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+        <div style={{ ...secLabel, marginBottom: 0 }}>{de ? "LinkedIn-Seite" : "LinkedIn page"}</div>
+        <div style={{ flex: 1 }} />
+        {url && (
+          <span onClick={() => load(true)}
+            style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textDim, cursor: "pointer" }}>
+            {busy ? (de ? "Lädt…" : "Loading…") : (de ? "Aktualisieren" : "Refresh")}
+          </span>
+        )}
+      </div>
+
+      {url === undefined ? msg(de ? "Lädt…" : "Loading…")
+        : url === null ? msg(de
+            ? "Für diesen Workspace ist keine LinkedIn-Seite hinterlegt — unter Brand → Kanäle eintragen."
+            : "No LinkedIn page set for this workspace — add one under Brand → Channels.")
+        : error ? msg(error.code === "socialcrawl_not_configured"
+            ? (de ? "SocialCrawl ist noch nicht konfiguriert — SOCIALCRAWL_API_KEY hinterlegen."
+                  : "SocialCrawl is not configured yet — set SOCIALCRAWL_API_KEY.")
+            : zernioErrorText(error, de))
+        : data === null ? msg(de ? "Lädt…" : "Loading…")
+        : !p ? msg(de ? "Die Seite konnte nicht gelesen werden." : "The page could not be read.")
+        : (<div style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 10, flexShrink: 0,
+              background: p.avatar_url ? `center/cover no-repeat url(${p.avatar_url})` : "#15151c" }} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: theme.text }}>
+                {p.display_name || p.username}
+                {p.verified && <span style={{ fontSize: 11, color: theme.textDim }}> ✓</span>}
+              </div>
+              <div style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textDim }}>
+                {fmtMetric(p.followers || 0, de)} {de ? "Follower" : "followers"}
+                {ext.employee_count ? ` · ${fmtMetric(ext.employee_count, de)} ${de ? "Mitarbeitende" : "employees"}` : ""}
+              </div>
+            </div>
+          </div>
+
+          {/* Numbers the connected account cannot report on itself. */}
+          {(ins || jobs) && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(84px, 1fr))",
+              gap: 10, marginBottom: 12 }}>
+              {[[de ? "Views" : "Views", ins && ins.total_views],
+                [de ? "Likes" : "Likes", ins && ins.total_likes],
+                [de ? "Kommentare" : "Comments", ins && ins.total_comments],
+                [de ? "Offene Stellen" : "Open jobs", jobs && (jobs.job_count ?? jobs.total ?? jobs.count)],
+              ].filter(([, v]) => v != null).map(([l, v]) => (
+                <div key={l} style={{ padding: "10px 12px", borderRadius: 10,
+                  background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+                  <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 600, color: theme.text }}>
+                    {fmtMetric(Number(v) || 0, de)}
+                  </div>
+                  <div style={{ fontFamily: FONT, fontSize: 10.5, color: theme.textDim }}>{l}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {[
+            fact(de ? "Branche" : "Industry", list(ext.industries) || ext.business_category),
+            fact(de ? "Gegründet" : "Founded", ext.founded_year),
+            fact(de ? "Sitz" : "Headquarters", ext.headquarters || p.location),
+            fact(de ? "Größe" : "Size", ext.employee_count_range),
+            fact(de ? "Website" : "Website", ext.website || p.external_url),
+            fact(de ? "Spezialgebiete" : "Specialities", list(ext.specialities)),
+            fact("E-Mail", ext.public_email),
+            fact(de ? "Telefon" : "Phone", ext.public_phone),
+            fact(de ? "Beschreibung" : "About", p.bio),
+          ].filter(Boolean)}
+
+          {data.cached && (
+            <div style={{ fontFamily: FONT, fontSize: 10.5, color: theme.textFaint, marginTop: 10 }}>
+              {de ? "Aus dem Zwischenspeicher \u2014 \u201EAktualisieren\u201C holt live."
+                  : "From cache \u2014 \u201CRefresh\u201D fetches live."}
+            </div>
+          )}
+        </div>)}
+    </div>
+  );
+}
+
 // ── Benchmark ────────────────────────────────────────────────────────────────
 // Zernio reads the accounts this workspace owns. SocialCrawl reads anyone's
 // public page — which is the only way to answer "how do we compare". Same
@@ -25107,9 +25249,16 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
             {/* Beside the comments, in the column the connected accounts use
                 above: both answer "who else is out there", one from the people
                 already talking to you and one from everybody else. */}
-            <SocialBenchmarkPanel theme={theme} darkMode={darkMode} de={de}
-              session={session} orgId={orgId} card={card} secLabel={secLabel}
-              ownFollowers={followersOk ? followerTotal : null} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {/* The page itself, then everyone else's — same column, same
+                  question one step wider. */}
+              <LinkedInPagePanel theme={theme} darkMode={darkMode} de={de}
+                session={session} orgId={orgId} projectId={null}
+                card={card} secLabel={secLabel} />
+              <SocialBenchmarkPanel theme={theme} darkMode={darkMode} de={de}
+                session={session} orgId={orgId} card={card} secLabel={secLabel}
+                ownFollowers={followersOk ? followerTotal : null} />
+            </div>
           </div>
         </>
       )}
