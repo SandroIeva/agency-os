@@ -401,9 +401,11 @@ export default async function handler(req, res) {
     //    something the connected account holds. The public post page can, and
     //    that is what SocialCrawl reads.
     //
-    //    The item shape is not pinned down in SocialCrawl's spec, so this
-    //    passes the list through as it comes and the UI reads defensively —
-    //    inventing a shape here would only move the guessing one layer down.
+    //    A reaction carries more about the person than a comment does: the
+    //    comment author object holds only username/display_name/avatar_url/
+    //    verified, and LinkedIn fills just the name. A reactor comes with a
+    //    headline and a profile link, which is why this is the richer of the
+    //    two.
     if (mode === "reactors") {
       await requireOrgMember(user.id, orgId);
       await requirePaidSocial(orgId);
@@ -411,7 +413,24 @@ export default async function handler(req, res) {
       if (!/^https?:\/\/([a-z0-9-]+\.)*linkedin\.com\//i.test(url)) {
         throw new HttpError(400, "A LinkedIn post URL is required", "invalid_url");
       }
-      const data = await scfetch("/linkedin/post/reactions", { url }, !!body.fresh);
+      // Same URN trap as the comments path: an analytics post carries the
+      // `urn:li:share:…` permalink and SocialCrawl answers 502 on it. The
+      // matching activity id is not derivable from the share id — it is a
+      // different number — but it appears inside the ids of that post's
+      // comments, so Zernio's thread is where it is read from.
+      let target = url;
+      if (/urn:li:share:/.test(url) && body.postId) {
+        // The caller has the post id but not the account it was published
+        // from, so that is resolved here rather than pushed into the browser.
+        const profileId = await ensureProfile(orgId);
+        const mine = await zfetchSoft(`/accounts?profileId=${encodeURIComponent(profileId)}`);
+        const li = (mine?.accounts || []).find(a => a.platform === "linkedin");
+        const thread = await zfetchSoft(
+          `/inbox/comments/${encodeURIComponent(body.postId)}?accountId=${encodeURIComponent(li?._id || "")}`);
+        const hit = JSON.stringify(thread || {}).match(/urn:li:activity:\d+/);
+        if (hit) target = `https://www.linkedin.com/feed/update/${hit[0]}`;
+      }
+      const data = await scfetch("/linkedin/post/reactions", { url: target }, !!body.fresh);
       // Shape confirmed against the live API rather than the spec, which types
       // these only as "search result item": { reaction_type, user: { name,
       // description, url, … } }. The person is nested, so a reader looking for

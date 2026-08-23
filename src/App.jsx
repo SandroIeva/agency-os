@@ -25065,11 +25065,13 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
   // because a reaction is not something the connected account holds. Fetched
   // per post on click — each call is billed upstream.
   const [reactors, setReactors] = useState({});   // postUrl → { loading | list | error }
-  const loadReactors = async (url) => {
+  const loadReactors = async (url, postId) => {
     if (!url || reactors[url]) return;
     setReactors(m => ({ ...m, [url]: { loading: true } }));
     try {
-      const r = await zernioRequest(session, { mode: "reactors", orgId, url });
+      // The post id travels with the URL: an analytics permalink names the
+      // share, and SocialCrawl only answers to the activity behind it.
+      const r = await zernioRequest(session, { mode: "reactors", orgId, url, postId });
       setReactors(m => ({ ...m, [url]: { list: r.reactors || [], total: r.total } }));
     } catch (e) { setReactors(m => ({ ...m, [url]: { error: e } })); }
   };
@@ -25312,7 +25314,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
                       {post.platform === "linkedin" && post.platformPostUrl && (() => {
                         const r = reactors[post.platformPostUrl];
                         if (!r) return (
-                          <span onClick={(e) => { e.stopPropagation(); loadReactors(post.platformPostUrl); }}
+                          <span onClick={(e) => { e.stopPropagation(); loadReactors(post.platformPostUrl, post._id); }}
                             style={{ fontFamily: FONT, fontSize: 11, color: theme.textDim,
                               cursor: "pointer", marginTop: 6, display: "inline-block" }}>
                             {de ? "Wer hat reagiert?" : "Who reacted?"}
