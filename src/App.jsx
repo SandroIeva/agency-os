@@ -24221,6 +24221,31 @@ const fmtMetric = (n, de = true) => {
   return String(n);
 };
 
+// Not every field a social vendor returns is a scalar. LinkedIn's size band is
+// { start, end } and an address arrives as an object — and an object put
+// straight into JSX is not a wrong label, it is a blank page (React error #31,
+// which is exactly how the size band announced itself). So nothing from a
+// vendor reaches a text node without passing through here.
+const plainField = (v, de = true) => {
+  if (v == null || v === "") return null;
+  if (Array.isArray(v)) return v.map(x => plainField(x, de)).filter(Boolean).join(", ") || null;
+  if (typeof v === "object") {
+    if ("start" in v || "end" in v) {
+      const { start: a, end: b } = v;
+      if (a != null && b != null) return `${fmtMetric(a, de)}–${fmtMetric(b, de)}`;
+      if (a != null) return `${fmtMetric(a, de)}+`;
+      if (b != null) return `≤ ${fmtMetric(b, de)}`;
+      return null;
+    }
+    // An address, a place, a company — whatever names itself, in the order it
+    // would be written.
+    const parts = [v.name, v.line1, v.line2, v.postal_code, v.city, v.region,
+      v.state, v.country, v.year].filter(x => x != null && x !== "");
+    return parts.length ? parts.join(", ") : null;
+  }
+  return String(v);
+};
+
 // Website Presence — what a crawler and an AI agent find when they arrive.
 // The scan itself is free to run for anybody, because it costs us nothing; only
 // keeping the result counts against the monthly allowance, and the database
@@ -24587,16 +24612,19 @@ function LinkedInPagePanel({ theme, darkMode, de, session, orgId, projectId, acc
     <div style={{ padding: "18px 0", color: theme.textDim, fontSize: 12.5, fontFamily: FONT,
       lineHeight: 1.6 }}>{t}</div>
   );
-  const fact = (label, value) => (value == null || value === "" ? null : (
-    <div key={label} style={{ display: "flex", gap: 10, padding: "7px 0",
-      borderTop: `1px solid ${theme.borderFaint}` }}>
-      <span style={{ fontFamily: FONT, fontSize: 12, color: theme.textDim, width: 132,
-        flexShrink: 0 }}>{label}</span>
-      <span style={{ fontFamily: FONT, fontSize: 12.5, color: theme.text, minWidth: 0,
-        wordBreak: "break-word" }}>{value}</span>
-    </div>
-  ));
-  const list = (v) => (Array.isArray(v) ? v.filter(Boolean).join(", ") : v);
+  const fact = (label, raw) => {
+    const value = plainField(raw, de);
+    if (value == null) return null;
+    return (
+      <div key={label} style={{ display: "flex", gap: 10, padding: "7px 0",
+        borderTop: `1px solid ${theme.borderFaint}` }}>
+        <span style={{ fontFamily: FONT, fontSize: 12, color: theme.textDim, width: 132,
+          flexShrink: 0 }}>{label}</span>
+        <span style={{ fontFamily: FONT, fontSize: 12.5, color: theme.text, minWidth: 0,
+          wordBreak: "break-word" }}>{value}</span>
+      </div>
+    );
+  };
 
   return (
     <div style={card}>
@@ -24658,12 +24686,12 @@ function LinkedInPagePanel({ theme, darkMode, de, session, orgId, projectId, acc
           )}
 
           {[
-            fact(de ? "Branche" : "Industry", list(ext.industries) || ext.business_category),
+            fact(de ? "Branche" : "Industry", ext.industries || ext.business_category),
             fact(de ? "Gegründet" : "Founded", ext.founded_year),
             fact(de ? "Sitz" : "Headquarters", ext.headquarters || p.location),
             fact(de ? "Größe" : "Size", ext.employee_count_range),
             fact(de ? "Website" : "Website", ext.website || p.external_url),
-            fact(de ? "Spezialgebiete" : "Specialities", list(ext.specialities)),
+            fact(de ? "Spezialgebiete" : "Specialities", ext.specialities),
             fact("E-Mail", ext.public_email),
             fact(de ? "Telefon" : "Phone", ext.public_phone),
             fact(de ? "Beschreibung" : "About", p.bio),
@@ -24787,7 +24815,8 @@ function SocialBenchmarkPanel({ theme, darkMode, de, session, orgId, card, secLa
               </div>
               <div style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textDim, marginTop: 2,
                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {[p.username && `@${p.username}`, p.location, p.bio].filter(Boolean).join(" · ")}
+                {[p.username && `@${p.username}`, plainField(p.location, de), p.bio]
+                  .filter(Boolean).join(" · ")}
               </div>
             </div>
             <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -24991,7 +25020,7 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
                         <div style={{ marginTop: w.bio ? 3 : 0 }}>
                           {[w.followers != null && `${fmtMetric(w.followers, de)} ${de ? "Follower" : "followers"}`,
                             w.following != null && `${fmtMetric(w.following, de)} ${de ? "folgt" : "following"}`,
-                            w.location,
+                            plainField(w.location, de),
                             w.ext?.is_top_voice && "Top Voice",
                             w.ext?.is_premium && "Premium"].filter(Boolean).join(" · ")}
                         </div>
