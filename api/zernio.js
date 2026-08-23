@@ -307,7 +307,11 @@ export default async function handler(req, res) {
         if (!Array.isArray(items) || !items.length) return zern;
         const conv = (n) => {
           const c = n?.comment || n || {};
-          const a = c.author || c.user || {};
+          // The person sits under a different key per endpoint, and the field
+          // names are the unified ones a reactor revealed on the live API:
+          // name / description / url. Written wide on purpose — a missing key
+          // costs nothing, a wrong guess costs another round.
+          const a = c.author || c.user || c.actor || c.commenter || c.from || {};
           return {
             id: c.id || c.url || `${Math.random()}`,
             message: c.text || c.message || "",
@@ -319,8 +323,9 @@ export default async function handler(req, res) {
             from: {
               name: a.display_name || a.name || a.username || null,
               username: a.username || null,
-              picture: a.avatar_url || a.picture || null,
-              headline: a.description || a.headline || null,
+              picture: a.avatar_url || a.image || a.picture || a.photo_url
+                || a.profile_picture || a.profile_image_url || null,
+              headline: a.description || a.headline || a.subtitle || a.title || null,
               url: a.url || null,
               verified: a.verified ?? null,
             },
