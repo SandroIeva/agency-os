@@ -24828,15 +24828,40 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
   // dashboard that enriched forty commenters on open would spend forty.
   const [people, setPeople] = useState({});    // username → { loading | data | error }
 
-  const whoIs = async (handle) => {
-    if (!handle || people[handle]) return;
-    setPeople(m => ({ ...m, [handle]: { loading: true } }));
+  // Resolving a commenter takes two steps on LinkedIn, because a comment does
+  // not say who wrote it beyond the name: the author object holds username,
+  // display_name, avatar_url and verified, and only the name comes filled. The
+  // profile — picture, bio, followers, location — needs a profile URL, and the
+  // place that has one is the post's reaction list, where each person arrives
+  // with theirs. So a name is matched against the people who reacted to the
+  // same post, and that lookup is cached per post: the second commenter on a
+  // post costs nothing.
+  const reactorsByPost = useRef({});          // postId → [{ name, url, headline }]
+  const profileUrlFor = async (c, label) => {
+    const pid = c.postId;
+    if (!pid || !c.postPermalink || !label) return null;
+    if (!reactorsByPost.current[pid]) {
+      const r = await zernioRequest(session, { mode: "reactors", orgId,
+        url: c.postPermalink, postId: pid });
+      reactorsByPost.current[pid] = r.reactors || [];
+    }
+    const norm = (x) => String(x || "").trim().toLowerCase();
+    return reactorsByPost.current[pid].find(p => norm(p.name) === norm(label))?.url || null;
+  };
+  const whoIs = async (key, c, label) => {
+    if (!key || people[key]) return;
+    setPeople(m => ({ ...m, [key]: { loading: true } }));
     try {
+      const handle = /^https?:/i.test(key) ? key : (await profileUrlFor(c, label));
+      if (!handle) {
+        setPeople(m => ({ ...m, [key]: { data: null, unidentified: true } }));
+        return;
+      }
       const r = await zernioRequest(session, { mode: "lookup", orgId,
         platform: "linkedinperson", handle });
-      setPeople(m => ({ ...m, [handle]: { data: r.profile || null } }));
+      setPeople(m => ({ ...m, [key]: { data: r.profile || null } }));
     } catch (e) {
-      setPeople(m => ({ ...m, [handle]: { error: e } }));
+      setPeople(m => ({ ...m, [key]: { error: e } }));
     }
   };
 
@@ -24896,15 +24921,22 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
             const label = from.name || from.display_name || from.username
               || from.full_name || null;
             const initial = (label || "?").trim()[0]?.toUpperCase() || "?";
+            // One key per person, not per row: a URL when the vendor gives one,
+            // otherwise the name, so someone who commented twice is looked up
+            // once.
+            const pKey = from.url || label;
+            const who = pKey ? people[pKey] : null;
+            // LinkedIn sends no picture with a comment. Once the profile has
+            // been fetched it has one, and the row uses it.
+            const avatar = from.picture || from.avatar_url || who?.data?.avatar_url || null;
             return (
               <div key={c.id + i} style={{ display: "flex", gap: 12, padding: "12px 0",
                 borderBottom: i < Math.min(shown, list.length) - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
                 <div style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0,
                   overflow: "hidden", color: "#fff", display: "flex", alignItems: "center",
                   justifyContent: "center", fontFamily: FONT, fontSize: 12, fontWeight: 600,
-                  background: (from.picture || from.avatar_url)
-                    ? `center/cover no-repeat url(${from.picture || from.avatar_url})` : "#15151c" }}>
-                  {(from.picture || from.avatar_url) ? "" : initial}
+                  background: avatar ? `center/cover no-repeat url(${avatar})` : "#15151c" }}>
+                  {avatar ? "" : initial}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
@@ -24934,8 +24966,6 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
                   </div>
                   {/* What we found out about them, once asked. */}
                   {(() => {
-                    const h = from.username;
-                    const who = h ? people[h] : null;
                     if (!who) return null;
                     if (who.loading) return (
                       <div style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint,
@@ -24946,6 +24976,9 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
                         marginTop: 4 }}>
                         {who.error?.code === "socialcrawl_not_configured"
                           ? (de ? "SocialCrawl nicht konfiguriert." : "SocialCrawl not configured.")
+                          : who.unidentified
+                          ? (de ? "Nicht zuzuordnen — der Kommentar nennt nur den Namen, und diese Person hat auf den Beitrag nicht reagiert."
+                                : "Cannot be identified — the comment carries only a name, and this person did not react to the post.")
                           : (de ? "Kein öffentliches Profil gefunden." : "No public profile found.")}
                       </div>
                     );
@@ -24957,8 +24990,17 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
                         {w.bio && <div style={{ color: theme.text }}>{w.bio}</div>}
                         <div style={{ marginTop: w.bio ? 3 : 0 }}>
                           {[w.followers != null && `${fmtMetric(w.followers, de)} ${de ? "Follower" : "followers"}`,
-                            w.location, w.external_url].filter(Boolean).join(" · ")}
+                            w.following != null && `${fmtMetric(w.following, de)} ${de ? "folgt" : "following"}`,
+                            w.location,
+                            w.ext?.is_top_voice && "Top Voice",
+                            w.ext?.is_premium && "Premium"].filter(Boolean).join(" · ")}
                         </div>
+                        {w.url && (
+                          <a href={w.url} target="_blank" rel="noreferrer"
+                            style={{ color: theme.textFaint, fontSize: 11 }}>
+                            {de ? "Profil öffnen" : "Open profile"}
+                          </a>
+                        )}
                       </div>
                     );
                   })()}
@@ -24972,8 +25014,8 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
                       <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis",
                         whiteSpace: "nowrap" }}>{from.headline}</span>
                     )}
-                    {c.platform === "linkedin" && from.username && !people[from.username] && (
-                      <span onClick={() => whoIs(from.username)}
+                    {c.platform === "linkedin" && pKey && !who && (
+                      <span onClick={() => whoIs(pKey, c, label)}
                         style={{ cursor: "pointer", color: theme.textDim }}>
                         {de ? "Wer ist das?" : "Who is this?"}
                       </span>

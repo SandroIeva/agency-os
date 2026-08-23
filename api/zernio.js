@@ -323,10 +323,16 @@ export default async function handler(req, res) {
             from: {
               name: a.display_name || a.name || a.username || null,
               username: a.username || null,
+              // The unified author object carries only username, display_name,
+              // avatar_url and verified — LinkedIn fills just the name. Anything
+              // more the endpoint knows about a person would be in the
+              // platform-specific `ext` block, so it is read too rather than
+              // assumed absent.
+              url: a.url || c.ext?.author_url || c.ext?.profile_url || null,
+              urn: a.urn || c.ext?.author_urn || null,
               picture: a.avatar_url || a.image || a.picture || a.photo_url
                 || a.profile_picture || a.profile_image_url || null,
               headline: a.description || a.headline || a.subtitle || a.title || null,
-              url: a.url || null,
               verified: a.verified ?? null,
             },
             replies: Array.isArray(c.replies) ? c.replies.map(conv) : [],
