@@ -48,12 +48,14 @@ Body `{ mode, orgId, … }`.
 | `connect` | `platform` (Zernio-Key, z. B. `twitter`) | `{ authUrl }` | admin-only. `redirect_url` = `PUBLIC_APP_URL/?zernio=connected`; nach OAuth hängt Zernio `connected={platform}&accountId=…` an |
 | `disconnect` | `accountId` | `{ ok }` | admin-only, `DELETE /v1/accounts/{id}` |
 | `analytics` | `platform?` | `{ top, followers, daily }` | 3 parallele Zernio-Calls; Teile, die das **Zernio Analytics-Add-on** brauchen (402/403), kommen als `{ __unavailable, status }` zurück statt zu failen |
+| `comments` | `platform?` **oder** `postId` + `accountId` | `{ list }` bzw. `{ thread }` | Ohne `postId`: `GET /v1/inbox/comments?minComments=1&limit=25` — die Beiträge, unter denen etwas steht. Mit `postId`: `GET /v1/inbox/comments/{postId}?accountId=…` — der Verlauf darunter (`comments[]` mit `from`, `message`, `likeCount`, verschachtelten `replies`). Beides soft-gefetcht wie `analytics`, weil Kommentare auf manchen Plänen am selben Add-on hängen |
 | `presign` | `filename, contentType, size` | `{ uploadUrl, publicUrl }` | Client PUTtet die Datei direkt zu Zernio-Storage (Bytes laufen nie durch unsere Function) |
 | `post` | `content?, platforms:[{platform, accountId}], mediaItems?, scheduledFor?, timezone?, isDraft?` | `{ id, status, platforms:[{platform, status, url, error}] }` | `publishNow` wenn kein `scheduledFor`; `x-request-id` (UUID) für Zernio-Idempotenz; Zernio dedupt identische Inhalte 24 h (409) |
 
 Genutzte Zernio-Endpoints: `POST /v1/profiles`, `GET /v1/accounts`, `GET /v1/connect/{platform}`,
 `DELETE /v1/accounts/{id}`, `GET /v1/analytics` (sortBy=engagement), `GET /v1/accounts/follower-stats`,
-`GET /v1/analytics/daily-metrics`, `POST /v1/media/presign`, `POST /v1/posts`.
+`GET /v1/analytics/daily-metrics`, `POST /v1/media/presign`, `POST /v1/posts`,
+`GET /v1/inbox/comments`, `GET /v1/inbox/comments/{postId}`.
 
 ## Plattform-Key-Mapping
 

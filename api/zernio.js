@@ -11,6 +11,7 @@
 //   "connect"    → { platform } → OAuth authUrl to redirect the user to (admin only)
 //   "disconnect" → { accountId } → remove a connected account (admin only)
 //   "analytics"  → { platform? } → overview + top posts + follower stats + daily series
+//   "comments"   → { platform? } → posts that have comments; with { postId, accountId } the thread
 //   "presign"    → { filename, contentType, size } → direct-upload URL for post media
 //   "post"       → { content, platforms, mediaItems?, scheduledFor?, timezone?, isDraft? }
 //
@@ -181,6 +182,34 @@ export default async function handler(req, res) {
         zfetchSoft(`/analytics/daily-metrics?profileId=${profileId}${pf}&fromDate=${since}`),
       ]);
       return res.status(200).json({ top, followers, daily, platform: platform || "all" });
+    }
+
+    // ── comments — who said what under a post. Two shapes, because that is how
+    //    Zernio splits it: without a postId the list of posts that HAVE comments,
+    //    with one the thread under that post.
+    //
+    //    Soft-fetched like analytics: reading comments needs the same add-on on
+    //    some plans, and a workspace without it should see a notice rather than
+    //    a failed tab.
+    if (mode === "comments") {
+      await requireOrgMember(user.id, orgId);
+      const profileId = await ensureProfile(orgId);
+      const platform = body.platform && /^[a-z]+$/.test(body.platform) ? body.platform : null;
+
+      if (body.postId) {
+        const accountId = String(body.accountId || "");
+        if (!/^[a-f0-9]{24}$/i.test(accountId)) throw new HttpError(400, "Invalid accountId", "invalid_account");
+        const thread = await zfetchSoft(
+          `/inbox/comments/${encodeURIComponent(String(body.postId))}?accountId=${encodeURIComponent(accountId)}`);
+        return res.status(200).json({ thread });
+      }
+
+      const pf = platform ? `&platform=${platform}` : "";
+      // Only posts that actually have something under them, newest first —
+      // the default sort is the only one whose cursor paging is coherent.
+      const list = await zfetchSoft(
+        `/inbox/comments?profileId=${profileId}${pf}&minComments=1&limit=25`);
+      return res.status(200).json({ list });
     }
 
     // ── presign — direct-upload URL for post media (client PUTs the file itself,
