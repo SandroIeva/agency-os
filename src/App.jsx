@@ -24818,6 +24818,7 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
   const [recent, setRecent] = useState(null);   // null = loading
   const [error, setError] = useState(null);
   const [shown, setShown] = useState(5);
+  const [scReady, setScReady] = useState(true);
   // Who a commenter actually is — headline, reach, where they are. Zernio gives
   // a name and a picture, which is enough to read a thread and not enough to
   // know whether the person is worth answering first. That answer lives on
@@ -24845,7 +24846,8 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
     setRecent(null); setError(null); setShown(5);
     zernioRequest(session, { mode: "comments", orgId, recent: true,
       platform: platform === "all" ? undefined : zernioKeyFor(platform) })
-      .then(r => { if (alive) setRecent(r.list?.__unavailable ? r.list : (r.recent || [])); })
+      .then(r => { if (alive) { setScReady(r.socialcrawl !== false);
+        setRecent(r.list?.__unavailable ? r.list : (r.recent || [])); } })
       .catch(e => { if (alive) setError(e); });
     return () => { alive = false; };
   }, [orgId, session, platform]);
@@ -24875,6 +24877,17 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
             ? "Unter den letzten Beiträgen steht noch nichts."
             : "Nothing has been said under the recent posts yet.")
         : (<>
+          {/* Without the key, LinkedIn threads come from Zernio, which returns
+              no author — so the rows say "Unknown" and that looks like a fault
+              rather than an unset variable. */}
+          {!scReady && (
+            <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 9,
+              fontFamily: FONT, fontSize: 11.5, color: theme.textDim, lineHeight: 1.5,
+              background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+              {de ? "Ohne SOCIALCRAWL_API_KEY bleiben LinkedIn-Kommentare ohne Namen — der Schlüssel ist in Vercel nur für Production und Preview gesetzt, nicht für Development."
+                  : "Without SOCIALCRAWL_API_KEY, LinkedIn comments arrive with no author — the key is set in Vercel for Production and Preview only, not Development."}
+            </div>
+          )}
           {list.slice(0, shown).map((c, i) => {
             // Read from whatever the vendor called it. A row that says
             // "Unknown" is a row that had a name somewhere and lost it to a

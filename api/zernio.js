@@ -274,6 +274,11 @@ export default async function handler(req, res) {
       // seven, and the fan-out is capped — the newest handful of posts is where
       // the newest comments are.
       const posts = Array.isArray(list?.data) ? list.data.slice(0, 6) : [];
+      // Said out loud rather than left to look like missing data: without the
+      // key a LinkedIn thread falls back to Zernio, which returns comments
+      // with no author — and the UI then shows a list of "Unknown" that looks
+      // like a bug instead of an unset variable.
+      const scReady = !!process.env.SOCIALCRAWL_API_KEY;
       // On LinkedIn the thread comes from SocialCrawl instead. Zernio returns
       // the comments but not who wrote them — the author object arrives without
       // a name, which is why every row read "Unknown". The public post page has
@@ -329,7 +334,7 @@ export default async function handler(req, res) {
         t.comments.forEach(c => walk(c, null));
       });
       flat.sort((a, b) => String(b.createdTime || "").localeCompare(String(a.createdTime || "")));
-      return res.status(200).json({ list, recent: flat.slice(0, 40) });
+      return res.status(200).json({ list, recent: flat.slice(0, 40), socialcrawl: scReady });
     }
 
     // ── lookup — a public profile, for holding your numbers against someone
