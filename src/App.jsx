@@ -24531,9 +24531,21 @@ const COMMENT_PLATFORMS = ["linkedin", "instagram", "facebook", "threads", "yout
 // industry it claims, where it is, whether it is hiring. That lives on the
 // public page, and SocialCrawl is how we read it.
 //
-// The URL comes from the brand profile, where the workspace already keeps its
-// channels; asking for it a second time here would be asking twice.
-function LinkedInPagePanel({ theme, darkMode, de, session, orgId, projectId, card, secLabel }) {
+// Whose page: the LinkedIn account already connected here. Zernio hands back a
+// profileUrl with every account it manages, so connecting once is the whole
+// answer — making someone paste the same address a second time under Brand
+// would be asking twice for something we were already told. The brand profile
+// is only the fallback, for a workspace that entered a page without connecting
+// the account.
+function LinkedInPagePanel({ theme, darkMode, de, session, orgId, projectId, accounts, card, secLabel }) {
+  const connectedUrl = (() => {
+    const a = (accounts || []).find(x => x.platform === "linkedin" && x.profileUrl);
+    if (a) return a.profileUrl;
+    // No URL on the account, but a username is enough to build one.
+    const b = (accounts || []).find(x => x.platform === "linkedin" && x.username);
+    return b ? `https://www.linkedin.com/company/${encodeURIComponent(b.username)}` : null;
+  })();
+
   const [url, setUrl] = useState(undefined);   // undefined = looking it up
   const [data, setData] = useState(null);      // null = loading, false = failed
   const [error, setError] = useState(null);
@@ -24542,6 +24554,7 @@ function LinkedInPagePanel({ theme, darkMode, de, session, orgId, projectId, car
   useEffect(() => {
     let alive = true;
     (async () => {
+      if (connectedUrl) { setUrl(connectedUrl); return; }
       if (!orgId) return;
       const q = supabase.from("brand_profile").select("channels").eq("org_id", orgId);
       const { data: row } = await (projectId ? q.eq("project_id", projectId) : q).maybeSingle();
@@ -24550,7 +24563,7 @@ function LinkedInPagePanel({ theme, darkMode, de, session, orgId, projectId, car
       setUrl(ch.linkedin || null);
     })();
     return () => { alive = false; };
-  }, [orgId, projectId]);
+  }, [orgId, projectId, connectedUrl]);
 
   const load = async (fresh) => {
     if (!url || !session || busy) return;
@@ -24600,8 +24613,8 @@ function LinkedInPagePanel({ theme, darkMode, de, session, orgId, projectId, car
 
       {url === undefined ? msg(de ? "Lädt…" : "Loading…")
         : url === null ? msg(de
-            ? "Für diesen Workspace ist keine LinkedIn-Seite hinterlegt — unter Brand → Kanäle eintragen."
-            : "No LinkedIn page set for this workspace — add one under Brand → Channels.")
+            ? "Kein LinkedIn-Konto verbunden. Oben verbinden — oder eine Seite unter Brand → Kanäle eintragen."
+            : "No LinkedIn account connected. Connect one above — or set a page under Brand → Channels.")
         : error ? msg(error.code === "socialcrawl_not_configured"
             ? (de ? "SocialCrawl ist noch nicht konfiguriert — SOCIALCRAWL_API_KEY hinterlegen."
                   : "SocialCrawl is not configured yet — set SOCIALCRAWL_API_KEY.")
@@ -25253,7 +25266,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
               {/* The page itself, then everyone else's — same column, same
                   question one step wider. */}
               <LinkedInPagePanel theme={theme} darkMode={darkMode} de={de}
-                session={session} orgId={orgId} projectId={null}
+                session={session} orgId={orgId} projectId={null} accounts={accounts}
                 card={card} secLabel={secLabel} />
               <SocialBenchmarkPanel theme={theme} darkMode={darkMode} de={de}
                 session={session} orgId={orgId} card={card} secLabel={secLabel}
