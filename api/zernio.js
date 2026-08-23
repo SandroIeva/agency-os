@@ -12,6 +12,7 @@
 //   "disconnect" → { accountId } → remove a connected account (admin only)
 //   "analytics"  → { platform? } → overview + top posts + follower stats + daily series
 //   "comments"   → { platform? } → posts that have comments; with { postId, accountId } the thread
+//   "reactors"   → { url } → who reacted to a LinkedIn post (SocialCrawl)
 //   "lookup"     → { platform, handle } → a PUBLIC profile via SocialCrawl (any
 //                  account, not just connected ones) — for benchmarking against
 //                  competitors. Second vendor in this file on purpose: Vercel
@@ -335,6 +336,30 @@ export default async function handler(req, res) {
         out.jobs = jobs?.__unavailable ? null : (jobs?.data || null);
       }
       return res.status(200).json(out);
+    }
+
+    // ── reactors — the people who reacted to a post. Zernio reports HOW MANY
+    //    reactions a post got; it cannot say who, because a reaction is not
+    //    something the connected account holds. The public post page can, and
+    //    that is what SocialCrawl reads.
+    //
+    //    The item shape is not pinned down in SocialCrawl's spec, so this
+    //    passes the list through as it comes and the UI reads defensively —
+    //    inventing a shape here would only move the guessing one layer down.
+    if (mode === "reactors") {
+      await requireOrgMember(user.id, orgId);
+      await requirePaidSocial(orgId);
+      const url = String(body.url || "");
+      if (!/^https?:\/\/([a-z0-9-]+\.)*linkedin\.com\//i.test(url)) {
+        throw new HttpError(400, "A LinkedIn post URL is required", "invalid_url");
+      }
+      const data = await scfetch("/linkedin/post/reactions", { url }, !!body.fresh);
+      const items = data?.data?.items;
+      return res.status(200).json({
+        reactors: Array.isArray(items) ? items.slice(0, 50) : [],
+        total: data?.data?.total ?? null,
+        credits: { used: data?.credits_used ?? null, remaining: data?.credits_remaining ?? null },
+      });
     }
 
     // ── presign — direct-upload URL for post media (client PUTs the file itself,

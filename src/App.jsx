@@ -24818,6 +24818,26 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
   const [recent, setRecent] = useState(null);   // null = loading
   const [error, setError] = useState(null);
   const [shown, setShown] = useState(5);
+  // Who a commenter actually is — headline, reach, where they are. Zernio gives
+  // a name and a picture, which is enough to read a thread and not enough to
+  // know whether the person is worth answering first. That answer lives on
+  // their public profile, so it comes from SocialCrawl.
+  //
+  // On click, never on render: each one spends a credit upstream, and a
+  // dashboard that enriched forty commenters on open would spend forty.
+  const [people, setPeople] = useState({});    // username → { loading | data | error }
+
+  const whoIs = async (handle) => {
+    if (!handle || people[handle]) return;
+    setPeople(m => ({ ...m, [handle]: { loading: true } }));
+    try {
+      const r = await zernioRequest(session, { mode: "lookup", orgId,
+        platform: "linkedinperson", handle });
+      setPeople(m => ({ ...m, [handle]: { data: r.profile || null } }));
+    } catch (e) {
+      setPeople(m => ({ ...m, [handle]: { error: e } }));
+    }
+  };
 
   useEffect(() => {
     if (!orgId || !session) return;
@@ -24892,8 +24912,46 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
                     marginTop: 3, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                     {c.message}
                   </div>
+                  {/* What we found out about them, once asked. */}
+                  {(() => {
+                    const h = from.username;
+                    const who = h ? people[h] : null;
+                    if (!who) return null;
+                    if (who.loading) return (
+                      <div style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint,
+                        marginTop: 4 }}>{de ? "Sucht…" : "Looking…"}</div>
+                    );
+                    if (who.error || !who.data) return (
+                      <div style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint,
+                        marginTop: 4 }}>
+                        {who.error?.code === "socialcrawl_not_configured"
+                          ? (de ? "SocialCrawl nicht konfiguriert." : "SocialCrawl not configured.")
+                          : (de ? "Kein öffentliches Profil gefunden." : "No public profile found.")}
+                      </div>
+                    );
+                    const w = who.data;
+                    return (
+                      <div style={{ marginTop: 6, padding: "8px 10px", borderRadius: 9,
+                        background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                        fontFamily: FONT, fontSize: 11.5, color: theme.textDim, lineHeight: 1.5 }}>
+                        {w.bio && <div style={{ color: theme.text }}>{w.bio}</div>}
+                        <div style={{ marginTop: w.bio ? 3 : 0 }}>
+                          {[w.followers != null && `${fmtMetric(w.followers, de)} ${de ? "Follower" : "followers"}`,
+                            w.location, w.external_url].filter(Boolean).join(" · ")}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <div style={{ display: "flex", gap: 12, marginTop: 5, fontFamily: FONT,
                     fontSize: 11, color: theme.textFaint, alignItems: "baseline" }}>
+                    {/* LinkedIn only: this is the platform whose public profiles
+                        SocialCrawl can read by handle. */}
+                    {c.platform === "linkedin" && from.username && !people[from.username] && (
+                      <span onClick={() => whoIs(from.username)}
+                        style={{ cursor: "pointer", color: theme.textDim }}>
+                        {de ? "Wer ist das?" : "Who is this?"}
+                      </span>
+                    )}
                     {c.likeCount > 0 && <span>{c.likeCount} {de ? "Likes" : "likes"}</span>}
                     {c.postContent && (
                       <span style={{ flex: 1, minWidth: 0, overflow: "hidden",
@@ -24977,6 +25035,18 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
   const card = { borderRadius: 18, background: theme.cardBg, border: `1px solid ${theme.border}`, padding: 20 };
   const secLabel = { fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 14 };
   const platformMeta = (uiKey) => TOUCHPOINT_PLATFORMS.find(p => p.key === uiKey);
+  // Who reacted to a post. Zernio counts reactions; it cannot name them,
+  // because a reaction is not something the connected account holds. Fetched
+  // per post on click — each call is billed upstream.
+  const [reactors, setReactors] = useState({});   // postUrl → { loading | list | error }
+  const loadReactors = async (url) => {
+    if (!url || reactors[url]) return;
+    setReactors(m => ({ ...m, [url]: { loading: true } }));
+    try {
+      const r = await zernioRequest(session, { mode: "reactors", orgId, url });
+      setReactors(m => ({ ...m, [url]: { list: r.reactors || [], total: r.total } }));
+    } catch (e) { setReactors(m => ({ ...m, [url]: { error: e } })); }
+  };
   const connectedUiKeys = [...new Set((accounts || []).map(a => uiKeyFor(a.platform)))];
   const unconnected = ZERNIO_UI_PLATFORMS.filter(k => !connectedUiKeys.includes(k));
 
@@ -25210,6 +25280,68 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>{fmtMetric(a.shares, de)}</span>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-7.5 11-7.5S23 12 23 12s-4 7.5-11 7.5S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>{fmtMetric(a.impressions, de)}</span>
                       </div>
+                      {/* Who is behind those numbers. LinkedIn only, because
+                          that is the platform whose public post page
+                          SocialCrawl can read. */}
+                      {post.platform === "linkedin" && post.platformPostUrl && (() => {
+                        const r = reactors[post.platformPostUrl];
+                        if (!r) return (
+                          <span onClick={(e) => { e.stopPropagation(); loadReactors(post.platformPostUrl); }}
+                            style={{ fontFamily: FONT, fontSize: 11, color: theme.textDim,
+                              cursor: "pointer", marginTop: 6, display: "inline-block" }}>
+                            {de ? "Wer hat reagiert?" : "Who reacted?"}
+                          </span>
+                        );
+                        if (r.loading) return (
+                          <div style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint,
+                            marginTop: 6 }}>{de ? "Sucht…" : "Looking…"}</div>
+                        );
+                        if (r.error) return (
+                          <div style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint,
+                            marginTop: 6 }}>
+                            {r.error.code === "socialcrawl_not_configured"
+                              ? (de ? "SocialCrawl nicht konfiguriert." : "SocialCrawl not configured.")
+                              : zernioErrorText(r.error, de)}
+                          </div>
+                        );
+                        // The item shape is not pinned down upstream, so every
+                        // field is read defensively and a row that yields no
+                        // name is left out rather than shown as a blank.
+                        const people = (r.list || []).map(x => ({
+                          name: x.display_name || x.name || x.full_name || x.username || null,
+                          sub: x.bio || x.headline || x.subtitle || x.occupation || null,
+                          avatar: x.avatar_url || x.picture || x.profile_picture || null,
+                          url: x.url || x.profile_url || null,
+                        })).filter(x => x.name);
+                        if (!people.length) return (
+                          <div style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint,
+                            marginTop: 6 }}>
+                            {de ? "Keine Reaktionen gefunden." : "No reactions found."}
+                          </div>
+                        );
+                        return (
+                          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                            {people.slice(0, 6).map((x, k) => (
+                              <div key={k} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <div style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
+                                  background: x.avatar ? `center/cover no-repeat url(${x.avatar})` : "#15151c" }} />
+                                <span style={{ fontFamily: FONT, fontSize: 11.5, color: theme.text,
+                                  whiteSpace: "nowrap" }}>{x.name}</span>
+                                {x.sub && (
+                                  <span style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint,
+                                    minWidth: 0, overflow: "hidden", textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap" }}>{x.sub}</span>
+                                )}
+                              </div>
+                            ))}
+                            {(r.total || people.length) > 6 && (
+                              <span style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint }}>
+                                +{(r.total || people.length) - 6} {de ? "weitere" : "more"}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 );
