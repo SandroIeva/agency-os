@@ -137,3 +137,28 @@ und Canvas-Export).
 - [ ] Template-System für den Visual-Step (ladbare Layouts mit vorplatzierten Text-Overlays; Platzhalter-Chip existiert schon).
 - [ ] Webhooks für Post-Status statt Polling (Zernio unterstützt Webhooks).
 - [ ] Weitere Social-Tool-Integration ist geplant (vom User angekündigt).
+
+## SocialCrawl: die Formen, die die Doku nicht zeigt
+
+Die Doku bebildert jeden Endpoint mit einem YouTube-Beispiel und sagt, das
+unified schema gelte überall. Für LinkedIn stimmt das nur halb — an der
+Live-API gemessen:
+
+- **Profil** (`/linkedin/profile`, `/linkedin/company`): die Antwort ist
+  `{ author, computed }`, nicht flach. `api/zernio.js` flacht sie im
+  `lookup`-Mode ab; Leser bekommen `avatar_url`, `bio`, `followers`,
+  `location`, `ext.is_top_voice`, `ext.is_premium` direkt.
+- **Kommentar-Autor**: nur `username`, `display_name`, `avatar_url`,
+  `verified` — und LinkedIn füllt davon **nur den Namen**. Kein Bild, kein
+  Handle, kein Profil-Link. Wer mehr über die Person will, braucht einen
+  Profil-Abruf, und dafür eine URL, die der Kommentar nicht mitliefert.
+- **Reaktion**: `{ reaction_type, user: { name, description, url } }` — die
+  Person liegt unter `user`. Das ist die einzige Stelle, an der eine
+  Profil-URL zu einem Namen kommt, deshalb löst „Wer ist das?" einen
+  Kommentator über die Reaktionsliste desselben Beitrags auf.
+- **URN-Form**: SocialCrawl antwortet nur auf `urn:li:activity:…`. Zernios
+  Permalink trägt `urn:li:share:…` und liefert dort **502**. Die Activity-ID
+  ist keine Umrechnung der Share-ID, sondern eine andere Nummer — sie steckt
+  in den Kommentar-IDs, die Zernio zurückgibt.
+- **Fehler** sind Objekte (`{type, message, status}`). Als String verkettet
+  ergeben sie „[object Object]" und machen jeden Fehlschlag unsichtbar.

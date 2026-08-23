@@ -376,8 +376,16 @@ export default async function handler(req, res) {
       const fresh = !!body.fresh;
       const q = spec.by === "url" ? { url: spec.url(handle) } : { handle };
       const data = await scfetch(spec.path, q, fresh);
+      // A profile does not come flat. SocialCrawl returns { author, computed },
+      // so every field a caller reads — avatar_url, bio, followers, and the id
+      // the company enrichment below needs — sits one level down and comes back
+      // undefined. Measured on the live API: the response's only keys are
+      // "author" and "computed". Flattened once here so profile, company page
+      // and benchmark all read the same shape.
+      const raw = data?.data || null;
+      const prof = raw?.author ? { ...raw.author, computed: raw.computed || null } : raw;
       const out = {
-        profile: data?.data || null,
+        profile: prof,
         credits: { used: data?.credits_used ?? null, remaining: data?.credits_remaining ?? null },
         cached: !!data?.cached,
       };
@@ -390,8 +398,8 @@ export default async function handler(req, res) {
       //
       // The follow-ups take the numeric company id the profile call returns, so
       // they can only run after it, and they run in parallel with each other.
-      if (body.enrich && platform === "linkedin" && data?.data?.id) {
-        const company_id = String(data.data.id);
+      if (body.enrich && platform === "linkedin" && prof?.id) {
+        const company_id = String(prof.id);
         const [insights, jobs] = await Promise.all([
           scSoft("/linkedin/company/insights", { company_id }, fresh),
           scSoft("/linkedin/company/job-count", { company_id }, fresh),
