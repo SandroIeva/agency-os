@@ -111,14 +111,43 @@ const SC_PROFILE = {
   facebook: { path: "/facebook/profile", by: "url",
     url: (h) => (/^https?:/i.test(h) ? h : `https://www.facebook.com/${encodeURIComponent(h)}`) },
 };
+// A day is the unit here, not a page view. Every SocialCrawl read is billed,
+// and the analytics dashboard called out on EVERY visit — opening it three
+// times bought the same answers three times. Their own `Cache-Control` header
+// did not stop that: it is their cache, and a cached hit is still a request we
+// pay for. So the answer is kept in our database for 24 hours, keyed by the
+// request itself, and the Refresh buttons (`fresh`) go past it and overwrite.
+const SC_TTL_MS = 24 * 60 * 60 * 1000;
+
+async function scCached(cache_key) {
+  try {
+    const { data } = await getAdminSupabase()
+      .from("social_crawl_cache").select("payload, fetched_at")
+      .eq("cache_key", cache_key).maybeSingle();
+    if (!data) return null;
+    if (Date.now() - new Date(data.fetched_at).getTime() > SC_TTL_MS) return null;
+    return data.payload;
+  } catch { return null; }   // a cache that is down must not take the call with it
+}
+
+async function scStore(cache_key, payload) {
+  try {
+    await getAdminSupabase().from("social_crawl_cache")
+      .upsert({ cache_key, payload, fetched_at: new Date().toISOString() },
+        { onConflict: "cache_key" });
+  } catch { /* storing is best-effort; the answer is already in hand */ }
+}
+
 async function scfetch(path, query, fresh) {
   const key = process.env.SOCIALCRAWL_API_KEY;
   if (!key) throw new HttpError(503, "SOCIALCRAWL_API_KEY is not configured", "socialcrawl_not_configured");
   const qs = new URLSearchParams(query).toString();
+  const cache_key = `${path}?${qs}`;
+  if (!fresh) {
+    const hit = await scCached(cache_key);
+    if (hit) return { ...hit, cached: true, credits_used: 0 };
+  }
   const res = await fetch(`${SC_BASE}${path}?${qs}`, {
-    // Cached by default — a page's employee count does not change between two
-    // looks at a dashboard, and every live fetch is billed. `no-cache` is what
-    // the Refresh button sends.
     headers: { "x-api-key": key, accept: "application/json",
       ...(fresh ? { "Cache-Control": "no-cache" } : {}) },
   });
@@ -132,6 +161,7 @@ async function scfetch(path, query, fresh) {
       || data?.message || `SocialCrawl ${res.status}`;
     throw new HttpError(res.status === 200 ? 502 : res.status, msg, "socialcrawl_error");
   }
+  await scStore(cache_key, data);
   return data;
 }
 
@@ -404,26 +434,12 @@ export default async function handler(req, res) {
         }
         return a;
       };
-      let prof = flatten(data);
-      let meta = data;
+      const prof = flatten(data);
 
-      // A picture is the one field a cached record loses without looking
-      // incomplete: name, headline, followers and location all come back, and
-      // only avatar_url is empty. Reads are served from SocialCrawl's cache by
-      // default, so a person whose record was crawled thin stays faceless
-      // forever. One retry past the cache, and only in exactly that case — the
-      // picture is missing AND the answer came from the cache. Unconditional
-      // it would pay twice for every faceless person, and a record that is
-      // already fresh cannot improve by being fetched again.
-      if (!fresh && platform === "linkedinperson" && prof && !prof.avatar_url && data?.cached) {
-        const again = await scSoft(spec.path, q, true);
-        const prof2 = again?.__unavailable ? null : flatten(again);
-        if (prof2?.avatar_url) { prof = prof2; meta = again; }
-      }
       const out = {
         profile: prof,
-        credits: { used: meta?.credits_used ?? null, remaining: meta?.credits_remaining ?? null },
-        cached: !!meta?.cached,
+        credits: { used: data?.credits_used ?? null, remaining: data?.credits_remaining ?? null },
+        cached: !!data?.cached,
       };
 
       // Everything a LinkedIn company page carries that our own analytics
