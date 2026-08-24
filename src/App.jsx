@@ -23636,14 +23636,6 @@ function parseCSV(text) {
 // Placeholder sample data for now; the shape is easy to swap for a real table.
 // `handles` = the person's username per social platform. A channel counts as
 // active (and shows its icon) when it has a non-empty handle.
-const SAMPLE_PEOPLE = [
-  { id: "p1", name: "Gabriela Christiansen", note: { de: "Erstgespräch", en: "First customer call" }, status: "explorer", date: "24.08.2026 7:24", gender: "female", ageRange: "29-45", country: "Dänemark",       email: "gabriela@example.com", handles: { linkedin: "gabriela-christiansen" },                                   color: "#E0B84B" },
-  { id: "p2", name: "Halle Griffiths",       note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "explorer", date: "24.08.2026 7:24", gender: "female", ageRange: "18-29", country: "USA, Kalifornien", email: null,                  handles: { instagram: "halle.griffiths", x: "hallegriffiths" },                  color: "#E8728C" },
-  { id: "p3", name: "Josiah Love",           note: { de: "Erstgespräch", en: "First customer call" }, status: "explorer", date: "23.08.2026 7:24", gender: "male",   ageRange: "18-29", country: "Großbritannien",  email: "josiah@example.com",   handles: { x: "josiah_love" },                                                   color: "#4FAE7B" },
-  { id: "p4", name: "Wyatt Wetmore",         note: { de: "Follow-up-Mail", en: "Follow up mail" },    status: "customer", date: "01.08.2026 7:24", gender: "male",   ageRange: "29-45", country: "USA, New York",   email: "wyatt@example.com",    handles: { linkedin: "wyatt-wetmore", instagram: "wyatt.creates", threads: "wyattw" }, color: "#E0A06A" },
-  { id: "p5", name: "Jaclyn Moses",          note: { de: "Erstgespräch", en: "First customer call" }, status: "customer", date: "01.08.2026 7:24", gender: "female", ageRange: "45+",   country: "Kanada",         email: null,                  handles: { threads: "jaclyn.moses" },                                            color: "#6C8BE0" },
-  { id: "p6", name: "Marcus Chen",           note: { de: "Angebot gesendet", en: "Proposal sent" },   status: "explorer", date: "28.07.2026 7:24", gender: "male",   ageRange: "29-45", country: "Singapur",       email: "marcus@example.com",   handles: { instagram: "marcus.chen" },                                           color: "#9B6CE0" },
-];
 // Channel colour/label lookup — reuse the same platform set + glyphs as Touchpoints.
 const CHANNEL_META = Object.fromEntries(TOUCHPOINT_PLATFORMS.map(p => [p.key, { label: p.label, color: p.color }]));
 
@@ -23652,7 +23644,10 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef,
   const [view, setView] = useState("cards"); // "cards" | "list"
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all"); // "all" | "explorer" | "customer"
-  const [allPeople, setAllPeople] = useState(SAMPLE_PEOPLE); // editable in state (no DB yet)
+  // Starts empty on purpose: People holds the people this workspace actually
+  // has — added by hand, imported, or arrived through social. Six invented
+  // names looked like data and were not.
+  const [allPeople, setAllPeople] = useState([]);
   const [selected, setSelected] = useState(null); // open person → detail view
   const [editing, setEditing] = useState(false);  // detail edit mode
   const [draft, setDraft] = useState(null);        // editable copy while editing
@@ -23714,7 +23709,10 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef,
             id: p.id, name: p.name, status: "engaged", _source: "social",
             note: parts.join(" · "), notes: p.headline || "",
             date: d ? `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}` : "",
-            gender: "", ageRange: "", email: null, avatar: p.avatar_url || null,
+            gender: "", ageRange: "", email: null,
+            // `avatar_url` is the name the card reads; calling it `avatar`
+            // stored the picture where nothing looks for it.
+            avatar_url: p.avatar_url || null,
             profileUrl: p.profile_url || null,
             handles: p.profile_url || p.name ? { [p.platform]: (p.profile_url || "").split("/").filter(Boolean).pop() || p.name } : {},
             color: PERSON_COLORS[Math.abs([...p.id].reduce((h, c) => h * 31 + c.charCodeAt(0) | 0, 7)) % PERSON_COLORS.length],
@@ -23878,7 +23876,9 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef,
     : st === "engaged" ? (de ? "Engagiert" : "Engaged")
     : (de ? "Explorer" : "Explorer");
   const avatar = (p, size) => p.avatar_url ? (
-    <img src={p.avatar_url} alt="" style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+    // Without this, media.licdn.com answers a hotlinked request with nothing.
+    <img src={p.avatar_url} alt="" referrerPolicy="no-referrer"
+      style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
   ) : (
     <div style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: p.color + "2e", color: p.color, fontSize: size * 0.36, fontWeight: 600, fontFamily: FONT }}>{initials(p.name)}</div>
   );
@@ -24156,7 +24156,15 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef,
 
       <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 26px 26px" }}>
         {people.length === 0 ? (
-          <div style={{ padding: "60px 20px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Keine Personen gefunden." : "No people found."}</div>
+          <div style={{ padding: "60px 20px", textAlign: "center", fontSize: 13,
+            fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+            {/* An empty tab and a filter that matches nothing are different
+                situations, and only one of them is the user's doing. */}
+            {allPeople.length === 0
+              ? (de ? "Noch niemand hier. Über „Hinzufügen“ anlegen oder importieren — wer auf Social Media kommentiert oder mehrfach reagiert, erscheint von selbst."
+                    : "Nobody here yet. Add or import someone — anyone who comments on social, or reacts repeatedly, shows up on their own.")
+              : (de ? "Keine Personen gefunden." : "No people found.")}
+          </div>
         ) : view === "list" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
             {people.map(p => (
