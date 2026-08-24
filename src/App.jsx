@@ -26708,7 +26708,13 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
         || (a.username ? `https://www.${a.platform === "linkedin" ? "linkedin.com/company" : `${a.platform}.com`}/${encodeURIComponent(a.username)}` : null);
       if (!url) continue;
       const current = next[key];
-      if (current && current !== auto[key]) continue;   // typed by a person — leave it
+      // First sync for this platform wins outright, even over something typed:
+      // that value predates the connection and is exactly what goes stale —
+      // Instagram read "appics" long after i7OS was the connected account.
+      // Once a platform has been synced, a value that differs from what we put
+      // there was changed deliberately, and stays.
+      const syncedBefore = auto[key] !== undefined;
+      if (syncedBefore && current && current !== auto[key]) continue;
       if (current === url) { auto[key] = url; continue; }
       next[key] = url;
       auto[key] = url;
