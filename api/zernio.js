@@ -452,11 +452,17 @@ export default async function handler(req, res) {
       // they can only run after it, and they run in parallel with each other.
       if (body.enrich && platform === "linkedin" && prof?.id) {
         const company_id = String(prof.id);
+        // Insights is a breakdown OF the workforce — by location, school, job
+        // function, skill. A page with nobody on it can only answer with empty
+        // lists, which is what i7OS got, for five credits a day. So it is only
+        // asked when there is a workforce to break down. Job count stays: a
+        // page can be hiring without listing staff.
+        const staffed = Number(prof?.ext?.employee_count) > 0;
         const [insights, jobs] = await Promise.all([
-          scSoft("/linkedin/company/insights", { company_id }, fresh),
+          staffed ? scSoft("/linkedin/company/insights", { company_id }, fresh) : null,
           scSoft("/linkedin/company/job-count", { company_id }, fresh),
         ]);
-        out.insights = insights?.__unavailable ? null : (insights?.data || null);
+        out.insights = !insights || insights.__unavailable ? null : (insights.data || null);
         out.jobs = jobs?.__unavailable ? null : (jobs?.data || null);
       }
       return res.status(200).json(out);
