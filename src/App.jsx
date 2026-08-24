@@ -6684,17 +6684,26 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       }
     })();
     const me = session?.user?.id;
-    const ch = supabase.channel(`wb-${board.id}`, { config: { presence: { key: myKey.current } } })
-      .on("presence", { event: "sync" }, () => {
-        const state = ch.presenceState();
-        const next = {};
-        Object.entries(state).forEach(([key, entries]) => {
-          const p = entries[entries.length - 1];   // the newest report from that person
-          if (!p || key === myKey.current) return; // never draw your own pointer
-          if (p.x == null || p.y == null) return;  // present, but has not moved yet
-          next[key] = p;
+    // Two different jobs, two different mechanisms. Presence answers "who is on
+    // this board" and is a synchronised state — the wrong tool for a pointer,
+    // as measured: every movement made it re-diff the whole state, and after a
+    // handful of updates the position simply stopped travelling. Broadcast is
+    // built for exactly this: frequent, ephemeral, nothing to reconcile.
+    const ch = supabase.channel(`wb-${board.id}`, {
+      config: { presence: { key: myKey.current }, broadcast: { self: false } } })
+      .on("broadcast", { event: "cursor" }, ({ payload }) => {
+        if (!payload?.key || payload.key === myKey.current) return;
+        setPeers(prev => ({ ...prev, [payload.key]: payload }));
+      })
+      .on("presence", { event: "leave" }, ({ leftPresences, key }) => {
+        // Somebody closed the board — take their pointer with them, or it
+        // stays on the canvas forever pointing at nothing.
+        setPeers(prev => {
+          const next = { ...prev };
+          delete next[key];
+          (leftPresences || []).forEach(pr => { if (pr?.key) delete next[pr.key]; });
+          return next;
         });
-        setPeers(next);
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "whiteboard_items", filter: `board_id=eq.${board.id}` }, (payload) => {
         if (payload.eventType === "INSERT") {
@@ -6713,9 +6722,9 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       .subscribe(async (status) => {
         if (status !== "SUBSCRIBED") return;
         chanRef.current = ch;
-        // Present before the first movement, so the board can show who is here
-        // rather than only who is waving.
-        await ch.track({ name: myName(), color: peerColor(me), x: null, y: null });
+        // Presence now carries only the fact of being here — the position
+        // travels by broadcast.
+        await ch.track({ key: myKey.current, name: myName(), color: peerColor(me) });
       });
     return () => {
       alive = false; chanRef.current = null;
@@ -7071,8 +7080,9 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       const send = () => {
         lastSent.current = Date.now();
         pendingSend.current = null;
-        chanRef.current?.track({ name: myName(), color: peerColor(session?.user?.id),
-          ...lastPoint.current });
+        chanRef.current?.send({ type: "broadcast", event: "cursor",
+          payload: { key: myKey.current, name: myName(),
+            color: peerColor(session?.user?.id), ...lastPoint.current } });
       };
       if (now - lastSent.current >= 100) send();
       // A pointer that stops between two ticks would otherwise freeze one step
