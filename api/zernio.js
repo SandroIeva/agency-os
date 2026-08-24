@@ -402,7 +402,8 @@ export default async function handler(req, res) {
         t.comments.forEach(c => walk(c, null));
       });
       flat.sort((a, b) => String(b.createdTime || "").localeCompare(String(a.createdTime || "")));
-      await recordEngagement(flat.map(c => {
+      await recordEngagement(flat.filter(c => !c.from?.isOwner).map(c => {
+        // The brand commenting under its own post is not an audience.
         const f = c.from || {};
         const key = f.url || f.username || f.name;
         return { org_id: orgId, platform: c.platform || "unknown", person_key: key || null,

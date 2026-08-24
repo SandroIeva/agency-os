@@ -23682,9 +23682,15 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef,
         .select("platform, person_key, kind, name, headline, profile_url, avatar_url, occurred_at")
         .eq("org_id", orgId);
       if (error || !data?.length) return;
+      // Grouped by name, not by the stored key. The same person arrives under
+      // two keys — a comment carries only a display name, a reaction carries a
+      // profile URL — so keying on what was stored would list Felix twice and
+      // split his comments from his likes, which is also how the five-like
+      // threshold would quietly never be reached.
       const byPerson = new Map();
       for (const r of data) {
-        const id = `soc:${r.platform}:${r.person_key}`;
+        if (!r.name) continue;
+        const id = `soc:${r.platform}:${r.name.trim().toLowerCase()}`;
         const cur = byPerson.get(id) || { id, platform: r.platform, comments: 0, reactions: 0,
           name: null, headline: null, profile_url: null, avatar_url: null, last: null };
         if (r.kind === "comment") cur.comments++; else cur.reactions++;
