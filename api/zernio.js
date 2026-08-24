@@ -165,6 +165,21 @@ async function scfetch(path, query, fresh) {
   return data;
 }
 
+// Who engaged, written down as it goes past. Nothing here costs a call: these
+// are the comments and reactions we already fetched for the dashboard. Keyed by
+// the act, so reading the same post again tomorrow cannot inflate anyone's
+// count, and best-effort — an audience that fails to record must not take the
+// answer the caller actually asked for with it.
+async function recordEngagement(rows) {
+  const clean = rows.filter(r => r.org_id && r.person_key && r.ref_id);
+  if (!clean.length) return;
+  try {
+    await getAdminSupabase().from("audience_engagement")
+      .upsert(clean, { onConflict: "org_id,platform,person_key,kind,ref_id",
+        ignoreDuplicates: true });
+  } catch { /* best effort */ }
+}
+
 // The enrichment parts may be absent on a page or on a plan; one of them
 // failing must not take the card with it.
 async function scSoft(path, query, fresh) {
@@ -387,6 +402,14 @@ export default async function handler(req, res) {
         t.comments.forEach(c => walk(c, null));
       });
       flat.sort((a, b) => String(b.createdTime || "").localeCompare(String(a.createdTime || "")));
+      await recordEngagement(flat.map(c => {
+        const f = c.from || {};
+        const key = f.url || f.username || f.name;
+        return { org_id: orgId, platform: c.platform || "unknown", person_key: key || null,
+          kind: "comment", ref_id: String(c.id || ""), name: f.name || null,
+          headline: f.headline || null, profile_url: f.url || null,
+          avatar_url: f.picture || null, occurred_at: c.createdTime || null };
+      }));
       return res.status(200).json({ list, recent: flat.slice(0, 40), socialcrawl: scReady });
     }
 
@@ -514,6 +537,13 @@ export default async function handler(req, res) {
         url: x.user?.url || x.url || null,
         avatar: x.user?.avatar_url || x.avatar_url || null,
       })).filter(x => x.name);
+      // A reaction belongs to the POST, so five likes means five posts — which
+      // is what "liked five times" is supposed to mean.
+      await recordEngagement(items.map(x => ({
+        org_id: orgId, platform: "linkedin", person_key: x.url || x.name,
+        kind: "reaction", ref_id: target, name: x.name, headline: x.headline,
+        profile_url: x.url, avatar_url: x.avatar, occurred_at: null,
+      })));
       return res.status(200).json({
         reactors: items.slice(0, 50),
         total: data?.data?.total ?? null,

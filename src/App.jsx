@@ -23647,7 +23647,7 @@ const SAMPLE_PEOPLE = [
 // Channel colour/label lookup — reuse the same platform set + glyphs as Touchpoints.
 const CHANNEL_META = Object.fromEntries(TOUCHPOINT_PLATFORMS.map(p => [p.key, { label: p.label, color: p.color }]));
 
-function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef }) {
+function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef, userOrg }) {
   const de = appLanguage === "de";
   const [view, setView] = useState("cards"); // "cards" | "list"
   const [search, setSearch] = useState("");
@@ -23663,6 +23663,62 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
   const csvInputRef = useRef(null);
   const pendingNewRef = useRef(null);              // id of a freshly-created person being edited
   const L = (o) => typeof o === "string" ? o : ((o && (o[de ? "de" : "en"] ?? o.de)) || "");
+
+  // People who engaged with the brand, from what the social dashboard already
+  // read. A comment counts on its own — someone who writes under your post has
+  // said something. A like is one click, so it only counts as an audience from
+  // the fifth, and those five are five different posts, not five taps on one.
+  const ENGAGEMENT_LIKE_THRESHOLD = 5;
+  // Keyed by workspace, not a plain boolean: a switch has to load the other
+  // workspace's audience, and a "once" flag would have shown the first one's.
+  const engagedFor = useRef(null);
+  useEffect(() => {
+    const orgId = userOrg?.id;
+    if (!orgId || engagedFor.current === orgId) return;
+    engagedFor.current = orgId;
+    (async () => {
+      const { data, error } = await supabase
+        .from("audience_engagement")
+        .select("platform, person_key, kind, name, headline, profile_url, avatar_url, occurred_at")
+        .eq("org_id", orgId);
+      if (error || !data?.length) return;
+      const byPerson = new Map();
+      for (const r of data) {
+        const id = `soc:${r.platform}:${r.person_key}`;
+        const cur = byPerson.get(id) || { id, platform: r.platform, comments: 0, reactions: 0,
+          name: null, headline: null, profile_url: null, avatar_url: null, last: null };
+        if (r.kind === "comment") cur.comments++; else cur.reactions++;
+        cur.name = cur.name || r.name;
+        cur.headline = cur.headline || r.headline;
+        cur.profile_url = cur.profile_url || r.profile_url;
+        cur.avatar_url = cur.avatar_url || r.avatar_url;
+        if (r.occurred_at && (!cur.last || r.occurred_at > cur.last)) cur.last = r.occurred_at;
+        byPerson.set(id, cur);
+      }
+      const rows = [...byPerson.values()]
+        .filter(p => p.name && (p.comments > 0 || p.reactions >= ENGAGEMENT_LIKE_THRESHOLD))
+        .sort((a, b) => (b.comments - a.comments) || (b.reactions - a.reactions))
+        .map(p => {
+          const parts = [
+            p.comments > 0 && `${p.comments} ${de ? (p.comments === 1 ? "Kommentar" : "Kommentare") : (p.comments === 1 ? "comment" : "comments")}`,
+            p.reactions > 0 && `${p.reactions} ${de ? "Likes" : "likes"}`,
+          ].filter(Boolean);
+          const d = p.last ? new Date(p.last) : null;
+          return {
+            id: p.id, name: p.name, status: "engaged", _source: "social",
+            note: parts.join(" · "), notes: p.headline || "",
+            date: d ? `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}` : "",
+            gender: "", ageRange: "", email: null, avatar: p.avatar_url || null,
+            profileUrl: p.profile_url || null,
+            handles: p.profile_url || p.name ? { [p.platform]: (p.profile_url || "").split("/").filter(Boolean).pop() || p.name } : {},
+            color: PERSON_COLORS[Math.abs([...p.id].reduce((h, c) => h * 31 + c.charCodeAt(0) | 0, 7)) % PERSON_COLORS.length],
+          };
+        });
+      if (rows.length) {
+        setAllPeople(prev => [...rows.filter(r => !prev.some(x => x.id === r.id)), ...prev]);
+      }
+    })();
+  }, [userOrg?.id]);
 
   const people = allPeople
     .filter(p => filter === "all" || p.status === filter)
@@ -23812,7 +23868,9 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
   const genderLabel = (g) => GENDER_OPTS.find(o => o[0] === g)?.[1] || "—";
   const ageLabel = (a) => AGE_OPTS.find(o => o[0] === a)?.[1] || "—";
   const initials = (n) => (n || "?").split(" ").map(w => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
-  const statusLabel = (st) => st === "customer" ? (de ? "Kunde" : "Customer") : (de ? "Explorer" : "Explorer");
+  const statusLabel = (st) => st === "customer" ? (de ? "Kunde" : "Customer")
+    : st === "engaged" ? (de ? "Engagiert" : "Engaged")
+    : (de ? "Explorer" : "Explorer");
   const avatar = (p, size) => p.avatar_url ? (
     <img src={p.avatar_url} alt="" style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
   ) : (
@@ -24082,6 +24140,7 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef 
           {filterBtn("all", de ? "Alle" : "All")}
           {filterBtn("explorer", "Explorer")}
           {filterBtn("customer", de ? "Kunden" : "Customers")}
+          {filterBtn("engaged", de ? "Engagiert" : "Engaged")}
         </div>
         <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
           {viewBtn("cards", de ? "Karten" : "Cards", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>)}
@@ -26674,7 +26733,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
         </div>
 
         {audTab === "people" ? (
-          <PeopleTab theme={theme} darkMode={darkMode} accent={accent} appLanguage={appLanguage} headerSlotRef={peopleHeaderSlot} />
+          <PeopleTab theme={theme} darkMode={darkMode} accent={accent} appLanguage={appLanguage} headerSlotRef={peopleHeaderSlot} userOrg={userOrg} />
         ) : audTab === "analytics" ? (
           <AnalyticsTab theme={theme} darkMode={darkMode} appLanguage={appLanguage} session={session} userOrg={userOrg} />
         ) : previewKey ? (
