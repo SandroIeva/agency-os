@@ -26135,11 +26135,13 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 // Assets holds finished files; this holds the working ones. A banner exported to
 // Assets is a PNG and nothing more — the canvas it was built on lives here, so it
 // can be opened and changed a month later instead of rebuilt from scratch.
-const CREATION_KINDS = [
-  { key: "social", de: "Social Media", en: "Social media" },
-  { key: "ads",    de: "Anzeigen",     en: "Ads" },
-  { key: "deck",   de: "Präsentation", en: "Presentation" },
-  { key: "other",  de: "Sonstiges",    en: "Other" },
+// Two sections, not four categories. Social / Ads / Presentation / Other split
+// the same shelf four ways and asked a question — "what kind of thing is this?"
+// — at the moment of creating, when nobody knows yet. What actually differs is
+// the medium: a board you think on, and a canvas you design on.
+const CREATION_SECTIONS = [
+  { key: "ideas",  de: "Ideen",  en: "Ideas" },
+  { key: "canvas", de: "Canvas", en: "Canvas" },
 ];
 
 // The formats offered when starting something new. The channel ones are read
@@ -26174,7 +26176,8 @@ const creationFormats = (de) => {
 };
 
 function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, appLanguage = "de",
-                         canEdit = true, projectId = null, onPublish = null }) {
+                         canEdit = true, projectId = null, onPublish = null,
+                         orgMembers = [], onOpenBoard = null }) {
   const de = appLanguage === "de";
   // A canvas is any shape; the tile it sits in is not. Fitting is a choice of
   // which side touches the edge, and the aspect decides it.
@@ -26184,12 +26187,18 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
     const h = Number(b?.h) || Number(r?.h) || 1;
     return w / h >= 4 / 3 ? { width: "100%", height: "auto" } : { height: "100%", width: "auto" };
   };
-  const [kind, setKind] = useState("social");
+  // `kind` used to be both the open tab and the value written to the row. With
+  // the tabs gone it is only the latter, so the two are separate now: a tab
+  // cannot leak into the database any more.
+  const [section, setSection] = useState("ideas");
+  const ideasCreate = useRef(null);      // IdeasTab registers its "new board" fn
+  const ideasNewFolder = useRef(null);   // …and its "create folder" fn
   const [rows, setRows] = useState(null);          // null = loading
   const [folders, setFolders] = useState([]);
   const [folderId, setFolderId] = useState(null);
   const [q, setQ] = useState("");
   const [layout, setLayout] = useState("grid");    // "grid" | "list"
+  const [sortMode, setSortMode] = useState("updated"); // same two the other tabs offer
   const [newOpen, setNewOpen] = useState(false);
   const [editing, setEditing] = useState(null);    // the canvas row open in the editor
   const [renaming, setRenaming] = useState(null);
@@ -26198,7 +26207,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   // The app's own tab indicator: one persistent line, measured and animated.
   // There is a note by the hook explaining why Framer's layoutId misbehaves here
   // — first switch after mount often does not animate.
-  const ind = useTabIndicator(kind, [appLanguage]);
+  const ind = useTabIndicator(section, [appLanguage]);
 
   const scope = (query) => projectId ? query.eq("project_id", projectId) : query.is("project_id", null);
 
@@ -26230,7 +26239,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
     setBusy(true);
     const { data, error } = await supabase.from("brand_canvases").insert({
       org_id: userOrg.id, project_id: projectId, folder_id: folderId,
-      name: fmt.name, kind: fmt.kind || kind, w: fmt.w, h: fmt.h,
+      name: fmt.name, kind: fmt.kind || "other", w: fmt.w, h: fmt.h,
       doc: { bg: "#FFFFFF", items: [] }, created_by: session?.user?.id || null,
     }).select().single();
     setBusy(false);
@@ -26290,9 +26299,11 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   };
 
   const visible = (rows || [])
-    .filter(r => r.kind === kind)
     .filter(r => (folderId ? r.folder_id === folderId : !r.folder_id))
-    .filter(r => !q.trim() || (r.name || "").toLowerCase().includes(q.trim().toLowerCase()));
+    .filter(r => !q.trim() || (r.name || "").toLowerCase().includes(q.trim().toLowerCase()))
+    .sort((a, b) => sortMode === "name"
+      ? (a.name || "").localeCompare(b.name || "")
+      : String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
 
   const card = { background: darkMode ? "rgba(255,255,255,0.04)" : "#fff",
     border: `1px solid ${theme.borderFaint}`, borderRadius: 14 };
@@ -26346,7 +26357,8 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
           <div style={{ flex: 1 }} />
           {/* Primary action in the top-right header slot, where this app keeps it */}
           {canEdit && (
-            <motion.div whileTap={{ scale: 0.96 }} onClick={() => setNewOpen(true)}
+            <motion.div whileTap={{ scale: 0.96 }}
+              onClick={() => section === "ideas" ? ideasCreate.current?.() : setNewOpen(true)}
               style={{ padding: "9px 18px", borderRadius: 999, background: "#15151c", color: "#fff",
                 fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
               {de ? "Neu erstellen" : "Create new"}
@@ -26358,11 +26370,11 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
         <div ref={ind.containerRef}
           style={{ padding: "0 24px", display: "flex", alignItems: "center", gap: 22,
             borderBottom: `1px solid ${theme.borderFaint}`, position: "relative" }}>
-          {CREATION_KINDS.map(k => {
-            const on = kind === k.key;
+          {CREATION_SECTIONS.map(k => {
+            const on = section === k.key;
             return (
               <div key={k.key} ref={ind.registerTab(k.key)}
-                onClick={() => { setKind(k.key); setFolderId(null); }}
+                onClick={() => { setSection(k.key); setFolderId(null); }}
                 style={{ padding: "12px 2px", cursor: "pointer", fontSize: 13.5,
                   fontFamily: FONT,
                   // Weight is NOT switched with the tab: bolding the active label
@@ -26378,11 +26390,21 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
           <TabUnderline box={ind.box} darkMode={darkMode} />
         </div>
 
+        {/* Ideas brings its own toolbar, folders and list — it is a whole tab,
+            not a filter over this one. */}
+        {section === "ideas" ? (
+          <IdeasTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode}
+            appLanguage={appLanguage} orgMembers={orgMembers} projectId={projectId}
+            createRef={ideasCreate} newFolderRef={ideasNewFolder} onOpenBoard={onOpenBoard} />
+        ) : (<>
         <div style={{ padding: "14px 24px 0" }}>
+        {/* Search on the left, the way the file manager does it — the eye starts
+            there, and a search box that hides at the right end of a row is one
+            nobody finds. */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <div style={{ flex: 1 }} />
-          <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "0 12px", height: 34,
-            borderRadius: 10, border: `1px solid ${theme.borderFaint}`, minWidth: 190 }}>
+          <div style={{ flex: 1, maxWidth: 340, display: "flex", alignItems: "center", gap: 7,
+            padding: "0 12px", height: 34,
+            borderRadius: 10, border: `1px solid ${theme.borderFaint}` }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.textDim}
               strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.3-4.3" /></svg>
             <input value={q} onChange={e => setQ(e.target.value)}
@@ -26390,6 +26412,17 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
               style={{ width: "100%", border: "none", outline: "none", background: "transparent",
                 color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
           </div>
+          <div style={{ flex: 1 }} />
+          <motion.div whileTap={{ scale: 0.96 }}
+            onClick={() => setSortMode(m => m === "updated" ? "name" : "updated")}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px",
+              borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`,
+              background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT,
+              whiteSpace: "nowrap" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+            {sortMode === "name" ? "Name" : (de ? "Zuletzt geändert" : "Last modified")}
+          </motion.div>
           {iconBtn(<><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
             <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></>,
             () => setLayout("grid"), layout === "grid", de ? "Kacheln" : "Grid")}
@@ -26526,6 +26559,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
           </div>
         )}
       </div>
+        </>)}
 
       {/* Format picker. Rendered as a plain portal, NOT wrapped in
           AnimatePresence: that component tracks its children by key and drops the
@@ -27521,9 +27555,6 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const docsCreate = useRef(null); // DocsTab registers its "new document" fn here
   const docsUploadPdf = useRef(null); // …and its "upload PDF" fn here
   const docsNewFolder = useRef(null); // DocsTab registers its "create folder" fn here
-  const ideasCreate = useRef(null); // IdeasTab registers its "new board" fn here
-  const ideasNewFolder = useRef(null); // IdeasTab registers its "create folder" fn here
-  const [ideasAddOpen, setIdeasAddOpen] = useState(false); // "Hinzufügen" dropdown (ideas tab)
   const [boards, setBoards] = useState([]);
   const [loadingBoards, setLoadingBoards] = useState(true);
   const [activeBoard, setActiveBoard] = useState(null);
@@ -27924,8 +27955,9 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   if (!activeBoard) {
     const ASSET_TABS = [
       { id: "moodboards",   label: t("assets.moodboards") || "Moodboards" },
-      { id: "ideas",        label: appLanguage === "de" ? "Ideen" : "Ideas" },
-      { id: "creations",    label: t("assets.creations") || "Creations" },
+      // Labelled "Assets", not "Creations": Creations is now a Brand section of
+      // its own, and one word cannot mean two places.
+      { id: "creations",    label: "Assets" },
       { id: "docs",         label: t("assets.docs") || "Docs" },
     ];
     const headerActions = (<>
@@ -28052,52 +28084,6 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                 </AnimatePresence>
               </div>
             )}
-            {tab === "ideas" && (
-              <div style={{ position: "relative" }}>
-                <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setIdeasAddOpen(o => !o)}
-                  style={{ ...iconBtn, background: "#23232b", color: "#fff", border: "none" }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  {appLanguage === "de" ? "Hinzufügen" : "Add"}
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 1, opacity: 0.8 }}><polyline points="6 9 12 15 18 9"/></svg>
-                </motion.div>
-                <AnimatePresence>
-                  {ideasAddOpen && (
-                    <>
-                      <div onClick={() => setIdeasAddOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
-                      <motion.div
-                        initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                        transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
-                        style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 41, minWidth: 250, whiteSpace: "nowrap",
-                          background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
-                          boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden", padding: 6 }}>
-                        {[
-                          { key: "new", label: appLanguage === "de" ? "Neues Board" : "New board",
-                            sub: appLanguage === "de" ? "Leeres Brainstorm-Board erstellen" : "Create a blank brainstorm board",
-                            icon: <><rect x="3" y="3" width="8" height="8" rx="1.5"/><circle cx="17.5" cy="7" r="3.5"/><path d="M4 21l4-7 4 7z"/><path d="M14 15h7v6h-7z"/></>,
-                            onClick: () => { setIdeasAddOpen(false); ideasCreate.current?.(); } },
-                          { key: "folder", label: appLanguage === "de" ? "Ordner erstellen" : "Create folder",
-                            sub: appLanguage === "de" ? "Boards in Ordnern organisieren" : "Organise boards in folders",
-                            icon: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>,
-                            onClick: () => { setIdeasAddOpen(false); ideasNewFolder.current?.(); } },
-                        ].map(it => (
-                          <div key={it.key} onClick={it.onClick} className="hover-row"
-                            style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
-                            <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                              background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
-                              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>
-                            </div>
-                            <div style={{ minWidth: 0 }}>
-                              <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{it.label}</div>
-                              <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{it.sub}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </motion.div>
-                    </>
-                  )}
-                </AnimatePresence>
-              </div>
-            )}
     </>);
     return (
       <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0, pointerEvents: "auto" }}
@@ -28186,13 +28172,6 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           {/* ── DOCS tab ── */}
           {tab === "docs" && (
             <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} orgMembers={orgMembers} createNotification={createNotification} projectId={projectId} deepLink={docDeepLink} fullscreen={docFullscreen} setFullscreen={setDocFullscreen} createRef={docsCreate} uploadPdfRef={docsUploadPdf} importRef={docsImport} onImportingChange={setDocsImporting} skillsRef={docsSkills} newFolderRef={docsNewFolder} llmProvider={llmProvider} llmKeys={llmKeys} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} onOpenChange={setDocOpen} />
-          )}
-
-          {/* ── IDEAS tab (Brainstorm whiteboards) ── */}
-          {tab === "ideas" && (
-            <IdeasTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} appLanguage={appLanguage}
-              orgMembers={orgMembers} projectId={projectId} createRef={ideasCreate} newFolderRef={ideasNewFolder}
-              onOpenBoard={onOpenWhiteboard} />
           )}
 
           {/* ── MOODBOARDS tab (boards grid) ── */}
@@ -42651,12 +42630,15 @@ export default function CircularMenu() {
     setWhiteboardReturn("dashboard");
     setCurrentView("whiteboard");
   };
-  // Open an existing board from the Dateien → Ideen tab (back returns to assets).
-  const openWhiteboardFromAssets = (id) => {
+  // Open an existing board. Ideas moved from Dateien to Brand → Creations, so
+  // the way back is no longer always the file manager — whoever opens the board
+  // says where closing it should land.
+  const openWhiteboardFrom = (id, back = "assets") => {
     setWhiteboardId(id);
-    setWhiteboardReturn("assets");
+    setWhiteboardReturn(back);
     setCurrentView("whiteboard");
   };
+  const openWhiteboardFromAssets = (id) => openWhiteboardFrom(id, "assets");
 
   const handleSubClick = (subItem) => {
     try { sounds.subSelect(); } catch(e) {}
@@ -43618,6 +43600,7 @@ export default function CircularMenu() {
           {currentView === "creations" && (
             <CreationsView session={session} userOrg={userOrg} brand={brandProfile} theme={theme} darkMode={darkMode}
               t={t} appLanguage={appLanguage} canEdit={canEditBrand}
+              orgMembers={orgMembers} onOpenBoard={(id) => openWhiteboardFrom(id, "creations")}
               onPublish={(file) => { setPostVisual({ file, ts: Date.now() }); setCurrentView("createpost"); }}
               onBack={() => setCurrentView("dashboard")} />
           )}
