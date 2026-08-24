@@ -26199,6 +26199,10 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   const [q, setQ] = useState("");
   const [layout, setLayout] = useState("grid");    // "grid" | "list"
   const [sortMode, setSortMode] = useState("updated"); // same two the other tabs offer
+  // The same three-pill group the file manager uses for Alle / Bilder / Videos,
+  // asking the one question that separates these: is this a starting point kept
+  // to be reused, or something made for the brand?
+  const [canvasFilter, setCanvasFilter] = useState("all"); // all | template | brand
   const [newOpen, setNewOpen] = useState(false);
   const [editing, setEditing] = useState(null);    // the canvas row open in the editor
   const [renaming, setRenaming] = useState(null);
@@ -26272,6 +26276,19 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
     await supabase.from("brand_canvases").delete().eq("id", row.id);
   };
 
+  // A filter with no way to put anything into it is an empty drawer, so the
+  // card can move a canvas between the two.
+  const toggleTemplate = async (row) => {
+    const next = !row.is_template;
+    setRows(list => (list || []).map(r => r.id === row.id ? { ...r, is_template: next } : r));
+    const { error } = await supabase.from("brand_canvases")
+      .update({ is_template: next }).eq("id", row.id);
+    if (error) {
+      setRows(list => (list || []).map(r => r.id === row.id ? { ...r, is_template: !next } : r));
+      setErr(planLimitError(error, de) || error.message);
+    }
+  };
+
   const rename = async (row, name) => {
     setRows(list => (list || []).map(r => r.id === row.id ? { ...r, name } : r));
     setRenaming(null);
@@ -26299,6 +26316,8 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   };
 
   const visible = (rows || [])
+    .filter(r => canvasFilter === "all" ? true
+      : canvasFilter === "template" ? !!r.is_template : !r.is_template)
     .filter(r => (folderId ? r.folder_id === folderId : !r.folder_id))
     .filter(r => !q.trim() || (r.name || "").toLowerCase().includes(q.trim().toLowerCase()))
     .sort((a, b) => sortMode === "name"
@@ -26309,6 +26328,34 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
     border: `1px solid ${theme.borderFaint}`, borderRadius: 14 };
   const fmtDate = (s) => new Date(s).toLocaleDateString(de ? "de-DE" : "en-GB",
     { day: "2-digit", month: "short", year: "numeric" });
+
+  // Same control in both views, so a canvas is moved the same way whichever one
+  // you happen to be in.
+  const templateToggle = (r) => canEdit && (
+    <span onClick={e => { e.stopPropagation(); toggleTemplate(r); }}
+      title={r.is_template
+        ? (de ? "Als Brand-Creation zurücklegen" : "Move back to Brand")
+        : (de ? "Als Template ablegen" : "Keep as a template")}
+      style={{ cursor: "pointer", fontSize: 10.5, fontFamily: FONT, fontWeight: 600,
+        padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap",
+        border: `1px solid ${r.is_template ? "transparent" : theme.borderFaint}`,
+        background: r.is_template ? "#15151c" : "transparent",
+        color: r.is_template ? "#fff" : theme.textDim }}>
+      Template
+    </span>
+  );
+
+  const filterBtn = (mode, label) => {
+    const on = canvasFilter === mode;
+    return (
+      <motion.div whileTap={{ scale: 0.95 }} onClick={() => setCanvasFilter(mode)}
+        style={{ padding: "6px 13px", borderRadius: 8, cursor: "pointer", fontSize: 12.5,
+          fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap",
+          background: on ? (darkMode ? "rgba(255,255,255,0.10)" : "#fff") : "transparent",
+          color: on ? theme.text : theme.textDim,
+          boxShadow: on ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>{label}</motion.div>
+    );
+  };
 
   const iconBtn = (glyph, act, on, title) => (
     <motion.div whileTap={{ scale: 0.94 }} onClick={act} title={title}
@@ -26413,6 +26460,12 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                 color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
           </div>
           <div style={{ flex: 1 }} />
+          <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11,
+            background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+            {filterBtn("all", de ? "Alle" : "All")}
+            {filterBtn("template", de ? "Templates" : "Templates")}
+            {filterBtn("brand", de ? "Brand" : "Brand")}
+          </div>
           <motion.div whileTap={{ scale: 0.96 }}
             onClick={() => setSortMode(m => m === "updated" ? "name" : "updated")}
             style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px",
@@ -26515,6 +26568,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                       {r.w} × {r.h} · {fmtDate(r.updated_at)}
                     </span>
                     <div style={{ flex: 1 }} />
+                    {templateToggle(r)}
                     {canEdit && (
                       <span onClick={() => removeCanvas(r)} title={de ? "Löschen" : "Delete"}
                         style={{ cursor: "pointer", color: theme.textFaint, fontSize: 12 }}>✕</span>
@@ -26549,6 +26603,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                     {r.w} × {r.h} px
                   </div>
                 </div>
+                {templateToggle(r)}
                 <span style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textDim }}>{fmtDate(r.updated_at)}</span>
                 {canEdit && (
                   <span onClick={e => { e.stopPropagation(); removeCanvas(r); }}
