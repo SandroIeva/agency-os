@@ -23702,7 +23702,7 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef,
         .map(p => {
           const parts = [
             p.comments > 0 && `${p.comments} ${de ? (p.comments === 1 ? "Kommentar" : "Kommentare") : (p.comments === 1 ? "comment" : "comments")}`,
-            p.reactions > 0 && `${p.reactions} ${de ? "Likes" : "likes"}`,
+            p.reactions > 0 && `${p.reactions} ${p.reactions === 1 ? "Like" : (de ? "Likes" : "likes")}`,
           ].filter(Boolean);
           const d = p.last ? new Date(p.last) : null;
           return {
