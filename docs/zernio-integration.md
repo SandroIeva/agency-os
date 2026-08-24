@@ -162,16 +162,24 @@ Live-API gemessen:
   in den Kommentar-IDs, die Zernio zurückgibt.
 - **Fehler** sind Objekte (`{type, message, status}`). Als String verkettet
   ergeben sie „[object Object]" und machen jeden Fehlschlag unsichtbar.
-- **Personenfoto**: kommt grundsätzlich an — an der Live-API geprüft, das
-  Bild von `linkedin.com/in/williamhgates` rendert in der Benchmark-Zeile.
-  Es fehlt aber bei manchen Profilen: Felix Sander liefert Bio, Follower,
-  Following und Ort, nur `avatar_url` ist leer. Ein Kommentator ist über die
-  Reaktionsliste nur unter seiner verschleierten `/in/ACoAA…`-URL erreichbar,
-  nicht unter einem Vanity-Slug — ob daran das fehlende Bild hängt, ließ sich
-  ohne ein zweites Profil in beiden Formen nicht auseinanderhalten.
+- **Personenfoto**: kommt grundsätzlich an — `linkedin.com/in/williamhgates`
+  rendert sein Bild in der Benchmark-Zeile. Bei manchen Profilen fehlt es
+  trotzdem, und das ist dann deren Datensatz, nicht unser Mapping. Für Felix
+  Sander durchgeprüft: verschleierte `/in/ACoAA…`-URL und Vanity-Slug
+  `felix-sander` liefern beide Bio, Follower, Following und Ort, aber kein
+  Bild — auch nicht mit erzwungenem Neu-Crawl und auch nicht unter einem
+  anders benannten Feld (jedes Feld mit bild-artigem Namen und URL-Wert wird
+  geprüft, `ext` eingeschlossen). Wahrscheinlichste Ursache: die
+  Foto-Sichtbarkeit des Profils steht nicht auf „Public"; anonym ist LinkedIn
+  nicht gegenzuprüfen, es antwortet auf Abrufe ohne Login mit HTTP 999.
 - **Ort**: kommt als fertiger String und wiederholt sich darin
   („Hamburg, Hamburg, Germany, Germany"). `plainField` in App.jsx zieht
   Wiederholungen raus — auch aus Strings, nicht nur aus Objekten.
 - **Größenband**: `ext.employee_count_range` ist `{start, end}`. Roh in JSX
   gesteckt ist das keine falsche Beschriftung, sondern eine weiße Seite
   (React #31).
+- **Rate-Limit**: LinkedIn wird upstream zeitweise gedrosselt („momentarily
+  rate-limited, retry after 30s, credits refunded"). Sichtbar wird das als
+  „Unknown" beim Kommentar, weil der SocialCrawl-Aufruf scheitert und auf
+  Zernio zurückfällt, das keinen Namen führt. Kein Fehler im Code — 30
+  Sekunden warten.
