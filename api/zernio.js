@@ -412,9 +412,10 @@ export default async function handler(req, res) {
       // only avatar_url is empty. Reads are served from SocialCrawl's cache by
       // default, so a person whose record was crawled thin stays faceless
       // forever. One retry past the cache, and only in exactly that case — the
-      // picture is missing — so the extra credit is only ever spent on the
-      // person we would otherwise show as a letter.
-      if (!fresh && platform === "linkedinperson" && prof && !prof.avatar_url) {
+      // picture is missing AND the answer came from the cache. Unconditional
+      // it would pay twice for every faceless person, and a record that is
+      // already fresh cannot improve by being fetched again.
+      if (!fresh && platform === "linkedinperson" && prof && !prof.avatar_url && data?.cached) {
         const again = await scSoft(spec.path, q, true);
         const prof2 = again?.__unavailable ? null : flatten(again);
         if (prof2?.avatar_url) { prof = prof2; meta = again; }
