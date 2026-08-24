@@ -170,20 +170,6 @@ async function scfetch(path, query, fresh) {
 // the act, so reading the same post again tomorrow cannot inflate anyone's
 // count, and best-effort — an audience that fails to record must not take the
 // answer the caller actually asked for with it.
-// The team is not the audience. `isOwner` only catches the connected page
-// commenting as itself; a colleague replying from their personal profile looks
-// like anyone else, so the workspace's own member names are matched by name —
-// which is all a LinkedIn comment gives us to match on.
-async function orgMemberNames(orgId) {
-  try {
-    const { data } = await getAdminSupabase()
-      .from("org_members").select("profiles(display_name)").eq("org_id", orgId);
-    return new Set((data || [])
-      .map(r => r.profiles?.display_name?.trim().toLowerCase())
-      .filter(Boolean));
-  } catch { return new Set(); }
-}
-
 async function recordEngagement(rows) {
   const clean = rows.filter(r => r.org_id && r.person_key && r.ref_id);
   if (!clean.length) return;
@@ -416,12 +402,12 @@ export default async function handler(req, res) {
         t.comments.forEach(c => walk(c, null));
       });
       flat.sort((a, b) => String(b.createdTime || "").localeCompare(String(a.createdTime || "")));
-      const ourNames = await orgMemberNames(orgId);
-      await recordEngagement(flat.filter(c => {
-        if (c.from?.isOwner) return false;                 // the page itself
-        const n = c.from?.name?.trim().toLowerCase();
-        return !(n && ourNames.has(n));                    // and anyone on the team
-      }).map(c => {
+      // Only the connected page commenting as itself is excluded. Filtering out
+      // the workspace's own members by name was tried and reverted: Felix Sander
+      // turns out to be a member of this very workspace, so the rule would have
+      // deleted exactly the person the audience was built to show. A colleague
+      // who comments has still engaged.
+      await recordEngagement(flat.filter(c => !c.from?.isOwner).map(c => {
         const f = c.from || {};
         const key = f.url || f.username || f.name;
         return { org_id: orgId, platform: c.platform || "unknown", person_key: key || null,
@@ -558,10 +544,7 @@ export default async function handler(req, res) {
       })).filter(x => x.name);
       // A reaction belongs to the POST, so five likes means five posts — which
       // is what "liked five times" is supposed to mean.
-      const ourReactorNames = await orgMemberNames(orgId);
-      await recordEngagement(items
-        .filter(x => !ourReactorNames.has(String(x.name || "").trim().toLowerCase()))
-        .map(x => ({
+      await recordEngagement(items.map(x => ({
         org_id: orgId, platform: "linkedin", person_key: x.url || x.name,
         kind: "reaction", ref_id: target, name: x.name, headline: x.headline,
         profile_url: x.url, avatar_url: x.avatar, occurred_at: null,
