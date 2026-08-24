@@ -183,3 +183,36 @@ Live-API gemessen:
   „Unknown" beim Kommentar, weil der SocialCrawl-Aufruf scheitert und auf
   Zernio zurückfällt, das keinen Namen führt. Kein Fehler im Code — 30
   Sekunden warten.
+
+## Kosten im Griff behalten
+
+- **Alles läuft durch `scfetch`**, und das bedient sich 24 h aus
+  `social_crawl_cache` (Service-Key, keine Policy). Nie eine Aufrufstelle daran
+  vorbeibauen. `fresh` nur aus einem „Aktualisieren"-Knopf, den ein Mensch
+  gedrückt hat.
+- **Preise bei LinkedIn** (deren Doku): jedes Profil, jeder Post, jede
+  Firmenseite 5 Credits; Personensuche, Firmen-Mitarbeitende, Firmen-Jobs,
+  Jobsuche, **Post-Reaktionen** und Video-Transkripte 10. Nur die drei
+  ID-Resolver (`search/location`, `search/schools`, `search/industry`) kosten 1.
+  Es gibt bei LinkedIn keine 1-Credit-Inhaltsabfrage.
+- **Profil-Unterressourcen sind kein Bündel.** Dreizehn Endpunkte teilen sich
+  dieselbe Profil-URL; ein vollständiges Dossier zu einer Person sind dreizehn
+  abgerechnete Aufrufe.
+- **Debuggen ohne Credits**: die Rohantworten liegen in `social_crawl_cache`.
+  Per SQL lesen statt neu abrufen.
+
+## Warum ein Profilfoto fehlen kann
+
+An Felix Sander durchgemessen, weil die Doku ein Bild verspricht: Im **selben**
+Datensatz liefert `/linkedin/profile` sein `ext.cover_url` (Banner), aber
+`avatar_url: null`. Der Crawl hat die Seite also gesehen. Gegenprobe an der
+öffentlichen LinkedIn-Seite, anonym und ohne Login:
+
+| Profil | `og:image` |
+|---|---|
+| `williamhgates` | `media.licdn.com/…/profile-displayphoto-shrink_200_200/…` |
+| `felix-sander` | `static.licdn.com/aero-v1/sc/h/…` (Platzhalter) |
+
+Das Banner kennt bei LinkedIn keine Sichtbarkeitseinstellung, das Profilfoto
+schon. Fehlt `avatar_url`, ist das die Einstellung der Person — kein Mapping-
+Fehler und mit keinem anderen Endpunkt zu umgehen.
