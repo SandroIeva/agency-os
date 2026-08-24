@@ -39570,19 +39570,16 @@ export default function CircularMenu() {
     (async () => {
       const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
       const since = midnight.toISOString();
-      const [tasks, projects, docs, boards, canvases, sent] = await Promise.all([
+      const [tasks, docs, boards, canvases, sent] = await Promise.all([
         supabase.from("tasks")
           .select("id, title, column_key, project_id, project_name, updated_at")
           .eq("org_id", userOrg.id),
-        supabase.from("projects").select("id, name, color")
-          .eq("org_id", userOrg.id).eq("is_brand", false)
-          .order("updated_at", { ascending: false }).limit(3),
         supabase.from("brand_documents").select("id, title, updated_at")
-          .eq("org_id", userOrg.id).order("updated_at", { ascending: false }).limit(4),
+          .eq("org_id", userOrg.id).order("updated_at", { ascending: false }).limit(6),
         supabase.from("whiteboards").select("id, name, updated_at")
-          .eq("org_id", userOrg.id).order("updated_at", { ascending: false }).limit(4),
+          .eq("org_id", userOrg.id).order("updated_at", { ascending: false }).limit(6),
         supabase.from("brand_canvases").select("id, name, updated_at")
-          .eq("org_id", userOrg.id).order("updated_at", { ascending: false }).limit(4),
+          .eq("org_id", userOrg.id).order("updated_at", { ascending: false }).limit(6),
         // chat_messages carries no org_id, so "sent today" is scoped to the
         // person rather than the workspace — which is what the label says.
         supabase.from("chat_messages").select("id", { count: "exact", head: true })
@@ -39591,7 +39588,6 @@ export default function CircularMenu() {
       if (!alive) return;
       const rows = tasks.data || [];
       const done = rows.filter(x => x.column_key === "done");
-      const byProject = (id) => rows.filter(x => x.project_id === id);
       const feed = [
         ...(docs.data || []).map(d => ({ at: d.updated_at, kind: "doc",  name: d.title })),
         ...(boards.data || []).map(b => ({ at: b.updated_at, kind: "board", name: b.name })),
@@ -39599,19 +39595,14 @@ export default function CircularMenu() {
         ...done.map(x => ({ at: x.updated_at, kind: "done", name: x.title })),
       ].filter(x => x.at)
         .sort((a, b) => String(b.at).localeCompare(String(a.at)))
-        .slice(0, 4);
+        // Six rather than four: the projects section is gone and the space it
+        // held is better spent on things that actually happened.
+        .slice(0, 6);
       setDash({
         open: rows.filter(x => x.column_key !== "done").length,
         progress: rows.filter(x => x.column_key === "progress").length,
         doneToday: done.filter(x => x.updated_at >= since).length,
         messages: sent.count || 0,
-        projects: (projects.data || []).map(pr => {
-          const mine = byProject(pr.id);
-          const fin = mine.filter(x => x.column_key === "done").length;
-          return { id: pr.id, name: pr.name, color: pr.color || "#8B7AFF",
-            total: mine.length, done: fin,
-            progress: mine.length ? Math.round((fin / mine.length) * 100) : 0 };
-        }),
         feed,
       });
     })();
@@ -44724,43 +44715,6 @@ export default function CircularMenu() {
                       <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e70" }}>{stat.label}</div>
                     </motion.div>
                   ))}
-                </div>
-              </div>
-
-              {/* Active projects */}
-              <div>
-                <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>{t("dash.activeProjects")}</div>
-                <div style={{ display: "flex", gap: 10 }}>
-                  {(dash?.projects || []).map((proj, i) => (
-                    <motion.div key={proj.id}
-                      initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.1 + i * 0.06, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
-                      onClick={() => { setPanelOpen(false); setCurrentView("kanban"); }}
-                      style={{ flex: 1, padding: "16px 18px", borderRadius: 14, background: darkMode ? "#16161E" : "rgba(255,255,255,0.9)", border: darkMode ? "1px solid #ffffff0A" : "1px solid rgba(0,0,0,0.06)", cursor: "pointer" }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                        <div style={{ fontSize: 13, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 500 }}>{proj.name}</div>
-                        <div style={{ fontSize: 12, fontFamily: FONT, color: proj.color }}>{proj.progress}%</div>
-                      </div>
-                      <div style={{ height: 3, borderRadius: 2, background: darkMode ? "#ffffff0A" : "rgba(0,0,0,0.06)", marginBottom: 8 }}>
-                        <motion.div initial={{ width: 0 }} animate={{ width: `${proj.progress}%` }} transition={{ delay: 0.3 + i * 0.1, duration: 0.6, ease: [0.22, 0.68, 0.35, 1.0] }} style={{ height: "100%", borderRadius: 2, background: proj.color }} />
-                      </div>
-                      <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e55" }}>
-                        {/* The bar is done/total, so the count says what it is a
-                            share OF — a bar alone cannot be checked. */}
-                        {proj.total
-                          ? `${proj.done}/${proj.total} ${t("dash.tasks")}`
-                          : (appLanguage === "de" ? "Keine Aufgaben" : "No tasks")}
-                      </div>
-                    </motion.div>
-                  ))}
-                  {dash && dash.projects.length === 0 && (
-                    <div style={{ fontSize: 12.5, fontFamily: FONT, padding: "14px 2px",
-                      color: darkMode ? "#ffffff40" : "#1a1a2e60" }}>
-                      {appLanguage === "de" ? "Noch keine Projekte angelegt."
-                                            : "No projects yet."}
-                    </div>
-                  )}
                 </div>
               </div>
 
