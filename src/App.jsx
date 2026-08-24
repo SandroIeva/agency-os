@@ -24915,9 +24915,13 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
     }
   };
 
+  const AUTO_PEOPLE = 3;
+  const autoDone = useRef(false);
+
   useEffect(() => {
     if (!orgId || !session) return;
     let alive = true;
+    autoDone.current = false;
     setRecent(null); setError(null); setShown(5);
     zernioRequest(session, { mode: "comments", orgId, recent: true,
       platform: platform === "all" ? undefined : zernioKeyFor(platform) })
@@ -24939,6 +24943,32 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
   );
   const unavailable = recent && recent.__unavailable;
   const list = Array.isArray(recent) ? recent : [];
+
+  // Who these people are is the point of the box, so it is fetched rather than
+  // offered behind a link. It was opt-in to save credits, and the result was a
+  // panel that showed a name and nothing else while the answer sat one faint
+  // click away — nobody found it, which is the same as not having built it.
+  //
+  // Bounded rather than unbounded: the three newest distinct people, once per
+  // mount. The rest keep the link, because forty commenters would be forty
+  // lookups on every visit.
+  useEffect(() => {
+    if (autoDone.current || !list.length) return;
+    autoDone.current = true;
+    (async () => {
+      const seen = new Set();
+      for (const c of list.slice(0, shown)) {
+        if (c.platform !== "linkedin") continue;
+        const f = c.from || c.author || c.user || {};
+        const label = f.name || f.display_name || f.username || null;
+        const key = f.url || label;
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        if (seen.size > AUTO_PEOPLE) break;
+        await whoIs(key, c, label);
+      }
+    })();
+  }, [list]);
 
   return (
     <div style={card}>
@@ -25072,7 +25102,9 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
                     )}
                     {c.platform === "linkedin" && pKey && !who && (
                       <span onClick={() => whoIs(pKey, c, label)}
-                        style={{ cursor: "pointer", color: theme.textDim }}>
+                        style={{ cursor: "pointer", color: theme.text, fontWeight: 600,
+                          border: `1px solid ${theme.borderFaint}`, borderRadius: 999,
+                          padding: "2px 9px" }}>
                         {de ? "Wer ist das?" : "Who is this?"}
                       </span>
                     )}
