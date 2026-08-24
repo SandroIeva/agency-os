@@ -24979,11 +24979,18 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
     const norm = (x) => String(x || "").trim().toLowerCase();
     return reactorsByPost.current[pid].find(p => norm(p.name) === norm(label))?.url || null;
   };
-  const whoIs = async (key, c, label) => {
+  // Three ways to reach a profile, cheapest first. A URL or a username IS the
+  // profile — `/in/<username>` resolves, checked against the live page — and
+  // costs one lookup. Only a comment that carries neither needs the detour
+  // through the post's reaction list, which costs twice as much and does not
+  // work on every post.
+  const whoIs = async (key, c, label, username) => {
     if (!key || people[key]) return;
     setPeople(m => ({ ...m, [key]: { loading: true } }));
     try {
-      const found = /^https?:/i.test(key) ? key : (await profileUrlFor(c, label));
+      const found = /^https?:/i.test(key) ? key
+        : username ? username
+        : (await profileUrlFor(c, label));
       if (found?.unreachable) {
         setPeople(m => ({ ...m, [key]: { data: null, unreachable: true } }));
         return;
@@ -25046,16 +25053,18 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
       for (const c of list.slice(0, shown)) {
         if (c.platform !== "linkedin") continue;
         const f = c.from || c.author || c.user || {};
-        // The connected account's own comment needs no lookup — Zernio already
-        // sends its name and picture — and asking anyway spends a reaction list
-        // on a person we could name without it.
-        if (f.isOwner) continue;
+        // The connected account's own comment is worth a profile only when it
+        // can be reached the cheap way. Zernio already gives its name and
+        // picture; spending a reaction list — our dearest call — to learn what
+        // is already on screen is not worth it, but one lookup for the bio,
+        // followers and location is.
+        if (f.isOwner && !f.url && !f.username) continue;
         const label = f.name || f.display_name || f.username || null;
         const key = f.url || label;
         if (!key || seen.has(key)) continue;
         seen.add(key);
         if (seen.size > AUTO_PEOPLE) break;
-        await whoIs(key, c, label);
+        await whoIs(key, c, label, f.username);
       }
     })();
   }, [list]);
@@ -25189,8 +25198,9 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
                       <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis",
                         whiteSpace: "nowrap" }}>{from.headline}</span>
                     )}
-                    {c.platform === "linkedin" && pKey && !who && !from.isOwner && (
-                      <span onClick={() => whoIs(pKey, c, label)}
+                    {c.platform === "linkedin" && pKey && !who
+                      && !(from.isOwner && !from.url && !from.username) && (
+                      <span onClick={() => whoIs(pKey, c, label, from.username)}
                         style={{ cursor: "pointer", color: theme.text, fontWeight: 600,
                           border: `1px solid ${theme.borderFaint}`, borderRadius: 999,
                           padding: "2px 9px" }}>
