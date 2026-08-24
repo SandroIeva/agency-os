@@ -39361,6 +39361,67 @@ export default function CircularMenu() {
   // Push-setup overlay (shown when ?push-setup=true)
   const [pushSetupOverlay, setPushSetupOverlay] = useState(null); // null | { status, message, needsPwa }
   const [panelOpen, setPanelOpen] = useState(false);
+  // ── The slide-up dashboard, on real numbers ────────────────────────────────
+  // It showed 8 open tasks, three projects named Meridian, Volta and Rebranding,
+  // and an AI analysis from two minutes ago — none of which existed. A dashboard
+  // that invents its content teaches people not to read it.
+  //
+  // Loaded when the panel is pulled up, not on every dashboard render: nobody
+  // should pay for a panel they never open.
+  const [dash, setDash] = useState(null);
+  useEffect(() => {
+    if (!panelOpen || !userOrg?.id || !session?.user?.id) return;
+    let alive = true;
+    (async () => {
+      const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+      const since = midnight.toISOString();
+      const [tasks, projects, docs, boards, canvases, sent] = await Promise.all([
+        supabase.from("tasks")
+          .select("id, title, column_key, project_id, project_name, updated_at")
+          .eq("org_id", userOrg.id),
+        supabase.from("projects").select("id, name, color")
+          .eq("org_id", userOrg.id).eq("is_brand", false)
+          .order("updated_at", { ascending: false }).limit(3),
+        supabase.from("brand_documents").select("id, title, updated_at")
+          .eq("org_id", userOrg.id).order("updated_at", { ascending: false }).limit(4),
+        supabase.from("whiteboards").select("id, name, updated_at")
+          .eq("org_id", userOrg.id).order("updated_at", { ascending: false }).limit(4),
+        supabase.from("brand_canvases").select("id, name, updated_at")
+          .eq("org_id", userOrg.id).order("updated_at", { ascending: false }).limit(4),
+        // chat_messages carries no org_id, so "sent today" is scoped to the
+        // person rather than the workspace — which is what the label says.
+        supabase.from("chat_messages").select("id", { count: "exact", head: true })
+          .eq("sender_id", session.user.id).gte("created_at", since),
+      ]);
+      if (!alive) return;
+      const rows = tasks.data || [];
+      const done = rows.filter(x => x.column_key === "done");
+      const byProject = (id) => rows.filter(x => x.project_id === id);
+      const feed = [
+        ...(docs.data || []).map(d => ({ at: d.updated_at, kind: "doc",  name: d.title })),
+        ...(boards.data || []).map(b => ({ at: b.updated_at, kind: "board", name: b.name })),
+        ...(canvases.data || []).map(c => ({ at: c.updated_at, kind: "canvas", name: c.name })),
+        ...done.map(x => ({ at: x.updated_at, kind: "done", name: x.title })),
+      ].filter(x => x.at)
+        .sort((a, b) => String(b.at).localeCompare(String(a.at)))
+        .slice(0, 4);
+      setDash({
+        open: rows.filter(x => x.column_key !== "done").length,
+        progress: rows.filter(x => x.column_key === "progress").length,
+        doneToday: done.filter(x => x.updated_at >= since).length,
+        messages: sent.count || 0,
+        projects: (projects.data || []).map(pr => {
+          const mine = byProject(pr.id);
+          const fin = mine.filter(x => x.column_key === "done").length;
+          return { id: pr.id, name: pr.name, color: pr.color || "#8B7AFF",
+            total: mine.length, done: fin,
+            progress: mine.length ? Math.round((fin / mine.length) * 100) : 0 };
+        }),
+        feed,
+      });
+    })();
+    return () => { alive = false; };
+  }, [panelOpen, userOrg?.id, session?.user?.id]);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [dashboardTasks, setDashboardTasks] = useState([]);
   const [dashboardReminders, setDashboardReminders] = useState([]);
@@ -44642,10 +44703,10 @@ export default function CircularMenu() {
                 <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>{t("dash.overview")}</div>
                 <div style={{ display: "flex", gap: 10 }}>
                   {[
-                    { label: t("dash.open"), value: "8", color: "#8B7AFF" },
-                    { label: t("dash.inProgress"), value: "3", color: "#F59E0B" },
-                    { label: t("dash.doneToday"), value: "2", color: "#00B894" },
-                    { label: t("dash.messages"), value: "4", color: "#E84393" },
+                    { label: t("dash.open"), value: dash ? String(dash.open) : "–", color: "#8B7AFF" },
+                    { label: t("dash.inProgress"), value: dash ? String(dash.progress) : "–", color: "#F59E0B" },
+                    { label: t("dash.doneToday"), value: dash ? String(dash.doneToday) : "–", color: "#00B894" },
+                    { label: t("dash.messages"), value: dash ? String(dash.messages) : "–", color: "#E84393" },
                   ].map((stat, i) => (
                     <motion.div key={stat.label}
                       initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
@@ -44663,14 +44724,11 @@ export default function CircularMenu() {
               <div>
                 <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>{t("dash.activeProjects")}</div>
                 <div style={{ display: "flex", gap: 10 }}>
-                  {[
-                    { name: "Meridian", progress: 68, color: "#8B7AFF", tasks: `12 ${t("dash.tasks")}` },
-                    { name: "Volta", progress: 34, color: "#00B894", tasks: `7 ${t("dash.tasks")}` },
-                    { name: "Rebranding", progress: 90, color: "#F59E0B", tasks: `3 ${t("dash.tasks")}` },
-                  ].map((proj, i) => (
-                    <motion.div key={proj.name}
+                  {(dash?.projects || []).map((proj, i) => (
+                    <motion.div key={proj.id}
                       initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.1 + i * 0.06, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
+                      onClick={() => { setPanelOpen(false); setCurrentView("kanban"); }}
                       style={{ flex: 1, padding: "16px 18px", borderRadius: 14, background: darkMode ? "#16161E" : "rgba(255,255,255,0.9)", border: darkMode ? "1px solid #ffffff0A" : "1px solid rgba(0,0,0,0.06)", cursor: "pointer" }}
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -44680,9 +44738,22 @@ export default function CircularMenu() {
                       <div style={{ height: 3, borderRadius: 2, background: darkMode ? "#ffffff0A" : "rgba(0,0,0,0.06)", marginBottom: 8 }}>
                         <motion.div initial={{ width: 0 }} animate={{ width: `${proj.progress}%` }} transition={{ delay: 0.3 + i * 0.1, duration: 0.6, ease: [0.22, 0.68, 0.35, 1.0] }} style={{ height: "100%", borderRadius: 2, background: proj.color }} />
                       </div>
-                      <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e55" }}>{proj.tasks}</div>
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e55" }}>
+                        {/* The bar is done/total, so the count says what it is a
+                            share OF — a bar alone cannot be checked. */}
+                        {proj.total
+                          ? `${proj.done}/${proj.total} ${t("dash.tasks")}`
+                          : (appLanguage === "de" ? "Keine Aufgaben" : "No tasks")}
+                      </div>
                     </motion.div>
                   ))}
+                  {dash && dash.projects.length === 0 && (
+                    <div style={{ fontSize: 12.5, fontFamily: FONT, padding: "14px 2px",
+                      color: darkMode ? "#ffffff40" : "#1a1a2e60" }}>
+                      {appLanguage === "de" ? "Noch keine Projekte angelegt."
+                                            : "No projects yet."}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -44690,12 +44761,26 @@ export default function CircularMenu() {
               <div>
                 <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>{t("dash.activity")}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  {[
-                    { icon: "◆", color: "#8B7AFF", title: t("dash.actAiAnalysis"), time: t("dash.act2min"), sub: "Meridian — 8 Insights" },
-                    { icon: "✓", color: "#00B894", title: t("dash.actBrandDone"), time: t("dash.act18min"), sub: "Sandro · Meridian" },
-                    { icon: "◎", color: "#F59E0B", title: t("dash.actNewMessage"), time: t("dash.act34min"), sub: "#brand-refresh" },
-                    { icon: "⏱", color: darkMode ? "#ffffff50" : "#1a1a2e60", title: t("dash.actTimeTracked"), time: t("dash.act1h"), sub: t("dash.actLoggedToday") },
-                  ].map((item, i) => (
+                  {/* What was actually touched, newest first: documents,
+                      brainstorm boards, canvases, and tasks that reached Done.
+                      An empty workspace says so rather than inventing four
+                      entries. */}
+                  {(dash?.feed || []).map(f => {
+                    const de2 = appLanguage === "de";
+                    const meta = {
+                      doc:    { icon: "◻", color: "#00B894", label: de2 ? "Dokument bearbeitet" : "Document edited" },
+                      board:  { icon: "◇", color: "#8B7AFF", label: de2 ? "Brainstorm bearbeitet" : "Brainstorm edited" },
+                      canvas: { icon: "◆", color: "#E84393", label: de2 ? "Canvas bearbeitet" : "Canvas edited" },
+                      done:   { icon: "✓", color: "#F59E0B", label: de2 ? "Aufgabe erledigt" : "Task done" },
+                    }[f.kind];
+                    const mins = Math.floor((Date.now() - new Date(f.at).getTime()) / 60000);
+                    const time = mins < 1 ? (de2 ? "gerade eben" : "just now")
+                      : mins < 60 ? `${mins} Min`
+                      : mins < 1440 ? `${Math.floor(mins / 60)} Std`
+                      : `${Math.floor(mins / 1440)} T`;
+                    return { icon: meta.icon, color: meta.color, title: meta.label,
+                      time, sub: f.name || (de2 ? "Ohne Titel" : "Untitled") };
+                  }).map((item, i) => (
                     <motion.div key={i}
                       initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.2 + i * 0.06, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
@@ -44709,6 +44794,13 @@ export default function CircularMenu() {
                       <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40" }}>{item.time}</div>
                     </motion.div>
                   ))}
+                  {dash && dash.feed.length === 0 && (
+                    <div style={{ fontSize: 12.5, fontFamily: FONT, padding: "10px 14px",
+                      color: darkMode ? "#ffffff40" : "#1a1a2e60" }}>
+                      {appLanguage === "de" ? "Heute war hier noch nichts los."
+                                            : "Nothing has happened here yet."}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -44716,17 +44808,24 @@ export default function CircularMenu() {
               <div>
                 <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>{appLanguage === "de" ? "Schnellaktionen" : "Quick Actions"}</div>
                 <div style={{ display: "flex", gap: 10 }}>
+                  {/* Four things you can actually start from here. "Schedule"
+                      opened nothing and is now Brainstorm, which does. */}
                   {[
-                    { label: t("dash.newTask"), icon: "＋", color: "#8B7AFF" },
-                    { label: t("dash.askAi"), icon: "✦", color: "#E84393" },
-                    { label: t("dash.newDoc"), icon: "◻", color: "#00B894" },
-                    { label: t("dash.schedule"), icon: "◷", color: "#F59E0B" },
+                    { label: t("dash.newTask"), icon: "＋", color: "#8B7AFF",
+                      go: () => { setTriggerNewTask(true); setCurrentView("kanban"); } },
+                    { label: t("dash.askAi"), icon: "✦", color: "#E84393",
+                      go: () => setCurrentView("chat") },
+                    { label: t("dash.newDoc"), icon: "◻", color: "#00B894",
+                      go: () => setCurrentView("assets") },
+                    { label: appLanguage === "de" ? "Brainstorm" : "Brainstorm", icon: "◇", color: "#F59E0B",
+                      go: () => openBrainstorm() },
                   ].map((action, i) => (
                     <motion.div key={action.label}
                       initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: 0.3 + i * 0.05, duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
                       whileHover={{ scale: 1.04, background: darkMode ? "#1E1E28" : "rgba(0,0,0,0.04)" }}
                       whileTap={{ scale: 0.97 }}
+                      onClick={() => { setPanelOpen(false); action.go(); }}
                       style={{ flex: 1, padding: "14px 12px", borderRadius: 14, background: darkMode ? "#16161E" : "rgba(255,255,255,0.9)", border: darkMode ? "1px solid #ffffff0A" : "1px solid rgba(0,0,0,0.06)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}
                     >
                       <div style={{ fontSize: 18, color: action.color }}>{action.icon}</div>
