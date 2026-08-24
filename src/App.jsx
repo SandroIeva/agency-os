@@ -26674,11 +26674,57 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
       setProfile(data || null);
       const ch = { ...(data?.channels && typeof data.channels === "object" ? data.channels : {}) };
       if (data?.website_url && !ch.website) ch.website = data.website_url;
-      setChannels(ch);
+      setChannels(await syncConnectedChannels(ch, data?.id));
       setPreviews(data?.channel_previews && typeof data.channel_previews === "object" ? data.channel_previews : {});
       setLoading(false);
     })();
   }, [userOrg?.id, projectId]);
+
+  // A connected account already says where it lives, so asking for the same
+  // address a second time under Touchpoints is asking twice — and worse, the
+  // typed one goes stale: Instagram still read "appics" long after i7OS was
+  // the connected account.
+  //
+  // A hand-typed address still wins. What was filled in automatically is
+  // remembered under a reserved key, and only a value that is empty or still
+  // equals that remembered one is replaced. Change it yourself and it stays
+  // changed. The reserved key cannot collide with a channel, because channels
+  // are only ever read through TOUCHPOINT_PLATFORMS.
+  const AUTO_KEY = "__fromConnected";
+  const syncConnectedChannels = async (ch, profileId) => {
+    if (!session || !userOrg?.id) return ch;
+    let accounts = [];
+    try {
+      const r = await zernioRequest(session, { mode: "status", orgId: userOrg.id });
+      accounts = r.accounts || [];
+    } catch { return ch; }                       // not connected, or Zernio down
+    const auto = { ...(ch[AUTO_KEY] && typeof ch[AUTO_KEY] === "object" ? ch[AUTO_KEY] : {}) };
+    const next = { ...ch };
+    let changed = false;
+    for (const a of accounts) {
+      const key = uiKeyFor(a.platform);
+      if (!TOUCHPOINT_PLATFORMS.some(p => p.key === key)) continue;
+      const url = a.profileUrl
+        || (a.username ? `https://www.${a.platform === "linkedin" ? "linkedin.com/company" : `${a.platform}.com`}/${encodeURIComponent(a.username)}` : null);
+      if (!url) continue;
+      const current = next[key];
+      if (current && current !== auto[key]) continue;   // typed by a person — leave it
+      if (current === url) { auto[key] = url; continue; }
+      next[key] = url;
+      auto[key] = url;
+      changed = true;
+    }
+    if (!changed) return ch;
+    next[AUTO_KEY] = auto;
+    // Written back so the next visit does not have to ask Zernio to know it.
+    try {
+      if (profileId) {
+        await supabase.from("brand_profile")
+          .update({ channels: next, updated_at: new Date().toISOString() }).eq("id", profileId);
+      }
+    } catch { /* showing the right thing matters more than storing it */ }
+    return next;
+  };
 
   const saveChannel = async (key, value) => {
     const next = { ...channels };
