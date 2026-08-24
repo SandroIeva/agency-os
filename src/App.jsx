@@ -39584,6 +39584,27 @@ export default function CircularMenu() {
       if (orgLogoInputRef.current) orgLogoInputRef.current.value = "";
     }
   };
+  // Renaming the workspace. It could be created and given a logo, but not
+  // renamed — the name appeared in Settings as a heading only.
+  const [orgNameEdit, setOrgNameEdit] = useState(false);
+  const [orgNameDraft, setOrgNameDraft] = useState("");
+  const [orgNameSaving, setOrgNameSaving] = useState(false);
+  const saveOrgName = async () => {
+    const name = orgNameDraft.trim();
+    if (!userOrg?.id || !name || name === userOrg.name) { setOrgNameEdit(false); return; }
+    setOrgNameSaving(true);
+    const { error } = await supabase.from("organizations").update({ name }).eq("id", userOrg.id);
+    setOrgNameSaving(false);
+    if (error) {
+      alert((appLanguage === "de" ? "Umbenennen fehlgeschlagen: " : "Rename failed: ") + (error.message || ""));
+      return;
+    }
+    // Both copies, or the switcher keeps showing the old name.
+    setUserOrg(o => o ? { ...o, name } : o);
+    setUserOrgs(prev => prev.map(o => o.id === userOrg.id ? { ...o, name } : o));
+    setOrgNameEdit(false);
+  };
+
   const removeOrgLogo = async () => {
     if (!userOrg?.id) return;
     await supabase.from("organizations").update({ logo_url: null }).eq("id", userOrg.id);
@@ -45318,6 +45339,62 @@ export default function CircularMenu() {
                           >{appLanguage === "de" ? "Entfernen" : "Remove"}</motion.div>
                         )}
                       </div>
+                    ) : (
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, flexShrink: 0 }}>
+                        {appLanguage === "de" ? "Nur Admins" : "Admins only"}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Workspace name — admins, same rule as the logo above it. */}
+                  <div style={{ padding: "18px 20px", borderBottom: `1px solid ${theme.borderFaint}`,
+                    display: "flex", alignItems: "center", gap: 16 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
+                        {appLanguage === "de" ? "Workspace-Name" : "Workspace name"}
+                      </div>
+                      {orgNameEdit ? (
+                        <input
+                          autoFocus value={orgNameDraft}
+                          onChange={e => setOrgNameDraft(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") saveOrgName();
+                            if (e.key === "Escape") setOrgNameEdit(false);
+                          }}
+                          style={{ marginTop: 6, width: "100%", maxWidth: 320, height: 34, borderRadius: 10,
+                            border: `1px solid ${theme.border}`, background: theme.inputBg || "transparent",
+                            color: theme.text, fontFamily: FONT, fontSize: 13, padding: "0 12px", outline: "none" }}
+                        />
+                      ) : (
+                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                          {userOrg.name}
+                        </div>
+                      )}
+                    </div>
+                    {(userOrgRole === "admin" || userOrg?.role === "admin") ? (
+                      orgNameEdit ? (
+                        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                          <motion.div onClick={() => setOrgNameEdit(false)} whileTap={{ scale: 0.97 }}
+                            style={{ padding: "7px 12px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`,
+                              color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>
+                            {appLanguage === "de" ? "Abbrechen" : "Cancel"}
+                          </motion.div>
+                          <motion.div onClick={saveOrgName} whileTap={{ scale: 0.97 }}
+                            style={{ padding: "7px 14px", borderRadius: 999, background: "#15151c", color: "#fff",
+                              fontSize: 12, fontWeight: 600, fontFamily: FONT, cursor: "pointer",
+                              opacity: (orgNameSaving || !orgNameDraft.trim()) ? 0.6 : 1 }}>
+                            {orgNameSaving ? (appLanguage === "de" ? "Speichert…" : "Saving…")
+                              : (appLanguage === "de" ? "Speichern" : "Save")}
+                          </motion.div>
+                        </div>
+                      ) : (
+                        <motion.div whileTap={{ scale: 0.97 }}
+                          onClick={() => { setOrgNameDraft(userOrg.name || ""); setOrgNameEdit(true); }}
+                          style={{ padding: "7px 12px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`,
+                            color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer", flexShrink: 0 }}>
+                          {appLanguage === "de" ? "Umbenennen" : "Rename"}
+                        </motion.div>
+                      )
                     ) : (
                       <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, flexShrink: 0 }}>
                         {appLanguage === "de" ? "Nur Admins" : "Admins only"}
