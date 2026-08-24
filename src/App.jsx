@@ -8664,7 +8664,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
             </motion.button>
             {shareOpen && board && (() => {
               const vis = board.visibility || "workspace";
-              const accent = "#15151c";
+              // Anthracite is the app's selected-state colour, and on this
+              // panel's own dark background it was near-black on near-black —
+              // the icons, the tick and "Copied ✓" were all there and none of
+              // them could be seen. Dark mode inverts it, the way the main
+              // menu's selected pill already does.
+              const accent = darkMode ? "#F4F4F7" : "#15151c";
               const shareables = (orgMembers || []).filter(m => (m.user_id || m.id) !== board.created_by && (m.profiles?.display_name || m.display_name));
               const memName = (m) => m.profiles?.display_name || m.display_name || "—";
               const memAv = (m) => m.profiles?.avatar_url || m.avatar_url;
@@ -8710,7 +8715,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
                               {av ? <img src={av} alt="" referrerPolicy="no-referrer" style={{ width: 24, height: 24, borderRadius: "50%", flexShrink: 0 }} /> : <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#15151c", color: "#fff", fontSize: 10, fontWeight: 600, fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{memName(m)[0]?.toUpperCase()}</div>}
                               <span style={{ flex: 1, fontSize: 13, color: theme.text, fontFamily: FONT }}>{memName(m)}</span>
                               <span style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${on ? accent : theme.borderFaint}`, background: on ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
+                                {/* The tick sits ON the accent, so it has to be
+                                    the opposite of it — white on white is the
+                                    same bug one level in. */}
+                                {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={darkMode ? "#15151c" : "#fff"} strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
                               </span>
                             </button>
                           );
@@ -18545,9 +18553,133 @@ function NumberField({ value, onCommit, min, max, style, ...rest }) {
   );
 }
 
+// ── Sharing a working surface (board or canvas) ─────────────────────────────
+// Named apart from SharePopover, which belongs to documents: that one speaks
+// `doc`, links to ?doc=, and carries an export tab. Bending it to also mean a
+// canvas would put two unrelated things in one component.
+//
+// `accent` is theme-aware on purpose. Anthracite is the app's selected-state
+// colour, and on this panel's own dark background it was near-black on
+// near-black — every icon and tick was drawn and none of them could be seen.
+function SurfaceShareMenu({ visibility, onVisibility, shares, onToggleShare, members,
+                            projects, projectId, onProject, linkUrl, ownerId,
+                            theme, darkMode, de, onClose }) {
+  const [copied, setCopied] = useState(false);
+  const vis = visibility || "workspace";
+  const accent = darkMode ? "#F4F4F7" : "#15151c";
+  const shareables = (members || []).filter(m =>
+    (m.user_id || m.id) !== ownerId && (m.profiles?.display_name || m.display_name));
+  const memName = (m) => m.profiles?.display_name || m.display_name || "\u2014";
+  const memAv = (m) => m.profiles?.avatar_url || m.avatar_url;
+  const opt = (id, label, desc, icon, children) => (
+    <div style={{ borderRadius: 10, background: vis === id ? (darkMode ? "rgba(255,255,255,0.06)" : "#f1f2f4") : "transparent", marginBottom: 2 }}>
+      <button onClick={() => onVisibility(id)} style={{ display: "flex", gap: 10, alignItems: "flex-start", width: "100%", textAlign: "left", padding: "10px 12px", border: "none", borderRadius: 10, cursor: "pointer", background: "transparent" }}>
+        <div style={{ marginTop: 1, color: vis === id ? accent : theme.textDim, lineHeight: 0 }}>{icon}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{label}</div>
+          <div style={{ fontSize: 11.5, color: theme.textDim, fontFamily: FONT, lineHeight: 1.4 }}>{desc}</div>
+        </div>
+        {vis === id && <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginTop: 2, flexShrink: 0 }}><path d="M20 6L9 17l-5-5"/></svg>}
+      </button>
+      {vis === id && children}
+    </div>
+  );
+  return (<>
+    <div onMouseDown={(e) => e.stopPropagation()} onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 39 }} />
+    <div onMouseDown={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}
+      style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 320, zIndex: 40,
+        background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`,
+        borderRadius: 16, boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden" }}>
+      {linkUrl && (
+        <div style={{ padding: "6px", borderBottom: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "#f0f0f3"}` }}>
+          <button onClick={() => { try { navigator.clipboard.writeText(linkUrl); } catch (_) {} setCopied(true); setTimeout(() => setCopied(false), 1600); }}
+            onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.06)" : "#f1f2f4"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "9px 12px", border: "none", borderRadius: 10, cursor: "pointer", background: "transparent" }}>
+            <span style={{ color: accent, lineHeight: 0 }}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{de ? "Link kopieren" : "Copy link"}</span>
+            {copied && <span style={{ fontSize: 12, color: accent, fontFamily: FONT, fontWeight: 600 }}>{de ? "Kopiert \u2713" : "Copied \u2713"}</span>}
+          </button>
+        </div>
+      )}
+      <div style={{ padding: 6 }}>
+        {opt("workspace", de ? "Ganzer Workspace" : "Whole workspace", de ? "Alle Mitglieder k\u00f6nnen sehen & bearbeiten" : "All members can view & edit",
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 0 0 18M12 3a14 14 0 0 1 0 18"/></svg>)}
+        {opt("restricted", de ? "Bestimmte Mitglieder" : "Specific members", de ? "Nur ausgew\u00e4hlte Personen" : "Only selected people",
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg>,
+          <div className="no-scrollbar" style={{ maxHeight: 190, overflowY: "auto", padding: "0 0 6px" }}>
+            {shareables.length === 0 && <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, padding: "4px 12px 8px" }}>{de ? "Keine weiteren Mitglieder" : "No other members"}</div>}
+            {shareables.map(m => {
+              const uid = m.user_id || m.id; const on = (shares || []).includes(uid); const av = memAv(m);
+              return (
+                <button key={uid} onClick={() => onToggleShare(uid)} style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left", padding: "6px 12px", border: "none", borderRadius: 8, cursor: "pointer", background: "transparent" }}>
+                  {av ? <img src={av} alt="" referrerPolicy="no-referrer" style={{ width: 24, height: 24, borderRadius: "50%", flexShrink: 0 }} /> : <div style={{ width: 24, height: 24, borderRadius: "50%", background: accent, color: darkMode ? "#15151c" : "#fff", fontSize: 10, fontWeight: 600, fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{memName(m)[0]?.toUpperCase()}</div>}
+                  <span style={{ flex: 1, fontSize: 13, color: theme.text, fontFamily: FONT }}>{memName(m)}</span>
+                  <span style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${on ? accent : theme.borderFaint}`, background: on ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={darkMode ? "#15151c" : "#fff"} strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
+                  </span>
+                </button>
+              );
+            })}
+          </div>)}
+        {opt("project", de ? "Projekt" : "Project", de ? "Mitglieder eines Projekts erhalten Zugriff" : "Members of a project get access",
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>,
+          <div style={{ padding: "0 12px 12px", position: "relative" }}>
+            <select value={projectId || ""} onChange={(e) => onProject(e.target.value)}
+              style={{ width: "100%", padding: "9px 34px 9px 11px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff", color: theme.text, fontFamily: FONT, fontSize: 13, outline: "none", appearance: "none", WebkitAppearance: "none", MozAppearance: "none", cursor: "pointer" }}>
+              <option value="">{de ? "Projekt w\u00e4hlen\u2026" : "Choose project\u2026"}</option>
+              {(projects || []).map(pr => <option key={pr.id} value={pr.id}>{pr.name}</option>)}
+            </select>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ position: "absolute", right: 24, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}><path d="M6 9l6 6 6-6" stroke={darkMode ? "#ffffff70" : "#1a1a2e70"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </div>)}
+      </div>
+    </div>
+  </>);
+}
+
 function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, userOrg,
-                        theme, darkMode, appLanguage, onUpload, onDone, onAutoSave, onPublish, onClose }) {
+                        theme, darkMode, appLanguage, onUpload, onDone, onAutoSave, onPublish, onClose,
+                        canvasRow = null }) {
   const de = appLanguage === "de";
+  // ── Sharing ────────────────────────────────────────────────────────────────
+  // Only when the editor is standing on a saved canvas: the same editor is also
+  // used for brand slots, which are part of a document and have nothing of
+  // their own to share.
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareVis, setShareVis] = useState(canvasRow?.visibility || "workspace");
+  const [shareProject, setShareProject] = useState(canvasRow?.project_id || null);
+  const [shareWith, setShareWith] = useState([]);
+  const [shareMembers, setShareMembers] = useState([]);
+  const [shareProjects, setShareProjects] = useState([]);
+  useEffect(() => {
+    if (!shareOpen || !canvasRow?.id || !orgId) return;
+    (async () => {
+      const [mem, proj, sh] = await Promise.all([
+        supabase.from("org_members").select("user_id, profiles(display_name, avatar_url)").eq("org_id", orgId),
+        supabase.from("projects").select("id, name").eq("org_id", orgId).order("name"),
+        supabase.from("canvas_shares").select("user_id").eq("canvas_id", canvasRow.id),
+      ]);
+      setShareMembers(mem.data || []);
+      setShareProjects(proj.data || []);
+      setShareWith((sh.data || []).map(r => r.user_id));
+    })();
+  }, [shareOpen, canvasRow?.id, orgId]);
+  const setCanvasVisibility = async (v) => {
+    setShareVis(v);
+    await supabase.from("brand_canvases").update({ visibility: v }).eq("id", canvasRow.id);
+  };
+  const setCanvasProject = async (pid) => {
+    setShareProject(pid || null);
+    await supabase.from("brand_canvases").update({ project_id: pid || null }).eq("id", canvasRow.id);
+  };
+  const toggleCanvasShare = async (uid) => {
+    const on = shareWith.includes(uid);
+    setShareWith(list => on ? list.filter(x => x !== uid) : [...list, uid]);
+    if (on) await supabase.from("canvas_shares").delete().eq("canvas_id", canvasRow.id).eq("user_id", uid);
+    else await supabase.from("canvas_shares").insert({ canvas_id: canvasRow.id, user_id: uid });
+  };
+
   // The panel width sits in the camera arithmetic as well as in the panel, so it
   // is a name rather than a number in four places waiting to drift apart.
   const PANEL_W = 300, RAIL_W = 78;
@@ -21384,6 +21516,33 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             </div>
           );
         })()}
+        {canvasRow?.id && (
+          <div style={{ position: "relative", marginRight: 4 }}>
+            <motion.div whileTap={{ scale: 0.96 }} onClick={() => setShareOpen(o => !o)}
+              title={de ? "Teilen" : "Share"}
+              style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 13px",
+                borderRadius: 999, cursor: "pointer", border: `1px solid ${line}`,
+                background: shareOpen ? (darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.09)") : "transparent",
+                color: theme.text, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+              </svg>
+              {de ? "Teilen" : "Share"}
+            </motion.div>
+            {shareOpen && (
+              <SurfaceShareMenu
+                visibility={shareVis} onVisibility={setCanvasVisibility}
+                shares={shareWith} onToggleShare={toggleCanvasShare}
+                members={shareMembers} projects={shareProjects}
+                projectId={shareProject} onProject={setCanvasProject}
+                ownerId={canvasRow.created_by}
+                theme={theme} darkMode={darkMode} de={de}
+                onClose={() => setShareOpen(false)} />
+            )}
+          </div>
+        )}
         <div style={{ position: "relative" }}>
           <motion.div whileTap={{ scale: 0.96 }} onClick={() => setZoomMenu(o => !o)}
             style={{ padding: "7px 10px 7px 13px", borderRadius: 999, border: `1px solid ${line}`,
@@ -26656,7 +26815,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
       {editing && (
         <CanvasEditor
           size={[editing.w, editing.h]} title={editing.name || "Canvas"}
-          doc={editing.doc} originRect={null}
+          doc={editing.doc} originRect={null} canvasRow={editing}
           brand={brand} orgId={userOrg?.id} session={session} userOrg={userOrg}
           theme={theme} darkMode={darkMode} appLanguage={appLanguage}
           onUpload={(file) => upload(file, "export")}
