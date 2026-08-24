@@ -24964,10 +24964,18 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
     const pid = c.postId;
     if (!pid || !c.postPermalink || !label) return null;
     if (!reactorsByPost.current[pid]) {
-      const r = await zernioRequest(session, { mode: "reactors", orgId,
-        url: c.postPermalink, postId: pid });
-      reactorsByPost.current[pid] = r.reactors || [];
+      // Not every post can be asked. SocialCrawl answers to
+      // `urn:li:activity:…`, and a post whose permalink and comment ids carry
+      // `urn:li:ugcPost:…` has no activity id anywhere in what we hold — so the
+      // one route from a name to a profile is closed for that post. Saying
+      // "no public profile found" there would blame the person for our reach.
+      try {
+        const r = await zernioRequest(session, { mode: "reactors", orgId,
+          url: c.postPermalink, postId: pid });
+        reactorsByPost.current[pid] = r.reactors || [];
+      } catch { reactorsByPost.current[pid] = null; }
     }
+    if (reactorsByPost.current[pid] === null) return { unreachable: true };
     const norm = (x) => String(x || "").trim().toLowerCase();
     return reactorsByPost.current[pid].find(p => norm(p.name) === norm(label))?.url || null;
   };
@@ -24975,7 +24983,12 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
     if (!key || people[key]) return;
     setPeople(m => ({ ...m, [key]: { loading: true } }));
     try {
-      const handle = /^https?:/i.test(key) ? key : (await profileUrlFor(c, label));
+      const found = /^https?:/i.test(key) ? key : (await profileUrlFor(c, label));
+      if (found?.unreachable) {
+        setPeople(m => ({ ...m, [key]: { data: null, unreachable: true } }));
+        return;
+      }
+      const handle = found;
       if (!handle) {
         setPeople(m => ({ ...m, [key]: { data: null, unidentified: true } }));
         return;
@@ -25033,6 +25046,10 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
       for (const c of list.slice(0, shown)) {
         if (c.platform !== "linkedin") continue;
         const f = c.from || c.author || c.user || {};
+        // The connected account's own comment needs no lookup — Zernio already
+        // sends its name and picture — and asking anyway spends a reaction list
+        // on a person we could name without it.
+        if (f.isOwner) continue;
         const label = f.name || f.display_name || f.username || null;
         const key = f.url || label;
         if (!key || seen.has(key)) continue;
@@ -25172,7 +25189,7 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
                       <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis",
                         whiteSpace: "nowrap" }}>{from.headline}</span>
                     )}
-                    {c.platform === "linkedin" && pKey && !who && (
+                    {c.platform === "linkedin" && pKey && !who && !from.isOwner && (
                       <span onClick={() => whoIs(pKey, c, label)}
                         style={{ cursor: "pointer", color: theme.text, fontWeight: 600,
                           border: `1px solid ${theme.borderFaint}`, borderRadius: 999,
@@ -25186,6 +25203,9 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
                       <span>
                         {who.error?.code === "socialcrawl_not_configured"
                           ? (de ? "SocialCrawl nicht konfiguriert" : "SocialCrawl not configured")
+                          : who.unreachable
+                          ? (de ? "Für diesen Beitrag liefert LinkedIn keine öffentliche Reaktionsliste"
+                                : "LinkedIn gives no public reaction list for this post")
                           : who.unidentified
                           ? (de ? "Nicht zuzuordnen — hat auf den Beitrag nicht reagiert"
                                 : "Cannot be identified — did not react to the post")
