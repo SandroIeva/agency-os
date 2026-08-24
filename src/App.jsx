@@ -39361,67 +39361,6 @@ export default function CircularMenu() {
   // Push-setup overlay (shown when ?push-setup=true)
   const [pushSetupOverlay, setPushSetupOverlay] = useState(null); // null | { status, message, needsPwa }
   const [panelOpen, setPanelOpen] = useState(false);
-  // ── The slide-up dashboard, on real numbers ────────────────────────────────
-  // It showed 8 open tasks, three projects named Meridian, Volta and Rebranding,
-  // and an AI analysis from two minutes ago — none of which existed. A dashboard
-  // that invents its content teaches people not to read it.
-  //
-  // Loaded when the panel is pulled up, not on every dashboard render: nobody
-  // should pay for a panel they never open.
-  const [dash, setDash] = useState(null);
-  useEffect(() => {
-    if (!panelOpen || !userOrg?.id || !session?.user?.id) return;
-    let alive = true;
-    (async () => {
-      const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
-      const since = midnight.toISOString();
-      const [tasks, projects, docs, boards, canvases, sent] = await Promise.all([
-        supabase.from("tasks")
-          .select("id, title, column_key, project_id, project_name, updated_at")
-          .eq("org_id", userOrg.id),
-        supabase.from("projects").select("id, name, color")
-          .eq("org_id", userOrg.id).eq("is_brand", false)
-          .order("updated_at", { ascending: false }).limit(3),
-        supabase.from("brand_documents").select("id, title, updated_at")
-          .eq("org_id", userOrg.id).order("updated_at", { ascending: false }).limit(4),
-        supabase.from("whiteboards").select("id, name, updated_at")
-          .eq("org_id", userOrg.id).order("updated_at", { ascending: false }).limit(4),
-        supabase.from("brand_canvases").select("id, name, updated_at")
-          .eq("org_id", userOrg.id).order("updated_at", { ascending: false }).limit(4),
-        // chat_messages carries no org_id, so "sent today" is scoped to the
-        // person rather than the workspace — which is what the label says.
-        supabase.from("chat_messages").select("id", { count: "exact", head: true })
-          .eq("sender_id", session.user.id).gte("created_at", since),
-      ]);
-      if (!alive) return;
-      const rows = tasks.data || [];
-      const done = rows.filter(x => x.column_key === "done");
-      const byProject = (id) => rows.filter(x => x.project_id === id);
-      const feed = [
-        ...(docs.data || []).map(d => ({ at: d.updated_at, kind: "doc",  name: d.title })),
-        ...(boards.data || []).map(b => ({ at: b.updated_at, kind: "board", name: b.name })),
-        ...(canvases.data || []).map(c => ({ at: c.updated_at, kind: "canvas", name: c.name })),
-        ...done.map(x => ({ at: x.updated_at, kind: "done", name: x.title })),
-      ].filter(x => x.at)
-        .sort((a, b) => String(b.at).localeCompare(String(a.at)))
-        .slice(0, 4);
-      setDash({
-        open: rows.filter(x => x.column_key !== "done").length,
-        progress: rows.filter(x => x.column_key === "progress").length,
-        doneToday: done.filter(x => x.updated_at >= since).length,
-        messages: sent.count || 0,
-        projects: (projects.data || []).map(pr => {
-          const mine = byProject(pr.id);
-          const fin = mine.filter(x => x.column_key === "done").length;
-          return { id: pr.id, name: pr.name, color: pr.color || "#8B7AFF",
-            total: mine.length, done: fin,
-            progress: mine.length ? Math.round((fin / mine.length) * 100) : 0 };
-        }),
-        feed,
-      });
-    })();
-    return () => { alive = false; };
-  }, [panelOpen, userOrg?.id, session?.user?.id]);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [dashboardTasks, setDashboardTasks] = useState([]);
   const [dashboardReminders, setDashboardReminders] = useState([]);
@@ -39610,6 +39549,68 @@ export default function CircularMenu() {
 
   // Organization / onboarding state
   const [userOrg, setUserOrg] = useState(null);            // current org the user belongs to
+
+  // ── The slide-up dashboard, on real numbers ────────────────────────────────
+  // It showed 8 open tasks, three projects named Meridian, Volta and Rebranding,
+  // and an AI analysis from two minutes ago — none of which existed. A dashboard
+  // that invents its content teaches people not to read it.
+  //
+  // Loaded when the panel is pulled up, not on every dashboard render: nobody
+  // should pay for a panel they never open.
+  const [dash, setDash] = useState(null);
+  useEffect(() => {
+    if (!panelOpen || !userOrg?.id || !session?.user?.id) return;
+    let alive = true;
+    (async () => {
+      const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+      const since = midnight.toISOString();
+      const [tasks, projects, docs, boards, canvases, sent] = await Promise.all([
+        supabase.from("tasks")
+          .select("id, title, column_key, project_id, project_name, updated_at")
+          .eq("org_id", userOrg.id),
+        supabase.from("projects").select("id, name, color")
+          .eq("org_id", userOrg.id).eq("is_brand", false)
+          .order("updated_at", { ascending: false }).limit(3),
+        supabase.from("brand_documents").select("id, title, updated_at")
+          .eq("org_id", userOrg.id).order("updated_at", { ascending: false }).limit(4),
+        supabase.from("whiteboards").select("id, name, updated_at")
+          .eq("org_id", userOrg.id).order("updated_at", { ascending: false }).limit(4),
+        supabase.from("brand_canvases").select("id, name, updated_at")
+          .eq("org_id", userOrg.id).order("updated_at", { ascending: false }).limit(4),
+        // chat_messages carries no org_id, so "sent today" is scoped to the
+        // person rather than the workspace — which is what the label says.
+        supabase.from("chat_messages").select("id", { count: "exact", head: true })
+          .eq("sender_id", session.user.id).gte("created_at", since),
+      ]);
+      if (!alive) return;
+      const rows = tasks.data || [];
+      const done = rows.filter(x => x.column_key === "done");
+      const byProject = (id) => rows.filter(x => x.project_id === id);
+      const feed = [
+        ...(docs.data || []).map(d => ({ at: d.updated_at, kind: "doc",  name: d.title })),
+        ...(boards.data || []).map(b => ({ at: b.updated_at, kind: "board", name: b.name })),
+        ...(canvases.data || []).map(c => ({ at: c.updated_at, kind: "canvas", name: c.name })),
+        ...done.map(x => ({ at: x.updated_at, kind: "done", name: x.title })),
+      ].filter(x => x.at)
+        .sort((a, b) => String(b.at).localeCompare(String(a.at)))
+        .slice(0, 4);
+      setDash({
+        open: rows.filter(x => x.column_key !== "done").length,
+        progress: rows.filter(x => x.column_key === "progress").length,
+        doneToday: done.filter(x => x.updated_at >= since).length,
+        messages: sent.count || 0,
+        projects: (projects.data || []).map(pr => {
+          const mine = byProject(pr.id);
+          const fin = mine.filter(x => x.column_key === "done").length;
+          return { id: pr.id, name: pr.name, color: pr.color || "#8B7AFF",
+            total: mine.length, done: fin,
+            progress: mine.length ? Math.round((fin / mine.length) * 100) : 0 };
+        }),
+        feed,
+      });
+    })();
+    return () => { alive = false; };
+  }, [panelOpen, userOrg?.id, session?.user?.id]);
   const [userOrgs, setUserOrgs] = useState([]);             // all orgs the user belongs to
   const [userOrgRole, setUserOrgRole] = useState(null);     // role in current org
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false); // workspace switcher dropdown
