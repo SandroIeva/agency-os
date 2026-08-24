@@ -25046,50 +25046,49 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
                       {when(c.createdTime)}
                     </span>
                   </div>
-                  <div style={{ fontFamily: FONT, fontSize: 13, color: theme.text, lineHeight: 1.55,
-                    marginTop: 3, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                    {c.message}
-                  </div>
-                  {/* What we found out about them, once asked. */}
+                  {/* Who this is, directly under the name — the way a
+                      profile reads. It was a grey card BELOW the comment
+                      before, which looks like a quotation of the comment
+                      rather than a description of the person: the owner had
+                      the headline, the followers and the location on screen
+                      and still reported seeing "only the name". Information
+                      nobody recognises as information is not delivered. */}
                   {(() => {
                     if (!who) return null;
                     if (who.loading) return (
                       <div style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint,
-                        marginTop: 4 }}>{de ? "Sucht…" : "Looking…"}</div>
+                        marginTop: 2 }}>{de ? "Sucht…" : "Looking…"}</div>
                     );
-                    if (who.error || !who.data) return (
-                      <div style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint,
-                        marginTop: 4 }}>
-                        {who.error?.code === "socialcrawl_not_configured"
-                          ? (de ? "SocialCrawl nicht konfiguriert." : "SocialCrawl not configured.")
-                          : who.unidentified
-                          ? (de ? "Nicht zuzuordnen — der Kommentar nennt nur den Namen, und diese Person hat auf den Beitrag nicht reagiert."
-                                : "Cannot be identified — the comment carries only a name, and this person did not react to the post.")
-                          : (de ? "Kein öffentliches Profil gefunden." : "No public profile found.")}
-                      </div>
-                    );
+                    if (who.error || !who.data) return null;   // said below, with the rest
                     const w = who.data;
+                    const facts = [
+                      w.followers != null && `${fmtMetric(w.followers, de)} ${de ? "Follower" : "followers"}`,
+                      plainField(w.location, de),
+                      w.ext?.is_top_voice && "Top Voice",
+                    ].filter(Boolean);
                     return (
-                      <div style={{ marginTop: 6, padding: "8px 10px", borderRadius: 9,
-                        background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                        fontFamily: FONT, fontSize: 11.5, color: theme.textDim, lineHeight: 1.5 }}>
-                        {w.bio && <div style={{ color: theme.text }}>{w.bio}</div>}
-                        <div style={{ marginTop: w.bio ? 3 : 0 }}>
-                          {[w.followers != null && `${fmtMetric(w.followers, de)} ${de ? "Follower" : "followers"}`,
-                            w.following != null && `${fmtMetric(w.following, de)} ${de ? "folgt" : "following"}`,
-                            plainField(w.location, de),
-                            w.ext?.is_top_voice && "Top Voice",
-                            w.ext?.is_premium && "Premium"].filter(Boolean).join(" · ")}
-                        </div>
-                        {w.url && (
-                          <a href={w.url} target="_blank" rel="noreferrer"
-                            style={{ color: theme.textFaint, fontSize: 11 }}>
-                            {de ? "Profil öffnen" : "Open profile"}
-                          </a>
+                      <div style={{ marginTop: 1 }}>
+                        {w.bio && (
+                          <div style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textDim,
+                            lineHeight: 1.45 }}>{w.bio}</div>
                         )}
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 1,
+                          fontFamily: FONT, fontSize: 11, color: theme.textFaint }}>
+                          {facts.length > 0 && <span>{facts.join(" · ")}</span>}
+                          {w.url && (
+                            <a href={w.url} target="_blank" rel="noreferrer"
+                              style={{ color: theme.textFaint }}>
+                              {de ? "Profil öffnen" : "Open profile"}
+                            </a>
+                          )}
+                        </div>
                       </div>
                     );
                   })()}
+                  <div style={{ fontFamily: FONT, fontSize: 13, color: theme.text, lineHeight: 1.55,
+                    marginTop: 3, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                    {c.message}
+                  </div>
                   <div style={{ display: "flex", gap: 12, marginTop: 5, fontFamily: FONT,
                     fontSize: 11, color: theme.textFaint, alignItems: "baseline" }}>
                     {/* LinkedIn only: this is the platform whose public profiles
@@ -25106,6 +25105,18 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
                           border: `1px solid ${theme.borderFaint}`, borderRadius: 999,
                           padding: "2px 9px" }}>
                         {de ? "Wer ist das?" : "Who is this?"}
+                      </span>
+                    )}
+                    {/* A lookup that found nobody says so here rather than
+                        leaving the row looking unfinished. */}
+                    {who && !who.loading && (who.error || !who.data) && (
+                      <span>
+                        {who.error?.code === "socialcrawl_not_configured"
+                          ? (de ? "SocialCrawl nicht konfiguriert" : "SocialCrawl not configured")
+                          : who.unidentified
+                          ? (de ? "Nicht zuzuordnen — hat auf den Beitrag nicht reagiert"
+                                : "Cannot be identified — did not react to the post")
+                          : (de ? "Kein öffentliches Profil gefunden" : "No public profile found")}
                       </span>
                     )}
                     {c.likeCount > 0 && <span>{c.likeCount} {de ? "Likes" : "likes"}</span>}
