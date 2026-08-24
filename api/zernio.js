@@ -382,9 +382,27 @@ export default async function handler(req, res) {
       // undefined. Measured on the live API: the response's only keys are
       // "author" and "computed". Flattened once here so profile, company page
       // and benchmark all read the same shape.
+      // The picture may not be called avatar_url. Rather than add a guess per
+      // round, any field whose NAME looks like an image and whose VALUE is a
+      // URL counts — including inside `ext`, where platform-specific extras
+      // live. If nothing matches, the vendor has no picture for this person,
+      // which is a different statement from "we read the wrong key".
+      const findImage = (o) => {
+        if (!o || typeof o !== "object") return null;
+        for (const [k, v] of Object.entries(o)) {
+          if (typeof v === "string" && /^https?:\/\//.test(v)
+            && /(avatar|photo|picture|image|thumb)/i.test(k)) return v;
+        }
+        return findImage(o.ext) || null;
+      };
       const flatten = (d) => {
         const r = d?.data || null;
-        return r?.author ? { ...r.author, computed: r.computed || null } : r;
+        const a = r?.author ? { ...r.author, computed: r.computed || null } : r;
+        if (a && !a.avatar_url) {
+          const img = findImage(a);
+          if (img) a.avatar_url = img;
+        }
+        return a;
       };
       let prof = flatten(data);
       let meta = data;
@@ -394,9 +412,9 @@ export default async function handler(req, res) {
       // only avatar_url is empty. Reads are served from SocialCrawl's cache by
       // default, so a person whose record was crawled thin stays faceless
       // forever. One retry past the cache, and only in exactly that case — the
-      // picture is missing AND the answer came from the cache — so the extra
-      // credit is spent on the person we would otherwise show as a letter.
-      if (!fresh && platform === "linkedinperson" && prof && !prof.avatar_url && data?.cached) {
+      // picture is missing — so the extra credit is only ever spent on the
+      // person we would otherwise show as a letter.
+      if (!fresh && platform === "linkedinperson" && prof && !prof.avatar_url) {
         const again = await scSoft(spec.path, q, true);
         const prof2 = again?.__unavailable ? null : flatten(again);
         if (prof2?.avatar_url) { prof = prof2; meta = again; }
