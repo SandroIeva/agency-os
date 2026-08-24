@@ -27557,7 +27557,7 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
 // a Grid (overview of everything) and a freeform Canvas (drag images around).
 // Images upload to the public brand-assets bucket so their URLs can later be
 // reused as reference inputs for image/video generation (Higgsfield etc.).
-function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, assetDeepLink, openWebImport = null, docFullscreen, setDocFullscreen, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null, embedded = false, headerSlotRef = null, projectName = "", projectLogoUrl = "", projectColor = "", onOpenWhiteboard = null }) {
+function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, assetDeepLink, openTab = null, openWebImport = null, docFullscreen, setDocFullscreen, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null, embedded = false, headerSlotRef = null, projectName = "", projectLogoUrl = "", projectColor = "", onOpenWhiteboard = null }) {
   // Embedded: action buttons portal into BrandView's header slot once it exists.
   const [assetSlotReady, setAssetSlotReady] = useState(false);
   useEffect(() => { setAssetSlotReady(true); }, []);
@@ -27572,6 +27572,11 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   // an effect that watched the value alone would re-fire on every unrelated
   // render. Same guard the document link needs.
   useEffect(() => { if (assetDeepLink?.url) setTab("creations"); }, [assetDeepLink?.ts]); // eslint-disable-line
+  // Arriving with a tab in mind — "New Doc" from the dashboard means Documents,
+  // not whatever tab happened to be open. Keyed on `ts` like the two above: the
+  // request stays set while the view is open, so watching the value alone would
+  // re-fire on every unrelated render and fight the user's own tab clicks.
+  useEffect(() => { if (openTab?.tab) setTab(openTab.tab); }, [openTab?.ts]); // eslint-disable-line
   // The website import lives in the Creations tab, so arriving here from the
   // dashboard has to land on it first; the tab itself opens the dialog.
   useEffect(() => { if (openWebImport?.ts) setTab("creations"); }, [openWebImport?.ts]); // eslint-disable-line
@@ -39361,6 +39366,7 @@ export default function CircularMenu() {
   // Push-setup overlay (shown when ?push-setup=true)
   const [pushSetupOverlay, setPushSetupOverlay] = useState(null); // null | { status, message, needsPwa }
   const [panelOpen, setPanelOpen] = useState(false);
+  const [assetsOpenTab, setAssetsOpenTab] = useState(null); // { tab, ts } — land on a named tab
   const [tasksOpen, setTasksOpen] = useState(false);
   const [dashboardTasks, setDashboardTasks] = useState([]);
   const [dashboardReminders, setDashboardReminders] = useState([]);
@@ -43700,7 +43706,7 @@ export default function CircularMenu() {
         {/* ASSETS VIEW (Brand → Assets): Moodboards / Creations / Inspirations */}
         <AnimatePresence>
           {currentView === "assets" && (
-            <AssetsView openWebImport={webImportLink} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive} orgMembers={orgMembers} createNotification={createNotification} docDeepLink={docDeepLink} assetDeepLink={assetDeepLink} docFullscreen={docFullscreen} setDocFullscreen={setDocFullscreen} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} llmProvider={llmProvider} llmKeys={llmKeys} onOpenWhiteboard={openWhiteboardFromAssets} onBack={() => setCurrentView("dashboard")} />
+            <AssetsView openTab={assetsOpenTab} openWebImport={webImportLink} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive} orgMembers={orgMembers} createNotification={createNotification} docDeepLink={docDeepLink} assetDeepLink={assetDeepLink} docFullscreen={docFullscreen} setDocFullscreen={setDocFullscreen} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} llmProvider={llmProvider} llmKeys={llmKeys} onOpenWhiteboard={openWhiteboardFromAssets} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
@@ -44817,7 +44823,7 @@ export default function CircularMenu() {
                     { label: t("dash.askAi"), icon: "✦", color: "#E84393",
                       go: () => setCurrentView("chat") },
                     { label: t("dash.newDoc"), icon: "◻", color: "#00B894",
-                      go: () => setCurrentView("assets") },
+                      go: () => { setAssetsOpenTab({ tab: "docs", ts: Date.now() }); setCurrentView("assets"); } },
                     { label: appLanguage === "de" ? "Brainstorm" : "Brainstorm", icon: "◇", color: "#F59E0B",
                       go: () => openBrainstorm() },
                   ].map((action, i) => (
