@@ -6482,6 +6482,8 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [peers, setPeers] = useState({});
   const chanRef = useRef(null);
   const lastSent = useRef(0);
+  const lastPoint = useRef({ x: 0, y: 0 });
+  const pendingSend = useRef(null);
   // Keyed per WINDOW, not per person. Two windows are two pointers — the same
   // colleague on a laptop and a tablet is genuinely in two places — and it is
   // also the only way to see this working without a second account.
@@ -6715,7 +6717,11 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         // rather than only who is waving.
         await ch.track({ name: myName(), color: peerColor(me), x: null, y: null });
       });
-    return () => { alive = false; chanRef.current = null; supabase.removeChannel(ch); };
+    return () => {
+      alive = false; chanRef.current = null;
+      if (pendingSend.current) { clearTimeout(pendingSend.current); pendingSend.current = null; }
+      supabase.removeChannel(ch);
+    };
   }, [board?.id]);
 
   // ── Mutations (optimistic; realtime echoes are deduped by id) ──
@@ -7058,12 +7064,23 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     // worth showing, and that is most of the time somebody is on a board.
     // Throttled to ~20/s — a cursor is smooth long before it is every pixel,
     // and every send is a message to everyone else on the board.
-    const now = Date.now();
-    if (chanRef.current && now - lastSent.current > 50) {
-      lastSent.current = now;
+    if (chanRef.current) {
       const w = toWorld(e);
-      chanRef.current.track({ name: myName(), color: peerColor(session?.user?.id),
-        x: Math.round(w.x), y: Math.round(w.y) });
+      lastPoint.current = { x: Math.round(w.x), y: Math.round(w.y) };
+      const now = Date.now();
+      const send = () => {
+        lastSent.current = Date.now();
+        pendingSend.current = null;
+        chanRef.current?.track({ name: myName(), color: peerColor(session?.user?.id),
+          ...lastPoint.current });
+      };
+      if (now - lastSent.current >= 100) send();
+      // A pointer that stops between two ticks would otherwise freeze one step
+      // short of where it actually is. The trailing send is what makes the
+      // cursor come to rest in the right place.
+      else if (!pendingSend.current) {
+        pendingSend.current = setTimeout(send, 100 - (now - lastSent.current));
+      }
     }
     const d = dragRef.current; if (!d) return;
     if (d.mode === "pan") { setCam(prev => ({ ...prev, x: d.cx + (e.clientX - d.sx), y: d.cy + (e.clientY - d.sy) })); return; }
