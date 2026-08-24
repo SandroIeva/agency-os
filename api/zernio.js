@@ -382,12 +382,29 @@ export default async function handler(req, res) {
       // undefined. Measured on the live API: the response's only keys are
       // "author" and "computed". Flattened once here so profile, company page
       // and benchmark all read the same shape.
-      const raw = data?.data || null;
-      const prof = raw?.author ? { ...raw.author, computed: raw.computed || null } : raw;
+      const flatten = (d) => {
+        const r = d?.data || null;
+        return r?.author ? { ...r.author, computed: r.computed || null } : r;
+      };
+      let prof = flatten(data);
+      let meta = data;
+
+      // A picture is the one field a cached record loses without looking
+      // incomplete: name, headline, followers and location all come back, and
+      // only avatar_url is empty. Reads are served from SocialCrawl's cache by
+      // default, so a person whose record was crawled thin stays faceless
+      // forever. One retry past the cache, and only in exactly that case — the
+      // picture is missing AND the answer came from the cache — so the extra
+      // credit is spent on the person we would otherwise show as a letter.
+      if (!fresh && platform === "linkedinperson" && prof && !prof.avatar_url && data?.cached) {
+        const again = await scSoft(spec.path, q, true);
+        const prof2 = again?.__unavailable ? null : flatten(again);
+        if (prof2?.avatar_url) { prof = prof2; meta = again; }
+      }
       const out = {
         profile: prof,
-        credits: { used: data?.credits_used ?? null, remaining: data?.credits_remaining ?? null },
-        cached: !!data?.cached,
+        credits: { used: meta?.credits_used ?? null, remaining: meta?.credits_remaining ?? null },
+        cached: !!meta?.cached,
       };
 
       // Everything a LinkedIn company page carries that our own analytics
