@@ -6460,6 +6460,13 @@ function CommentPopup({ authorName, createdAt, canEdit, text,
   );
 }
 
+// One colour per person, derived from their id rather than assigned: everyone
+// on the board computes the same colour for the same person without anybody
+// handing it out, and it survives a reload.
+const PEER_COLORS = ["#8B7AFF", "#00B894", "#E84393", "#F59E0B", "#0A66C2", "#E07A5F", "#3FA796", "#9B6CE0"];
+const peerColor = (id) => PEER_COLORS[
+  Math.abs([...String(id || "?")].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7)) % PEER_COLORS.length];
+
 function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage = "de", orgMembers = [], boardId = null, createNotification }) {
   const de = appLanguage === "de";
   const [boards, setBoards] = useState([]);
@@ -6468,6 +6475,17 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [items, setItems] = useState([]);          // [{ id, type, data }]
   const [tool, setTool] = useState("select");      // select | hand | pen | sticky | rect | ellipse | arrow | text
   const [cam, setCam] = useState({ x: 0, y: 0, s: 1 });
+  // Who else is on this board, and where their pointer is — in BOARD
+  // coordinates, so every viewer draws it through their own camera. Sending
+  // screen pixels would put the other person's cursor somewhere else for
+  // anyone panned or zoomed differently, which is most of the time.
+  const [peers, setPeers] = useState({});
+  const chanRef = useRef(null);
+  const lastSent = useRef(0);
+  // Keyed per WINDOW, not per person. Two windows are two pointers — the same
+  // colleague on a laptop and a tablet is genuinely in two places — and it is
+  // also the only way to see this working without a second account.
+  const myKey = useRef(crypto.randomUUID());
   const [sel, setSel] = useState(null);
   const [selIds, setSelIds] = useState([]); // multi-selection (marquee); always includes `sel` when single
   const [marquee, setMarquee] = useState(null); // {x,y,w,h} world-space selection rectangle
@@ -6663,7 +6681,19 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         if (alive && byId.size) setItems(prev => prev.map(i => byId.has(i.id) ? { ...i, data: byId.get(i.id) } : i));
       }
     })();
-    const ch = supabase.channel(`wb-${board.id}`)
+    const me = session?.user?.id;
+    const ch = supabase.channel(`wb-${board.id}`, { config: { presence: { key: myKey.current } } })
+      .on("presence", { event: "sync" }, () => {
+        const state = ch.presenceState();
+        const next = {};
+        Object.entries(state).forEach(([key, entries]) => {
+          const p = entries[entries.length - 1];   // the newest report from that person
+          if (!p || key === myKey.current) return; // never draw your own pointer
+          if (p.x == null || p.y == null) return;  // present, but has not moved yet
+          next[key] = p;
+        });
+        setPeers(next);
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "whiteboard_items", filter: `board_id=eq.${board.id}` }, (payload) => {
         if (payload.eventType === "INSERT") {
           const row = payload.new;
@@ -6678,8 +6708,14 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           setItems(prev => prev.filter(i => i.id !== payload.old?.id));
         }
       })
-      .subscribe();
-    return () => { alive = false; supabase.removeChannel(ch); };
+      .subscribe(async (status) => {
+        if (status !== "SUBSCRIBED") return;
+        chanRef.current = ch;
+        // Present before the first movement, so the board can show who is here
+        // rather than only who is waving.
+        await ch.track({ name: myName(), color: peerColor(me), x: null, y: null });
+      });
+    return () => { alive = false; chanRef.current = null; supabase.removeChannel(ch); };
   }, [board?.id]);
 
   // ── Mutations (optimistic; realtime echoes are deduped by id) ──
@@ -7018,6 +7054,17 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   };
 
   const onCanvasPointerMove = (e) => {
+    // Before the drag guard: a pointer that is only moving still has a position
+    // worth showing, and that is most of the time somebody is on a board.
+    // Throttled to ~20/s — a cursor is smooth long before it is every pixel,
+    // and every send is a message to everyone else on the board.
+    const now = Date.now();
+    if (chanRef.current && now - lastSent.current > 50) {
+      lastSent.current = now;
+      const w = toWorld(e);
+      chanRef.current.track({ name: myName(), color: peerColor(session?.user?.id),
+        x: Math.round(w.x), y: Math.round(w.y) });
+    }
     const d = dragRef.current; if (!d) return;
     if (d.mode === "pan") { setCam(prev => ({ ...prev, x: d.cx + (e.clientX - d.sx), y: d.cy + (e.clientY - d.sy) })); return; }
     const pt = toWorld(e);
@@ -8373,6 +8420,27 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           backgroundSize: `${24 * cam.s}px ${24 * cam.s}px`, backgroundPosition: `${cam.x}px ${cam.y}px`,
           WebkitMaskImage: "linear-gradient(to bottom, #000 0%, #000 calc(100% - 260px), transparent calc(100% - 90px))",
           maskImage: "linear-gradient(to bottom, #000 0%, #000 calc(100% - 260px), transparent calc(100% - 90px))" }} />
+        {/* Other people's pointers. Placed by hand from board coordinates
+            rather than inside the transformed layer: a cursor that scales with
+            the zoom is tiny at 20 % and enormous at 400 %, when what it means —
+            "someone is here" — never changes size. Nothing here takes pointer
+            events; a colleague's cursor must never be in the way of your own. */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 6 }}>
+          {Object.entries(peers).map(([uid, p]) => (
+            <div key={uid} style={{ position: "absolute", left: cam.x + p.x * cam.s,
+              top: cam.y + p.y * cam.s, transition: "left 0.08s linear, top 0.08s linear",
+              display: "flex", alignItems: "flex-start", gap: 4, willChange: "left, top" }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill={p.color || "#8B7AFF"}
+                style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.35))", flexShrink: 0 }}>
+                <path d="M5 3l14 8-6.2 1.6L9.6 19z" />
+              </svg>
+              <span style={{ marginTop: 12, padding: "2px 7px", borderRadius: 999,
+                background: p.color || "#8B7AFF", color: "#fff", fontFamily: FONT,
+                fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }}>{p.name || "\u2014"}</span>
+            </div>
+          ))}
+        </div>
         <div style={{ position: "absolute", left: 0, top: 0, transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`, transformOrigin: "0 0", pointerEvents: tool === "select" ? "auto" : "none" }}>
           {/* Alignment guides. Drawn in world coordinates alongside the elements,
               but scaled back by the zoom so the line stays hairline-thin and the
