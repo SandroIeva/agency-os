@@ -29789,7 +29789,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                 style={{ width: 255, maxWidth: "61%", height: "auto", marginBottom: 16,
                   pointerEvents: "none", userSelect: "none" }} />
               <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("assets.creationsEmptyTitle") || "Noch keine Kreationen"}</div>
-              <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 340, lineHeight: 1.55 }}>{t("assets.creationsEmptyHint") || "Mit KI generierte Bilder erscheinen hier automatisch — oder lade eigene hoch."}</div>
+              <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 340, lineHeight: 1.55 }}>{t("assets.creationsEmptyHint") || "Mit KI generierte Bilder erscheinen hier automatisch, oder lade eigene hoch."}</div>
               <motion.div whileTap={{ scale: 0.97 }} onClick={() => inputRef.current?.click()}
                 style={{ marginTop: 12, padding: "13px 26px", borderRadius: 999,
                   background: "transparent", border: `1px solid ${darkMode ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.22)"}`,
