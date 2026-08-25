@@ -43424,7 +43424,8 @@ export default function CircularMenu() {
             }}
           >
             <DotGrid darkMode={true} />
-            <AnimatedBlob />
+            {/* No AnimatedBlob here. On a screen that asks one question it was the brightest thing on it,
+                and it sat in the corner where nothing is. */}
             <div style={{ position: "relative", zIndex: 2, display: "flex", flexDirection: "column", alignItems: "center", maxWidth: 480, width: "100%", padding: "0 24px" }}>
 
               {/* ── Step: Choose ── */}
@@ -43461,7 +43462,10 @@ export default function CircularMenu() {
                     onClick={() => setOnboardingStep("create")}
                     style={{
                       flex: 1, padding: "28px 24px", borderRadius: 20, cursor: "pointer",
+                      // Frosted, so the dot grid reads as texture behind the card
+                      // rather than as dots showing through it.
                       background: "rgba(139, 122, 255, 0.06)", border: "1px solid rgba(139, 122, 255, 0.15)",
+                      backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
                       display: "flex", flexDirection: "column", alignItems: "center", gap: 14,
                       transition: "all 0.25s ease",
                     }}
@@ -43493,6 +43497,7 @@ export default function CircularMenu() {
                     style={{
                       flex: 1, padding: "28px 24px", borderRadius: 20, cursor: "pointer",
                       background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+                      backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
                       display: "flex", flexDirection: "column", alignItems: "center", gap: 14,
                       transition: "all 0.25s ease",
                     }}
