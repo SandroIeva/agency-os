@@ -28539,11 +28539,12 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                   transition={{ type: "spring", stiffness: 160, damping: 18 }}
                   // A fifth larger, and the negative margin closes the gap the
                   // image's own transparent padding leaves under it.
-                  // marginTop moves the picture down, marginBottom pulls the
-                  // block under it up — ten pixels each, so they meet rather
-                  // than the whole composition sliding.
+                  // marginTop moves the picture down, marginBottom takes the
+                  // same amount back off the bottom — the stack keeps its
+                  // height, so the centring does not budge and the picture
+                  // alone drops thirty pixels toward the text.
                   style={{ width: 384, maxWidth: "78%", height: "auto",
-                    marginTop: 10, marginBottom: -16,
+                    marginTop: 40, marginBottom: -46,
                     pointerEvents: "none", userSelect: "none" }} />
                 <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.emptyTitle") || "Noch keine Moodboards"}</div>
                 <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 340, lineHeight: 1.55 }}>{t("moodboard.emptyHint") || "Erstelle dein erstes Moodboard und sammle Referenzbilder, Farben und Inspirationen."}</div>
@@ -28739,7 +28740,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                 initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                 transition={{ type: "spring", stiffness: 160, damping: 18 }}
                 style={{ width: 360, maxWidth: "78%", height: "auto",
-                  marginTop: 10, marginBottom: -16,
+                  marginTop: 40, marginBottom: -46,
                   pointerEvents: "none", userSelect: "none" }} />
               <div style={{ fontSize: 15.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.boardEmptyTitle") || "Board ist leer"}</div>
               <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 320, lineHeight: 1.55 }}>{t("moodboard.boardEmptyHint") || "Lade Bilder hoch oder füge eine URL ein, um Referenzen zu sammeln."}</div>
