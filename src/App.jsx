@@ -45164,8 +45164,14 @@ export default function CircularMenu() {
                     <motion.div key={action.label}
                       initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: 0.3 + i * 0.05, duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
-                      whileHover={{ scale: 1.04, background: darkMode ? "#1E1E28" : "rgba(0,0,0,0.04)" }}
-                      whileTap={{ scale: 0.97 }}
+                      // No whileHover. Framer animates it with a spring, and a
+                      // spring has a ramp — that is the delay before anything
+                      // happens. Hover is CSS now: it starts on the same frame
+                      // as the pointer arrives. The scale is gone with it; a
+                      // button that grows under the cursor is a button that
+                      // moves while you are aiming at it.
+                      className="quick-action"
+                      whileTap={{ scale: 0.98 }}
                       onClick={() => { setPanelOpen(false); action.go(); }}
                       style={{ flex: 1, padding: "14px 12px", borderRadius: 14, background: darkMode ? "#16161E" : "rgba(255,255,255,0.9)", border: darkMode ? "1px solid #ffffff0A" : "1px solid rgba(0,0,0,0.06)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}
                     >
@@ -47658,6 +47664,13 @@ export default function CircularMenu() {
         .doc-blocknote .doc-anno-btn:active { transform: scale(0.94); }
         .doc-blocknote .doc-anno-pop { position: absolute; right: 0; width: 330px; pointer-events: auto; z-index: 30; }
         .doc-blocknote .doc-anno-pop-card { border-radius: 14px; overflow: hidden; }
+        .quick-action {
+          transition: background 0.12s ease-out, border-color 0.12s ease-out;
+        }
+        .quick-action:hover {
+          background: ${darkMode ? "#1A1A23" : "rgba(0,0,0,0.028)"} !important;
+          border-color: ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.09)"} !important;
+        }
         .hover-row {
           transition: background 0.6s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
