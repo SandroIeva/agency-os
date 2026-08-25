@@ -26395,7 +26395,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 // the medium: a board you think on, and a canvas you design on.
 const CREATION_SECTIONS = [
   { key: "ideas",  de: "Ideen",  en: "Ideas" },
-  { key: "canvas", de: "Canvas", en: "Canvas" },
+  // The key stays "canvas" — it is the section's identity in state, not a
+  // label, and renaming it would touch every comparison for no gain.
+  { key: "canvas", de: "Artboards", en: "Artboards" },
 ];
 
 // The formats offered when starting something new. The channel ones are read
