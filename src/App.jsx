@@ -12727,7 +12727,11 @@ const CHAT_AGENTS = [
 ];
 const AGENT_BY_KEY = Object.fromEntries(CHAT_AGENTS.map(a => [a.key, a]));
 
-function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t, session, userOrg, orgMembers, darkMode, theme, createNotification, notifications = [], markNotifRead, appLanguage = "en", llmProvider, llmKeys }) {
+function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t, session, userOrg, orgMembers, darkMode, theme, createNotification, notifications = [], markNotifRead, appLanguage = "en", llmProvider, llmKeys, onOpenAiSettings }) {
+  // An agent without a model is a name that will never answer. The same test the
+  // rest of the app uses — Gemini counts as connected because its key lives on
+  // the server, not with the user.
+  const aiConnected = !!((llmKeys && llmProvider && llmKeys[llmProvider]) || llmProvider === "gemini");
   const [search, setSearch] = useState("");
   const [conversations, setConversations] = useState([]);
   const [activeConvId, setActiveConvId] = useState(null);
@@ -13567,9 +13571,30 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                 // Centred in the whole area rather than floating near the top,
                 // and it names who you are about to write to.
                 <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textDim, textAlign: "center" }}>
-                    {(appLanguage === "de" ? "Starte eine Konversation mit " : "Start a conversation with ")
-                      + (activeConv.name || "").split(" ")[0]}
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+                    <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textDim, textAlign: "center" }}>
+                      {(appLanguage === "de" ? "Starte eine Konversation mit " : "Start a conversation with ")
+                        + (activeConv.name || "").split(" ")[0]}
+                    </div>
+                    {/* Said before the first message rather than after it. Writing
+                        to an agent with no model behind it gets you a refusal,
+                        and a refusal after the fact is a worse way to learn a
+                        precondition than a line saying so up front. */}
+                    {activeConv.agent_id && !aiConnected && (
+                      <motion.div whileTap={{ scale: 0.97 }}
+                        onClick={() => onOpenAiSettings?.()}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 8,
+                          padding: "7px 14px", borderRadius: 999, cursor: "pointer",
+                          border: `1px solid ${theme.borderFaint}`,
+                          background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                          fontFamily: FONT, fontSize: 12, color: theme.text }}>
+                        <span style={{ width: 6, height: 6, borderRadius: "50%",
+                          background: "#E84393", flexShrink: 0 }} />
+                        {appLanguage === "de" ? "Kein KI-Modell verknüpft" : "No AI model connected"}
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={theme.textDim}
+                          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                      </motion.div>
+                    )}
                   </div>
                 </div>
               )}
@@ -44037,6 +44062,7 @@ export default function CircularMenu() {
           {currentView === "chat" && (
             <ChatView
               initialTab={chatTab} appLanguage={appLanguage} llmProvider={llmProvider} llmKeys={llmKeys}
+              onOpenAiSettings={() => { setSettingsTab("ai"); setCurrentView("settings"); }}
               initialConvId={openChatConvId}
               onConvOpened={() => setOpenChatConvId(null)}
               t={t}
