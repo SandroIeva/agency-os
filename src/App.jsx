@@ -29769,15 +29769,30 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
             </div>
           )}
           {allFiles.length === 0 ? (
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: theme.textDim, textAlign: "center", gap: 14, padding: 20 }}>
-              <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 160, damping: 16 }}
-                style={{ width: 84, height: 84, borderRadius: 24, background: grad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: glow }}>
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 6.9 18.2l1.9-5.8L4 8.8h6.1z"/></svg>
-              </motion.div>
-              <div style={{ fontSize: 15.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("assets.creationsEmptyTitle") || "Noch keine Kreationen"}</div>
-              <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 330, lineHeight: 1.55 }}>{t("assets.creationsEmptyHint") || "Mit KI generierte Bilder erscheinen hier automatisch — oder lade eigene hoch."}</div>
-              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }} onClick={() => inputRef.current?.click()}
-                style={{ marginTop: 4, padding: "11px 22px", borderRadius: 999, background: accent, color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
+            // Same composition as the empty moodboard list: gap 9 so the title
+            // and its sentence read as one statement, and the block lifted
+            // twenty-five pixels off the optical centre.
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: theme.textDim, textAlign: "center", gap: 9, padding: 20, transform: "translateY(-25px)" }}>
+              {/* The stacked-cards visual, in place of the gradient star badge.
+                  Sized by HEIGHT rather than width: this picture is 1.23:1 where
+                  the board's is 1.59:1, so matching widths would have made it
+                  the taller of the two. 300px lands both at ~244px tall.
+                  It is also cropped flush — no transparent padding to absorb —
+                  so the gap under it is a positive margin, not the negative one
+                  the board visual needs. */}
+              <motion.img
+                src="/visual-NewAssets.png" alt=""
+                onError={(e) => { e.currentTarget.style.display = "none"; }}
+                initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 160, damping: 18 }}
+                style={{ width: 300, maxWidth: "72%", height: "auto", marginBottom: 16,
+                  pointerEvents: "none", userSelect: "none" }} />
+              <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("assets.creationsEmptyTitle") || "Noch keine Kreationen"}</div>
+              <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 340, lineHeight: 1.55 }}>{t("assets.creationsEmptyHint") || "Mit KI generierte Bilder erscheinen hier automatisch — oder lade eigene hoch."}</div>
+              <motion.div whileTap={{ scale: 0.97 }} onClick={() => inputRef.current?.click()}
+                style={{ marginTop: 12, padding: "13px 26px", borderRadius: 999,
+                  background: "transparent", border: `1px solid ${darkMode ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.22)"}`,
+                  color: theme.text, fontSize: 13.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
                 {t("moodboard.upload") || "Hochladen"}
               </motion.div>
             </div>
