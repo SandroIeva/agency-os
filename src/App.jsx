@@ -39828,7 +39828,7 @@ export default function CircularMenu() {
       const since = midnight.toISOString();
       const [tasks, docs, boards, canvases, sent] = await Promise.all([
         supabase.from("tasks")
-          .select("id, title, column_key, project_id, project_name, updated_at")
+          .select("id, title, column_key, project_id, project_name, updated_at, due_date, assignee_id")
           .eq("org_id", userOrg.id),
         supabase.from("brand_documents").select("id, title, updated_at")
           .eq("org_id", userOrg.id).order("updated_at", { ascending: false }).limit(6),
@@ -39854,7 +39854,15 @@ export default function CircularMenu() {
         // Four. Six filled the column but made it a wall — the point of this
         // list is the last few things, not a log.
         .slice(0, 4);
+      // What is actually on your plate today, which "10 open" never said.
+      const today = new Date(); today.setHours(23, 59, 59, 999);
+      const openRows = rows.filter(x => x.column_key !== "done");
+      const dueSoon = openRows
+        .filter(x => x.due_date && new Date(x.due_date) <= today)
+        .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)))
+        .slice(0, 4);
       setDash({
+        dueSoon,
         open: rows.filter(x => x.column_key !== "done").length,
         progress: rows.filter(x => x.column_key === "progress").length,
         doneToday: done.filter(x => x.updated_at >= since).length,
@@ -44951,12 +44959,20 @@ export default function CircularMenu() {
               position: "fixed", bottom: 0, left: 0, right: 0, top: "18%",
               background: darkMode ? "linear-gradient(180deg, transparent 0%, #111117 6%)" : "linear-gradient(180deg, transparent 0%, #F5F5F7 6%)",
               paddingTop: 32, zIndex: 25, overflowY: "hidden",
+              // A flex column, or the spacer below cannot push anything: `flex:1`
+              // on a child of a block container does nothing at all.
+              display: "flex", flexDirection: "column",
             }}
           >
             {/* Drag handle */}
             <div onClick={() => setPanelOpen(false)} style={{ width: 36, height: 4, borderRadius: 2, background: darkMode ? "#ffffff18" : "#1a1a2e20", margin: "0 auto 24px", cursor: "pointer" }} />
 
-            <div style={{ padding: "0 40px 120px", display: "flex", flexDirection: "column", gap: 28 }}>
+            {/* A column that fills the panel, so the actions can be pushed to
+                the bottom rather than trailing the content. The gap is the air
+                between sections — the view read as crowded because four blocks
+                sat 28px apart with no hierarchy between them. */}
+            <div style={{ padding: "0 40px 40px", flex: 1, minHeight: 0,
+              display: "flex", flexDirection: "column", gap: 44 }}>
 
               {/* Stats row */}
               <div>
@@ -44986,66 +45002,71 @@ export default function CircularMenu() {
                 </div>
               </div>
 
-              {/* Two columns. The view had one column of content and a wide
-                  empty right half — space that says nothing is space that makes
-                  a dashboard feel unfinished. Activity is what you did;
-                  notifications are what happened to you, and they belong side
-                  by side rather than one under the other. */}
+              {/* Left: what today asks of you — the meetings that are coming
+                  and the tasks that are due. "10 open" never said which ten or
+                  when, and that is the question somebody opens a dashboard
+                  with. Right: what happened while you were away. */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0, alignItems: "start" }}>
-              <div>
-                <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>{t("dash.activity")}</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  {/* What was actually touched, newest first: documents,
-                      brainstorm boards, canvases, and tasks that reached Done.
-                      An empty workspace says so rather than inventing four
-                      entries. */}
-                  {(dash?.feed || []).map(f => {
-                    const de2 = appLanguage === "de";
-                    const meta = {
-                      doc:    { icon: "◻", color: "#00B894", label: de2 ? "Dokument bearbeitet" : "Document edited" },
-                      board:  { icon: "◇", color: "#8B7AFF", label: de2 ? "Brainstorm bearbeitet" : "Brainstorm edited" },
-                      canvas: { icon: "◆", color: "#E84393", label: de2 ? "Canvas bearbeitet" : "Canvas edited" },
-                      done:   { icon: "✓", color: "#F59E0B", label: de2 ? "Aufgabe erledigt" : "Task done" },
-                    }[f.kind];
-                    const mins = Math.floor((Date.now() - new Date(f.at).getTime()) / 60000);
-                    const time = mins < 1 ? (de2 ? "gerade eben" : "just now")
-                      : mins < 60 ? `${mins} Min`
-                      : mins < 1440 ? `${Math.floor(mins / 60)} Std`
-                      : `${Math.floor(mins / 1440)} T`;
-                    return { icon: meta.icon, color: meta.color, title: meta.label,
-                      time, sub: f.name || (de2 ? "Ohne Titel" : "Untitled") };
-                  }).map((item, i) => (
-                    // No timestamp column. "17 Std" answers a question nobody
-                    // asked of a list that is already in order; what matters is
-                    // what changed, and the order says the rest.
-                    <motion.div key={i} className="hover-row"
-                      initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.2 + i * 0.06, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
-                      style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 14px",
-                        borderRadius: 12, cursor: "default" }}
-                    >
-                      <div style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0, background: item.color + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: item.color }}>{item.icon}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{item.title}</div>
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e60", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.sub}</div>
-                      </div>
-                    </motion.div>
-                  ))}
-                  {dash && dash.feed.length === 0 && (
-                    <div style={{ fontSize: 12.5, fontFamily: FONT, padding: "10px 14px",
-                      color: darkMode ? "#ffffff40" : "#1a1a2e60" }}>
-                      {appLanguage === "de" ? "Heute war hier noch nichts los."
-                                            : "Nothing has happened here yet."}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-
-                {/* Notifications — the same list the bell shows, read-only here
-                    and capped at what fits, so the panel never scrolls. */}
                 <div>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 }}>
+                  <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 18 }}>
+                    {appLanguage === "de" ? "Heute" : "Today"}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {upcomingEvents.slice(0, 2).map((ev, i) => {
+                      const d = ev.start ? new Date(ev.start) : null;
+                      const time = d ? d.toLocaleTimeString(appLanguage === "de" ? "de-DE" : "en-GB",
+                        { hour: "2-digit", minute: "2-digit" }) : "";
+                      return (
+                        <motion.div key={ev.id} className="hover-row"
+                          initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.15 + i * 0.06, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
+                          onClick={() => { setPanelOpen(false); ev.hangoutLink ? window.open(ev.hangoutLink, "_blank") : setCurrentView("calendar"); }}
+                          style={{ display: "flex", alignItems: "center", gap: 14, padding: "15px 14px", borderRadius: 12, cursor: "pointer" }}>
+                          <div style={{ minWidth: 52, fontSize: 13, fontFamily: FONT, fontWeight: 600,
+                            color: ev.isMeet ? "#00B894" : "#8B7AFF" }}>{time}</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD",
+                              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.title}</div>
+                            {ev.isMeet && (
+                              <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e60", marginTop: 3 }}>Google Meet</div>
+                            )}
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                    {(dash?.dueSoon || []).map((tk, i) => {
+                      const over = new Date(tk.due_date) < new Date(new Date().setHours(0, 0, 0, 0));
+                      return (
+                        <motion.div key={tk.id} className="hover-row"
+                          initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.2 + i * 0.06, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
+                          onClick={() => { setPanelOpen(false); setOpenTaskId(tk.id); setCurrentView("kanban"); }}
+                          style={{ display: "flex", alignItems: "center", gap: 14, padding: "15px 14px", borderRadius: 12, cursor: "pointer" }}>
+                          <div style={{ minWidth: 52, fontSize: 11, fontFamily: FONT, fontWeight: 600,
+                            color: over ? "#E84393" : (darkMode ? "#ffffff40" : "#1a1a2e60") }}>
+                            {over ? (appLanguage === "de" ? "überfällig" : "overdue") : (appLanguage === "de" ? "fällig" : "due")}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD",
+                              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tk.title}</div>
+                            {tk.project_name && (
+                              <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e60", marginTop: 3 }}>{tk.project_name}</div>
+                            )}
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                    {dash && upcomingEvents.length === 0 && dash.dueSoon.length === 0 && (
+                      <div style={{ fontSize: 12.5, fontFamily: FONT, padding: "12px 14px",
+                        color: darkMode ? "#ffffff40" : "#1a1a2e60" }}>
+                        {appLanguage === "de" ? "Keine Termine, nichts fällig." : "No meetings, nothing due."}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 18 }}>
                     <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase" }}>
                       {appLanguage === "de" ? "Benachrichtigungen" : "Notifications"}
                     </div>
@@ -45054,25 +45075,19 @@ export default function CircularMenu() {
                         background: "#E84393", borderRadius: 999, padding: "1px 7px" }}>{unreadCount}</span>
                     )}
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                    {notifications.slice(0, 4).map((n, i) => (
-                      // These lead somewhere — the same places the bell leads —
-                      // so they carry an arrow and the pointer to say so. The
-                      // activity list beside them does not, and that difference
-                      // is the point.
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {notifications.slice(0, 3).map((n, i) => (
                       <motion.div key={n.id} className="hover-row"
                         initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.2 + i * 0.06, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
                         whileTap={{ scale: 0.985 }}
                         onClick={() => openNotification(n)}
-                        style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "14px 14px",
+                        style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "15px 14px",
                           borderRadius: 12, cursor: "pointer" }}>
-                        {/* Unread carries a dot, read carries the space where
-                            one would be — so the rows stay aligned. */}
                         <div style={{ width: 6, height: 6, borderRadius: "50%", marginTop: 6, flexShrink: 0,
                           background: n.read ? "transparent" : "#E84393" }} />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12.5, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD",
+                          <div style={{ fontSize: 13, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD",
                             fontWeight: n.read ? 400 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.title}</div>
                           {n.body && (
                             <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e60",
@@ -45082,11 +45097,11 @@ export default function CircularMenu() {
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                           stroke={darkMode ? "#ffffff35" : "#1a1a2e40"} strokeWidth="2"
                           strokeLinecap="round" strokeLinejoin="round"
-                          style={{ flexShrink: 0, marginTop: 2 }}><path d="M9 18l6-6-6-6"/></svg>
+                          style={{ flexShrink: 0, marginTop: 3 }}><path d="M9 18l6-6-6-6"/></svg>
                       </motion.div>
                     ))}
                     {notifications.length === 0 && (
-                      <div style={{ fontSize: 12.5, fontFamily: FONT, padding: "10px 12px",
+                      <div style={{ fontSize: 12.5, fontFamily: FONT, padding: "12px 14px",
                         color: darkMode ? "#ffffff40" : "#1a1a2e60" }}>
                         {appLanguage === "de" ? "Nichts Neues." : "Nothing new."}
                       </div>
@@ -45094,6 +45109,41 @@ export default function CircularMenu() {
                   </div>
                 </div>
               </div>
+
+              {/* Activity, quieter and further down: it is the least urgent
+                  thing here — a record, not a call to act. */}
+              <div>
+                <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 16 }}>{t("dash.activity")}</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 34px" }}>
+                  {(dash?.feed || []).slice(0, 3).map(f => {
+                    const de2 = appLanguage === "de";
+                    const meta = {
+                      doc:    { color: "#00B894", label: de2 ? "Dokument" : "Document" },
+                      board:  { color: "#8B7AFF", label: "Brainstorm" },
+                      canvas: { color: "#E84393", label: de2 ? "Artboard" : "Artboard" },
+                      done:   { color: "#F59E0B", label: de2 ? "Erledigt" : "Done" },
+                    }[f.kind];
+                    return (
+                      <div key={f.at + f.kind} style={{ display: "flex", alignItems: "center", gap: 9,
+                        fontFamily: FONT, fontSize: 12, color: darkMode ? "#ffffff55" : "#1a1a2e75" }}>
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: meta.color, flexShrink: 0 }} />
+                        <span style={{ color: darkMode ? "#ffffff35" : "#1a1a2e50" }}>{meta.label}</span>
+                        <span style={{ maxWidth: 190, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                      </div>
+                    );
+                  })}
+                  {dash && dash.feed.length === 0 && (
+                    <div style={{ fontSize: 12.5, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e60" }}>
+                      {appLanguage === "de" ? "Heute war hier noch nichts los." : "Nothing has happened here yet."}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Pushes the actions to the bottom of the panel — they are what
+                  you reach for last, and the space above them is what makes the
+                  rest readable. */}
+              <div style={{ flex: 1, minHeight: 20 }} />
 
               {/* Quick actions */}
               <div>
