@@ -29776,7 +29776,8 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
               {/* The stacked-cards visual, in place of the gradient star badge.
                   Sized by HEIGHT rather than width: this picture is 1.23:1 where
                   the board's is 1.59:1, so matching widths would have made it
-                  the taller of the two. 300px lands both at ~244px tall.
+                  the taller of the two. 255px — a sixth off the 300 that lined
+                  the two up — is where it was asked to sit.
                   It is also cropped flush — no transparent padding to absorb —
                   so the gap under it is a positive margin, not the negative one
                   the board visual needs. */}
@@ -29785,7 +29786,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                 onError={(e) => { e.currentTarget.style.display = "none"; }}
                 initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                 transition={{ type: "spring", stiffness: 160, damping: 18 }}
-                style={{ width: 300, maxWidth: "72%", height: "auto", marginBottom: 16,
+                style={{ width: 255, maxWidth: "61%", height: "auto", marginBottom: 16,
                   pointerEvents: "none", userSelect: "none" }} />
               <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("assets.creationsEmptyTitle") || "Noch keine Kreationen"}</div>
               <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 340, lineHeight: 1.55 }}>{t("assets.creationsEmptyHint") || "Mit KI generierte Bilder erscheinen hier automatisch — oder lade eigene hoch."}</div>
