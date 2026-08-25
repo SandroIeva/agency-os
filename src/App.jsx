@@ -39623,6 +39623,11 @@ export default function CircularMenu() {
   const [pushSetupOverlay, setPushSetupOverlay] = useState(null); // null | { status, message, needsPwa }
   const [panelOpen, setPanelOpen] = useState(false);
   const [assetsOpenTab, setAssetsOpenTab] = useState(null); // { tab, ts } — land on a named tab
+  // Which quick action the pointer is over. A CSS :hover rule was tried first
+  // and lost to Framer's inline style even with !important — measured: the
+  // element reported :hover, the rule was in the sheet, the colour never
+  // changed. State is one line and cannot be out-specified.
+  const [hoverAction, setHoverAction] = useState(-1);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [dashboardTasks, setDashboardTasks] = useState([]);
   const [dashboardReminders, setDashboardReminders] = useState([]);
@@ -45170,10 +45175,19 @@ export default function CircularMenu() {
                       // as the pointer arrives. The scale is gone with it; a
                       // button that grows under the cursor is a button that
                       // moves while you are aiming at it.
-                      className="quick-action"
                       whileTap={{ scale: 0.98 }}
+                      onMouseEnter={() => setHoverAction(i)}
+                      onMouseLeave={() => setHoverAction(-1)}
                       onClick={() => { setPanelOpen(false); action.go(); }}
-                      style={{ flex: 1, padding: "14px 12px", borderRadius: 14, background: darkMode ? "#16161E" : "rgba(255,255,255,0.9)", border: darkMode ? "1px solid #ffffff0A" : "1px solid rgba(0,0,0,0.06)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}
+                      style={{ flex: 1, padding: "14px 12px", borderRadius: 14,
+                        background: hoverAction === i
+                          ? (darkMode ? "#1A1A23" : "rgba(0,0,0,0.028)")
+                          : (darkMode ? "#16161E" : "rgba(255,255,255,0.9)"),
+                        border: `1px solid ${hoverAction === i
+                          ? (darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.09)")
+                          : (darkMode ? "#ffffff0A" : "rgba(0,0,0,0.06)")}`,
+                        transition: "background 0.12s ease-out, border-color 0.12s ease-out",
+                        cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}
                     >
                       {/* The icon sits in its own tinted disc and the label is
                           full-strength text: a control should look like
@@ -47664,13 +47678,6 @@ export default function CircularMenu() {
         .doc-blocknote .doc-anno-btn:active { transform: scale(0.94); }
         .doc-blocknote .doc-anno-pop { position: absolute; right: 0; width: 330px; pointer-events: auto; z-index: 30; }
         .doc-blocknote .doc-anno-pop-card { border-radius: 14px; overflow: hidden; }
-        .quick-action {
-          transition: background 0.12s ease-out, border-color 0.12s ease-out;
-        }
-        .quick-action:hover {
-          background: ${darkMode ? "#1A1A23" : "rgba(0,0,0,0.028)"} !important;
-          border-color: ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.09)"} !important;
-        }
         .hover-row {
           transition: background 0.6s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
