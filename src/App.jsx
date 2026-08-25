@@ -161,14 +161,19 @@ const PENDING_BILLING_TTL_MS = 60 * 60 * 1000;
 const VAPID_PUBLIC_KEY = "BJJ_TXEs7qnwTKLnYO5_pvuuzr6oB59d4xpSCssTZCkfujAaQYlCwxptfnUPXxhSnikKcG4rPH1FuU4CTYh4gvg";
 
 // OS visual slots — user-customizable icons (key → metadata)
+// Anthracite by default, all of them. Seven different colours on one screen
+// read as decoration rather than as meaning — nothing was being distinguished,
+// the circles were simply loud. The colour stays configurable per slot, so a
+// workspace that wants one can still set it; it is just no longer the default.
+const OS_ICON_BG = "#15151c";
 const OS_VISUAL_SLOTS = [
-  { key: "calendar_event", label: "Kalender-Termin", description: "Symbol für normale Calendar-Events", defaultEmoji: "📅", defaultBg: "#4A6FA5" },
-  { key: "calendar_meet", label: "Google Meet", description: "Symbol für Meet/Video-Termine", defaultEmoji: "📹", defaultBg: "#2D7A6A" },
-  { key: "reminder", label: "Erinnerung", description: "Symbol für Reminder", defaultEmoji: "⏰", defaultBg: "#D4A85A" },
-  { key: "task_high", label: "Task — High Priority", description: "Symbol für Tasks mit hoher Priorität", defaultEmoji: "⚡", defaultBg: "#C4624A" },
-  { key: "task_default", label: "Task — Standard", description: "Symbol für Standard-Tasks ohne Logo", defaultEmoji: "◎", defaultBg: "#5A7AB5" },
-  { key: "note", label: "Notiz", description: "Symbol für Notizen", defaultEmoji: "📝", defaultBg: "#7E6FB5" },
-  { key: "chat_message", label: "Chat-Nachricht", description: "Symbol für Chat-Notifications", defaultEmoji: "💬", defaultBg: "#5BA889" },
+  { key: "calendar_event", label: "Kalender-Termin", description: "Symbol für normale Calendar-Events", defaultEmoji: "📅", defaultBg: OS_ICON_BG },
+  { key: "calendar_meet", label: "Google Meet", description: "Symbol für Meet/Video-Termine", defaultEmoji: "📹", defaultBg: OS_ICON_BG },
+  { key: "reminder", label: "Erinnerung", description: "Symbol für Reminder", defaultEmoji: "⏰", defaultBg: OS_ICON_BG },
+  { key: "task_high", label: "Task — High Priority", description: "Symbol für Tasks mit hoher Priorität", defaultEmoji: "⚡", defaultBg: OS_ICON_BG },
+  { key: "task_default", label: "Task — Standard", description: "Symbol für Standard-Tasks ohne Logo", defaultEmoji: "◎", defaultBg: OS_ICON_BG },
+  { key: "note", label: "Notiz", description: "Symbol für Notizen", defaultEmoji: "📝", defaultBg: OS_ICON_BG },
+  { key: "chat_message", label: "Chat-Nachricht", description: "Symbol für Chat-Notifications", defaultEmoji: "💬", defaultBg: OS_ICON_BG },
 ];
 
 // Curated background color palette for OS visual slots
@@ -41551,19 +41556,19 @@ export default function CircularMenu() {
     );
     const stepMeta = {
       project: {
-        iconBg: "#4A6FA5", done: onboarding?.project,
+        iconBg: OS_ICON_BG, done: onboarding?.project,
         icon: stepIcon(<><path d="M12 3 3.5 7.5 12 12l8.5-4.5L12 3Z" /><path d="M3.5 12.5 12 17l8.5-4.5" /><path d="M3.5 16.5 12 21l8.5-4.5" /></>),
         go: () => { setTriggerNewProject(true); setCurrentView("projects"); } },
       assets: {
-        iconBg: "#2D7A6A", done: onboarding?.assets,
+        iconBg: OS_ICON_BG, done: onboarding?.assets,
         icon: stepIcon(<><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3c2.5 2.4 3.8 5.5 3.8 9s-1.3 6.6-3.8 9c-2.5-2.4-3.8-5.5-3.8-9S9.5 5.4 12 3Z" /></>),
         go: () => { setWebImportLink({ ts: Date.now() }); setCurrentView("assets"); } },
       board: {
-        iconBg: "#D2569B", done: onboarding?.board,
+        iconBg: OS_ICON_BG, done: onboarding?.board,
         icon: stepIcon(<><path d="M9.5 18h5" /><path d="M10.5 21h3" /><path d="M12 3a6 6 0 0 0-3.6 10.8c.5.4.8 1 .8 1.6V16h5.6v-.6c0-.6.3-1.2.8-1.6A6 6 0 0 0 12 3Z" /></>),
         go: () => openBrainstormRef.current?.() },
       brand: {
-        iconBg: "#63676E", done: onboarding?.brand,
+        iconBg: OS_ICON_BG, done: onboarding?.brand,
         icon: stepIcon(<><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" fill="#fff" /></>),
         go: () => { setBrandTab("strategy"); setCurrentView("brand"); } },
     };
@@ -41581,8 +41586,15 @@ export default function CircularMenu() {
       const stepKey = FIRST_STEP_BY_TITLE.get(tk.title);
       const step = stepKey ? stepMeta[stepKey] : null;
       return {
-        icon: projLogo || customIcon ? null : (step ? step.icon : (tk.priority === "high" ? "⚡" : "◎")),
-        iconBg: step ? step.iconBg : (customBg || slotDef?.defaultBg || (tk.priority === "high" ? "#C4624A" : "#5A7AB5")),
+        // A drawn glyph rather than an emoji: an emoji brings its own colours
+        // and its own idea of what a bolt looks like, and it changes with the
+        // platform's font. These are white on anthracite like everything else.
+        icon: projLogo || customIcon ? null
+          : (step ? step.icon
+            : tk.priority === "high"
+              ? stepIcon(<path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5Z" />)
+              : stepIcon(<><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="3" /></>)),
+        iconBg: step ? step.iconBg : (customBg || slotDef?.defaultBg || OS_ICON_BG),
         logoUrl: projLogo || customIcon,
         // Project logos always fill the full circle (not affected by OS visual modes).
         // OS visual icons only fill when explicitly set to fullbleed mode.
@@ -41612,8 +41624,11 @@ export default function CircularMenu() {
       const customBg = slotData?.bg_color || null;
       const fullbleed = slotData?.mode === "fullbleed" && customIcon;
       return {
-        icon: customIcon ? null : (ev.isMeet ? "📹" : "📅"),
-        iconBg: customBg || slotDef?.defaultBg || (ev.isMeet ? "#2D7A6A" : "#4A6FA5"),
+        icon: customIcon ? null
+          : (ev.isMeet
+            ? stepIcon(<><rect x="2.5" y="6" width="13" height="12" rx="2.5" /><path d="M15.5 10.5 21.5 7v10l-6-3.5Z" /></>)
+            : stepIcon(<><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M3.5 10h17M8 3v4M16 3v4" /></>)),
+        iconBg: customBg || slotDef?.defaultBg || OS_ICON_BG,
         logoUrl: customIcon,
         fullbleed,
         name: ev.title,
