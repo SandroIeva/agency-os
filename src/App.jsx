@@ -44962,19 +44962,30 @@ export default function CircularMenu() {
                     { label: t("dash.doneToday"), value: dash ? String(dash.doneToday) : "–", color: "#00B894" },
                     { label: t("dash.messages"), value: dash ? String(dash.messages) : "–", color: "#E84393" },
                   ].map((stat, i) => (
+                    // A readout, not a control. It had the same card, border and
+                    // radius as the buttons at the bottom, so the only way to
+                    // learn which half was clickable was to click. The frame is
+                    // gone; what is left is the number and its word, with a
+                    // hairline between them for rhythm.
                     <motion.div key={stat.label}
                       initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.05, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
-                      style={{ flex: 1, padding: "14px 16px", borderRadius: 14, background: darkMode ? "#16161E" : "rgba(255,255,255,0.9)", border: darkMode ? "1px solid #ffffff0A" : "1px solid rgba(0,0,0,0.06)" }}
+                      style={{ flex: 1, padding: "2px 0 2px 18px",
+                        borderLeft: i === 0 ? "none" : `1px solid ${darkMode ? "#ffffff12" : "rgba(0,0,0,0.08)"}` }}
                     >
-                      <div style={{ fontSize: 26, fontWeight: 300, fontFamily: FONT, color: stat.color, lineHeight: 1, marginBottom: 5 }}>{stat.value}</div>
-                      <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e70" }}>{stat.label}</div>
+                      <div style={{ fontSize: 34, fontWeight: 200, fontFamily: FONT, color: stat.color, lineHeight: 1, marginBottom: 6, letterSpacing: -0.5 }}>{stat.value}</div>
+                      <div style={{ fontSize: 11, fontFamily: FONT, letterSpacing: 0.3, color: darkMode ? "#ffffff45" : "#1a1a2e70" }}>{stat.label}</div>
                     </motion.div>
                   ))}
                 </div>
               </div>
 
-              {/* Activity feed */}
+              {/* Two columns. The view had one column of content and a wide
+                  empty right half — space that says nothing is space that makes
+                  a dashboard feel unfinished. Activity is what you did;
+                  notifications are what happened to you, and they belong side
+                  by side rather than one under the other. */}
+              <div style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: 28, alignItems: "start" }}>
               <div>
                 <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>{t("dash.activity")}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -45021,6 +45032,59 @@ export default function CircularMenu() {
                 </div>
               </div>
 
+
+                {/* Notifications — the same list the bell shows, read-only here
+                    and capped at what fits, so the panel never scrolls. */}
+                <div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 }}>
+                    <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase" }}>
+                      {appLanguage === "de" ? "Benachrichtigungen" : "Notifications"}
+                    </div>
+                    {unreadCount > 0 && (
+                      <span style={{ fontSize: 10, fontFamily: FONT, fontWeight: 700, color: "#fff",
+                        background: "#E84393", borderRadius: 999, padding: "1px 7px" }}>{unreadCount}</span>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    {notifications.slice(0, 6).map((n, i) => {
+                      const mins = Math.floor((Date.now() - new Date(n.created_at).getTime()) / 60000);
+                      const time = mins < 1 ? (appLanguage === "de" ? "jetzt" : "now")
+                        : mins < 60 ? `${mins} Min`
+                        : mins < 1440 ? `${Math.floor(mins / 60)} Std`
+                        : `${Math.floor(mins / 1440)} T`;
+                      return (
+                        <motion.div key={n.id}
+                          initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.2 + i * 0.06, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
+                          onClick={() => { markNotifRead(n.id); }}
+                          style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 12px",
+                            borderRadius: 12, cursor: "pointer" }}>
+                          {/* Unread carries a dot, read carries the space where
+                              one would be — so the rows stay aligned. */}
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", marginTop: 6, flexShrink: 0,
+                            background: n.read ? "transparent" : "#E84393" }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12.5, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD",
+                              fontWeight: n.read ? 400 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.title}</div>
+                            {n.body && (
+                              <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e60",
+                                marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.body}</div>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40", flexShrink: 0 }}>{time}</div>
+                        </motion.div>
+                      );
+                    })}
+                    {notifications.length === 0 && (
+                      <div style={{ fontSize: 12.5, fontFamily: FONT, padding: "10px 12px",
+                        color: darkMode ? "#ffffff40" : "#1a1a2e60" }}>
+                        {appLanguage === "de" ? "Nichts Neues." : "Nothing new."}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* Quick actions */}
               <div>
                 <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>{appLanguage === "de" ? "Schnellaktionen" : "Quick Actions"}</div>
@@ -45045,8 +45109,14 @@ export default function CircularMenu() {
                       onClick={() => { setPanelOpen(false); action.go(); }}
                       style={{ flex: 1, padding: "14px 12px", borderRadius: 14, background: darkMode ? "#16161E" : "rgba(255,255,255,0.9)", border: darkMode ? "1px solid #ffffff0A" : "1px solid rgba(0,0,0,0.06)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}
                     >
-                      <div style={{ fontSize: 18, color: action.color }}>{action.icon}</div>
-                      <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff60" : "#1a1a2e80" }}>{action.label}</div>
+                      {/* The icon sits in its own tinted disc and the label is
+                          full-strength text: a control should look like
+                          something that was put there to be pressed. */}
+                      <div style={{ width: 34, height: 34, borderRadius: "50%",
+                        background: action.color + "1f", color: action.color,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 16 }}>{action.icon}</div>
+                      <div style={{ fontSize: 12, fontWeight: 500, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD" }}>{action.label}</div>
                     </motion.div>
                   ))}
                 </div>
