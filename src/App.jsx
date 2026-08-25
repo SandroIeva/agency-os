@@ -28527,14 +28527,22 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
             ) : boards.length === 0 ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, textAlign: "center", gap: 14 }}>
-                <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 160, damping: 16 }}
-                  style={{ width: 92, height: 92, borderRadius: 26, background: grad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: glow }}>
-                  <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
-                </motion.div>
+                {/* Same visual as the empty board itself. This is the screen the
+                    mockup was drawn from — the one you reach with no boards at
+                    all, where "New board" is the right thing to offer. */}
+                <motion.img
+                  src="/visual-NewBoard.png" alt=""
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                  initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 160, damping: 18 }}
+                  style={{ width: 320, maxWidth: "70%", height: "auto", marginBottom: 4,
+                    pointerEvents: "none", userSelect: "none" }} />
                 <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.emptyTitle") || "Noch keine Moodboards"}</div>
                 <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 340, lineHeight: 1.55 }}>{t("moodboard.emptyHint") || "Erstelle dein erstes Moodboard und sammle Referenzbilder, Farben und Inspirationen."}</div>
-                <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }} onClick={() => setCreating(true)}
-                  style={{ marginTop: 6, padding: "11px 22px", borderRadius: 999, background: accent, color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
+                <motion.div whileTap={{ scale: 0.97 }} onClick={() => setCreating(true)}
+                  style={{ marginTop: 6, padding: "11px 26px", borderRadius: 999,
+                    background: "transparent", border: `1px solid ${darkMode ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.22)"}`,
+                    color: theme.text, fontSize: 13.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
                   {t("moodboard.new") || "Neues Board"}
                 </motion.div>
               </div>
