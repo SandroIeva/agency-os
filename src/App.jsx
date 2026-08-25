@@ -28710,14 +28710,27 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
           ) : items.length === 0 ? (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, textAlign: "center", gap: 14, padding: 20 }}>
-              <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 160, damping: 16 }}
-                style={{ width: 84, height: 84, borderRadius: 24, background: grad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: glow }}>
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-              </motion.div>
+              {/* The three fanned references, as supplied. A picture of what a
+                  moodboard becomes says more here than an icon of a picture. */}
+              <motion.img
+                src="/moodboard-empty.png" alt=""
+                // Hidden if the file is not there, rather than leaving a broken
+                // image icon in an empty state — which would be worse than the
+                // plain icon this replaced.
+                onError={(e) => { e.currentTarget.style.display = "none"; }}
+                initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 160, damping: 18 }}
+                style={{ width: 300, maxWidth: "70%", height: "auto", marginBottom: 4,
+                  pointerEvents: "none", userSelect: "none" }} />
               <div style={{ fontSize: 15.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.boardEmptyTitle") || "Board ist leer"}</div>
               <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 320, lineHeight: 1.55 }}>{t("moodboard.boardEmptyHint") || "Lade Bilder hoch oder füge eine URL ein, um Referenzen zu sammeln."}</div>
-              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }} onClick={() => fileInputRef.current?.click()}
-                style={{ marginTop: 4, padding: "11px 22px", borderRadius: 999, background: accent, color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
+              {/* Outlined rather than filled, the way it was drawn: on this
+                  screen the picture is the loud part, and the button should not
+                  compete with it. */}
+              <motion.div whileTap={{ scale: 0.97 }} onClick={() => fileInputRef.current?.click()}
+                style={{ marginTop: 6, padding: "11px 26px", borderRadius: 999,
+                  background: "transparent", border: `1px solid ${darkMode ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.22)"}`,
+                  color: theme.text, fontSize: 13.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
                 {t("moodboard.upload") || "Hochladen"}
               </motion.div>
             </div>
