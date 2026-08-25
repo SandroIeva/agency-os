@@ -28713,7 +28713,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
               {/* The three fanned references, as supplied. A picture of what a
                   moodboard becomes says more here than an icon of a picture. */}
               <motion.img
-                src="/moodboard-empty.png" alt=""
+                src="/visual-NewBoard.png" alt=""
                 // Hidden if the file is not there, rather than leaving a broken
                 // image icon in an empty state — which would be worse than the
                 // plain icon this replaced.
