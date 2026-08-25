@@ -39851,9 +39851,9 @@ export default function CircularMenu() {
         ...done.map(x => ({ at: x.updated_at, kind: "done", name: x.title })),
       ].filter(x => x.at)
         .sort((a, b) => String(b.at).localeCompare(String(a.at)))
-        // Six rather than four: the projects section is gone and the space it
-        // held is better spent on things that actually happened.
-        .slice(0, 6);
+        // Four. Six filled the column but made it a wall — the point of this
+        // list is the last few things, not a log.
+        .slice(0, 4);
       setDash({
         open: rows.filter(x => x.column_key !== "done").length,
         progress: rows.filter(x => x.column_key === "progress").length,
@@ -41048,6 +41048,32 @@ export default function CircularMenu() {
   }, [session?.user?.id]);
 
   // ── Notifications: load, subscribe, helpers ──
+  // Where a notification leads. Extracted because the pull-up dashboard shows
+  // the same list: two copies of this chain would be two sets of rules for
+  // where a click lands, and they would not stay the same for long.
+  const closePanels = () => { setNotifOpen(false); setPanelOpen(false); };
+  const openNotification = (n) => {
+    markNotifRead(n.id);
+    if (n.type === "chat_message") { setOpenChatConvId(n.metadata?.conversation_id || null); setCurrentView("chat"); closePanels(); }
+    else if (n.metadata?.task_id) { setOpenTaskId(n.metadata.task_id); setCurrentView("kanban"); closePanels(); }
+    else if (n.metadata?.hangoutLink) { window.open(n.metadata.hangoutLink, "_blank"); }
+    else if (n.type === "calendar_reminder") { setCurrentView("calendar"); closePanels(); }
+    else if (n.type === "project_added") { setCurrentView("projects"); closePanels(); }
+    else if (n.type === "comment_mention" && n.metadata?.document_id) { setDocDeepLink({ documentId: n.metadata.document_id, blockId: n.metadata.block_id || null, ts: Date.now() }); setCurrentView("assets"); closePanels(); }
+    // A finished image opens where it lives, showing the
+    // picture itself. Landing on the asset list and
+    // leaving someone to find it would be half an
+    // answer — the notification already knows which
+    // one it means.
+    else if (n.type === "image_ready" && n.metadata?.url) { setAssetDeepLink({ url: n.metadata.url, ts: Date.now() }); setCurrentView("assets"); closePanels(); }
+    // A failed one has nothing to open. It goes to
+    // Assets like the rest so the prompt can go
+    // straight back out, and the panel closes rather
+    // than sitting there having done nothing.
+    else if (n.type === "image_failed") { setCurrentView("assets"); closePanels(); }
+    else if (n.type === "reminder") { closePanels(); }
+  };
+
   const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
 
   useEffect(() => {
@@ -43807,27 +43833,7 @@ export default function CircularMenu() {
                         return (
                           <motion.div key={n.id}
                             whileTap={{ scale: 0.98 }}
-                            onClick={() => {
-                              markNotifRead(n.id);
-                              if (n.type === "chat_message") { setOpenChatConvId(n.metadata?.conversation_id || null); setCurrentView("chat"); setNotifOpen(false); }
-                              else if (n.metadata?.task_id) { setOpenTaskId(n.metadata.task_id); setCurrentView("kanban"); setNotifOpen(false); }
-                              else if (n.metadata?.hangoutLink) { window.open(n.metadata.hangoutLink, "_blank"); }
-                              else if (n.type === "calendar_reminder") { setCurrentView("calendar"); setNotifOpen(false); }
-                              else if (n.type === "project_added") { setCurrentView("projects"); setNotifOpen(false); }
-                              else if (n.type === "comment_mention" && n.metadata?.document_id) { setDocDeepLink({ documentId: n.metadata.document_id, blockId: n.metadata.block_id || null, ts: Date.now() }); setCurrentView("assets"); setNotifOpen(false); }
-                              // A finished image opens where it lives, showing the
-                              // picture itself. Landing on the asset list and
-                              // leaving someone to find it would be half an
-                              // answer — the notification already knows which
-                              // one it means.
-                              else if (n.type === "image_ready" && n.metadata?.url) { setAssetDeepLink({ url: n.metadata.url, ts: Date.now() }); setCurrentView("assets"); setNotifOpen(false); }
-                              // A failed one has nothing to open. It goes to
-                              // Assets like the rest so the prompt can go
-                              // straight back out, and the panel closes rather
-                              // than sitting there having done nothing.
-                              else if (n.type === "image_failed") { setCurrentView("assets"); setNotifOpen(false); }
-                              else if (n.type === "reminder") { setNotifOpen(false); }
-                            }}
+                            onClick={() => openNotification(n)}
                             style={{
                               padding: "12px 18px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 12,
                               background: n.read ? "transparent" : (darkMode ? "rgba(139,122,255,0.04)" : "rgba(139,122,255,0.06)"),
@@ -44985,7 +44991,7 @@ export default function CircularMenu() {
                   a dashboard feel unfinished. Activity is what you did;
                   notifications are what happened to you, and they belong side
                   by side rather than one under the other. */}
-              <div style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: 28, alignItems: "start" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0, alignItems: "start" }}>
               <div>
                 <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff30" : "#1a1a2e50", letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 }}>{t("dash.activity")}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -45009,17 +45015,20 @@ export default function CircularMenu() {
                     return { icon: meta.icon, color: meta.color, title: meta.label,
                       time, sub: f.name || (de2 ? "Ohne Titel" : "Untitled") };
                   }).map((item, i) => (
-                    <motion.div key={i}
+                    // No timestamp column. "17 Std" answers a question nobody
+                    // asked of a list that is already in order; what matters is
+                    // what changed, and the order says the rest.
+                    <motion.div key={i} className="hover-row"
                       initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.2 + i * 0.06, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
-                      style={{ display: "flex", alignItems: "center", gap: 14, padding: "11px 14px", borderRadius: 12, cursor: "pointer" }}
+                      style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 14px",
+                        borderRadius: 12, cursor: "default" }}
                     >
                       <div style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0, background: item.color + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: item.color }}>{item.icon}</div>
-                      <div style={{ flex: 1 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 400 }}>{item.title}</div>
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e60", marginTop: 2 }}>{item.sub}</div>
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e60", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.sub}</div>
                       </div>
-                      <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40" }}>{item.time}</div>
                     </motion.div>
                   ))}
                   {dash && dash.feed.length === 0 && (
@@ -45046,35 +45055,36 @@ export default function CircularMenu() {
                     )}
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                    {notifications.slice(0, 6).map((n, i) => {
-                      const mins = Math.floor((Date.now() - new Date(n.created_at).getTime()) / 60000);
-                      const time = mins < 1 ? (appLanguage === "de" ? "jetzt" : "now")
-                        : mins < 60 ? `${mins} Min`
-                        : mins < 1440 ? `${Math.floor(mins / 60)} Std`
-                        : `${Math.floor(mins / 1440)} T`;
-                      return (
-                        <motion.div key={n.id}
-                          initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.2 + i * 0.06, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
-                          onClick={() => { markNotifRead(n.id); }}
-                          style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 12px",
-                            borderRadius: 12, cursor: "pointer" }}>
-                          {/* Unread carries a dot, read carries the space where
-                              one would be — so the rows stay aligned. */}
-                          <div style={{ width: 6, height: 6, borderRadius: "50%", marginTop: 6, flexShrink: 0,
-                            background: n.read ? "transparent" : "#E84393" }} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12.5, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD",
-                              fontWeight: n.read ? 400 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.title}</div>
-                            {n.body && (
-                              <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e60",
-                                marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.body}</div>
-                            )}
-                          </div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e40", flexShrink: 0 }}>{time}</div>
-                        </motion.div>
-                      );
-                    })}
+                    {notifications.slice(0, 4).map((n, i) => (
+                      // These lead somewhere — the same places the bell leads —
+                      // so they carry an arrow and the pointer to say so. The
+                      // activity list beside them does not, and that difference
+                      // is the point.
+                      <motion.div key={n.id} className="hover-row"
+                        initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.2 + i * 0.06, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
+                        whileTap={{ scale: 0.985 }}
+                        onClick={() => openNotification(n)}
+                        style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "14px 14px",
+                          borderRadius: 12, cursor: "pointer" }}>
+                        {/* Unread carries a dot, read carries the space where
+                            one would be — so the rows stay aligned. */}
+                        <div style={{ width: 6, height: 6, borderRadius: "50%", marginTop: 6, flexShrink: 0,
+                          background: n.read ? "transparent" : "#E84393" }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12.5, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD",
+                            fontWeight: n.read ? 400 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.title}</div>
+                          {n.body && (
+                            <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e60",
+                              marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.body}</div>
+                          )}
+                        </div>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                          stroke={darkMode ? "#ffffff35" : "#1a1a2e40"} strokeWidth="2"
+                          strokeLinecap="round" strokeLinejoin="round"
+                          style={{ flexShrink: 0, marginTop: 2 }}><path d="M9 18l6-6-6-6"/></svg>
+                      </motion.div>
+                    ))}
                     {notifications.length === 0 && (
                       <div style={{ fontSize: 12.5, fontFamily: FONT, padding: "10px 12px",
                         color: darkMode ? "#ffffff40" : "#1a1a2e60" }}>
