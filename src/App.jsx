@@ -43179,7 +43179,11 @@ export default function CircularMenu() {
     }}>
       <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet" />
       <DotGrid darkMode={darkMode} />
-      <AnimatedBlob />
+      {/* The glow belongs to the AI orb in the bottom-right corner — it is the
+          light the orb casts. On screens that have no orb (login, onboarding)
+          it is a coloured smudge in an empty corner, explaining nothing. The
+          login screen draws its own; this one is for the app proper. */}
+      {session && !onboardingStep && <AnimatedBlob />}
 
       {/* AUTH LOADING */}
       <AnimatePresence>
