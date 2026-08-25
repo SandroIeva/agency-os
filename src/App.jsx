@@ -28539,12 +28539,18 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                   transition={{ type: "spring", stiffness: 160, damping: 18 }}
                   // A fifth larger, and the negative margin closes the gap the
                   // image's own transparent padding leaves under it.
-                  style={{ width: 384, maxWidth: "78%", height: "auto", marginBottom: -6,
+                  // marginTop moves the picture down, marginBottom pulls the
+                  // block under it up — ten pixels each, so they meet rather
+                  // than the whole composition sliding.
+                  style={{ width: 384, maxWidth: "78%", height: "auto",
+                    marginTop: 10, marginBottom: -16,
                     pointerEvents: "none", userSelect: "none" }} />
                 <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.emptyTitle") || "Noch keine Moodboards"}</div>
                 <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 340, lineHeight: 1.55 }}>{t("moodboard.emptyHint") || "Erstelle dein erstes Moodboard und sammle Referenzbilder, Farben und Inspirationen."}</div>
                 <motion.div whileTap={{ scale: 0.97 }} onClick={() => setCreating(true)}
-                  style={{ marginTop: 3, padding: "11px 26px", borderRadius: 999,
+                  // 13px top and bottom rather than 11: the label sat low in the
+                  // pill because the cap height is not the line box.
+                  style={{ marginTop: 12, padding: "13px 26px", borderRadius: 999,
                     background: "transparent", border: `1px solid ${darkMode ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.22)"}`,
                     color: theme.text, fontSize: 13.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
                   {t("moodboard.new") || "Neues Board"}
@@ -28732,7 +28738,8 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                 onError={(e) => { e.currentTarget.style.display = "none"; }}
                 initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                 transition={{ type: "spring", stiffness: 160, damping: 18 }}
-                style={{ width: 360, maxWidth: "78%", height: "auto", marginBottom: -6,
+                style={{ width: 360, maxWidth: "78%", height: "auto",
+                  marginTop: 10, marginBottom: -16,
                   pointerEvents: "none", userSelect: "none" }} />
               <div style={{ fontSize: 15.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.boardEmptyTitle") || "Board ist leer"}</div>
               <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 320, lineHeight: 1.55 }}>{t("moodboard.boardEmptyHint") || "Lade Bilder hoch oder füge eine URL ein, um Referenzen zu sammeln."}</div>
@@ -28740,7 +28747,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                   screen the picture is the loud part, and the button should not
                   compete with it. */}
               <motion.div whileTap={{ scale: 0.97 }} onClick={() => fileInputRef.current?.click()}
-                style={{ marginTop: 3, padding: "11px 26px", borderRadius: 999,
+                style={{ marginTop: 12, padding: "13px 26px", borderRadius: 999,
                   background: "transparent", border: `1px solid ${darkMode ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.22)"}`,
                   color: theme.text, fontSize: 13.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
                 {t("moodboard.upload") || "Hochladen"}
