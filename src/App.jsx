@@ -45180,11 +45180,14 @@ export default function CircularMenu() {
                       onMouseLeave={() => setHoverAction(-1)}
                       onClick={() => { setPanelOpen(false); action.go(); }}
                       style={{ flex: 1, padding: "14px 12px", borderRadius: 14,
+                        // Halved again: two steps of grey in dark mode rather
+                        // than four, and the border barely moves. It should
+                        // read as "this one" and not as a change of state.
                         background: hoverAction === i
-                          ? (darkMode ? "#1A1A23" : "rgba(0,0,0,0.028)")
+                          ? (darkMode ? "#18181F" : "rgba(0,0,0,0.014)")
                           : (darkMode ? "#16161E" : "rgba(255,255,255,0.9)"),
                         border: `1px solid ${hoverAction === i
-                          ? (darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.09)")
+                          ? (darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.075)")
                           : (darkMode ? "#ffffff0A" : "rgba(0,0,0,0.06)")}`,
                         transition: "background 0.12s ease-out, border-color 0.12s ease-out",
                         cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}
