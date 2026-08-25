@@ -28528,7 +28528,10 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
             ) : boards.length === 0 ? (
               // gap 9 instead of 14: the title and its sentence belong together,
               // and at 14 they read as two separate statements.
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, textAlign: "center", gap: 9 }}>
+              // translateY rather than a margin: the box keeps its size, so the
+              // centring underneath is untouched and the whole block — picture,
+              // title, sentence, button — rises exactly twenty-five pixels.
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, textAlign: "center", gap: 9, transform: "translateY(-25px)" }}>
                 {/* Same visual as the empty board itself. This is the screen the
                     mockup was drawn from — the one you reach with no boards at
                     all, where "New board" is the right thing to offer. */}
@@ -28728,7 +28731,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           {loadingItems ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
           ) : items.length === 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, textAlign: "center", gap: 9, padding: 20 }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, textAlign: "center", gap: 9, padding: 20, transform: "translateY(-25px)" }}>
               {/* The three fanned references, as supplied. A picture of what a
                   moodboard becomes says more here than an icon of a picture. */}
               <motion.img
