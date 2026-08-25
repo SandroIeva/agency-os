@@ -32773,9 +32773,15 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
           </div>
         )}
         {visibleDocs.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "48px 20px" }}>
-          <div style={{ fontSize: 16, fontFamily: FONT, color: theme.text, marginBottom: 6 }}>{search ? "Keine Treffer" : currentFolder != null ? (appLanguage === "de" ? "Dieser Ordner ist leer" : "This folder is empty") : "Noch keine Dokumente"}</div>
-          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{search ? "Versuche einen anderen Suchbegriff." : "Klicke auf Neues Dokument, um loszulegen."}</div>
+        // Centred like the empty Moodboards and Assets tabs. This tab has no
+        // flex column to hand out a height, so the block claims what is left of
+        // the scroll container: 100% of its content box minus the toolbar above
+        // (40px plus its 18px margin) and centres inside that. minHeight rather
+        // than height, so a folder row pushing it down lengthens the block
+        // instead of cutting the sentence off.
+        <div style={{ minHeight: "calc(100% - 64px)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: 9, padding: "20px 20px 48px" }}>
+          <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{search ? "Keine Treffer" : currentFolder != null ? (appLanguage === "de" ? "Dieser Ordner ist leer" : "This folder is empty") : "Noch keine Dokumente"}</div>
+          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, maxWidth: 340, lineHeight: 1.55 }}>{search ? "Versuche einen anderen Suchbegriff." : "Klicke auf Neues Dokument, um loszulegen."}</div>
         </div>
       ) : viewMode === "grid" ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 24 }}>
