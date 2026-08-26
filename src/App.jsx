@@ -19085,6 +19085,58 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setActive(i);
     loadBoard(next[i]);
   };
+  // ── Earlier versions ──────────────────────────────────────────────────────
+  // Every save files the document it replaced, twenty deep, in a trigger on
+  // brand_canvases. This is the way back to one of them without asking anybody.
+  const [histOpen, setHistOpen] = useState(false);
+  const [versions, setVersions] = useState(null);      // null = not loaded yet
+  const [histBusy, setHistBusy] = useState(false);
+  useEffect(() => {
+    if (!histOpen || !canvasRow?.id) return;
+    let alive = true;
+    (async () => {
+      // Metadata only. A document is small but twenty of them in a dropdown is
+      // not, and none of it is needed until something is actually restored.
+      const { data } = await supabase.from("brand_canvas_versions")
+        .select("id, saved_at, item_count")
+        .eq("canvas_id", canvasRow.id)
+        .order("saved_at", { ascending: false }).limit(20);
+      if (alive) setVersions(data || []);
+    })();
+    return () => { alive = false; };
+  }, [histOpen, canvasRow?.id]);
+
+  const restoreVersion = async (v) => {
+    setHistBusy(true);
+    const { data, error } = await supabase.from("brand_canvas_versions")
+      .select("doc").eq("id", v.id).maybeSingle();
+    setHistBusy(false);
+    const list = Array.isArray(data?.doc?.boards) ? data.doc.boards : [];
+    if (error || !list.length) {
+      setErr(de ? "Diese Fassung ließ sich nicht laden." : "That version could not be loaded.");
+      return;
+    }
+    // markChange first, so ⌘Z takes the restore back. And the save that follows
+    // files the CURRENT document as a version of its own — which is what makes
+    // this button safe to press: restoring is itself reversible, twice over.
+    markChange();
+    setBoards(list);
+    const i = Math.min(active, list.length - 1);
+    setActive(i);
+    loadBoard(list[i]);
+    setStageBg(data.doc.stage || null);
+    setHistOpen(false);
+    setVersions(null);
+  };
+  const versionAgo = (ts) => {
+    const mins = Math.floor((Date.now() - new Date(ts).getTime()) / 60000);
+    if (mins < 1) return de ? "gerade eben" : "just now";
+    if (mins < 60) return de ? `vor ${mins} Min` : `${mins} min ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return de ? `vor ${hrs} Std` : `${hrs} h ago`;
+    return de ? `vor ${Math.floor(hrs / 24)} T` : `${Math.floor(hrs / 24)} d ago`;
+  };
+
   const addBoard = () => {
     const list = boardsNow();
     const b = {
@@ -22078,6 +22130,69 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             </div>
           );
         })()}
+        {canvasRow?.id && (
+          <div style={{ position: "relative", marginRight: 4 }}>
+            <motion.div whileTap={{ scale: 0.96 }} onClick={() => setHistOpen(o => !o)}
+              title={de ? "Frühere Fassungen" : "Earlier versions"}
+              style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 13px",
+                borderRadius: 999, cursor: "pointer", border: `1px solid ${line}`,
+                background: histOpen ? (darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.09)") : "transparent",
+                color: theme.text, fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 3v5h5" />
+                <path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" />
+                <path d="M12 7v5l3.5 2" />
+              </svg>
+              {de ? "Verlauf" : "History"}
+            </motion.div>
+            {histOpen && (<>
+              {/* Click-outside, as a plain fixed sheet. Same as every other
+                  popover here — no listener to add and forget to remove. */}
+              <div onClick={() => setHistOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+              <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 41,
+                width: 292, maxHeight: 360, overflowY: "auto", borderRadius: 14, padding: 6,
+                background: darkMode ? "#1A1A22" : "#fff", border: `1px solid ${line}`,
+                boxShadow: "0 18px 60px rgba(0,0,0,0.28)" }}>
+                <div style={{ padding: "8px 10px 6px", fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.45 }}>
+                  {de
+                    ? "Jede Speicherung hebt die vorherige Fassung auf. Zurückspringen lässt sich rückgängig machen."
+                    : "Every save keeps the version it replaced. Going back is itself undoable."}
+                </div>
+                {versions === null ? (
+                  <div style={{ padding: "10px", fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
+                    {de ? "Lädt …" : "Loading …"}
+                  </div>
+                ) : versions.length === 0 ? (
+                  <div style={{ padding: "10px", fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
+                    {de ? "Noch keine früheren Fassungen." : "No earlier versions yet."}
+                  </div>
+                ) : versions.map(v => (
+                  <div key={v.id} className="hover-row"
+                    onClick={() => { if (!histBusy) restoreVersion(v); }}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px",
+                      borderRadius: 9, cursor: histBusy ? "default" : "pointer", opacity: histBusy ? 0.5 : 1 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text }}>
+                        {versionAgo(v.saved_at)}
+                      </div>
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>
+                        {new Date(v.saved_at).toLocaleString(de ? "de-DE" : "en-GB",
+                          { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    </div>
+                    {/* The element count is the whole point of this list: the
+                        version to go back to is the one that still had them. */}
+                    <div style={{ fontSize: 11.5, fontFamily: FONT, flexShrink: 0,
+                      color: v.item_count === 0 ? theme.textFaint : theme.textDim }}>
+                      {v.item_count} {de ? (v.item_count === 1 ? "Element" : "Elemente") : (v.item_count === 1 ? "element" : "elements")}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>)}
+          </div>
+        )}
         {canvasRow?.id && (
           <div style={{ position: "relative", marginRight: 4 }}>
             <motion.div whileTap={{ scale: 0.96 }} onClick={() => setShareOpen(o => !o)}

@@ -127,7 +127,11 @@ Multi-tenant: nearly every row carries `org_id` (workspace) and often `project_i
 - **Files/Assets:** `user_files`, `user_folders`, `user_drive_files`, `file_metadata`, `moodboards`, `moodboard_items`
 - **Whiteboard:** `whiteboards`, `whiteboard_items`, `whiteboard_shares`
 - **Chat:** `chat_conversations`, `chat_participants`, `chat_messages`
-- **Brand:** `brand_profile`, `brand_shares`
+- **Brand:** `brand_profile`, `brand_shares`, `brand_canvases` (ONE jsonb doc
+  per canvas — see the pitfall below), `brand_canvas_versions` (the previous
+  doc on every change, 20 deep, written by a `before update` trigger;
+  readable through RLS by whoever may read the canvas, never writable from
+  the browser)
 - **Misc:** `notifications`, `reminders`, `calendar_events`, `notes`, `push_subscriptions`, `short_links`, `os_visuals`
 - **Messenger bridge:** `messenger_links` (a link belongs to a PERSON, not a
   workspace — `provider` is ready for Slack), `messenger_link_tokens` (one-time,
@@ -211,6 +215,14 @@ FigJam-style infinite canvas (`WhiteboardView`), reachable via Erstellen → Bra
 - Stale `selIds` across board switches → cross-board DB deletes.
 - Group drags have no `dragRef.id` → check `dragRef.bases` too when guarding realtime.
 - Vercel Hobby: max 12 serverless functions → extend `fetch-brand.js` modes instead of adding files.
+- **Never sync an Artboard document live between clients.** A canvas is ONE
+  jsonb doc, so the only thing a peer can send is the whole of it, and a
+  window that has been open a while holds an OLD whole. Absence of an
+  element in a snapshot is indistinguishable from deletion: this shipped on
+  2026-08-26, read a stale peer's doc as "they deleted everything", and
+  saved it. Cursors over `canvas-<id>` are fine. Real co-editing needs one
+  row per element like `whiteboard_items`. The tell in a damaged row: board
+  name and bg survive, `items` is `[]` — check `brand_canvas_versions`.
 - `whiteboards.updated_at` is only bumped by title edits, not item changes.
 - Lists that mix saved DB rows with unsaved local rows (`_localId` pattern, e.g. the Kanban new-task checklist) must never compare raw `item.id` — `undefined === undefined` matches every unsaved row. Use an identity helper (`id ?? _localId`) and skip DB calls for unsaved rows.
 - Deep-link props like `openTaskId` stay set while the view is open — effects that auto-open something from them must guard with a "handled" ref or they re-fire on every dependent state change.
