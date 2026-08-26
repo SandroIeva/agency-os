@@ -20935,6 +20935,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // different places — CSS anchors a background to its own element, and this is
   // what makes the export agree.
   const paintCanvas = async (ctx, v, b, alpha) => {
+    // No paint means TRANSPARENT, spelled out. Returning undefined here would
+    // hand ctx.fillStyle a value the canvas silently refuses, leaving whatever
+    // colour was set last — so an unfilled shape would export filled with the
+    // previous one's colour.
+    if (v == null || v === "") return "transparent";
     if (isGradient(v)) return gradientCanvas(ctx, v, b);
     if (isPattern(v)) {
       const pat = ctx.createPattern(patternTile(v), "repeat");
@@ -21094,9 +21099,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             ctx.save();
             ctx.translate(it.ox || 0, it.oy || 0);
             if (typeof it.fill === "string") { ctx.fillStyle = it.fill; ctx.fill(p2); }
-            ctx.strokeStyle = it.color; ctx.lineWidth = it.width;
-            ctx.lineCap = "round"; ctx.lineJoin = "round";
-            ctx.stroke(p2);
+            // Same trap on the other side: ctx.lineWidth = 0 is refused, so a
+            // path with its stroke taken off would be drawn with the width of
+            // whatever was stroked last.
+            if (it.width > 0) {
+              ctx.strokeStyle = it.color; ctx.lineWidth = it.width;
+              ctx.lineCap = "round"; ctx.lineJoin = "round";
+              ctx.stroke(p2);
+            }
             ctx.restore();
           }
         } else if (it.type === "draw") {
@@ -23694,6 +23704,24 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               const key = (selItem.type === "draw" || selItem.type === "arrow" || selItem.type === "line" || selItem.type === "path")
                 ? "color" : selItem.type === "text" ? "color" : "fill";
               const cur = selItem[key] || "#000000";
+              // A surface can be taken away and put back; so can an outline. What
+              // cannot is the colour of TEXT, which would leave nothing to read.
+              const isFill = key === "fill" && selItem.type !== "image";
+              const isPathStroke = selItem.type === "path";
+              if (isPathStroke && !selItem.width) return (
+                <div onClick={() => set2({ width: Math.max(2, Math.round(H / 120)), color: selItem.color || palette[0] })}
+                  style={{ marginTop: 6, padding: "9px 12px", borderRadius: 9, textAlign: "center",
+                    cursor: "pointer", border: `1px dashed ${line}`, color: theme.textDim, fontSize: 12 }}>
+                  {de ? "Kontur hinzufügen" : "Add a stroke"}
+                </div>
+              );
+              if (isFill && selItem.fill == null) return (
+                <div onClick={() => set2({ fill: palette[1] || "#DDDDDD" })}
+                  style={{ marginTop: 6, padding: "9px 12px", borderRadius: 9, textAlign: "center",
+                    cursor: "pointer", border: `1px dashed ${line}`, color: theme.textDim, fontSize: 12 }}>
+                  {de ? "Füllung hinzufügen" : "Add a fill"}
+                </div>
+              );
               return (<>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, padding: "8px 10px",
                   borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
@@ -23729,6 +23757,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                           color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
                       <span style={{ fontSize: 11.5, color: theme.textFaint }}>%</span>
                     </div>
+                  )}
+                  {(isFill || isPathStroke) && (
+                    <div onClick={() => set2(isPathStroke ? { width: 0 } : { fill: undefined })}
+                      title={de ? "Entfernen" : "Remove"}
+                      style={{ cursor: "pointer", color: theme.textFaint, fontSize: 12, paddingLeft: 4, flexShrink: 0 }}>✕</div>
                   )}
                 </div>
               </>);
