@@ -20109,7 +20109,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       // Held and dragged, the click pulls a handle out of the node it just
       // placed — a click alone leaves a corner. That one gesture is the whole
       // difference between a polygon tool and a pen.
-      dragRef.current = { mode: "pathhandle", idx: next.length - 1 };
+      dragRef.current = { mode: "pathhandle", idx: next.length - 1, which: 2 };
       return;
     }
     if (tool === "pen") {
@@ -20209,8 +20209,20 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         const nodes = dr.nodes.slice();
         const n = nodes[d.idx];
         if (!n) return dr;
-        const q = e.shiftKey ? snap45(n.x, n.y, p.x, p.y) : p;
-        nodes[d.idx] = mirrorHandle(n, Math.round(q.x), Math.round(q.y));
+        const lx = Math.round(p.x), ly = Math.round(p.y);
+        // which: 0 the point itself, 1 the incoming handle, 2 the outgoing one.
+        // Placing a node starts a drag on 2, which is why that is the default.
+        if (d.which === 0) {
+          const dx = lx - n.x, dy = ly - n.y;
+          nodes[d.idx] = { ...n, x: lx, y: ly,
+            ...(n.h1x != null ? { h1x: n.h1x + dx, h1y: n.h1y + dy } : {}),
+            ...(n.h2x != null ? { h2x: n.h2x + dx, h2y: n.h2y + dy } : {}) };
+        } else if (d.which === 1) {
+          nodes[d.idx] = mirrorHandle(n, 2 * n.x - lx, 2 * n.y - ly);
+        } else {
+          const q = e.shiftKey ? snap45(n.x, n.y, p.x, p.y) : { x: lx, y: ly };
+          nodes[d.idx] = mirrorHandle(n, Math.round(q.x), Math.round(q.y));
+        }
         return { ...dr, nodes };
       });
       return;
@@ -21975,14 +21987,35 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     strokeWidth={Math.max(2, Math.round(H / 120))} strokeLinecap="round" strokeLinejoin="round" />
                   <path ref={pathPreviewRef} d="" fill="none" stroke="#15151c" opacity="0.6"
                     strokeWidth={1.5 * k} strokeDasharray={`${5 * k} ${4 * k}`} />
-                  {pathDraft.nodes.map((n, i) => (
-                    <Fragment key={"pd" + i}>
-                      {n.h1x != null && <line x1={n.x} y1={n.y} x2={n.h1x} y2={n.h1y} stroke="#15151c" strokeWidth={k} opacity="0.45" />}
-                      {n.h2x != null && <line x1={n.x} y1={n.y} x2={n.h2x} y2={n.h2y} stroke="#15151c" strokeWidth={k} opacity="0.45" />}
-                      <rect x={n.x - 3.5 * k} y={n.y - 3.5 * k} width={7 * k} height={7 * k}
-                        fill={i === 0 ? "#15151c" : "#fff"} stroke="#15151c" strokeWidth={1.4 * k} />
-                    </Fragment>
-                  ))}
+                  {/* Grips while drawing, not only after finishing: a curve is
+                      judged as it is laid down, and being unable to correct the
+                      point you just placed means starting the path again.
+                      stopPropagation is what keeps grabbing one from ALSO
+                      dropping a new node on the stage underneath. */}
+                  {pathDraft.nodes.map((n, i) => {
+                    // The first node's square is the CLOSE target once there are
+                    // two of them, so it lets the click through to the stage,
+                    // which is where closing is decided. Its handles stay
+                    // grabbable — only the point itself gives way.
+                    const closeTarget = i === 0 && pathDraft.nodes.length >= 2;
+                    const dg = (x, y, which, round) => (
+                      <rect x={x - 4 * k} y={y - 4 * k} width={8 * k} height={8 * k} rx={round ? 4 * k : 1 * k}
+                        fill={round ? "#15151c" : (i === 0 ? "#15151c" : "#fff")}
+                        stroke="#15151c" strokeWidth={1.4 * k}
+                        style={{ pointerEvents: (!round && closeTarget) ? "none" : "auto", cursor: "move" }}
+                        onPointerDown={(e2) => { e2.stopPropagation();
+                          dragRef.current = { mode: "pathhandle", idx: i, which }; }} />
+                    );
+                    return (
+                      <Fragment key={"pd" + i}>
+                        {n.h1x != null && <line x1={n.x} y1={n.y} x2={n.h1x} y2={n.h1y} stroke="#15151c" strokeWidth={k} opacity="0.45" />}
+                        {n.h2x != null && <line x1={n.x} y1={n.y} x2={n.h2x} y2={n.h2y} stroke="#15151c" strokeWidth={k} opacity="0.45" />}
+                        {n.h1x != null && dg(n.h1x, n.h1y, 1, true)}
+                        {n.h2x != null && dg(n.h2x, n.h2y, 2, true)}
+                        {dg(n.x, n.y, 0, false)}
+                      </Fragment>
+                    );
+                  })}
                 </svg>
               );
             })()}
