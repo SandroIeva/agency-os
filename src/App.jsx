@@ -47696,15 +47696,35 @@ export default function CircularMenu() {
                   </div>
                   <div style={{ borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`, padding: "20px 24px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                      <div style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-                        background: tgLink ? "rgba(0,184,148,0.1)" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
-                        border: `1px solid ${tgLink ? "rgba(0,184,148,0.2)" : theme.borderFaint}`,
+                      {/* The mark itself, taken from Wikimedia's public-domain file rather
+                          than drawn by hand — a brand people recognise at a glance is
+                          worth nothing if it is merely reminiscent of itself.
+                          The tile stays neutral in BOTH states: the logo brings its own
+                          blue, and a blue disc on a green wash reads as neither one.
+                          Being connected shows as the dot instead. */}
+                      <div style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0, position: "relative",
+                        background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                        border: `1px solid ${theme.borderFaint}`,
                         display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <svg width="21" height="21" viewBox="0 0 24 24" fill="none"
-                          stroke={tgLink ? "#00B894" : theme.textDim} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21.5 4.3 2.9 11.4c-.8.3-.8 1.4 0 1.7l4.6 1.5 1.8 5.4c.2.7 1.1.9 1.6.3l2.5-2.6 4.6 3.4c.6.4 1.4.1 1.6-.6l3-14.5c.2-.8-.6-1.5-1.4-1.2Z" />
-                          <path d="m7.5 14.6 10.6-7.7-8.3 8.9" />
+                        <svg width="27" height="27" viewBox="0 0 240 240" aria-hidden="true">
+                          <defs>
+                            {/* A gradient id has to be unique in the whole document, so it
+                                carries the component's name rather than the file's
+                                "linear-gradient", which any other inline SVG could reuse. */}
+                            <linearGradient id="i7TelegramMark" x1="120" y1="240" x2="120" y2="0" gradientUnits="userSpaceOnUse">
+                              <stop offset="0" stopColor="#1d93d2" />
+                              <stop offset="1" stopColor="#38b0e3" />
+                            </linearGradient>
+                          </defs>
+                          <circle cx="120" cy="120" r="120" fill="url(#i7TelegramMark)" />
+                            <path d="M81.229,128.772l14.237,39.406s1.78,3.687,3.686,3.687,30.255-29.492,30.255-29.492l31.525-60.89L81.737,118.6Z" fill="#c8daea" />
+                            <path d="M100.106,138.878l-2.733,29.046s-1.144,8.9,7.754,0,17.415-15.763,17.415-15.763" fill="#a9c6d8" />
+                            <path d="M81.486,130.178,52.2,120.636s-3.5-1.42-2.373-4.64c.232-.664.7-1.229,2.1-2.2,6.489-4.523,120.106-45.36,120.106-45.36s3.208-1.081,5.1-.362a2.766,2.766,0,0,1,1.885,2.055,9.357,9.357,0,0,1,.254,2.585c-.009.752-.1,1.449-.169,2.542-.692,11.165-21.4,94.493-21.4,94.493s-1.239,4.876-5.678,5.043A8.13,8.13,0,0,1,146.1,172.5c-8.711-7.493-38.819-27.727-45.472-32.177a1.27,1.27,0,0,1-.546-.9c-.093-.469.417-1.05.417-1.05s52.426-46.6,53.821-51.492c.108-.379-.3-.566-.848-.4-3.482,1.281-63.844,39.4-70.506,43.607A3.21,3.21,0,0,1,81.486,130.178Z" fill="#fff" />
                         </svg>
+                        {tgLink && (
+                          <span style={{ position: "absolute", right: -3, bottom: -3, width: 13, height: 13,
+                            borderRadius: "50%", background: "#00B894", border: `2px solid ${theme.cardBg}` }} />
+                        )}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
