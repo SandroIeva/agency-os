@@ -44899,12 +44899,15 @@ export default function CircularMenu() {
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0], delay: 0.15 + i * 0.06 }}
-                  className="hover-row"
+                  // Backgrounds live in the stylesheet for these four (see
+                  // .sv-card): the fill has to sit on an opaque base to quiet
+                  // the dot grid, and hover has to do the same — an inline
+                  // background would be overwritten by the hover rule anyway.
+                  className={`sv-card${i < 2 ? " sv-lit" : ""}`}
                   onClick={task.onClick}
                   style={{
                     display: "flex", alignItems: "center", gap: 18,
                     padding: "16px 24px", borderRadius: 18,
-                    background: i < 2 ? theme.hoverBg : "transparent",
                     border: i < 2 ? `1px solid ${theme.borderFaint}` : "1px solid transparent",
                     cursor: "pointer",
                   }}
@@ -48679,6 +48682,32 @@ export default function CircularMenu() {
         }
         .hover-row:hover {
           background: ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.07)"} !important;
+          border-color: ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)"} !important;
+          transition: background 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), border-color 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        /* The four start-view cards. The dot grid sits directly behind them and
+           read straight through: a translucent fill dims what is under it by its
+           own opacity and no more, so a 5% tint over 6% dots changes nothing.
+           The fill therefore sits on the page's own colour at 72% — the card
+           composites to the same shade it always did, and the dots come through
+           at a bit over a quarter of their strength instead of all of it.
+
+           Not a backdrop-filter, which is the obvious answer and does nothing
+           here: an ancestor of these cards carries a filter for the menu-open
+           blur, and a filter isolates the backdrop, so the blur would have had
+           the dot grid outside what it can sample. */
+        .sv-card {
+          transition: background 0.6s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .sv-lit {
+          background:
+            linear-gradient(${darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"}, ${darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"}),
+            ${darkMode ? "rgba(17,17,23,0.72)" : "rgba(245,245,247,0.72)"};
+        }
+        .sv-card:hover {
+          background:
+            linear-gradient(${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.07)"}, ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.07)"}),
+            ${darkMode ? "rgba(17,17,23,0.72)" : "rgba(245,245,247,0.72)"} !important;
           border-color: ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)"} !important;
           transition: background 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), border-color 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
