@@ -20162,19 +20162,32 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         [dx, dy] = [dx * ca - dy * sa, dx * sa + dy * ca];
       }
       const hd = d.handle || "se";
+      // Alt scales from the CENTRE, the way every design tool does it: the far
+      // edge moves out by whatever the near one moved in, so twice the delta goes
+      // into the size and half of it back into the position. Alt already means
+      // "suspend snapping" while MOVING, which is a different gesture and does not
+      // collide with this one.
+      const alt = e.altKey;
       let { x, y, w, h } = d.base;
-      if (hd.includes("e")) w = d.base.w + dx;
-      if (hd.includes("w")) { w = d.base.w - dx; x = d.base.x + dx; }
-      if (hd.includes("s")) h = d.base.h + dy;
-      if (hd.includes("n")) { h = d.base.h - dy; y = d.base.y + dy; }
+      if (hd.includes("e")) { w = d.base.w + (alt ? 2 * dx : dx); if (alt) x = d.base.x - dx; }
+      if (hd.includes("w")) { w = d.base.w - (alt ? 2 * dx : dx); x = d.base.x + dx; }
+      if (hd.includes("s")) { h = d.base.h + (alt ? 2 * dy : dy); if (alt) y = d.base.y - dy; }
+      if (hd.includes("n")) { h = d.base.h - (alt ? 2 * dy : dy); y = d.base.y + dy; }
       // A text box only ever changes width — its height follows the lines in it.
       if (d.isText) { patch(d.id, { w: Math.round(Math.max(8, w)), x: Math.round(x) }); return; }
       const corner = hd.length === 2;
       if (e.shiftKey && corner && d.base.h > 0) {
         const r = d.base.w / d.base.h;
         if (Math.abs(w - d.base.w) >= Math.abs(h - d.base.h)) h = w / r; else w = h * r;
-        if (hd.includes("n")) y = d.base.y + d.base.h - h;
-        if (hd.includes("w")) x = d.base.x + d.base.w - w;
+        if (alt) {
+          // Shift and Alt together: keep the ratio AND the centre. Anchoring to a
+          // corner here would drag the shape sideways as it grew.
+          x = d.base.x + d.base.w / 2 - w / 2;
+          y = d.base.y + d.base.h / 2 - h / 2;
+        } else {
+          if (hd.includes("n")) y = d.base.y + d.base.h - h;
+          if (hd.includes("w")) x = d.base.x + d.base.w - w;
+        }
       }
       w = Math.max(8, w); h = Math.max(8, h);
       patch(d.id, { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) });
