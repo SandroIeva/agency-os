@@ -20184,6 +20184,32 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     }
     const box = { x: Math.round(Math.min(d.ox, p.x)), y: Math.round(Math.min(d.oy, p.y)),
       w: Math.round(Math.abs(p.x - d.ox)), h: Math.round(Math.abs(p.y - d.oy)) };
+    if (d.mode === "groupresize") {
+      // The same arithmetic a single object's handles use — edges, Alt from the
+      // centre, Shift for the ratio — applied to the group's box, and then every
+      // member remapped into the result.
+      const dx = (e.clientX - d.sx) / cam.s, dy = (e.clientY - d.sy) / cam.s;
+      const hd = d.handle, alt = e.altKey;
+      let { x, y, w, h } = d.base;
+      if (hd.includes("e")) { w = d.base.w + (alt ? 2 * dx : dx); if (alt) x = d.base.x - dx; }
+      if (hd.includes("w")) { w = d.base.w - (alt ? 2 * dx : dx); x = d.base.x + dx; }
+      if (hd.includes("s")) { h = d.base.h + (alt ? 2 * dy : dy); if (alt) y = d.base.y - dy; }
+      if (hd.includes("n")) { h = d.base.h - (alt ? 2 * dy : dy); y = d.base.y + dy; }
+      if (e.shiftKey && hd.length === 2 && d.base.h > 0) {
+        const r = d.base.w / d.base.h;
+        if (Math.abs(w - d.base.w) >= Math.abs(h - d.base.h)) h = w / r; else w = h * r;
+        if (alt) { x = d.base.x + d.base.w / 2 - w / 2; y = d.base.y + d.base.h / 2 - h / 2; }
+        else {
+          if (hd.includes("n")) y = d.base.y + d.base.h - h;
+          if (hd.includes("w")) x = d.base.x + d.base.w - w;
+        }
+      }
+      w = Math.max(8, w); h = Math.max(8, h);
+      const sx = w / d.base.w, sy = h / d.base.h;
+      const next = new Map(d.members.map(m => [m.id, scaleItemInBox(m, d.base, sx, sy, x, y)]));
+      setItems(list => list.map(i => next.get(i.id) || i));
+      return;
+    }
     if (d.mode === "pathedit") {
       const cur = items.find(i => i.id === d.id);
       if (!cur?.nodes) return;
@@ -20853,6 +20879,58 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const w = b.w * c + b.h * s2, h = b.w * s2 + b.h * c;
     return { x: b.x + (b.w - w) / 2, y: b.y + (b.h - h) / 2, w, h };
   };
+  // One member of a group, remapped into the box its group is being resized to.
+  // Affine and per axis: a point keeps its position RELATIVE to the group, so
+  // everything inside stays in the arrangement it was put in.
+  //
+  // Every geometry the editor has, because a group holds whatever was grouped:
+  // boxes carry a width and a height, strokes and paths carry lists of points,
+  // a line carries two ends. A scaler that only knew about w and h would leave
+  // the drawings behind while the rest moved.
+  const scaleItemInBox = (it, g, sx, sy, nx, ny) => {
+    const mx = (x) => nx + (x - g.x) * sx;
+    const my = (y) => ny + (y - g.y) * sy;
+    const s1 = (sx + sy) / 2;                       // for things with no axis
+    const sh = (v) => (v ? { ...v, x: (v.x || 0) * sx, y: (v.y || 0) * sy, blur: (v.blur || 0) * s1 } : v);
+    const common = {
+      strokeWidth: it.strokeWidth == null ? it.strokeWidth : it.strokeWidth * s1,
+      radius: it.radius == null ? it.radius : it.radius * s1,
+      radii: Array.isArray(it.radii) ? it.radii.map(v => v * s1) : it.radii,
+      blur: it.blur == null ? it.blur : it.blur * s1,
+      bgBlur: it.bgBlur == null ? it.bgBlur : it.bgBlur * s1,
+      shadow: sh(it.shadow), innerShadow: sh(it.innerShadow),
+    };
+    if (it.type === "arrow" || it.type === "line") {
+      return { ...it, ...common, width: (it.width || 1) * s1,
+        x1: Math.round(mx(it.x1)), y1: Math.round(my(it.y1)),
+        x2: Math.round(mx(it.x2)), y2: Math.round(my(it.y2)) };
+    }
+    if (it.type === "draw") {
+      // Points are stored behind an offset; mapping folds that offset in, so it
+      // starts again at zero rather than being scaled twice.
+      const ox = it.ox || 0, oy = it.oy || 0;
+      return { ...it, ...common, ox: 0, oy: 0, width: (it.width || 1) * s1,
+        pts: (it.pts || []).map(([x, y]) => [Math.round(mx(x + ox)), Math.round(my(y + oy))]) };
+    }
+    if (it.type === "path") {
+      const ox = it.ox || 0, oy = it.oy || 0;
+      return { ...it, ...common, ox: 0, oy: 0, width: (it.width || 0) * s1,
+        nodes: (it.nodes || []).map(n => {
+          const o = { ...n, x: Math.round(mx(n.x + ox)), y: Math.round(my(n.y + oy)) };
+          if (n.h1x != null) { o.h1x = Math.round(mx(n.h1x + ox)); o.h1y = Math.round(my(n.h1y + oy)); }
+          if (n.h2x != null) { o.h2x = Math.round(mx(n.h2x + ox)); o.h2y = Math.round(my(n.h2y + oy)); }
+          return o;
+        }) };
+    }
+    const b = boxOf(it);
+    return { ...it, ...common,
+      x: Math.round(mx(b.x)), y: Math.round(my(b.y)),
+      w: Math.max(1, Math.round((it.w || b.w) * sx)),
+      h: it.h == null ? it.h : Math.max(1, Math.round(it.h * sy)),
+      // Text has no height of its own — its size is what makes it bigger.
+      ...(it.type === "text" ? { size: Math.max(4, Math.round((it.size || 16) * s1)) } : {}) };
+  };
+
   const unionRotBox = (list) => {
     const bs = (list || []).map(rotBoxOf);
     if (!bs.length) return { x: 0, y: 0, w: 0, h: 0 };
@@ -22105,11 +22183,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             {/* A GROUP is one object, so it gets one frame. Drawing the chrome
                 per member said "two things are selected", which is the opposite
                 of what grouping them was for — and it is what you would undo the
-                grouping to get back to.
-                No handles on it: resizing a group means scaling every member,
-                and a member can be a path or a freehand stroke, whose geometry
-                is points rather than a width and a height. Moving, styling and
-                deleting already treat the group as one. */}
+                grouping to get back to. It carries the same handles a single
+                object does, and they scale the whole group. */}
             {!editing && cam && selGid && (() => {
               const members = items.filter(i => i.groupId === selGid && !i.hidden);
               if (members.length < 2) return null;
@@ -22120,6 +22195,24 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   pointerEvents: "none" }}>
                   <div style={{ position: "absolute", inset: 0,
                     outline: `${1.6 * k}px solid #2F6BFF`, outlineOffset: 0 }} />
+                  {HANDLES.map(([hd, fx, fy]) => (
+                    <div key={hd}
+                      onPointerDown={(e2) => {
+                        e2.stopPropagation();
+                        pushUndo(takeSnap());
+                        dragRef.current = { mode: "groupresize", handle: hd,
+                          sx: e2.clientX, sy: e2.clientY, base: b,
+                          // A snapshot, so every move is measured from where the
+                          // drag STARTED. Reading the live items instead would
+                          // scale the already-scaled ones again each frame.
+                          members: members.map(m => ({ ...m })) };
+                      }}
+                      style={{ position: "absolute", left: `calc(${fx * 100}% - ${4.5 * k}px)`,
+                        top: `calc(${fy * 100}% - ${4.5 * k}px)`, width: 9 * k, height: 9 * k,
+                        borderRadius: 1.5 * k, background: "#fff",
+                        border: `${1.6 * k}px solid #2F6BFF`, cursor: CURSORS[hd], zIndex: 2,
+                        pointerEvents: "auto" }} />
+                  ))}
                   <div style={{ position: "absolute", left: "50%", top: `calc(100% + ${9 * k}px)`,
                     transform: "translateX(-50%)", padding: `${3 * k}px ${7 * k}px`,
                     borderRadius: 4 * k, background: "#2F6BFF", color: "#fff",
