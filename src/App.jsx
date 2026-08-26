@@ -19428,6 +19428,52 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     }
     return parts.length ? parts.join(" ") : "none";
   };
+  // A group is one object, so it casts ONE shadow — around the outline of the
+  // whole group, not one shadow per member falling across the others. Both the
+  // screen and the export draw the members first and put the shadow around the
+  // result, which is the only way to get a single silhouette.
+  //
+  // Returns the shadow to hoist, or null to leave every member drawing its own.
+  const groupShadowOf = (gid, list) => {
+    if (!gid) return null;
+    const mem = list.filter(i => i.groupId === gid);
+    if (mem.length < 2) return null;
+    const sh = mem[0].shadow;
+    if (!sh) return null;
+    // Every member has to carry the SAME shadow, which is what the panel writes
+    // when a group is selected. Members that were given a shadow of their own
+    // before being grouped keep them, one each — that is what they asked for.
+    if (!mem.every(m => cvSame(m.shadow, sh))) return null;
+    // A backdrop blur samples whatever is behind the item. On the offscreen
+    // canvas the export needs, there is nothing behind it, so such a group is
+    // left alone rather than exported wrong.
+    if (mem.some(m => m.bgBlur)) return null;
+    return sh;
+  };
+  // Wraps each contiguous run of a shadow-sharing group in one filtered box.
+  // Contiguous on purpose: a run is what can be lifted without changing which
+  // items are painted between the members.
+  const groupShadowWrap = (list, render) => {
+    const out = [];
+    let i = 0;
+    while (i < list.length) {
+      const it = list[i];
+      const sh = groupShadowOf(it.groupId, list);
+      if (!sh) { out.push(render(it)); i += 1; continue; }
+      const gid = it.groupId, run = [];
+      while (i < list.length && list[i].groupId === gid) { run.push(list[i]); i += 1; }
+      out.push(
+        // pointerEvents none, and the items inside turn it back on: an empty
+        // transparent box still swallows clicks, and this one covers the frame.
+        <div key={"gfx-" + gid + "-" + run[0].id} style={{ position: "absolute", left: 0, top: 0,
+          width: W, height: H, pointerEvents: "none", filter: effectFilter({ shadow: sh }) }}>
+          {run.map(m => render({ ...m, shadow: undefined }))}
+        </div>
+      );
+    }
+    return out;
+  };
+
   // Inner shadow is the one effect no filter can express: CSS needs `inset` and
   // the canvas needs a clip plus the inverse path. Kept to shapes whose outline
   // a border-radius describes — a clip-path polygon would ignore the inset and
@@ -19670,7 +19716,32 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const FONT_CHOICES = [...new Set([...brandFonts, "Geist", "Helvetica", "Georgia", "Courier New"])];
   const WEIGHTS = [[300, "Light"], [400, "Regular"], [500, "Medium"], [600, "Semibold"], [700, "Bold"], [800, "Black"]];
   const patch = (id, p) => { markChange(); setItems(list => list.map(i => (i.id === id ? { ...i, ...p } : i))); };
+  // The same write across several items in ONE history step, so undoing a group
+  // effect takes it off the whole group rather than one member per press.
+  const patchMany = (ids, p) => { markChange(); setItems(list => list.map(i => (ids.includes(i.id) ? { ...i, ...p } : i))); };
   const addItem = (it) => { markChange(); setItems(list => [...list, it]); setSel(it.id); setTool("select"); };
+
+  // ── Renaming an artboard ──────────────────────────────────────────────────
+  // The name is the only thing about a board that liveBoard() does NOT carry,
+  // so it is written straight onto the boards array. Going through boardsNow()
+  // here would fold the live items into the row as a side effect of a rename.
+  const [renamingBoard, setRenamingBoard] = useState(null);   // board index
+  const [boardNameDraft, setBoardNameDraft] = useState("");
+  const beginRenameBoard = (i) => {
+    setBoardNameDraft(boards[i]?.name || "");
+    setRenamingBoard(i);
+  };
+  const commitBoardName = () => {
+    const i = renamingBoard;
+    setRenamingBoard(null);
+    if (i == null) return;
+    const name = boardNameDraft.trim();
+    // An empty name would leave a board with nothing to click on in the layers
+    // list, so blank means "never mind" rather than "call it nothing".
+    if (!name || name === boards[i]?.name) return;
+    markChange();
+    setBoards(list => list.map((b, k) => (k === i ? { ...b, name } : b)));
+  };
 
   // ── Dropping image files onto the artboard ────────────────────────────────
   // A file let go ANYWHERE else — on the toolbar, on a panel, on the gap beside
@@ -20768,14 +20839,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       ctx.fillRect(0, 0, W, H);
     }
     else if (type === "image/jpeg") { ctx.fillStyle = "#FFFFFF"; ctx.fillRect(0, 0, W, H); }
-    for (const it of items) {
+    // Split out of the loop it used to be, so a GROUP can be drawn onto its own
+    // canvas first and the shadow put around the RESULT — one silhouette, the
+    // same thing the screen does with a filtered box. Draws onto whichever
+    // context it is handed; `ctx` here is the parameter, not the outer one.
+    const drawItemTo = async (ctx, it) => {
       // Comments are notes ABOUT the design. Exporting one would print a review
       // remark onto the banner, which is the one thing a comment must never do.
-      if (it.type === "comment") continue;
+      if (it.type === "comment") return;
       // The shape used as a mask lends its outline and nothing else.
-      if (it.isMask) continue;
+      if (it.isMask) return;
       // Hidden means hidden everywhere, the exported file included.
-      if (it.hidden) continue;
+      if (it.hidden) return;
       ctx.globalAlpha = it.opacity == null ? 1 : it.opacity;
       // Background blur, before the item's own paint: take what is already on
       // the canvas — which is exactly "everything behind", since items are drawn
@@ -20997,6 +21072,32 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       ctx.globalCompositeOperation = "source-over";
       if (spun) ctx.restore();
       if (maskShape) ctx.restore();
+        };
+
+    // The SAME list the screen groups over — masks and hidden rows filtered out
+    // first. Grouping over the raw array instead would let a hidden member with
+    // no shadow of its own break up a run that the screen had already lifted,
+    // and the exported file would then disagree with what was on the screen.
+    const drawable = items.filter(it => !it.isMask && !it.hidden);
+    let gi = 0;
+    while (gi < drawable.length) {
+      const it0 = drawable[gi];
+      const gsh = groupShadowOf(it0.groupId, drawable);
+      if (!gsh) { await drawItemTo(ctx, it0); gi += 1; continue; }
+      // The contiguous run of this group, onto a canvas of its own.
+      const gid = it0.groupId, run = [];
+      while (gi < drawable.length && drawable[gi].groupId === gid) { run.push(drawable[gi]); gi += 1; }
+      const oc = document.createElement("canvas");
+      oc.width = W; oc.height = H;
+      const octx = oc.getContext("2d");
+      for (const m of run) await drawItemTo(octx, { ...m, shadow: undefined });
+      // globalAlpha is reset: the last item drawn leaves its own opacity behind
+      // on the context, and it would otherwise fade the whole group.
+      ctx.save();
+      ctx.filter = effectFilter({ shadow: gsh });
+      ctx.globalAlpha = 1;
+      ctx.drawImage(oc, 0, 0);
+      ctx.restore();
     }
     ctx.globalAlpha = 1;
     return await new Promise((res, rej) =>
@@ -21338,9 +21439,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               boxShadow: "0 18px 60px rgba(0,0,0,0.28)",
               borderRadius: `${Math.max(0, Number(b.radius) || 0)}px` }}>
             <CanvasThumb doc={b} theme={theme} />
-            <div style={{ position: "absolute", left: 0, bottom: "100%",
+            {/* pointerEvents back on, for this label only: the board behind it
+                still switches on a single click, and the label needs a
+                double-click of its own. stopPropagation keeps the two apart. */}
+            <div onPointerDown={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => { e.stopPropagation(); switchBoard(i); beginRenameBoard(i); }}
+              title={de ? "Doppelklick zum Umbenennen" : "Double-click to rename"}
+              style={{ position: "absolute", left: 0, bottom: "100%",
               marginBottom: 8 / cam.s, fontFamily: FONT, fontSize: 12 / cam.s,
-              color: theme.textDim, whiteSpace: "nowrap", pointerEvents: "none" }}>
+              color: theme.textDim, whiteSpace: "nowrap", cursor: "text" }}>
               {b.name}
             </div>
           </div>
@@ -21378,10 +21485,30 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               return (<>
                 <div style={{ position: "absolute", left: 0, bottom: "100%", marginBottom: 8 * k,
                   display: "flex", alignItems: "center", gap: 8 * k }}>
-                  <span style={{ fontFamily: FONT, fontSize: 12 * k, fontWeight: 600,
-                    color: theme.text, whiteSpace: "nowrap" }}>
-                    {board.name}
-                  </span>
+                  {renamingBoard === active ? (
+                    // Sized in the same 1/scale units as the label it replaces, or
+                    // the title would jump size the moment it became editable.
+                    <input autoFocus value={boardNameDraft}
+                      onChange={(e) => setBoardNameDraft(e.target.value)}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onBlur={commitBoardName}
+                      onKeyDown={(e) => {
+                        if (e.nativeEvent?.isComposing || e.keyCode === 229) return;
+                        if (e.key === "Enter") commitBoardName();
+                        if (e.key === "Escape") setRenamingBoard(null);
+                      }}
+                      style={{ fontFamily: FONT, fontSize: 12 * k, fontWeight: 600,
+                        color: theme.text, background: "transparent",
+                        border: "none", borderBottom: `${1 * k}px solid ${theme.textFaint}`,
+                        outline: "none", padding: 0, width: `${Math.max(6, boardNameDraft.length + 1)}ch` }} />
+                  ) : (
+                    <span onDoubleClick={() => beginRenameBoard(active)}
+                      title={de ? "Doppelklick zum Umbenennen" : "Double-click to rename"}
+                      style={{ fontFamily: FONT, fontSize: 12 * k, fontWeight: 600,
+                        color: theme.text, whiteSpace: "nowrap", cursor: "text" }}>
+                      {board.name}
+                    </span>
+                  )}
                   {boards.length > 1 && (
                     <span onPointerDown={(e) => { e.stopPropagation(); removeBoard(active); }}
                       title={de ? "Artboard entfernen" : "Remove artboard"}
@@ -21432,7 +21559,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             {/* The drawing, and only the drawing, is cut at the canvas edge. */}
             <div style={{ position: "absolute", inset: 0, borderRadius: "inherit",
               overflow: frameClip ? "hidden" : "visible" }}>
-            {items.filter(it => !it.isMask && !it.hidden).map(it => {
+            {groupShadowWrap(items.filter(it => !it.isMask && !it.hidden), (it) => {
               const on = it.id === sel || pick.includes(it.id);
               const xf = [it.rot ? `rotate(${it.rot}deg)` : "",
                 it.flipX ? "scaleX(-1)" : "", it.flipY ? "scaleY(-1)" : ""].filter(Boolean).join(" ");
@@ -21440,7 +21567,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 position: "absolute", left: it.x, top: it.y,
                 // Locked layers stay visible and stop responding — that is the
                 // whole point of locking them.
-                ...(it.locked ? { pointerEvents: "none" } : {}),
+                // Spelled out rather than left to the default: inside a group's
+                // shadow box, which has to be pointerEvents:none, an item would
+                // otherwise inherit that and stop responding.
+                ...(it.locked ? { pointerEvents: "none" } : { pointerEvents: "auto" }),
                 ...(xf ? { transform: xf, transformOrigin: "center" } : {}),
                 outline: on ? `${Math.max(1, 1.5 / cam.s)}px solid #15151c` : "none",
                 outlineOffset: 0, cursor: tool === "select" ? "move" : "inherit",
@@ -22852,6 +22982,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           const isText = selItem.type === "text" || selItem.type === "sticky";
           const set = (k, v) => patch(selItem.id, { [k]: v });
           const set2 = (o) => patch(selItem.id, o);
+          // Effects only. A group selection means the group is the object, so a
+          // shadow lands on every member and the renderer draws it once around
+          // the lot. NOT set2's job: position and size through the same door
+          // would stack all the members on one spot.
+          const setFx = (o) => {
+            if (panelGid) {
+              const ids = items.filter(i => i.groupId === panelGid).map(i => i.id);
+              if (ids.length) { patchMany(ids, o); return; }
+            }
+            patch(selItem.id, o);
+          };
 
 
           return (
@@ -23155,7 +23296,31 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
             {label(selItem.type === "image" ? (de ? "Bild" : "Image") : de ? "Füllung" : "Fill")}
             {selItem.type === "image" ? (
-              <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+              <>
+              {/* Swapping the picture was only possible by deleting it and
+                  inserting another — or by using a RECTANGLE with an image fill,
+                  which is a different object that resizes and crops differently.
+                  The same picker the fill uses, writing url instead of a fill. */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, padding: "8px 10px",
+                borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                <div style={{ width: 26, height: 26, borderRadius: 6, flexShrink: 0, border: `1px solid ${line}`,
+                  background: selItem.url ? `center/cover no-repeat url(${selItem.url})` : "transparent" }} />
+                <div style={{ flex: 1, minWidth: 0, fontSize: 12, fontFamily: FONT, color: theme.textDim,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {(() => {
+                    // The stored name, not the whole URL: a signed storage link is
+                    // three hundred characters of noise in a 260px panel.
+                    try { return decodeURIComponent(String(selItem.url || "").split("/").pop().split("?")[0]) || "—"; }
+                    catch { return "—"; }
+                  })()}
+                </div>
+                <div onClick={() => setFillImgFor({ what: "swap", key: "url" })}
+                  style={{ padding: "6px 11px", borderRadius: 8, cursor: "pointer", fontSize: 11.5,
+                    border: `1px solid ${line}`, color: theme.text, whiteSpace: "nowrap" }}>
+                  {de ? "Ersetzen" : "Replace"}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                 {["cover", "contain"].map(f => (
                   <div key={f} onClick={() => set("fit", f)}
                     style={{ padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontSize: 11.5,
@@ -23164,6 +23329,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   </div>
                 ))}
               </div>
+              </>
             ) : (() => {
               const key = (selItem.type === "draw" || selItem.type === "arrow" || selItem.type === "line")
                 ? "color" : selItem.type === "text" ? "color" : "fill";
@@ -23284,7 +23450,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               );
               const shadowBody = (key) => {
                 const sh = selItem[key] || {};
-                const put = (o) => set2({ [key]: { x: 0, y: 4, blur: 10, color: "rgba(0,0,0,0.35)", ...sh, ...o } });
+                const put = (o) => setFx({ [key]: { x: 0, y: 4, blur: 10, color: "rgba(0,0,0,0.35)", ...sh, ...o } });
                 return (<>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
                     {field(sh.x ?? 0, v => put({ x: v }), "X")}
@@ -23326,25 +23492,25 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               };
               return (<>
                 {row(!!selItem.shadow,
-                  () => set2({ shadow: selItem.shadow ? undefined : { x: 0, y: 4, blur: 10, color: "#000000", alpha: 35 } }),
+                  () => setFx({ shadow: selItem.shadow ? undefined : { x: 0, y: 4, blur: 10, color: "#000000", alpha: 35 } }),
                   de ? "Schlagschatten" : "Drop shadow", shadowBody("shadow"))}
                 {canInnerShadow(selItem) && row(!!selItem.innerShadow,
-                  () => set2({ innerShadow: selItem.innerShadow ? undefined : { x: 0, y: 4, blur: 10, color: "#000000", alpha: 35 } }),
+                  () => setFx({ innerShadow: selItem.innerShadow ? undefined : { x: 0, y: 4, blur: 10, color: "#000000", alpha: 35 } }),
                   de ? "Innerer Schatten" : "Inner shadow", shadowBody("innerShadow"))}
                 {row(!!selItem.bgBlur,
-                  () => set2({ bgBlur: selItem.bgBlur ? undefined : 8 }),
+                  () => setFx({ bgBlur: selItem.bgBlur ? undefined : 8 }),
                   de ? "Hintergrund weichzeichnen" : "Background blur",
                   <>
-                    {field(selItem.bgBlur ?? 8, v => set2({ bgBlur: Math.max(0, v) }), "◌")}
+                    {field(selItem.bgBlur ?? 8, v => setFx({ bgBlur: Math.max(0, v) }), "◌")}
                     <div style={{ fontSize: 10.5, color: theme.textFaint, marginTop: 6, lineHeight: 1.45 }}>
                       {de ? "Wirkt nur, wenn die Füllung durchscheinend ist."
                           : "Only visible through a translucent fill."}
                     </div>
                   </>)}
                 {row(!!selItem.blur,
-                  () => set2({ blur: selItem.blur ? undefined : 6 }),
+                  () => setFx({ blur: selItem.blur ? undefined : 6 }),
                   de ? "Weichzeichnen" : "Layer blur",
-                  field(selItem.blur ?? 6, v => set2({ blur: Math.max(0, v) }), "◌"))}
+                  field(selItem.blur ?? 6, v => setFx({ blur: Math.max(0, v) }), "◌"))}
               </>);
             })()}
 
@@ -23430,6 +23596,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             markChange();
             const v = { src: url, fit: "cover" };
             if (fillImgFor.what === "bg") setBg(v);
+            // An image ELEMENT stores a bare url; only a fill wraps it in
+            // { src, fit }. Handing it the fill shape would blank the picture.
+            else if (fillImgFor.what === "swap" && selItem) patch(selItem.id, { url });
             else if (selItem) patch(selItem.id, { [fillImgFor.key]: v });
             setFillImgFor(null);
           }}
