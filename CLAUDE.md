@@ -129,6 +129,12 @@ Multi-tenant: nearly every row carries `org_id` (workspace) and often `project_i
 - **Chat:** `chat_conversations`, `chat_participants`, `chat_messages`
 - **Brand:** `brand_profile`, `brand_shares`
 - **Misc:** `notifications`, `reminders`, `calendar_events`, `notes`, `push_subscriptions`, `short_links`, `os_visuals`
+- **Messenger bridge:** `messenger_links` (a link belongs to a PERSON, not a
+  workspace — `provider` is ready for Slack), `messenger_link_tokens` (one-time,
+  10 min, minted by the `create_messenger_link_token` RPC). An `after insert`
+  trigger on `notifications` calls `/api/telegram` through **pg_net**, with the
+  shared secret read from **Vault** (`telegram_hook_secret`). No secret, no call —
+  which is what makes the trigger safe to ship before the bot exists.
 
 Storage buckets: `brand-assets` (also whiteboard image uploads under `whiteboards/<orgId>/…`), `user-files`, `chat-attachments`, `project-logos`, `os-visuals`.
 RPCs: `accept_project_invitation`, `delete_organization`, `redeem_push_setup_token` (api/redirect also calls a click-count RPC).
@@ -138,7 +144,9 @@ publication, so canvas collaboration rides entirely on broadcast).
 
 ## Serverless functions (`api/`)
 
-`chat-multi` (unified Claude/OpenAI/Gemini chat), `fetch-brand` (multi-mode POST/GET: brand analysis / weather / preview / **`mode:"pdf"`** brand-book PDF parse / **`mode:"zip"`** brand-package ZIP inspect), `send` (multi-mode POST, dispatched by `mode`: `"invite"` / `"project-invite"` / `"push-setup"` email via Resend, `"push"` web-push via VAPID), `google-fonts` (CORS proxy, **edge**), `img-proxy` (CORS image proxy for PDF export, **edge**), `drive-download` (**edge**), `workspace-delete` (**edge**: admin-only; wipes ALL of a workspace's storage assets via the service key — using the `org_storage_objects` RPC — then deletes the org so nothing is left on the server), `redirect` (short links `/i/:slug`), `refresh-token` (Google OAuth), `tts`, `zernio` (multi-mode POST, social integration via Zernio: `status`/`connect`/`disconnect`/`analytics`/`presign`/`post` — see `docs/zernio-integration.md`). Plus billing (Stripe): `billing-status`, `create-checkout-session`, `create-customer-portal-session`, `stripe-webhook`.
+`chat-multi` (unified Claude/OpenAI/Gemini chat), `fetch-brand` (multi-mode POST/GET: brand analysis / weather / preview / **`mode:"pdf"`** brand-book PDF parse / **`mode:"zip"`** brand-package ZIP inspect), `send` (multi-mode POST, dispatched by `mode`: `"invite"` / `"project-invite"` / `"push-setup"` email via Resend, `"push"` web-push via VAPID), `google-fonts` (CORS proxy, **edge**), `img-proxy` (CORS image proxy for PDF export, **edge**), `drive-download` (**edge**), `workspace-delete` (**edge**: admin-only; wipes ALL of a workspace's storage assets via the service key — using the `org_storage_objects` RPC — then deletes the org so nothing is left on the server), `redirect` (short links `/i/:slug`), `refresh-token` (Google OAuth), `tts`,
+`telegram` (**edge**: one bot for the whole product; the Telegram webhook and
+the notifications fan-out in one file, told apart by their auth header), `zernio` (multi-mode POST, social integration via Zernio: `status`/`connect`/`disconnect`/`analytics`/`presign`/`post` — see `docs/zernio-integration.md`). Plus billing (Stripe): `billing-status`, `create-checkout-session`, `create-customer-portal-session`, `stripe-webhook`.
 
 Also `lifecycle-sweep` (**edge**, daily Vercel Cron via `vercel.json`): warns, then purges storage, then deletes rows of workspaces whose owner has had no plan for 30/90 days (60/180 if they ever paid). Disarmed unless `LIFECYCLE_PURGE_ENABLED=true`.
 
@@ -150,7 +158,7 @@ for f in api/*.js; do grep -q 'runtime:\s*"edge"' "$f" || echo "$f"; done | wc -
 
 `stripe-webhook` needs the raw body — keep it standalone, never fold it into a bundle. Edge functions can't use the Node Stripe SDK's webhook verification, so that one has to stay Node.
 
-Env vars (Vercel): `ANTHROPIC_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `FISH_API_KEY`, `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`, `PUBLIC_APP_URL`, `CRON_SECRET` (lifecycle sweep; Vercel sends it as the cron `Authorization` header automatically), `LIFECYCLE_PURGE_ENABLED`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, six `STRIPE_PRICE_…`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. Client-side: `VITE_GOOGLE_API_KEY`, `VITE_GOOGLE_APP_ID`.
+Env vars (Vercel): `ANTHROPIC_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `FISH_API_KEY`, `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`, `PUBLIC_APP_URL`, `CRON_SECRET` (lifecycle sweep; Vercel sends it as the cron `Authorization` header automatically), `LIFECYCLE_PURGE_ENABLED`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, six `STRIPE_PRICE_…`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` (Telegram → us, set via setWebhook's `secret_token`), `TELEGRAM_HOOK_SECRET` (the DB trigger → us; the same value lives in Vault as `telegram_hook_secret`). Client-side: `VITE_GOOGLE_API_KEY`, `VITE_GOOGLE_APP_ID`, `VITE_TELEGRAM_BOT` (bot username; the whole Telegram section stays hidden while it is unset).
 
 ## Verifying a deploy
 

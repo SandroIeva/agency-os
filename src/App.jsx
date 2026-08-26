@@ -1,5 +1,9 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Component, Fragment } from "react";
 import { createPortal } from "react-dom";
+// Offline QR generator. A hosted QR service would have to be handed the
+// one-time pairing code to draw it, which is the one thing that code must
+// never leave the machine for.
+import qrcode from "qrcode-generator";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "./supabase";
 import { buildSystemPrompt } from "./systemPrompt";
@@ -41634,6 +41638,71 @@ export default function CircularMenu() {
     if (error) console.warn("[Notification] insert failed:", type, error.message);
   }, [session?.user?.id, userOrg?.id]);
 
+  // ── Telegram ──────────────────────────────────────────────────────────────
+  // One bot for the whole product, and the link belongs to the PERSON: connect
+  // once and every workspace you are in — including ones you join later — sends
+  // to the same chat, each message naming which one it came from. There is no
+  // per-workspace installation to do.
+  //
+  // The bot's username comes from the build. Until it is set the whole section
+  // stays hidden, so shipping this before the bot exists changes nothing anyone
+  // can see.
+  const TELEGRAM_BOT = import.meta.env.VITE_TELEGRAM_BOT || "";
+  const [tgLink, setTgLink] = useState(null);
+  const [tgBusy, setTgBusy] = useState(false);
+  const [tgErr, setTgErr] = useState("");
+  const [tgConnect, setTgConnect] = useState(null);   // { url, qr } while pairing
+  const readTgLink = useCallback(async () => {
+    if (!TELEGRAM_BOT || !session?.user?.id) return null;
+    const { data } = await supabase.from("messenger_links")
+      .select("id, chat_id, display_name, active, last_error")
+      .eq("provider", "telegram").eq("kind", "user").eq("user_id", session.user.id).maybeSingle();
+    return data || null;
+  }, [TELEGRAM_BOT, session?.user?.id]);
+  useEffect(() => { readTgLink().then(r => setTgLink(r)); }, [readTgLink]);
+
+  const startTgConnect = async () => {
+    setTgBusy(true); setTgErr("");
+    try {
+      const { data: token, error } = await supabase.rpc("create_messenger_link_token", {
+        p_org: userOrg?.id || null, p_kind: "user", p_lang: appLanguage === "en" ? "en" : "de",
+      });
+      if (error || !token) throw error || new Error("token");
+      const url = `https://t.me/${TELEGRAM_BOT}?start=${token}`;
+      const qr = qrcode(0, "M");
+      qr.addData(url); qr.make();
+      setTgConnect({ url, qr: qr.createDataURL(6, 2) });
+      // Opened as well as shown: on a machine with Telegram installed this is
+      // the whole interaction, and the QR is there for the machine that has not.
+      window.open(url, "_blank", "noopener");
+    } catch (e) {
+      setTgErr(appLanguage === "de" ? "Verbindung konnte nicht vorbereitet werden." : "Could not prepare the connection.");
+    }
+    setTgBusy(false);
+  };
+
+  // The pairing happens inside Telegram, so this window has no way of hearing
+  // about it except by asking. Gives up after two minutes: a panel left open
+  // must not poll for the rest of the day.
+  useEffect(() => {
+    if (!tgConnect) return;
+    const started = Date.now();
+    const iv = setInterval(async () => {
+      if (Date.now() - started > 120000) { clearInterval(iv); return; }
+      const row = await readTgLink();
+      if (row) { setTgLink(row); setTgConnect(null); clearInterval(iv); }
+    }, 3000);
+    return () => clearInterval(iv);
+  }, [tgConnect, readTgLink]);
+
+  const disconnectTg = async () => {
+    if (!tgLink) return;
+    setTgBusy(true); setTgErr("");
+    const { error } = await supabase.from("messenger_links").delete().eq("id", tgLink.id);
+    if (error) setTgErr(error.message); else setTgLink(null);
+    setTgBusy(false);
+  };
+
   // Load this workspace's entitlements from the (server-only) billing status once
   // per workspace: which plan is in force for its owner, what that plan allows,
   // and how much of the owner's pooled allowance is already used. Single source
@@ -47617,6 +47686,86 @@ export default function CircularMenu() {
               )}
 
               {/* OS Visuals — click to open icon customization modal */}
+              {settingsTab === "account" && TELEGRAM_BOT && session && (
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.22, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+                  style={{ marginTop: 24 }}>
+                  <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
+                    Telegram
+                  </div>
+                  <div style={{ borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`, padding: "20px 24px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                      <div style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                        background: tgLink ? "rgba(0,184,148,0.1)" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+                        border: `1px solid ${tgLink ? "rgba(0,184,148,0.2)" : theme.borderFaint}`,
+                        display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <svg width="21" height="21" viewBox="0 0 24 24" fill="none"
+                          stroke={tgLink ? "#00B894" : theme.textDim} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21.5 4.3 2.9 11.4c-.8.3-.8 1.4 0 1.7l4.6 1.5 1.8 5.4c.2.7 1.1.9 1.6.3l2.5-2.6 4.6 3.4c.6.4 1.4.1 1.6-.6l3-14.5c.2-.8-.6-1.5-1.4-1.2Z" />
+                          <path d="m7.5 14.6 10.6-7.7-8.3 8.9" />
+                        </svg>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
+                          {tgLink
+                            ? (appLanguage === "de" ? "Verbunden" : "Connected")
+                            : (appLanguage === "de" ? "Benachrichtigungen auf Telegram" : "Notifications on Telegram")}
+                        </div>
+                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.45 }}>
+                          {tgLink
+                            ? (appLanguage === "de"
+                                ? `Alles, was in der Glocke landet, kommt auch bei dir in Telegram an${tgLink.display_name ? ` (${tgLink.display_name})` : ""}. Gilt für jeden deiner Workspaces.`
+                                : `Whatever reaches the bell reaches you in Telegram too${tgLink.display_name ? ` (${tgLink.display_name})` : ""}. For every workspace you are in.`)
+                            : (appLanguage === "de"
+                                ? "Einmal verbinden, für alle Workspaces — auch für die, denen du später beitrittst."
+                                : "Connect once, for every workspace — including the ones you join later.")}
+                        </div>
+                      </div>
+                      <motion.div whileTap={{ scale: 0.97 }}
+                        onClick={tgBusy ? undefined : (tgLink ? disconnectTg : startTgConnect)}
+                        style={{ padding: "9px 18px", borderRadius: 999, cursor: tgBusy ? "default" : "pointer",
+                          border: `1px solid ${tgLink ? theme.borderFaint : "transparent"}`,
+                          background: tgLink ? "transparent" : "#15151c",
+                          color: tgLink ? theme.text : "#fff",
+                          fontSize: 12.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0, opacity: tgBusy ? 0.5 : 1 }}>
+                        {tgLink ? (appLanguage === "de" ? "Trennen" : "Disconnect")
+                                : (appLanguage === "de" ? "Verbinden" : "Connect")}
+                      </motion.div>
+                    </div>
+
+                    {/* The pairing panel. Two ways in, because the button alone
+                        fails on any machine without Telegram installed — that
+                        person needs the code on their phone, and the QR is how
+                        it gets there without being typed. */}
+                    {tgConnect && (
+                      <div style={{ marginTop: 18, paddingTop: 18, borderTop: `1px solid ${theme.borderFaint}`,
+                        display: "flex", alignItems: "center", gap: 18 }}>
+                        <img src={tgConnect.qr} alt="" width={116} height={116}
+                          style={{ borderRadius: 10, background: "#fff", padding: 6, flexShrink: 0, imageRendering: "pixelated" }} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
+                            {appLanguage === "de" ? "Telegram sollte sich geöffnet haben — drück dort auf START." : "Telegram should have opened — press START there."}
+                          </div>
+                          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 4, lineHeight: 1.45 }}>
+                            {appLanguage === "de"
+                              ? "Kein Telegram auf diesem Rechner? Scanne den Code mit dem Handy. Der Code gilt zehn Minuten und nur einmal — gib ihn nicht weiter."
+                              : "No Telegram on this machine? Scan the code with your phone. The code lasts ten minutes and works once — do not pass it on."}
+                          </div>
+                          <a href={tgConnect.url} target="_blank" rel="noopener noreferrer"
+                            style={{ display: "inline-block", marginTop: 8, fontSize: 12, fontFamily: FONT, color: theme.textDim, textDecoration: "underline" }}>
+                            {appLanguage === "de" ? "Nochmal in Telegram öffnen" : "Open in Telegram again"}
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                    {tgErr && (
+                      <div style={{ marginTop: 12, fontSize: 12, fontFamily: FONT, color: "#e5484d" }}>{tgErr}</div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+
               {settingsTab === "appearance" && (
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
