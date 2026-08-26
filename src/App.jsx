@@ -27684,26 +27684,35 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                 // Never magnified past 1:1 — a business card drawn as large as a
                 // poster would misreport the thing.
                 const k = ok ? Math.min(560 / w, 250 / h, 1) : 0;
+                // The label sits INSIDE the field on the right, the way the panel's
+                // number rows carry their unit. Faint on purpose: it has to read as
+                // a caption on the box, not as something else you can type in.
+                // One explicit height for the field and the button beside it —
+                // padding alone leaves them a few pixels apart, because their type
+                // sizes differ.
+                const FIELD_H = 42;
                 const field = (val, set, lab) => (
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 5 }}>{lab}</div>
+                  <div style={{ flex: 1, minWidth: 0, height: FIELD_H, boxSizing: "border-box",
+                    display: "flex", alignItems: "center", gap: 8, padding: "0 12px", borderRadius: 9,
+                    border: `1px solid ${theme.borderFaint}`,
+                    background: darkMode ? "rgba(255,255,255,0.04)" : "#fff" }}>
                     <input value={val} inputMode="numeric"
                       onChange={(e) => set(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))}
-                      style={{ width: "100%", padding: "10px 12px", borderRadius: 9, boxSizing: "border-box",
-                        border: `1px solid ${theme.borderFaint}`, outline: "none",
-                        background: darkMode ? "rgba(255,255,255,0.04)" : "#fff",
-                        color: theme.text, fontFamily: FONT, fontSize: 13.5 }} />
+                      style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
+                        padding: 0, color: theme.text, fontFamily: FONT, fontSize: 13.5 }} />
+                    <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, flexShrink: 0 }}>{lab}</span>
                   </div>
                 );
                 return (
                   <div style={{ height: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
                     {/* The two numbers first, across the full width — they are what
                         this tab is for. Everything below only reports on them. */}
-                    <div style={{ display: "flex", alignItems: "flex-end", gap: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                       {field(cw, setCw, de ? "Breite" : "Width")}
                       {field(chh, setChh, de ? "Höhe" : "Height")}
                       <div onClick={() => { setCw(chh); setChh(cw); }}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 14px",
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "0 14px",
+                          height: FIELD_H, boxSizing: "border-box",
                           borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`,
                           color: theme.textDim, fontFamily: FONT, fontSize: 11.5, whiteSpace: "nowrap", flexShrink: 0 }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -27728,7 +27737,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                     </div>
                     {/* The shape, at the size it is being typed. Two numbers do not
                         tell you a proportion; a rectangle does. */}
-                    <div style={{ flex: 1, minHeight: 160, borderRadius: 12,
+                    <div style={{ flex: 1, minHeight: 140, marginBottom: 20, borderRadius: 12,
                       background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
                       display: "flex", alignItems: "center", justifyContent: "center" }}>
                       {ok && (
