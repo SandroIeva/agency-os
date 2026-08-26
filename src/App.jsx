@@ -23827,14 +23827,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                           color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
                       <span style={{ fontSize: 11.5, color: theme.textFaint }}>%</span>
                     </div>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, marginTop: 6 }}>
-                    {num(selItem.strokeWidth, v => set2({ strokeWidth: Math.max(0, Number(v) || 0) }), "▭")}
+                    {/* The same ✕ in the same place as the fill's. Taking a stroke
+                        off and taking a fill off are one action, and a labelled
+                        button beside a width field made them look like two. */}
                     <div onClick={() => set2({ strokeWidth: undefined })}
-                      style={{ padding: "8px 12px", borderRadius: 9, cursor: "pointer", fontSize: 12,
-                        color: theme.textDim, border: `1px solid ${line}`, alignSelf: "center" }}>
-                      {de ? "Entfernen" : "Remove"}
-                    </div>
+                      title={de ? "Entfernen" : "Remove"}
+                      style={{ cursor: "pointer", color: theme.textFaint, fontSize: 12, paddingLeft: 4, flexShrink: 0 }}>✕</div>
+                  </div>
+                  {/* …which leaves the width the whole row it always wanted. */}
+                  <div style={{ marginTop: 6 }}>
+                    {num(selItem.strokeWidth, v => set2({ strokeWidth: Math.max(0, Number(v) || 0) }), "▭")}
                   </div>
                 </>
               )}
