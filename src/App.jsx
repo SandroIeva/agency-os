@@ -17802,14 +17802,14 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
                   <path key={it.id || i} d={pathD(it.nodes, it.closed)}
                     transform={`translate(${it.ox || 0}, ${it.oy || 0})`}
                     fill={typeof it.fill === "string" ? it.fill : "none"} stroke={it.color} strokeWidth={it.width}
-                    strokeLinecap="round" strokeLinejoin="round" />
+                    strokeLinecap={capOf(it)} strokeLinejoin={joinOf(it)} />
                 ) : it.type === "draw" ? (
                   <polyline key={it.id || i} fill="none" stroke={it.color} strokeWidth={it.width}
-                    strokeLinecap="round" strokeLinejoin="round"
+                    strokeLinecap={capOf(it)} strokeLinejoin={joinOf(it)}
                     points={(it.pts || []).map(([x, y]) => `${x + (it.ox || 0)},${y + (it.oy || 0)}`).join(" ")} />
                 ) : (
                   <line key={it.id || i} x1={it.x1} y1={it.y1} x2={it.x2} y2={it.y2}
-                    stroke={it.color} strokeWidth={it.width} strokeLinecap="round" />
+                    stroke={it.color} strokeWidth={it.width} strokeLinecap={capOf(it)} />
                 )
               ))}
             </svg>
@@ -21226,14 +21226,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             // whatever was stroked last.
             if (it.width > 0) {
               ctx.strokeStyle = it.color; ctx.lineWidth = it.width;
-              ctx.lineCap = "round"; ctx.lineJoin = "round";
+              ctx.lineCap = capOf(it); ctx.lineJoin = joinOf(it);
               ctx.stroke(p2);
             }
             ctx.restore();
           }
         } else if (it.type === "draw") {
           ctx.strokeStyle = it.color; ctx.lineWidth = it.width;
-          ctx.lineCap = "round"; ctx.lineJoin = "round";
+          ctx.lineCap = capOf(it); ctx.lineJoin = joinOf(it);
           ctx.beginPath();
           it.pts.forEach(([x, y], i) => {
             const px2 = x + (it.ox || 0), py2 = y + (it.oy || 0);
@@ -21242,7 +21242,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           ctx.stroke();
         } else if (it.type === "arrow" || it.type === "line") {
           ctx.strokeStyle = it.color; ctx.fillStyle = it.color;
-          ctx.lineWidth = it.width; ctx.lineCap = "round";
+          ctx.lineWidth = it.width; ctx.lineCap = capOf(it); ctx.lineJoin = joinOf(it);
           ctx.beginPath(); ctx.moveTo(it.x1, it.y1); ctx.lineTo(it.x2, it.y2); ctx.stroke();
           // A line is an arrow without the head. This was a `continue` while the
           // code sat in a loop; in a function of its own it is a return, and it
@@ -21986,7 +21986,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       <g transform={`translate(${it.ox || 0}, ${it.oy || 0})`}>
                         <path d={pathD(it.nodes, it.closed)}
                           fill={typeof it.fill === "string" ? it.fill : "none"} stroke={it.color} strokeWidth={it.width}
-                          strokeLinecap="round" strokeLinejoin="round"
+                          strokeLinecap={capOf(it)} strokeLinejoin={joinOf(it)}
                           onPointerDown={e => onItemDown(e, it)}
                           // A filled path is clickable on its surface; an unfilled
                           // one only on its line, or its empty inside would swallow
@@ -22001,13 +22001,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       </g>
                     ) : it.type === "draw" ? (
                       <polyline points={pts} fill="none" stroke={it.color} strokeWidth={it.width}
-                        strokeLinecap="round" strokeLinejoin="round"
+                        strokeLinecap={capOf(it)} strokeLinejoin={joinOf(it)}
                         onPointerDown={e => onItemDown(e, it)}
                         style={{ pointerEvents: tool === "select" ? "stroke" : "none", cursor: "move" }} />
                     ) : (
                       <g onPointerDown={e => onItemDown(e, it)}
-                        stroke={it.color} strokeWidth={it.width} strokeLinecap="round"
-                        strokeLinejoin="round" fill="none"
+                        stroke={it.color} strokeWidth={it.width} strokeLinecap={capOf(it)}
+                        strokeLinejoin={joinOf(it)} fill="none"
                         style={{ pointerEvents: tool === "select" ? "stroke" : "none", cursor: "move" }}>
                         <line x1={it.x1} y1={it.y1} x2={it.x2} y2={it.y2} />
                         {hd && <line x1={it.x2} y1={it.y2} x2={hd.x1} y2={hd.y1} />}
@@ -24012,6 +24012,21 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             {["draw", "arrow", "line"].includes(selItem.type) && (
               <div style={{ marginTop: 6 }}>
                 {num(selItem.width, v => set2({ width: Math.max(0.5, Number(v) || 1) }), "▭")}
+              </div>
+            )}
+            {/* How it ends. The same two-button pair the image fit uses, because
+                it is the same kind of question: one of two, and both worth
+                naming. */}
+            {["draw", "arrow", "line", "path"].includes(selItem.type) && (
+              <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                {[["round", de ? "Rund" : "Round"], ["butt", de ? "Kante" : "Flat"]].map(([v, l]) => (
+                  <div key={v} onClick={() => set2({ cap: v })}
+                    style={{ flex: 1, padding: "7px 12px", borderRadius: 8, cursor: "pointer",
+                      fontSize: 11.5, fontFamily: FONT, textAlign: "center", color: theme.text,
+                      border: `1px solid ${(selItem.cap || "round") === v ? "#15151c" : line}` }}>
+                    {l}
+                  </div>
+                ))}
               </div>
             )}
             {selItem.type === "path" && selItem.width > 0 && (
@@ -27794,6 +27809,14 @@ const pathBBox = (nodes, ox = 0, oy = 0) => {
 // Dragging a handle moves its opposite one to match, which is what makes a node
 // smooth. Same length on both sides, so the curve runs through without a kink.
 const mirrorHandle = (n, hx, hy) => ({ ...n, h2x: hx, h2y: hy, h1x: 2 * n.x - hx, h1y: 2 * n.y - hy });
+
+// How a stroke ends, and how it turns a corner. Round unless asked otherwise,
+// because that is what every stroke in this editor drew before there was a
+// choice — and a document written then must keep looking the way it did.
+// The join follows the cap: round ends with mitred corners is a line that
+// cannot decide what it is.
+const capOf = (it) => (it?.cap === "butt" ? "butt" : "round");
+const joinOf = (it) => (it?.cap === "butt" ? "miter" : "round");
 
 // Shift constrains a line to the nearest 45° ray from where it started. The
 // point is PROJECTED onto that ray rather than kept at the cursor's distance: a
