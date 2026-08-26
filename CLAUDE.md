@@ -132,7 +132,9 @@ Multi-tenant: nearly every row carries `org_id` (workspace) and often `project_i
 
 Storage buckets: `brand-assets` (also whiteboard image uploads under `whiteboards/<orgId>/…`), `user-files`, `chat-attachments`, `project-logos`, `os-visuals`.
 RPCs: `accept_project_invitation`, `delete_organization`, `redeem_push_setup_token` (api/redirect also calls a click-count RPC).
-Realtime channels: `wb-<boardId>` (whiteboard items), `chat-<convId>`, `team-calendar-<orgId>`.
+Realtime channels: `wb-<boardId>` (whiteboard items), `chat-<convId>`, `team-calendar-<orgId>`, `canvas-<canvasId>` (Artboards: cursors AND the
+document itself — `brand_canvases` is deliberately NOT in the realtime
+publication, so canvas collaboration rides entirely on broadcast).
 
 ## Serverless functions (`api/`)
 

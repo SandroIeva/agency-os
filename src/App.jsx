@@ -18780,6 +18780,86 @@ function SurfaceShareMenu({ visibility, onVisibility, shares, onToggleShare, mem
   </>);
 }
 
+// ── Merging two versions of one canvas document ──────────────────────────────
+// The whiteboard stores one row per element, so two people never write the same
+// row and the database settles it. A canvas is ONE jsonb document, so two saves
+// are two whole documents and the later one would simply erase the earlier —
+// including the parts it never touched.
+//
+// So the two versions are merged against the last state both sides agreed on,
+// element by element: whatever I changed stays mine, everything else takes
+// theirs. Only an element BOTH of us edited is a real conflict, and there mine
+// wins — the one thing that must never happen is losing what someone is
+// currently looking at.
+const cvStableStr = (v) => {
+  if (v === null || typeof v !== "object") return JSON.stringify(v) ?? "null";
+  if (Array.isArray(v)) return "[" + v.map(cvStableStr).join(",") + "]";
+  return "{" + Object.keys(v).sort().map(k => JSON.stringify(k) + ":" + cvStableStr(v[k])).join(",") + "}";
+};
+// Key order must not read as an edit — the boards are rebuilt by spreading, so
+// two clients hold the same board with the keys in a different order, and a
+// plain JSON compare would call every element changed and mine would always win.
+const cvSame = (a, b) => cvStableStr(a) === cvStableStr(b);
+const cvById = (list) => {
+  const m = new Map();
+  (Array.isArray(list) ? list : []).forEach(x => { if (x && x.id != null) m.set(x.id, x); });
+  return m;
+};
+const cvMergeLists = (baseL, mineL, theirsL) => {
+  const B = cvById(baseL), M = cvById(mineL), T = cvById(theirsL);
+  const out = [], taken = new Set();
+  const decide = (id) => {
+    const b = B.get(id), m = M.get(id), t = T.get(id);
+    // They deleted it, but I had just edited it: an edit outranks a delete.
+    // Losing work someone is still holding is worse than an element coming back.
+    if (m && !t) return (B.has(id) && cvSame(m, b)) ? null : m;
+    if (!m && t) return B.has(id) ? null : t;   // I deleted it; their copy is stale
+    if (!m && !t) return null;
+    return cvSame(m, b) ? t : m;                // untouched by me → take theirs
+  };
+  (Array.isArray(theirsL) ? theirsL : []).forEach(t => {
+    if (taken.has(t.id)) return;
+    taken.add(t.id);
+    const keep = decide(t.id);
+    if (keep) out.push(keep);
+  });
+  (Array.isArray(mineL) ? mineL : []).forEach((m, i) => {
+    if (taken.has(m.id)) return;
+    taken.add(m.id);
+    const keep = decide(m.id);
+    if (keep) out.splice(Math.min(i, out.length), 0, keep);
+  });
+  return out;
+};
+const cvMergeBoard = (b, m, t) => {
+  const out = {};
+  new Set([...Object.keys(b || {}), ...Object.keys(m || {}), ...Object.keys(t || {})]).forEach(k => {
+    if (k === "items") return;
+    const v = cvSame(m?.[k], b?.[k]) ? t?.[k] : m?.[k];
+    if (v !== undefined) out[k] = v;
+  });
+  out.items = cvMergeLists(b?.items, m?.items, t?.items);
+  return out;
+};
+function mergeCanvasDocs(base, mine, theirs) {
+  const bB = cvById(base?.boards), mB = cvById(mine?.boards), tB = cvById(theirs?.boards);
+  const boards = [], taken = new Set();
+  const push = (id) => {
+    if (taken.has(id)) return;
+    taken.add(id);
+    const b = bB.get(id), m = mB.get(id), t = tB.get(id);
+    if (m && t) boards.push(cvMergeBoard(b, m, t));
+    else if (m) { if (!bB.has(id) || !cvSame(m, b)) boards.push(m); }
+    else if (t && !bB.has(id)) boards.push(t);
+  };
+  (mine?.boards || []).forEach(b => push(b.id));
+  (theirs?.boards || []).forEach(b => push(b.id));
+  const stage = cvSame(mine?.stage, base?.stage) ? theirs?.stage : mine?.stage;
+  const out = { boards };
+  if (stage !== undefined) out.stage = stage;
+  return out;
+}
+
 function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, userOrg,
                         theme, darkMode, appLanguage, onUpload, onDone, onAutoSave, onPublish, onClose,
                         canvasRow = null }) {
@@ -19072,7 +19152,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     if (body === baselineRef.current) return;
     baselineRef.current = body;
     setSaveState("saving");
-    try { await onAutoSave(payload); setSaveState("saved"); }
+    try {
+      await onAutoSave(payload);
+      setSaveState("saved");
+      // Sent after the write, not instead of it: the database stays the record,
+      // this is only what spares everyone else a reload to see it.
+      chanRef.current?.send({ type: "broadcast", event: "doc",
+        payload: { key: myKey.current, doc: payload } });
+    }
     catch { setSaveState(""); }
   };
 
@@ -19093,6 +19180,127 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     flush(latestRef.current);
   }, []);
   const dragRef = useRef(null);
+
+  // ── Live collaboration ────────────────────────────────────────────────────
+  // Only on a SAVED canvas: the same editor also runs brand slots, which are
+  // part of a document and have no room of their own for people to meet in.
+  //
+  // Everything travels by broadcast, cursors and document alike. brand_canvases
+  // is not in the realtime publication, and broadcast is the better fit anyway:
+  // frequent, ephemeral, and it does not wait for a database round trip.
+  const collabId = canvasRow?.id || null;
+  const [peers, setPeers] = useState({});
+  const chanRef = useRef(null);
+  // Keyed per WINDOW rather than per person: two windows are two pointers, and
+  // it is also the only way to see this working without a second account.
+  const myKey = useRef(crypto.randomUUID());
+  const lastSent = useRef(0);
+  const lastPoint = useRef({ x: 0, y: 0 });
+  const pendingSend = useRef(null);
+  const remoteStash = useRef(null);
+  const myName = () =>
+    session?.user?.user_metadata?.full_name || session?.user?.email?.split("@")[0] || "Du";
+
+  // The channel callbacks outlive the render they were created in, so anything
+  // they need to read comes from a ref rather than a closed-over value.
+  const liveRef = useRef({});
+  liveRef.current = { boards, active, stageBg, editing };
+
+  const applyRemoteDoc = (rdoc) => {
+    if (!rdoc || !Array.isArray(rdoc.boards) || !rdoc.boards.length) return;
+    const L = liveRef.current;
+    // latestRef, not boardsNow(): this runs from a channel handler that was
+    // registered once and closes over the render it was created in. Calling
+    // boardsNow() there would compare their document against the boards as they
+    // stood when the canvas opened, and every edit made since would look like
+    // something they had deleted. latestRef is rewritten on every render.
+    const mineNow = latestRef.current || { boards: [], stage: undefined };
+    let baseDoc; try { baseDoc = JSON.parse(baselineRef.current); } catch { baseDoc = mineNow; }
+    const merged = mergeCanvasDocs(baseDoc, mineNow, rdoc);
+    if (cvSame(merged, mineNow)) return;        // nothing of theirs left to take
+    const i = Math.min(L.active, merged.boards.length - 1);
+    setBoards(merged.boards);
+    setActive(i);
+    // Not loadBoard(): that clears the selection, and having your selection
+    // dropped every time a colleague nudges something is its own small hell.
+    const b = merged.boards[i] || {};
+    setFrame({ w: b.w, h: b.h });
+    setBg(b.bg || palette[1] || "#FFFFFF");
+    setFrameRadius(Number(b.radius) || 0);
+    setFrameRadii(Array.isArray(b.radii) && b.radii.length === 4 ? b.radii : null);
+    setFrameClip(b.clip !== false);
+    setItems(Array.isArray(b.items) ? b.items : []);
+    setStageBg(merged.stage || null);
+  };
+
+  // A document that arrives mid-gesture waits: applying it under a live drag
+  // would move the thing out from under the pointer, and under a text caret it
+  // would take the caret with it.
+  const takeRemoteDoc = (rdoc) => {
+    if (dragRef.current || liveRef.current.editing) { remoteStash.current = rdoc; return; }
+    applyRemoteDoc(rdoc);
+  };
+  useEffect(() => {
+    if (!remoteStash.current || dragRef.current || editing) return;
+    const d = remoteStash.current; remoteStash.current = null;
+    applyRemoteDoc(d);
+  }, [editing, items, boards, active]);
+
+  useEffect(() => {
+    if (!collabId) return;
+    const me = session?.user?.id;
+    const ch = supabase.channel(`canvas-${collabId}`, {
+      config: { presence: { key: myKey.current }, broadcast: { self: false } } })
+      .on("broadcast", { event: "cursor" }, ({ payload }) => {
+        if (!payload?.key || payload.key === myKey.current) return;
+        setPeers(prev => ({ ...prev, [payload.key]: payload }));
+      })
+      .on("broadcast", { event: "doc" }, ({ payload }) => {
+        if (!payload?.key || payload.key === myKey.current) return;
+        takeRemoteDoc(payload.doc);
+      })
+      .on("presence", { event: "leave" }, ({ leftPresences, key }) => {
+        // Somebody closed the canvas — take their pointer with them, or it
+        // stays on screen forever pointing at nothing.
+        setPeers(prev => {
+          const next = { ...prev };
+          delete next[key];
+          (leftPresences || []).forEach(pr => { if (pr?.key) delete next[pr.key]; });
+          return next;
+        });
+      })
+      .subscribe(async (status) => {
+        if (status !== "SUBSCRIBED") return;
+        chanRef.current = ch;
+        await ch.track({ key: myKey.current, name: myName(), color: peerColor(me) });
+      });
+    return () => {
+      chanRef.current = null;
+      if (pendingSend.current) { clearTimeout(pendingSend.current); pendingSend.current = null; }
+      supabase.removeChannel(ch);
+    };
+  }, [collabId]);
+
+  // Throttled to ~10/s. A cursor reads as smooth long before it is every pixel,
+  // and every send is a message to everyone else in the room.
+  const sendCursor = (e) => {
+    if (!chanRef.current || !cam) return;
+    lastPoint.current = { x: Math.round((e.clientX - cam.x) / cam.s),
+                          y: Math.round((e.clientY - cam.y) / cam.s) };
+    const now = Date.now();
+    const send = () => {
+      lastSent.current = Date.now();
+      pendingSend.current = null;
+      chanRef.current?.send({ type: "broadcast", event: "cursor",
+        payload: { key: myKey.current, name: myName(),
+          color: peerColor(session?.user?.id), ...lastPoint.current } });
+    };
+    if (now - lastSent.current >= 100) send();
+    // A pointer that stops between two ticks would otherwise freeze one step
+    // short of where it actually is. The trailing send is what lets the cursor
+    // come to rest in the right place.
+    else if (!pendingSend.current) pendingSend.current = setTimeout(send, 100 - (now - lastSent.current));
+  };
 
   const [ctxMenu, setCtxMenu] = useState(null);   // { x, y, id }
   const [ctxHover, setCtxHover] = useState(null);
@@ -19667,6 +19875,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   };
 
   const onStageMove = (e) => {
+    // Before the drag guard: a pointer that is only moving still has a position
+    // worth showing, and moving is most of what anyone does on a canvas.
+    sendCursor(e);
     const d = dragRef.current;
     if (!d) return;
     if (d.mode === "pan") {
@@ -21320,6 +21531,31 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Other people's pointers. Placed by hand from canvas coordinates
+            rather than inside the zoomed layer: a cursor that scales with the
+            zoom is tiny at 20% and enormous at 400%, while what it means —
+            someone is here — never changes size. Nothing here takes pointer
+            events; a colleague's cursor must never be in the way of your own. */}
+        {cam && (
+          <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 6 }}>
+            {Object.entries(peers).map(([k, pr]) => (
+              <div key={k} style={{ position: "absolute",
+                left: cam.x + pr.x * cam.s, top: cam.y + pr.y * cam.s,
+                transition: "left 0.08s linear, top 0.08s linear",
+                display: "flex", alignItems: "flex-start", gap: 4, willChange: "left, top" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill={pr.color || "#8B7AFF"}
+                  style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.35))", flexShrink: 0 }}>
+                  <path d="M5 3l14 8-6.2 1.6L9.6 19z" />
+                </svg>
+                <span style={{ marginTop: 12, padding: "2px 7px", borderRadius: 999,
+                  background: pr.color || "#8B7AFF", color: "#fff", fontFamily: FONT,
+                  fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }}>{pr.name || "\u2014"}</span>
+              </div>
+            ))}
           </div>
         )}
       </div>
