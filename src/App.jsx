@@ -27681,11 +27681,11 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                 const w = Math.max(16, Math.min(8000, parseInt(cw, 10) || 0));
                 const h = Math.max(16, Math.min(8000, parseInt(chh, 10) || 0));
                 const ok = w >= 16 && h >= 16;
-                // Fitted to the half it sits in, and never magnified: a business
-                // card drawn as large as a poster would misreport the thing.
-                const k = ok ? Math.min(300 / w, 212 / h, 1) : 0;
+                // Never magnified past 1:1 — a business card drawn as large as a
+                // poster would misreport the thing.
+                const k = ok ? Math.min(560 / w, 250 / h, 1) : 0;
                 const field = (val, set, lab) => (
-                  <div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 5 }}>{lab}</div>
                     <input value={val} inputMode="numeric"
                       onChange={(e) => set(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))}
@@ -27696,51 +27696,45 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                   </div>
                 );
                 return (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, alignItems: "stretch" }}>
+                  <div style={{ height: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
+                    {/* The two numbers first, across the full width — they are what
+                        this tab is for. Everything below only reports on them. */}
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 12 }}>
+                      {field(cw, setCw, de ? "Breite" : "Width")}
+                      {field(chh, setChh, de ? "Höhe" : "Height")}
+                      <div onClick={() => { setCw(chh); setChh(cw); }}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 14px",
+                          borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`,
+                          color: theme.textDim, fontFamily: FONT, fontSize: 11.5, whiteSpace: "nowrap", flexShrink: 0 }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M7 4v6H3"/><path d="M17 20v-6h4"/>
+                          <path d="M20 9a8 8 0 0 0-13.7-4.2L3 8"/><path d="M4 15a8 8 0 0 0 13.7 4.2L21 16"/>
+                        </svg>
+                        {de ? "Drehen" : "Swap"}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>
+                        {ok ? `${de ? "Pixel" : "Pixels"} · ${ratioLabel(w, h)}` : (de ? "Mindestens 16 Pixel." : "16 pixels minimum.")}
+                      </div>
+                      <div style={{ flex: 1 }} />
+                      {recentSizes.map(([rw, rh]) => (
+                        <div key={`${rw}x${rh}`} onClick={() => { setCw(String(rw)); setChh(String(rh)); }}
+                          style={{ padding: "5px 11px", borderRadius: 999, cursor: "pointer",
+                            border: `1px solid ${theme.borderFaint}`, color: theme.textDim,
+                            fontFamily: FONT, fontSize: 11.5 }}>{rw} × {rh}</div>
+                      ))}
+                    </div>
                     {/* The shape, at the size it is being typed. Two numbers do not
                         tell you a proportion; a rectangle does. */}
-                    <div style={{ borderRadius: 12, minHeight: 244,
+                    <div style={{ flex: 1, minHeight: 160, borderRadius: 12,
                       background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
                       display: "flex", alignItems: "center", justifyContent: "center" }}>
                       {ok && (
                         <div style={{ width: Math.max(12, Math.round(w * k)), height: Math.max(12, Math.round(h * k)),
                           background: darkMode ? "#0f0f14" : "#fff", borderRadius: 3,
                           border: `1px solid ${theme.border}` }} />
-                      )}
-                    </div>
-                    <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
-                      {field(cw, setCw, de ? "Breite" : "Width")}
-                      {field(chh, setChh, de ? "Höhe" : "Height")}
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{ flex: 1, fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>
-                          {ok ? `${de ? "Pixel" : "Pixels"} · ${ratioLabel(w, h)}` : (de ? "Mindestens 16 Pixel." : "16 pixels minimum.")}
-                        </div>
-                        <div onClick={() => { setCw(chh); setChh(cw); }}
-                          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px",
-                            borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`,
-                            color: theme.textDim, fontFamily: FONT, fontSize: 11.5, whiteSpace: "nowrap" }}>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M7 4v6H3"/><path d="M17 20v-6h4"/>
-                            <path d="M20 9a8 8 0 0 0-13.7-4.2L3 8"/><path d="M4 15a8 8 0 0 0 13.7 4.2L21 16"/>
-                          </svg>
-                          {de ? "Drehen" : "Swap"}
-                        </div>
-                      </div>
-                      {recentSizes.length > 0 && (
-                        <div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginBottom: 7 }}>
-                            {de ? "Zuletzt benutzt" : "Recently used"}
-                          </div>
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                            {recentSizes.map(([rw, rh]) => (
-                              <div key={`${rw}x${rh}`} onClick={() => { setCw(String(rw)); setChh(String(rh)); }}
-                                style={{ padding: "5px 11px", borderRadius: 999, cursor: "pointer",
-                                  border: `1px solid ${theme.borderFaint}`, color: theme.textDim,
-                                  fontFamily: FONT, fontSize: 11.5 }}>{rw} × {rh}</div>
-                            ))}
-                          </div>
-                        </div>
                       )}
                     </div>
                   </div>
@@ -27750,7 +27744,9 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                   {creationFormats(de).filter(f => f.group === newTab).map((f, i) => {
                     // Every shape drawn to the same box, so a banner looks like a
                     // banner beside a portrait post instead of both being a word.
-                    const k = Math.min(150 / f.w, 88 / f.h);
+                    // Fifteen percent off: the box stays the size it is, the shape
+                    // just stops filling it edge to edge.
+                    const k = Math.min(128 / f.w, 75 / f.h);
                     return (
                       // Its own hover rather than the shared .hover-row: that one is
                       // tuned for list rows on a flat panel and reads as a hard step
