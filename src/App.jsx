@@ -27704,26 +27704,29 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                   </div>
                 );
                 return (
-                  <div style={{ height: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
                     {/* The two numbers first, across the full width — they are what
                         this tab is for. Everything below only reports on them. */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
                       {field(cw, setCw, de ? "Breite" : "Width")}
                       {field(chh, setChh, de ? "Höhe" : "Height")}
-                      <div onClick={() => { setCw(chh); setChh(cw); }}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "0 14px",
-                          height: FIELD_H, boxSizing: "border-box",
+                      {/* The glyph alone, in a square the same height as the fields.
+                          Two arrows turning around each other beside a width and a
+                          height need no caption; the title carries it for anyone who
+                          hovers. */}
+                      <div onClick={() => { setCw(chh); setChh(cw); }} title={de ? "Breite und Höhe tauschen" : "Swap width and height"}
+                        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
+                          width: FIELD_H, height: FIELD_H, boxSizing: "border-box", padding: 0,
                           borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`,
-                          color: theme.textDim, fontFamily: FONT, fontSize: 11.5, whiteSpace: "nowrap", flexShrink: 0 }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          color: theme.textDim, flexShrink: 0 }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                           strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M7 4v6H3"/><path d="M17 20v-6h4"/>
                           <path d="M20 9a8 8 0 0 0-13.7-4.2L3 8"/><path d="M4 15a8 8 0 0 0 13.7 4.2L21 16"/>
                         </svg>
-                        {de ? "Drehen" : "Swap"}
                       </div>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
                       <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>
                         {ok ? `${de ? "Pixel" : "Pixels"} · ${ratioLabel(w, h)}` : (de ? "Mindestens 16 Pixel." : "16 pixels minimum.")}
                       </div>
