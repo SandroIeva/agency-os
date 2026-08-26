@@ -22003,14 +22003,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       <polyline points={pts} fill="none" stroke={it.color} strokeWidth={it.width}
                         strokeLinecap="round" strokeLinejoin="round"
                         onPointerDown={e => onItemDown(e, it)}
-                        style={{ pointerEvents: tool === "select" ? "stroke" : "none",
-                          cursor: "move", filter: on ? "drop-shadow(0 0 2px #15151c)" : "none" }} />
+                        style={{ pointerEvents: tool === "select" ? "stroke" : "none", cursor: "move" }} />
                     ) : (
                       <g onPointerDown={e => onItemDown(e, it)}
                         stroke={it.color} strokeWidth={it.width} strokeLinecap="round"
                         strokeLinejoin="round" fill="none"
-                        style={{ pointerEvents: tool === "select" ? "stroke" : "none",
-                          cursor: "move", filter: on ? "drop-shadow(0 0 2px #15151c)" : "none" }}>
+                        style={{ pointerEvents: tool === "select" ? "stroke" : "none", cursor: "move" }}>
                         <line x1={it.x1} y1={it.y1} x2={it.x2} y2={it.y2} />
                         {hd && <line x1={it.x2} y1={it.y2} x2={hd.x1} y2={hd.y1} />}
                         {hd && <line x1={it.x2} y1={it.y2} x2={hd.x2} y2={hd.y2} />}
@@ -22171,6 +22169,25 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
             {/* A finished path, selected: every node and handle is a grip. Round
                 grips are handles, square ones are the points themselves. */}
+            {/* The line a stroke actually is, drawn thin down the middle of it.
+                A glow around the ink was the old marker, and on anything with a
+                shape of its own it reads as a second outline tracing it. */}
+            {cam && !editing && (() => {
+              const it = items.find(i => i.id === sel && !i.locked
+                && ["draw", "arrow", "line"].includes(i.type));
+              if (!it) return null;
+              const k = 1 / cam.s;
+              const d2 = it.type === "draw"
+                ? (it.pts || []).map(([x, y], i2) => `${i2 ? "L" : "M"} ${x + (it.ox || 0)} ${y + (it.oy || 0)}`).join(" ")
+                : `M ${it.x1} ${it.y1} L ${it.x2} ${it.y2}`;
+              return (
+                <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}
+                  style={{ position: "absolute", left: 0, top: 0, overflow: "visible", pointerEvents: "none", zIndex: 7 }}>
+                  <path d={d2} fill="none" stroke="#15151c" strokeWidth={1.2 * k} />
+                </svg>
+              );
+            })()}
+
             {cam && !editing && (() => {
               const it = items.find(i => i.id === sel && i.type === "path" && !i.locked);
               if (!it?.nodes?.length) return null;
@@ -23988,6 +24005,20 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 </div>
               </>);
             })()}
+
+            {/* Thickness belongs beside the colour that uses it. It lived only in
+                the floating bar, which meant reaching for a different surface for
+                one of a stroke's two properties. */}
+            {["draw", "arrow", "line"].includes(selItem.type) && (
+              <div style={{ marginTop: 6 }}>
+                {num(selItem.width, v => set2({ width: Math.max(0.5, Number(v) || 1) }), "▭")}
+              </div>
+            )}
+            {selItem.type === "path" && selItem.width > 0 && (
+              <div style={{ marginTop: 6 }}>
+                {num(selItem.width, v => set2({ width: Math.max(0.5, Number(v) || 1) }), "▭")}
+              </div>
+            )}
 
             {/* The mirror of "add a stroke" on a shape: a path is a line until
                 you ask for a surface, because that is what a path usually is. */}
