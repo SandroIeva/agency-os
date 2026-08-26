@@ -27305,7 +27305,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   // Derived, not written down: the fullest tab decides, so adding a format later
   // adjusts the box instead of quietly overflowing it. Four columns fixed, or the
   // row count this depends on would be a guess about the available width.
-  const FMT_COLS = 4, FMT_TILE_H = 132, FMT_GAP = 10;
+  const FMT_COLS = 4, FMT_TILE_H = 172, FMT_GAP = 10;
   // The whole dialog gets ONE height, and the body flexes inside it. Fixing the
   // body alone left the box free to follow whatever the custom tab needed, which
   // is what was still jumping.
@@ -27750,7 +27750,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                   {creationFormats(de).filter(f => f.group === newTab).map((f, i) => {
                     // Every shape drawn to the same box, so a banner looks like a
                     // banner beside a portrait post instead of both being a word.
-                    const k = Math.min(84 / f.w, 52 / f.h);
+                    const k = Math.min(150 / f.w, 88 / f.h);
                     return (
                       // Its own hover rather than the shared .hover-row: that one is
                       // tuned for list rows on a flat panel and reads as a hard step
@@ -27758,7 +27758,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                       <div key={i} onClick={() => !busy && createCanvas(f)} className="fmt-tile"
                         style={{ padding: "12px 13px", borderRadius: 11, cursor: "pointer", textAlign: "center",
                           border: `1px solid ${theme.borderFaint}` }}>
-                        <div style={{ height: 56, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 9 }}>
+                        <div style={{ height: 96, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 9 }}>
                           <div style={{ width: Math.max(6, Math.round(f.w * k)), height: Math.max(6, Math.round(f.h * k)),
                             background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
                             border: `1px solid ${theme.border}`,
