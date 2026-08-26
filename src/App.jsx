@@ -27267,20 +27267,62 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
 
   const card = { background: darkMode ? "rgba(255,255,255,0.04)" : "#fff",
     border: `1px solid ${theme.borderFaint}`, borderRadius: 14 };
+  // Lifted from IdeasTab unchanged, so a board card and an artboard card say who
+  // made it in the same way rather than in two dialects.
+  const memberById = useMemo(() => {
+    const m = {};
+    (orgMembers || []).forEach(om => { if (om.user_id) m[om.user_id] = { user_id: om.user_id, ...(om.profiles || {}) }; });
+    if (session?.user?.id) {
+      m[session.user.id] = m[session.user.id] || {
+        user_id: session.user.id,
+        display_name: session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "Du",
+        avatar_url: session.user.user_metadata?.avatar_url || null,
+      };
+    }
+    return m;
+  }, [orgMembers, session?.user?.id]);
+  const creatorAvatar = (m, size = 20) => (
+    <div style={{ width: size, height: size, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
+      color: theme.textDim, fontFamily: FONT, fontSize: size * 0.42, fontWeight: 600 }}>
+      {m?.avatar_url
+        ? <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        : (m?.initials || (m?.display_name || "?").trim()[0] || "?").toUpperCase()}
+    </div>
+  );
+  // A native button, the way IdeasTab does it: motion gestures were swallowing
+  // the click there, and there is no reason to rediscover that here.
+  const delBtn = (r) => canEdit && (
+    <button type="button" title={de ? "Löschen" : "Delete"}
+      onClick={(e) => { e.stopPropagation(); e.preventDefault(); removeCanvas(r); }}
+      style={{ width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center",
+        justifyContent: "center", color: darkMode ? "#e8e8ee" : "#23232b", cursor: "pointer",
+        border: "none", background: "transparent", padding: 0, flexShrink: 0 }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
+        strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+      </svg>
+    </button>
+  );
   const fmtDate = (s) => new Date(s).toLocaleDateString(de ? "de-DE" : "en-GB",
     { day: "2-digit", month: "short", year: "numeric" });
 
   // Same control in both views, so a canvas is moved the same way whichever one
   // you happen to be in.
-  const templateToggle = (r) => canEdit && (
+  const templateToggle = (r, onPreview = false) => canEdit && (
     <span onClick={e => { e.stopPropagation(); toggleTemplate(r); }}
       title={r.is_template
         ? (de ? "Als Brand-Creation zurücklegen" : "Move back to Brand")
         : (de ? "Als Template ablegen" : "Keep as a template")}
       style={{ cursor: "pointer", fontSize: 10.5, fontFamily: FONT, fontWeight: 600,
         padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap",
-        border: `1px solid ${r.is_template ? "transparent" : theme.borderFaint}`,
-        background: r.is_template ? "#15151c" : "transparent",
+        border: `1px solid ${r.is_template ? "transparent" : (onPreview ? "transparent" : theme.borderFaint)}`,
+        // On a thumbnail there is no telling what colour is underneath, so the
+        // idle state gets its own ground rather than borrowing the artboard's.
+        background: r.is_template ? "#15151c" : (onPreview ? (darkMode ? "rgba(20,20,26,0.72)" : "rgba(255,255,255,0.82)") : "transparent"),
+        backdropFilter: onPreview ? "blur(6px)" : undefined,
+        WebkitBackdropFilter: onPreview ? "blur(6px)" : undefined,
         color: r.is_template ? "#fff" : theme.textDim }}>
       Template
     </span>
@@ -27545,9 +27587,12 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
             {visible.map(r => (
               <div key={r.id} style={{ ...card, overflow: "hidden" }}>
                 <div onClick={() => setEditing(r)}
-                  style={{ aspectRatio: "4 / 3", cursor: "pointer", padding: 12,
+                  style={{ position: "relative", aspectRatio: "4 / 3", cursor: "pointer", padding: 12,
                     boxSizing: "border-box", background: darkMode ? "#111117" : "#F3F3F5",
                     display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ position: "absolute", top: 8, right: 8, zIndex: 2 }}>
+                    {templateToggle(r, true)}
+                  </div>
                   {/* The canvas itself, drawn from the saved document. A stored
                       image would cost storage and be a version behind the moment
                       anyone edits — this cannot be. */}
@@ -27576,17 +27621,22 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                       {r.name || (de ? "Ohne Titel" : "Untitled")}
                     </div>
                   )}
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3 }}>
-                    <span style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textDim }}>
-                      {r.w} × {r.h} · {fmtDate(r.updated_at)}
-                    </span>
-                    <div style={{ flex: 1 }} />
-                    {templateToggle(r)}
-                    {canEdit && (
-                      <span onClick={() => removeCanvas(r)} title={de ? "Löschen" : "Delete"}
-                        style={{ cursor: "pointer", color: theme.textFaint, fontSize: 12 }}>✕</span>
-                    )}
-                  </div>
+                  {/* Who made it and when, the way a board card says it: avatar,
+                      then the name and the date on one line. The size moved up to
+                      join them — it belongs to the same breath. */}
+                  {(() => {
+                    const creator = memberById[r.created_by];
+                    return (
+                      <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 4,
+                        fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, minWidth: 0 }}>
+                        {creator?.display_name && creatorAvatar(creator, 20)}
+                        <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {[creator?.display_name, fmtDate(r.updated_at)].filter(Boolean).join(" · ")}
+                        </span>
+                        {delBtn(r)}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             ))}
@@ -27617,11 +27667,13 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                   </div>
                 </div>
                 {templateToggle(r)}
+                {/* The same trio as a board row: who, when, and a bin. */}
+                {(() => {
+                  const creator = memberById[r.created_by];
+                  return creator?.display_name ? creatorAvatar(creator, 20) : null;
+                })()}
                 <span style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textDim }}>{fmtDate(r.updated_at)}</span>
-                {canEdit && (
-                  <span onClick={e => { e.stopPropagation(); removeCanvas(r); }}
-                    style={{ cursor: "pointer", color: theme.textFaint, fontSize: 12, padding: "0 4px" }}>✕</span>
-                )}
+                {delBtn(r)}
               </div>
             ))}
           </div>
