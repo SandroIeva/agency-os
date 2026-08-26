@@ -27305,7 +27305,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   // Derived, not written down: the fullest tab decides, so adding a format later
   // adjusts the box instead of quietly overflowing it. Four columns fixed, or the
   // row count this depends on would be a guess about the available width.
-  const FMT_COLS = 4, FMT_TILE_H = 172, FMT_GAP = 10;
+  const FMT_COLS = 4, FMT_TILE_H = 172, FMT_GAP = 16;
   // The whole dialog gets ONE height, and the body flexes inside it. Fixing the
   // body alone left the box free to follow whatever the custom tab needed, which
   // is what was still jumping.
@@ -27711,7 +27711,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                   <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
                     {/* The two numbers first, across the full width — they are what
                         this tab is for. Everything below only reports on them. */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 3, marginBottom: 20 }}>
                       {field(cw, setCw, de ? "Breite" : "Width")}
                       {field(chh, setChh, de ? "Höhe" : "Height")}
                       {/* The glyph alone, in a square the same height as the fields.
