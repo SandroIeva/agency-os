@@ -23586,11 +23586,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
                   {list.map((ch, i2) => (
                     <div key={g + i2} onClick={() => {
-                        const sz = Math.round(Math.min(W, H) * 0.22);
-                        addItem({ id: crypto.randomUUID(), type: "text", text: ch, size: sz,
-                          weight: 400, color: "#000", align: "left",
-                          x: Math.round(W / 2 - sz * 0.6), y: Math.round(H / 2 - sz * 0.6),
-                          w: Math.round(sz * 1.3) });
+                        // The sticker's own line, with the glyph as its source:
+                        // square, centred, contained — so it arrives with handles,
+                        // rotates from its corners, and keeps its proportion.
+                        const sz = Math.round(Math.min(W, H) * 0.3);
+                        addItem({ id: crypto.randomUUID(), type: "image", url: emojiImageUrl(ch),
+                          emoji: ch, fit: "contain",
+                          x: Math.round((W - sz) / 2), y: Math.round((H - sz) / 2),
+                          w: sz, h: sz });
                         setMediaOpen(false);
                       }}
                       style={{ width: 28, height: 28, display: "flex", alignItems: "center",
@@ -27102,6 +27105,21 @@ const creationFormats = (de) => {
     { group: "device", kind: "other", name: de ? "Desktop (16:9)" : "Desktop (16:9)", w: 1920, h: 1080 },
     { group: "device", kind: "other", name: "MacBook Pro 14\"", w: 3024, h: 1964 },
   ];
+};
+
+// An emoji as a PICTURE rather than as a letter. Placed as text it carried a
+// font size, which is why it could not be dragged bigger by a corner the way a
+// sticker can — text resizes by width, not by scale.
+//
+// An SVG data URL rather than a rasterised one: about a hundred and fifty bytes
+// instead of the twenty kilobytes a PNG of the same glyph would add to the
+// document on every save, and it stays sharp at any size. width and height are
+// spelled out beside the viewBox because canvas drawImage needs them to size an
+// SVG source — without them the export comes out empty in some browsers.
+const emojiImageUrl = (ch) => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">`
+    + `<text x="64" y="64" font-size="108" text-anchor="middle" dominant-baseline="central">${ch}</text></svg>`;
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 };
 
 // "1080 × 1350" says nothing about the shape; "4:5" does. Reduced by the common
