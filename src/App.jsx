@@ -27305,7 +27305,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   // Derived, not written down: the fullest tab decides, so adding a format later
   // adjusts the box instead of quietly overflowing it. Four columns fixed, or the
   // row count this depends on would be a guess about the available width.
-  const FMT_COLS = 4, FMT_TILE_H = 124, FMT_GAP = 10;
+  const FMT_COLS = 4, FMT_TILE_H = 132, FMT_GAP = 10;
   const formatBodyH = (() => {
     const counts = {};
     creationFormats(de).forEach(f => { counts[f.group] = (counts[f.group] || 0) + 1; });
@@ -27669,65 +27669,60 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
             {/* A fixed height, capped so a short window still fits it on screen.
                 The tabs with less in them simply have room to spare — better than
                 an overlay that grows and shrinks as you read across it. */}
-            <div className="no-scrollbar" style={{ height: `min(${formatBodyH}px, 56vh)`, overflowY: "auto", padding: "16px 22px 22px" }}>
+            <div className="no-scrollbar" style={{ height: `min(${formatBodyH}px, 56vh)`, overflowY: "auto", padding: "16px 22px 6px" }}>
               {newTab === "custom" ? (() => {
                 const w = Math.max(16, Math.min(8000, parseInt(cw, 10) || 0));
                 const h = Math.max(16, Math.min(8000, parseInt(chh, 10) || 0));
                 const ok = w >= 16 && h >= 16;
-                const k = ok ? Math.min(150 / w, 96 / h, 1) : 0;
+                // Fitted to the half it sits in, and never magnified: a business
+                // card drawn as large as a poster would misreport the thing.
+                const k = ok ? Math.min(300 / w, 212 / h, 1) : 0;
+                const field = (val, set, lab) => (
+                  <div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 5 }}>{lab}</div>
+                    <input value={val} inputMode="numeric"
+                      onChange={(e) => set(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))}
+                      style={{ width: "100%", padding: "10px 12px", borderRadius: 9, boxSizing: "border-box",
+                        border: `1px solid ${theme.borderFaint}`, outline: "none",
+                        background: darkMode ? "rgba(255,255,255,0.04)" : "#fff",
+                        color: theme.text, fontFamily: FONT, fontSize: 13.5 }} />
+                  </div>
+                );
                 return (
-                  <div style={{ display: "flex", gap: 26, alignItems: "flex-start" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, alignItems: "stretch" }}>
                     {/* The shape, at the size it is being typed. Two numbers do not
                         tell you a proportion; a rectangle does. */}
-                    <div style={{ width: 190, height: 130, flexShrink: 0, borderRadius: 12,
+                    <div style={{ borderRadius: 12, minHeight: 244,
                       background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
                       display: "flex", alignItems: "center", justifyContent: "center" }}>
                       {ok && (
-                        <div style={{ width: Math.max(10, Math.round(w * k)), height: Math.max(10, Math.round(h * k)),
+                        <div style={{ width: Math.max(12, Math.round(w * k)), height: Math.max(12, Math.round(h * k)),
                           background: darkMode ? "#0f0f14" : "#fff", borderRadius: 3,
                           border: `1px solid ${theme.border}` }} />
                       )}
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        {[[cw, setCw, de ? "Breite" : "Width"], [chh, setChh, de ? "Höhe" : "Height"]].map(([val, set, lab], idx) => (
-                          <Fragment key={lab}>
-                            {idx === 1 && <span style={{ color: theme.textFaint, fontSize: 13 }}>×</span>}
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 4 }}>{lab}</div>
-                              <input value={val} inputMode="numeric"
-                                onChange={(e) => set(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))}
-                                style={{ width: "100%", padding: "9px 11px", borderRadius: 9, boxSizing: "border-box",
-                                  border: `1px solid ${theme.borderFaint}`, outline: "none",
-                                  background: darkMode ? "rgba(255,255,255,0.04)" : "#fff",
-                                  color: theme.text, fontFamily: FONT, fontSize: 13 }} />
-                            </div>
-                          </Fragment>
-                        ))}
-                        <div onClick={() => { setCw(chh); setChh(cw); }} title={de ? "Drehen" : "Swap"}
-                          style={{ alignSelf: "flex-end", width: 36, height: 36, borderRadius: 9, flexShrink: 0,
-                            display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-                            border: `1px solid ${theme.borderFaint}`, color: theme.textDim }}>
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
+                      {field(cw, setCw, de ? "Breite" : "Width")}
+                      {field(chh, setChh, de ? "Höhe" : "Height")}
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ flex: 1, fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>
+                          {ok ? `${de ? "Pixel" : "Pixels"} · ${ratioLabel(w, h)}` : (de ? "Mindestens 16 Pixel." : "16 pixels minimum.")}
+                        </div>
+                        <div onClick={() => { setCw(chh); setChh(cw); }}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px",
+                            borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`,
+                            color: theme.textDim, fontFamily: FONT, fontSize: 11.5, whiteSpace: "nowrap" }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M7 4v6H3"/><path d="M17 20v-6h4"/>
                             <path d="M20 9a8 8 0 0 0-13.7-4.2L3 8"/><path d="M4 15a8 8 0 0 0 13.7 4.2L21 16"/>
                           </svg>
+                          {de ? "Drehen" : "Swap"}
                         </div>
                       </div>
-                      <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 8 }}>
-                        {ok ? `${de ? "Pixel" : "Pixels"} · ${ratioLabel(w, h)}` : (de ? "Mindestens 16 Pixel." : "16 pixels minimum.")}
-                      </div>
-                      <motion.div whileTap={{ scale: 0.97 }}
-                        onClick={() => { if (ok && !busy) { rememberSize(w, h); createCanvas({ name: `${w} × ${h}`, kind: "other", w, h }); } }}
-                        style={{ marginTop: 14, display: "inline-block", padding: "9px 20px", borderRadius: 999,
-                          background: ok ? "#15151c" : theme.borderFaint, color: ok ? "#fff" : theme.textDim,
-                          fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: ok ? "pointer" : "default" }}>
-                        {de ? "Erstellen" : "Create"}
-                      </motion.div>
                       {recentSizes.length > 0 && (
-                        <>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 20, marginBottom: 7 }}>
+                        <div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginBottom: 7 }}>
                             {de ? "Zuletzt benutzt" : "Recently used"}
                           </div>
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -27738,7 +27733,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                                   fontFamily: FONT, fontSize: 11.5 }}>{rw} × {rh}</div>
                             ))}
                           </div>
-                        </>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -27767,6 +27762,28 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                   })}
                 </div>
               )}
+            </div>
+            {/* Flush with the close button's edge, and the same 22 below as at the
+                sides. Present on every tab, so the box does not change height when
+                the button is not the thing you press. */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 22px 22px", minHeight: 38 }}>
+              <div style={{ flex: 1, fontSize: 11.5, fontFamily: FONT, color: theme.textFaint }}>
+                {newTab === "custom" ? "" : (de ? "Ein Format anklicken, um es anzulegen." : "Click a size to create it.")}
+              </div>
+              {newTab === "custom" && (() => {
+                const w = Math.max(16, Math.min(8000, parseInt(cw, 10) || 0));
+                const h = Math.max(16, Math.min(8000, parseInt(chh, 10) || 0));
+                const ok = w >= 16 && h >= 16;
+                return (
+                  <motion.div whileTap={{ scale: 0.97 }}
+                    onClick={() => { if (ok && !busy) { rememberSize(w, h); createCanvas({ name: `${w} × ${h}`, kind: "other", w, h }); } }}
+                    style={{ padding: "10px 22px", borderRadius: 999,
+                      background: ok ? "#15151c" : theme.borderFaint, color: ok ? "#fff" : theme.textDim,
+                      fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: ok ? "pointer" : "default" }}>
+                    {de ? "Erstellen" : "Create"}
+                  </motion.div>
+                );
+              })()}
             </div>
         </motion.div>
         </motion.div>, document.body)}
