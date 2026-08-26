@@ -21855,8 +21855,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                           // A filled path is clickable on its surface; an unfilled
                           // one only on its line, or its empty inside would swallow
                           // clicks meant for whatever sits behind it.
+                          // No glow when selected. A freehand scribble can carry one
+                          // because it has no other shape to show, but on a path it
+                          // reads as a second outline around the stroke. What marks a
+                          // selected path is the path ITSELF, drawn as a hairline down
+                          // the middle of it — see the overlay with the grips.
                           style={{ pointerEvents: tool === "select" ? (typeof it.fill === "string" ? "painted" : "stroke") : "none",
-                            cursor: "move", filter: on ? "drop-shadow(0 0 2px #15151c)" : "none" }} />
+                            cursor: "move" }} />
                       </g>
                     ) : it.type === "draw" ? (
                       <polyline points={pts} fill="none" stroke={it.color} strokeWidth={it.width}
@@ -21992,6 +21997,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   style={{ position: "absolute", left: 0, top: 0, overflow: "visible", pointerEvents: "none", zIndex: 6 }}>
                   <path d={pathD(pathDraft.nodes, false)} fill="none" stroke={palette[0]}
                     strokeWidth={Math.max(2, Math.round(H / 120))} strokeLinecap="round" strokeLinejoin="round" />
+                  <path d={pathD(pathDraft.nodes, false)} fill="none" stroke="#15151c" strokeWidth={1.2 * k} />
                   <path ref={pathPreviewRef} d="" fill="none" stroke="#15151c" opacity="0.6"
                     strokeWidth={1.5 * k} strokeDasharray={`${5 * k} ${4 * k}`} />
                   {/* Grips while drawing, not only after finishing: a curve is
@@ -22044,6 +22050,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}
                   style={{ position: "absolute", left: 0, top: 0, overflow: "visible", pointerEvents: "none", zIndex: 7 }}>
                   <g transform={`translate(${it.ox || 0}, ${it.oy || 0})`}>
+                    {/* The vector itself: one hairline along the centre of the
+                        stroke, a constant width on screen because it describes the
+                        geometry and not the drawing. */}
+                    <path d={pathD(it.nodes, it.closed)} fill="none" stroke="#15151c"
+                      strokeWidth={1.2 * k} />
                     {it.nodes.map((n, i) => (
                       <Fragment key={"pe" + i}>
                         {n.h1x != null && <line x1={n.x} y1={n.y} x2={n.h1x} y2={n.h1y} stroke="#15151c" strokeWidth={k} opacity="0.45" />}
