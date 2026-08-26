@@ -27025,7 +27025,13 @@ const CREATION_SECTIONS = [
 // from the same table the previews use, so a format cannot be right in one place
 // and stale in the other.
 // Sizes that are a sheet of paper rather than a screen — 300 dpi, both ways up.
-const PRINT_PX = [[2480, 3508], [3508, 2480]];
+const PRINT_PX = [
+  [2480, 3508], [3508, 2480],   // A4
+  [1748, 2480], [2480, 1748],   // A5
+  [3508, 4961],                 // A3
+  [1169, 2480],                 // DIN lang
+  [1004, 650],                  // business card
+];
 const CHANNEL_NAME = { linkedin: "LinkedIn", tiktok: "TikTok", youtube: "YouTube",
   x: "X", facebook: "Facebook", instagram: "Instagram", pinterest: "Pinterest", threads: "Threads" };
 const creationFormats = (de) => {
@@ -27035,22 +27041,65 @@ const creationFormats = (de) => {
     // eight and shows up as a section heading.
     const label = CHANNEL_NAME[key] || key.charAt(0).toUpperCase() + key.slice(1);
     const out = [];
-    if (sh.bannerPx) out.push({ kind: "social", name: `${label} — ${de ? "Banner" : "banner"}`, w: sh.bannerPx[0], h: sh.bannerPx[1] });
-    if (sh.logoPx) out.push({ kind: "social", name: `${label} — ${de ? "Profilbild" : "profile picture"}`,
+    // Grouped by what a format IS, not by which channel it came from. All
+    // sixteen channel entries under "Social" would have made that tab the whole
+    // list and the other tabs decoration.
+    if (sh.bannerPx) out.push({ group: "banner", kind: "social", name: `${label} — ${de ? "Banner" : "banner"}`, w: sh.bannerPx[0], h: sh.bannerPx[1] });
+    if (sh.logoPx) out.push({ group: "social", round: true, kind: "social", name: `${label} — ${de ? "Profilbild" : "profile picture"}`,
       w: Math.max(CANVAS_MIN_EDIT, sh.logoPx[0]), h: Math.max(CANVAS_MIN_EDIT, sh.logoPx[1]) });
     return out;
   });
   return [
-    { kind: "social", name: de ? "Beitrag hoch (4:5)" : "Post portrait (4:5)", w: 1080, h: 1350 },
-    { kind: "social", name: de ? "Beitrag quadratisch" : "Post square", w: 1080, h: 1080 },
-    { kind: "social", name: "Story / Reel (9:16)", w: 1080, h: 1920 },
+    { group: "social", kind: "social", name: de ? "Beitrag hoch (4:5)" : "Post portrait (4:5)", w: 1080, h: 1350 },
+    { group: "social", kind: "social", name: de ? "Beitrag quadratisch" : "Post square", w: 1080, h: 1080 },
+    { group: "social", kind: "social", name: "Story / Reel (9:16)", w: 1080, h: 1920 },
+    { group: "social", kind: "social", name: de ? "Beitrag quer (1.91:1)" : "Post landscape (1.91:1)", w: 1200, h: 628 },
     ...ch,
-    { kind: "ads",  name: de ? "Anzeige quer (16:9)" : "Ad landscape (16:9)", w: 1920, h: 1080 },
-    { kind: "ads",  name: "Leaderboard", w: 728, h: 90 },
-    { kind: "deck", name: de ? "Folie (16:9)" : "Slide (16:9)", w: 1920, h: 1080 },
-    { kind: "other", name: "A4 300 dpi", w: 2480, h: 3508 },
+    { group: "banner", kind: "ads", name: "Leaderboard", w: 728, h: 90 },
+    { group: "banner", kind: "ads", name: de ? "Rechteck (mittel)" : "Medium rectangle", w: 300, h: 250 },
+    { group: "banner", kind: "ads", name: de ? "Skyscraper" : "Wide skyscraper", w: 160, h: 600 },
+    { group: "banner", kind: "ads", name: "Billboard", w: 970, h: 250 },
+    { group: "banner", kind: "ads", name: de ? "Website-Hero" : "Website hero", w: 1920, h: 600 },
+    { group: "video", kind: "deck", name: de ? "Video quer (16:9)" : "Video landscape (16:9)", w: 1920, h: 1080 },
+    { group: "video", kind: "deck", name: de ? "Video hoch (9:16)" : "Video portrait (9:16)", w: 1080, h: 1920 },
+    { group: "video", kind: "deck", name: de ? "Video quadratisch" : "Video square", w: 1080, h: 1080 },
+    { group: "video", kind: "deck", name: "4K (16:9)", w: 3840, h: 2160 },
+    { group: "video", kind: "deck", name: de ? "YouTube-Vorschaubild" : "YouTube thumbnail", w: 1280, h: 720 },
+    { group: "print", kind: "other", name: de ? "A4 hoch" : "A4 portrait", w: 2480, h: 3508 },
+    { group: "print", kind: "other", name: de ? "A4 quer" : "A4 landscape", w: 3508, h: 2480 },
+    { group: "print", kind: "other", name: de ? "A5 hoch" : "A5 portrait", w: 1748, h: 2480 },
+    { group: "print", kind: "other", name: de ? "A3 hoch" : "A3 portrait", w: 3508, h: 4961 },
+    { group: "print", kind: "other", name: de ? "Flyer DIN lang" : "DL flyer", w: 1169, h: 2480 },
+    { group: "print", kind: "other", name: de ? "Visitenkarte" : "Business card", w: 1004, h: 650 },
+    { group: "device", kind: "other", name: "iPhone 16 Pro", w: 1206, h: 2622 },
+    { group: "device", kind: "other", name: "iPhone SE", w: 750, h: 1334 },
+    { group: "device", kind: "other", name: "iPad Pro 11\"", w: 1668, h: 2388 },
+    { group: "device", kind: "other", name: de ? "Desktop (16:9)" : "Desktop (16:9)", w: 1920, h: 1080 },
+    { group: "device", kind: "other", name: "MacBook Pro 14\"", w: 3024, h: 1964 },
   ];
 };
+
+// "1080 × 1350" says nothing about the shape; "4:5" does. Reduced by the common
+// divisor, and only when the result is short enough to read — 1206:2622 reduces
+// to 201:437, which is a worse answer than 1:2.17.
+const ratioLabel = (w, h) => {
+  const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+  const d = gcd(w, h) || 1;
+  const rw = w / d, rh = h / d;
+  if (rw <= 32 && rh <= 32) return `${rw}:${rh}`;
+  return w >= h ? `${(w / h).toFixed(2)}:1` : `1:${(h / w).toFixed(2)}`;
+};
+
+// The tabs of the "new artboard" dialog. Custom first and selected by default:
+// a size somebody already knows beats hunting for the closest preset.
+const FORMAT_TABS = (de) => [
+  { key: "custom", label: de ? "Eigenes Format" : "Custom size" },
+  { key: "social", label: "Social" },
+  { key: "banner", label: "Banner" },
+  { key: "video",  label: "Video" },
+  { key: "print",  label: de ? "Druck" : "Print" },
+  { key: "device", label: "Devices" },
+];
 
 function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, appLanguage = "de",
                          canEdit = true, projectId = null, onPublish = null,
@@ -27080,6 +27129,21 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   // asking the one question that separates these: is this a starting point kept
   // to be reused, or something made for the brand?
   const [canvasFilter, setCanvasFilter] = useState("all"); // all | template | brand
+  const [newMenuOpen, setNewMenuOpen] = useState(false);   // "Neu erstellen" dropdown
+  const [newTab, setNewTab] = useState("custom");          // tab inside the format dialog
+  const [cw, setCw] = useState("1080");
+  const [chh, setChh] = useState("1350");
+  // Sizes somebody typed before, newest first. Own formats repeat far more often
+  // than they get invented, so the second time should be one click.
+  const [recentSizes, setRecentSizes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("agencyos-canvas-sizes") || "[]").slice(0, 4); }
+    catch { return []; }
+  });
+  const rememberSize = (w, h) => {
+    const next = [[w, h], ...recentSizes.filter(([a, b]) => !(a === w && b === h))].slice(0, 4);
+    setRecentSizes(next);
+    try { localStorage.setItem("agencyos-canvas-sizes", JSON.stringify(next)); } catch {}
+  };
   const [newOpen, setNewOpen] = useState(false);
   const [editing, setEditing] = useState(null);    // the canvas row open in the editor
   const [renaming, setRenaming] = useState(null);
@@ -27281,12 +27345,57 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
           <div style={{ flex: 1 }} />
           {/* Primary action in the top-right header slot, where this app keeps it */}
           {canEdit && (
-            <motion.div whileTap={{ scale: 0.96 }}
-              onClick={() => section === "ideas" ? ideasCreate.current?.() : setNewOpen(true)}
-              style={{ padding: "9px 18px", borderRadius: 999, background: "#15151c", color: "#fff",
-                fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
-              {de ? "Neu erstellen" : "Create new"}
-            </motion.div>
+            <div style={{ position: "relative" }}>
+              <motion.div whileTap={{ scale: 0.96 }}
+                onClick={() => section === "ideas" ? ideasCreate.current?.() : setNewMenuOpen(o => !o)}
+                style={{ display: "inline-flex", alignItems: "center", gap: 7,
+                  padding: "9px 18px", borderRadius: 999, background: "#15151c", color: "#fff",
+                  fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                {de ? "Neu erstellen" : "Create new"}
+                {section !== "ideas" && (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                )}
+              </motion.div>
+              {/* The Assets "Hinzufügen" menu, part for part: same backdrop, same
+                  entrance, same 34px icon disc and label-over-sub rows. */}
+              <AnimatePresence>
+                {newMenuOpen && (
+                  <>
+                    <div onClick={() => setNewMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                    <motion.div
+                      initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                      transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
+                      style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 41, minWidth: 270,
+                        background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
+                        boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden", padding: 6 }}>
+                      {[
+                        { key: "blank", label: de ? "Leeres Artboard" : "Blank artboard",
+                          sub: de ? "Format wählen oder eingeben" : "Pick or type a size",
+                          icon: <><rect x="3" y="3" width="18" height="18" rx="2.5"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></>,
+                          onClick: () => { setNewMenuOpen(false); setNewTab("custom"); setNewOpen(true); } },
+                        { key: "template", label: de ? "Aus Vorlage" : "From a template",
+                          sub: de ? "Fertige Artboards deines Workspace" : "Ready-made artboards in your workspace",
+                          icon: <><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></>,
+                          onClick: () => { setNewMenuOpen(false); setCanvasFilter("template"); } },
+                      ].map(it => (
+                        <div key={it.key} onClick={it.onClick} className="hover-row"
+                          style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
+                          <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                            background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{it.label}</div>
+                            <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{it.sub}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
           )}
         </div>
 
@@ -27506,26 +27615,140 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
             display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
           <motion.div initial={{ scale: 0.97, y: 8 }} animate={{ scale: 1, y: 0 }}
             onClick={e => e.stopPropagation()}
-            style={{ width: "min(560px, 100%)", maxHeight: "80vh", overflowY: "auto",
-              background: darkMode ? "#16161e" : "#fff", borderRadius: 18, padding: 22,
+            style={{ width: "min(760px, 100%)", maxHeight: "82vh", display: "flex", flexDirection: "column",
+              background: darkMode ? "#16161e" : "#fff", borderRadius: 18,
               border: `1px solid ${theme.borderFaint}` }}>
-            <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 600, color: theme.text }}>
-              {de ? "Format wählen" : "Pick a size"}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "18px 22px 0" }}>
+              <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 600, color: theme.text, flex: 1 }}>
+                {de ? "Neues Artboard" : "New artboard"}
+              </div>
+              <div onClick={() => setNewOpen(false)} style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </div>
+            </div>
+            {/* The workspace's own filter pills, same container and same states —
+                six of them read as tabs without inventing a tab. */}
+            <div style={{ padding: "14px 22px 0" }}>
+              <div style={{ display: "inline-flex", gap: 3, padding: 3, borderRadius: 11, flexWrap: "wrap",
+                background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+                {FORMAT_TABS(de).map(tb => {
+                  const on = newTab === tb.key;
+                  return (
+                    <motion.div key={tb.key} whileTap={{ scale: 0.95 }} onClick={() => setNewTab(tb.key)}
+                      style={{ padding: "6px 13px", borderRadius: 8, cursor: "pointer", fontSize: 12.5,
+                        fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap",
+                        background: on ? (darkMode ? "rgba(255,255,255,0.10)" : "#fff") : "transparent",
+                        color: on ? theme.text : theme.textDim,
+                        boxShadow: on ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>{tb.label}</motion.div>
+                  );
+                })}
+              </div>
             </div>
             {err && (
-              <div style={{ marginTop: 10, padding: "9px 12px", borderRadius: 9,
+              <div style={{ margin: "12px 22px 0", padding: "9px 12px", borderRadius: 9,
                 background: "rgba(217,52,43,0.10)", color: "#D9342B",
                 fontFamily: FONT, fontSize: 12 }}>{err}</div>
             )}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 14 }}>
-              {creationFormats(de).map((f, i) => (
-                <div key={i} onClick={() => !busy && createCanvas(f)}
-                  style={{ padding: "11px 13px", borderRadius: 11, cursor: "pointer",
-                    border: `1px solid ${theme.borderFaint}` }}>
-                  <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: theme.text }}>{f.name}</div>
-                  <div style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textDim }}>{f.w} × {f.h} px</div>
+
+            <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "16px 22px 22px" }}>
+              {newTab === "custom" ? (() => {
+                const w = Math.max(16, Math.min(8000, parseInt(cw, 10) || 0));
+                const h = Math.max(16, Math.min(8000, parseInt(chh, 10) || 0));
+                const ok = w >= 16 && h >= 16;
+                const k = ok ? Math.min(150 / w, 96 / h, 1) : 0;
+                return (
+                  <div style={{ display: "flex", gap: 26, alignItems: "flex-start" }}>
+                    {/* The shape, at the size it is being typed. Two numbers do not
+                        tell you a proportion; a rectangle does. */}
+                    <div style={{ width: 190, height: 130, flexShrink: 0, borderRadius: 12,
+                      background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                      display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {ok && (
+                        <div style={{ width: Math.max(10, Math.round(w * k)), height: Math.max(10, Math.round(h * k)),
+                          background: darkMode ? "#0f0f14" : "#fff", borderRadius: 3,
+                          border: `1px solid ${theme.border}` }} />
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {[[cw, setCw, de ? "Breite" : "Width"], [chh, setChh, de ? "Höhe" : "Height"]].map(([val, set, lab], idx) => (
+                          <Fragment key={lab}>
+                            {idx === 1 && <span style={{ color: theme.textFaint, fontSize: 13 }}>×</span>}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 4 }}>{lab}</div>
+                              <input value={val} inputMode="numeric"
+                                onChange={(e) => set(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))}
+                                style={{ width: "100%", padding: "9px 11px", borderRadius: 9, boxSizing: "border-box",
+                                  border: `1px solid ${theme.borderFaint}`, outline: "none",
+                                  background: darkMode ? "rgba(255,255,255,0.04)" : "#fff",
+                                  color: theme.text, fontFamily: FONT, fontSize: 13 }} />
+                            </div>
+                          </Fragment>
+                        ))}
+                        <div onClick={() => { setCw(chh); setChh(cw); }} title={de ? "Drehen" : "Swap"}
+                          style={{ alignSelf: "flex-end", width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+                            display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                            border: `1px solid ${theme.borderFaint}`, color: theme.textDim }}>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M7 4v6H3"/><path d="M17 20v-6h4"/>
+                            <path d="M20 9a8 8 0 0 0-13.7-4.2L3 8"/><path d="M4 15a8 8 0 0 0 13.7 4.2L21 16"/>
+                          </svg>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 8 }}>
+                        {ok ? `${de ? "Pixel" : "Pixels"} · ${ratioLabel(w, h)}` : (de ? "Mindestens 16 Pixel." : "16 pixels minimum.")}
+                      </div>
+                      <motion.div whileTap={{ scale: 0.97 }}
+                        onClick={() => { if (ok && !busy) { rememberSize(w, h); createCanvas({ name: `${w} × ${h}`, kind: "other", w, h }); } }}
+                        style={{ marginTop: 14, display: "inline-block", padding: "9px 20px", borderRadius: 999,
+                          background: ok ? "#15151c" : theme.borderFaint, color: ok ? "#fff" : theme.textDim,
+                          fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: ok ? "pointer" : "default" }}>
+                        {de ? "Erstellen" : "Create"}
+                      </motion.div>
+                      {recentSizes.length > 0 && (
+                        <>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 20, marginBottom: 7 }}>
+                            {de ? "Zuletzt benutzt" : "Recently used"}
+                          </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                            {recentSizes.map(([rw, rh]) => (
+                              <div key={`${rw}x${rh}`} onClick={() => { setCw(String(rw)); setChh(String(rh)); }}
+                                style={{ padding: "5px 11px", borderRadius: 999, cursor: "pointer",
+                                  border: `1px solid ${theme.borderFaint}`, color: theme.textDim,
+                                  fontFamily: FONT, fontSize: 11.5 }}>{rw} × {rh}</div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })() : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
+                  {creationFormats(de).filter(f => f.group === newTab).map((f, i) => {
+                    // Every shape drawn to the same box, so a banner looks like a
+                    // banner beside a portrait post instead of both being a word.
+                    const k = Math.min(84 / f.w, 52 / f.h);
+                    return (
+                      <div key={i} onClick={() => !busy && createCanvas(f)} className="hover-row"
+                        style={{ padding: "12px 13px", borderRadius: 11, cursor: "pointer",
+                          border: `1px solid ${theme.borderFaint}` }}>
+                        <div style={{ height: 56, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 9 }}>
+                          <div style={{ width: Math.max(6, Math.round(f.w * k)), height: Math.max(6, Math.round(f.h * k)),
+                            background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                            border: `1px solid ${theme.border}`,
+                            borderRadius: f.round ? "50%" : 2 }} />
+                        </div>
+                        <div style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 500, color: theme.text,
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
+                        <div style={{ fontFamily: FONT, fontSize: 11, color: theme.textDim, marginTop: 1 }}>{f.w} × {f.h}</div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+              )}
             </div>
         </motion.div>
         </motion.div>, document.body)}
