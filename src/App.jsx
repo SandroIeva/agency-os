@@ -27306,11 +27306,17 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   // adjusts the box instead of quietly overflowing it. Four columns fixed, or the
   // row count this depends on would be a guess about the available width.
   const FMT_COLS = 4, FMT_TILE_H = 132, FMT_GAP = 10;
-  const formatBodyH = (() => {
+  // The whole dialog gets ONE height, and the body flexes inside it. Fixing the
+  // body alone left the box free to follow whatever the custom tab needed, which
+  // is what was still jumping.
+  const formatDialogH = (() => {
     const counts = {};
     creationFormats(de).forEach(f => { counts[f.group] = (counts[f.group] || 0) + 1; });
     const rows = Math.max(1, ...Object.values(counts).map(n => Math.ceil(n / FMT_COLS)));
-    return rows * FMT_TILE_H + (rows - 1) * FMT_GAP;
+    const body = rows * FMT_TILE_H + (rows - 1) * FMT_GAP;
+    // 156 is the chrome above and below — title row, tabs, footer — and the 56
+    // is the room asked for on top of that.
+    return body + 156 + 56;
   })();
 
   const iconBtn = (glyph, act, on, title) => (
@@ -27630,7 +27636,8 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
             display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
           <motion.div initial={{ scale: 0.97, y: 8 }} animate={{ scale: 1, y: 0 }}
             onClick={e => e.stopPropagation()}
-            style={{ width: "min(760px, 100%)", maxHeight: "82vh", display: "flex", flexDirection: "column",
+            style={{ width: "min(880px, 96vw)", height: `min(${formatDialogH}px, 88vh)`,
+              display: "flex", flexDirection: "column",
               background: darkMode ? "#16161e" : "#fff", borderRadius: 18,
               border: `1px solid ${theme.borderFaint}` }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "18px 22px 0" }}>
@@ -27669,7 +27676,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
             {/* A fixed height, capped so a short window still fits it on screen.
                 The tabs with less in them simply have room to spare — better than
                 an overlay that grows and shrinks as you read across it. */}
-            <div className="no-scrollbar" style={{ height: `min(${formatBodyH}px, 56vh)`, overflowY: "auto", padding: "16px 22px 6px" }}>
+            <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "16px 22px 6px" }}>
               {newTab === "custom" ? (() => {
                 const w = Math.max(16, Math.min(8000, parseInt(cw, 10) || 0));
                 const h = Math.max(16, Math.min(8000, parseInt(chh, 10) || 0));
@@ -27745,8 +27752,11 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                     // banner beside a portrait post instead of both being a word.
                     const k = Math.min(84 / f.w, 52 / f.h);
                     return (
-                      <div key={i} onClick={() => !busy && createCanvas(f)} className="hover-row"
-                        style={{ padding: "12px 13px", borderRadius: 11, cursor: "pointer",
+                      // Its own hover rather than the shared .hover-row: that one is
+                      // tuned for list rows on a flat panel and reads as a hard step
+                      // on a tile that already has a border.
+                      <div key={i} onClick={() => !busy && createCanvas(f)} className="fmt-tile"
+                        style={{ padding: "12px 13px", borderRadius: 11, cursor: "pointer", textAlign: "center",
                           border: `1px solid ${theme.borderFaint}` }}>
                         <div style={{ height: 56, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 9 }}>
                           <div style={{ width: Math.max(6, Math.round(f.w * k)), height: Math.max(6, Math.round(f.h * k)),
@@ -48942,6 +48952,16 @@ export default function CircularMenu() {
           background: ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.07)"} !important;
           border-color: ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)"} !important;
           transition: background 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), border-color 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        /* Format tiles in the new-artboard dialog. Half the step .hover-row
+           takes: a tile already carries a border, so the same jump in fill reads
+           as the tile changing colour rather than as the pointer being on it. */
+        .fmt-tile {
+          transition: background 0.18s ease, border-color 0.18s ease;
+        }
+        .fmt-tile:hover {
+          background: ${darkMode ? "rgba(255,255,255,0.045)" : "rgba(0,0,0,0.028)"};
+          border-color: ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.13)"} !important;
         }
         /* The four start-view cards. The dot grid sits directly behind them and
            read straight through: a translucent fill dims what is under it by its
