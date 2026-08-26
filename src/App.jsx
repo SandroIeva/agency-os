@@ -18981,7 +18981,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [frameRadii, setFrameRadii] = useState(
     Array.isArray(bootRef.current[0].radii) && bootRef.current[0].radii.length === 4
       ? bootRef.current[0].radii.map(v => Math.max(0, Number(v) || 0)) : null);
-  const [items, setItems] = useState(() => (Array.isArray(doc?.items) ? doc.items : []));
+  // From the BOARD, not from doc.items. A document is { boards: [ { items } ] };
+  // doc.items only exists in the old flat shape, so every boards-shaped document
+  // opened with an empty canvas — and the first autosave wrote that emptiness
+  // back over the real thing. boardsFromDoc has already folded the legacy shape
+  // into board 0, so this one source covers both.
+  const [items, setItems] = useState(() => bootRef.current[0].items);
   const [sel, setSel] = useState(null);
   const [tool, setTool] = useState("select");
   // The same state the shared toolbar drives in Brainstorm, under the same names.
