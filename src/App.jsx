@@ -18891,65 +18891,7 @@ const cvStableStr = (v) => {
 // two clients hold the same board with the keys in a different order, and a
 // plain JSON compare would call every element changed and mine would always win.
 const cvSame = (a, b) => cvStableStr(a) === cvStableStr(b);
-const cvById = (list) => {
-  const m = new Map();
-  (Array.isArray(list) ? list : []).forEach(x => { if (x && x.id != null) m.set(x.id, x); });
-  return m;
-};
-const cvMergeLists = (baseL, mineL, theirsL) => {
-  const B = cvById(baseL), M = cvById(mineL), T = cvById(theirsL);
-  const out = [], taken = new Set();
-  const decide = (id) => {
-    const b = B.get(id), m = M.get(id), t = T.get(id);
-    // They deleted it, but I had just edited it: an edit outranks a delete.
-    // Losing work someone is still holding is worse than an element coming back.
-    if (m && !t) return (B.has(id) && cvSame(m, b)) ? null : m;
-    if (!m && t) return B.has(id) ? null : t;   // I deleted it; their copy is stale
-    if (!m && !t) return null;
-    return cvSame(m, b) ? t : m;                // untouched by me → take theirs
-  };
-  (Array.isArray(theirsL) ? theirsL : []).forEach(t => {
-    if (taken.has(t.id)) return;
-    taken.add(t.id);
-    const keep = decide(t.id);
-    if (keep) out.push(keep);
-  });
-  (Array.isArray(mineL) ? mineL : []).forEach((m, i) => {
-    if (taken.has(m.id)) return;
-    taken.add(m.id);
-    const keep = decide(m.id);
-    if (keep) out.splice(Math.min(i, out.length), 0, keep);
-  });
-  return out;
-};
-const cvMergeBoard = (b, m, t) => {
-  const out = {};
-  new Set([...Object.keys(b || {}), ...Object.keys(m || {}), ...Object.keys(t || {})]).forEach(k => {
-    if (k === "items") return;
-    const v = cvSame(m?.[k], b?.[k]) ? t?.[k] : m?.[k];
-    if (v !== undefined) out[k] = v;
-  });
-  out.items = cvMergeLists(b?.items, m?.items, t?.items);
-  return out;
-};
-function mergeCanvasDocs(base, mine, theirs) {
-  const bB = cvById(base?.boards), mB = cvById(mine?.boards), tB = cvById(theirs?.boards);
-  const boards = [], taken = new Set();
-  const push = (id) => {
-    if (taken.has(id)) return;
-    taken.add(id);
-    const b = bB.get(id), m = mB.get(id), t = tB.get(id);
-    if (m && t) boards.push(cvMergeBoard(b, m, t));
-    else if (m) { if (!bB.has(id) || !cvSame(m, b)) boards.push(m); }
-    else if (t && !bB.has(id)) boards.push(t);
-  };
-  (mine?.boards || []).forEach(b => push(b.id));
-  (theirs?.boards || []).forEach(b => push(b.id));
-  const stage = cvSame(mine?.stage, base?.stage) ? theirs?.stage : mine?.stage;
-  const out = { boards };
-  if (stage !== undefined) out.stage = stage;
-  return out;
-}
+
 
 function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, userOrg,
                         theme, darkMode, appLanguage, onUpload, onDone, onAutoSave, onPublish, onClose,
@@ -19246,10 +19188,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     try {
       await onAutoSave(payload);
       setSaveState("saved");
-      // Sent after the write, not instead of it: the database stays the record,
-      // this is only what spares everyone else a reload to see it.
-      chanRef.current?.send({ type: "broadcast", event: "doc",
-        payload: { key: myKey.current, doc: payload } });
     }
     catch { setSaveState(""); }
   };
@@ -19278,7 +19216,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   //
   // Everything travels by broadcast, cursors and document alike. brand_canvases
   // is not in the realtime publication, and broadcast is the better fit anyway:
-  // frequent, ephemeral, and it does not wait for a database round trip.
+  // frequent, ephemeral, and nothing to reconcile.
+  //
+  // CURSORS ONLY, on purpose. Broadcasting the DOCUMENT was tried and destroyed
+  // someone's work on 2026-08-26: a canvas is one jsonb document, so the only
+  // thing a peer can send is the whole of it, and a peer whose window has been
+  // sitting open is holding an OLD whole. Merging that in is indistinguishable
+  // from the other person having deleted everything — and the merge then saved
+  // the deletion. Live co-editing here needs one row per element, the way the
+  // whiteboard has it, not a cleverer merge.
   const collabId = canvasRow?.id || null;
   const [peers, setPeers] = useState({});
   const chanRef = useRef(null);
@@ -19288,54 +19234,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const lastSent = useRef(0);
   const lastPoint = useRef({ x: 0, y: 0 });
   const pendingSend = useRef(null);
-  const remoteStash = useRef(null);
   const myName = () =>
     session?.user?.user_metadata?.full_name || session?.user?.email?.split("@")[0] || "Du";
-
-  // The channel callbacks outlive the render they were created in, so anything
-  // they need to read comes from a ref rather than a closed-over value.
-  const liveRef = useRef({});
-  liveRef.current = { boards, active, stageBg, editing };
-
-  const applyRemoteDoc = (rdoc) => {
-    if (!rdoc || !Array.isArray(rdoc.boards) || !rdoc.boards.length) return;
-    const L = liveRef.current;
-    // latestRef, not boardsNow(): this runs from a channel handler that was
-    // registered once and closes over the render it was created in. Calling
-    // boardsNow() there would compare their document against the boards as they
-    // stood when the canvas opened, and every edit made since would look like
-    // something they had deleted. latestRef is rewritten on every render.
-    const mineNow = latestRef.current || { boards: [], stage: undefined };
-    let baseDoc; try { baseDoc = JSON.parse(baselineRef.current); } catch { baseDoc = mineNow; }
-    const merged = mergeCanvasDocs(baseDoc, mineNow, rdoc);
-    if (cvSame(merged, mineNow)) return;        // nothing of theirs left to take
-    const i = Math.min(L.active, merged.boards.length - 1);
-    setBoards(merged.boards);
-    setActive(i);
-    // Not loadBoard(): that clears the selection, and having your selection
-    // dropped every time a colleague nudges something is its own small hell.
-    const b = merged.boards[i] || {};
-    setFrame({ w: b.w, h: b.h });
-    setBg(b.bg || palette[1] || "#FFFFFF");
-    setFrameRadius(Number(b.radius) || 0);
-    setFrameRadii(Array.isArray(b.radii) && b.radii.length === 4 ? b.radii : null);
-    setFrameClip(b.clip !== false);
-    setItems(Array.isArray(b.items) ? b.items : []);
-    setStageBg(merged.stage || null);
-  };
-
-  // A document that arrives mid-gesture waits: applying it under a live drag
-  // would move the thing out from under the pointer, and under a text caret it
-  // would take the caret with it.
-  const takeRemoteDoc = (rdoc) => {
-    if (dragRef.current || liveRef.current.editing) { remoteStash.current = rdoc; return; }
-    applyRemoteDoc(rdoc);
-  };
-  useEffect(() => {
-    if (!remoteStash.current || dragRef.current || editing) return;
-    const d = remoteStash.current; remoteStash.current = null;
-    applyRemoteDoc(d);
-  }, [editing, items, boards, active]);
 
   useEffect(() => {
     if (!collabId) return;
@@ -19345,10 +19245,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       .on("broadcast", { event: "cursor" }, ({ payload }) => {
         if (!payload?.key || payload.key === myKey.current) return;
         setPeers(prev => ({ ...prev, [payload.key]: payload }));
-      })
-      .on("broadcast", { event: "doc" }, ({ payload }) => {
-        if (!payload?.key || payload.key === myKey.current) return;
-        takeRemoteDoc(payload.doc);
       })
       .on("presence", { event: "leave" }, ({ leftPresences, key }) => {
         // Somebody closed the canvas — take their pointer with them, or it
