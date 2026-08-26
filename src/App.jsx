@@ -6172,7 +6172,8 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
   lastLineTool, setLastLineTool, lineToolOpen, setLineToolOpen,
   mediaOpen, setMediaOpen, mediaBtnRef, imgMenuOpen, setImgMenuOpen, imgBtnRef,
   fileRef, onFiles, zoomPct, onZoom, onResetZoom,
-  shapes = WB_SHAPE_TYPES, hide = [], extra = null, theme, darkMode, de }) {
+  shapes = WB_SHAPE_TYPES, hide = [], extra = null,
+  lineTools = ["arrow", "line", "pen"], theme, darkMode, de }) {
 
   const vertical = orientation === "vertical";
   const sw = 1.9;
@@ -6241,13 +6242,18 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
     : { height: 38, padding: "0 7px 0 10px", borderRadius: 11, display: "flex", alignItems: "center",
         justifyContent: "center", gap: 3, cursor: "pointer", transition: "background 0.15s ease" };
 
-  const lineIcon = (kind) => kind === "line"
+  const lineIcon = (kind) => kind === "path"
+    ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M4 18c6 0 8-12 14-12"/><rect x="2" y="16" width="4" height="4" rx="1"/><rect x="18" y="4" width="4" height="4" rx="1"/></svg>
+    : kind === "line"
     ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="18" x2="18" y2="6"/></svg>
     : kind === "pen"
     ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
     : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>;
-  const lineActive = tool === "arrow" || tool === "line" || tool === "pen";
-  const lineTitle = (k) => k === "arrow" ? (de ? "Pfeil" : "Arrow") : k === "line" ? (de ? "Linie" : "Line") : (de ? "Freihand" : "Free-hand");
+  const lineActive = tool === "arrow" || tool === "line" || tool === "pen" || tool === "path";
+  const lineTitle = (k) => k === "arrow" ? (de ? "Pfeil" : "Arrow")
+    : k === "line" ? (de ? "Linie" : "Line")
+    : k === "path" ? (de ? "Pfad" : "Path")
+    : (de ? "Freihand" : "Free-hand");
 
   return (
     <div style={{ display: "flex", flexDirection: vertical ? "column" : "row", alignItems: "center", gap: 4, padding: 6, borderRadius: 16,
@@ -6301,7 +6307,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
             <div style={flyoutWrap}>
               <motion.div initial={flyIn} animate={flyTo} exit={flyIn}
                 transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }} style={flyoutPanel}>
-                {["arrow", "line", "pen"].map(k => (
+                {lineTools.map(k => (
                   <motion.div key={k} whileTap={{ scale: 0.9 }}
                     onClick={() => { setTool(k); setLastLineTool(k); setLineToolOpen(false); setEditing?.(null); }}
                     title={lineTitle(k)}
@@ -17781,8 +17787,33 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
           // Nothing until the width is known, or the canvas flashes at full
           // size for one frame inside a card a tenth its size.
           visibility: k ? "visible" : "hidden" }}>
+          {/* Strokes, in one SVG in the canvas's own coordinates. They were left
+              out of the thumbnail entirely, so a card of a drawing showed an
+              empty page. They all sit above the boxed items rather than
+              interleaved with them — at card size that is not a distinction
+              anyone can see, and the alternative is an SVG layer per stroke. */}
+          {items.some(it => it && !it.hidden && !it.isMask && ["draw", "line", "arrow", "path"].includes(it.type)) && (
+            <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}
+              style={{ position: "absolute", left: 0, top: 0, overflow: "visible", pointerEvents: "none" }}>
+              {items.filter(it => it && !it.hidden && !it.isMask && ["draw", "line", "arrow", "path"].includes(it.type)).map((it, i) => (
+                it.type === "path" ? (
+                  <path key={it.id || i} d={pathD(it.nodes, it.closed)}
+                    transform={`translate(${it.ox || 0}, ${it.oy || 0})`}
+                    fill={it.fill || "none"} stroke={it.color} strokeWidth={it.width}
+                    strokeLinecap="round" strokeLinejoin="round" />
+                ) : it.type === "draw" ? (
+                  <polyline key={it.id || i} fill="none" stroke={it.color} strokeWidth={it.width}
+                    strokeLinecap="round" strokeLinejoin="round"
+                    points={(it.pts || []).map(([x, y]) => `${x + (it.ox || 0)},${y + (it.oy || 0)}`).join(" ")} />
+                ) : (
+                  <line key={it.id || i} x1={it.x1} y1={it.y1} x2={it.x2} y2={it.y2}
+                    stroke={it.color} strokeWidth={it.width} strokeLinecap="round" />
+                )
+              ))}
+            </svg>
+          )}
           {items.filter(it => it && !it.isMask && !it.hidden
-            && !["draw", "arrow", "line", "comment"].includes(it.type)).map(it => {
+            && !["draw", "arrow", "line", "comment", "path"].includes(it.type)).map(it => {
             const isText = it.type === "text" || it.type === "sticky";
             const bw = Number(it.w) || 0;
             const bh = Number(it.h) || (isText
@@ -18992,6 +19023,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // The same state the shared toolbar drives in Brainstorm, under the same names.
   const [lastShape, setLastShape] = useState("rect");
   const [shapesOpen, setShapesOpen] = useState(false);
+  // A path under construction. It lives outside `items` until it is finished:
+  // a half-drawn path in the document would be autosaved, undone into, and
+  // rendered as a selectable object while it is still being placed.
+  const [pathDraft, setPathDraft] = useState(null);   // { nodes: [...] }
+  // The rubber band from the last node to the cursor is written straight onto
+  // the element. A pointermove that costs a React render would make the pen feel
+  // heavy on a canvas that already has something on it.
+  const pathPreviewRef = useRef(null);
   const [lastLineTool, setLastLineTool] = useState("arrow");
   const [lineToolOpen, setLineToolOpen] = useState(false);
   const [mediaOpen, setMediaOpen] = useState(false);
@@ -19551,6 +19590,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     it.isMask ? (de ? "Maske" : "Mask")
     : it.type === "text" || it.type === "sticky" || it.type === "comment"
       ? (String(it.text || "").split("\n")[0].slice(0, 22) || it.type)
+    : it.type === "path" ? (de ? "Pfad" : "Path")
     : it.type === "image" ? (de ? "Bild" : "Image")
     : it.type === "star" ? (de ? "Stern" : "Star")
     : it.type === "rect" ? (de ? "Rechteck" : "Rectangle")
@@ -19644,6 +19684,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     (it.type === "arrow" || it.type === "line")
       ? { x: Math.min(it.x1, it.x2), y: Math.min(it.y1, it.y2),
           w: Math.abs(it.x2 - it.x1), h: Math.abs(it.y2 - it.y1) }
+      : it.type === "path"
+      ? pathBBox(it.nodes, it.ox || 0, it.oy || 0)
       : it.type === "draw"
       ? (() => {
           const xs = it.pts.map(q => q[0] + (it.ox || 0)), ys = it.pts.map(q => q[1] + (it.oy || 0));
@@ -19677,6 +19719,32 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // effect takes it off the whole group rather than one member per press.
   const patchMany = (ids, p) => { markChange(); setItems(list => list.map(i => (ids.includes(i.id) ? { ...i, ...p } : i))); };
   const addItem = (it) => { markChange(); setItems(list => [...list, it]); setSel(it.id); setTool("select"); };
+
+  // Enter and Escape both FINISH rather than one finishing and one discarding:
+  // a half-drawn path is work, and Escape next to Enter is where a slip lands.
+  useEffect(() => {
+    if (!pathDraft) return;
+    const onKey = (e) => {
+      if (e.key !== "Enter" && e.key !== "Escape") return;
+      e.preventDefault();
+      commitPath(pathDraft.nodes, false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pathDraft]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // Reaching for another tool finishes it too, rather than dropping it.
+  useEffect(() => {
+    if (tool !== "path" && pathDraft) commitPath(pathDraft.nodes, false);
+  }, [tool]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const commitPath = (nodes, closed) => {
+    setPathDraft(null);
+    // One node is a dot nobody asked for; two is the shortest real path.
+    if (!nodes || nodes.length < 2) return;
+    addItem({ id: crypto.randomUUID(), type: "path", ox: 0, oy: 0,
+      nodes, closed: !!closed, color: palette[0],
+      width: Math.max(2, Math.round(H / 120)) });
+  };
 
   // ── Renaming an artboard ──────────────────────────────────────────────────
   // The name is the only thing about a board that liveBoard() does NOT carry,
@@ -19915,7 +19983,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   });
   const cloneOf = (it, dx = 0, dy = 0) => ({
     ...it, id: crypto.randomUUID(),
-    ...(it.type === "draw" ? { ox: (it.ox || 0) + dx, oy: (it.oy || 0) + dy }
+    ...((it.type === "draw" || it.type === "path") ? { ox: (it.ox || 0) + dx, oy: (it.oy || 0) + dy }
       : it.type === "arrow" || it.type === "line"
         ? { x1: it.x1 + dx, y1: it.y1 + dy, x2: it.x2 + dx, y2: it.y2 + dy }
         : { x: it.x + dx, y: it.y + dy }),
@@ -20025,6 +20093,23 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     }
     if (tool === "image") { setImgMenuOpen(true); return; }
     pushUndo(takeSnap());
+    if (tool === "path") {
+      const nodes = pathDraft?.nodes || [];
+      // Back on the first node closes the shape. The tolerance is a SCREEN
+      // distance divided by the zoom, or closing would need pixel accuracy at
+      // 30% and be impossible to avoid at 400%.
+      if (nodes.length >= 2) {
+        const f = nodes[0];
+        if (Math.hypot(p.x - f.x, p.y - f.y) * cam.s < 12) { commitPath(nodes, true); return; }
+      }
+      const next = [...nodes, { x: Math.round(p.x), y: Math.round(p.y) }];
+      setPathDraft({ nodes: next });
+      // Held and dragged, the click pulls a handle out of the node it just
+      // placed — a click alone leaves a corner. That one gesture is the whole
+      // difference between a polygon tool and a pen.
+      dragRef.current = { mode: "pathhandle", idx: next.length - 1 };
+      return;
+    }
     if (tool === "pen") {
       // Points in artboard units behind one offset, the way the whiteboard keeps
       // pen paths: moving the stroke then costs one number, not a rewrite of
@@ -20050,6 +20135,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     // Before the drag guard: a pointer that is only moving still has a position
     // worth showing, and moving is most of what anyone does on a canvas.
     sendCursor(e);
+    // The segment that is not there yet: from the last node to the cursor,
+    // curving out of that node's handle if it has one. Written onto the element
+    // rather than through state — see pathPreviewRef.
+    if (tool === "path" && pathDraft?.nodes?.length && !dragRef.current && pathPreviewRef.current && cam) {
+      const pv = toArt(e);
+      const last = pathDraft.nodes[pathDraft.nodes.length - 1];
+      const q = e.shiftKey ? snap45(last.x, last.y, pv.x, pv.y) : pv;
+      pathPreviewRef.current.setAttribute("d", pathD([last, { x: Math.round(q.x), y: Math.round(q.y) }], false));
+    }
     const d = dragRef.current;
     if (!d) return;
     if (d.mode === "pan") {
@@ -20081,6 +20175,44 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     }
     const box = { x: Math.round(Math.min(d.ox, p.x)), y: Math.round(Math.min(d.oy, p.y)),
       w: Math.round(Math.abs(p.x - d.ox)), h: Math.round(Math.abs(p.y - d.oy)) };
+    if (d.mode === "pathedit") {
+      const cur = items.find(i => i.id === d.id);
+      if (!cur?.nodes) return;
+      // The path's own coordinates: everything in nodes is stored before the
+      // offset, so the pointer has to have that offset taken off it first.
+      const lx = Math.round(p.x - (cur.ox || 0)), ly = Math.round(p.y - (cur.oy || 0));
+      const nodes = cur.nodes.slice();
+      const n = nodes[d.idx];
+      if (!n) return;
+      if (d.which === 0) {
+        // A node takes its handles with it, or the curve would swing as the
+        // point moved.
+        const dx = lx - n.x, dy = ly - n.y;
+        nodes[d.idx] = { ...n, x: lx, y: ly,
+          ...(n.h1x != null ? { h1x: n.h1x + dx, h1y: n.h1y + dy } : {}),
+          ...(n.h2x != null ? { h2x: n.h2x + dx, h2y: n.h2y + dy } : {}) };
+      } else if (d.which === 2) {
+        nodes[d.idx] = mirrorHandle(n, lx, ly);
+      } else {
+        // The incoming handle is the mirror of the outgoing one, so it is set by
+        // reflecting the cursor through the node and mirroring that.
+        nodes[d.idx] = mirrorHandle(n, 2 * n.x - lx, 2 * n.y - ly);
+      }
+      patch(d.id, { nodes });
+      return;
+    }
+    if (d.mode === "pathhandle") {
+      setPathDraft(dr => {
+        if (!dr) return dr;
+        const nodes = dr.nodes.slice();
+        const n = nodes[d.idx];
+        if (!n) return dr;
+        const q = e.shiftKey ? snap45(n.x, n.y, p.x, p.y) : p;
+        nodes[d.idx] = mirrorHandle(n, Math.round(q.x), Math.round(q.y));
+        return { ...dr, nodes };
+      });
+      return;
+    }
     if (d.mode === "draw") {
       // Freehand until Shift goes down; from then on a straight segment, snapped
       // to 45°, anchored where Shift was pressed rather than at the very start —
@@ -20152,7 +20284,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       setItems(list => list.map(o => {
         const b = d.bases[o.id];
         if (!b) return o;
-        if (o.type === "draw") return { ...o, ox: b.ox + dx, oy: b.oy + dy };
+        if (o.type === "draw" || o.type === "path") return { ...o, ox: b.ox + dx, oy: b.oy + dy };
         if (o.type === "arrow" || o.type === "line")
           return { ...o, x1: b.x1 + dx, y1: b.y1 + dy, x2: b.x2 + dx, y2: b.y2 + dy };
         return { ...o, x: Math.round(b.x + dx), y: Math.round(b.y + dy) };
@@ -20318,7 +20450,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     for (const id of ids) {
       const o = items.find(q => q.id === id);
       if (!o) continue;
-      bases[id] = o.type === "draw" ? { ox: o.ox || 0, oy: o.oy || 0 }
+      bases[id] = (o.type === "draw" || o.type === "path") ? { ox: o.ox || 0, oy: o.oy || 0 }
         : (o.type === "arrow" || o.type === "line") ? { x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2 }
         : { x: o.x, y: o.y };
     }
@@ -20676,7 +20808,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   const shiftItem = (i, dx, dy) =>
     (!dx && !dy) ? i
-    : i.type === "draw" ? { ...i, ox: (i.ox || 0) + dx, oy: (i.oy || 0) + dy }
+    : (i.type === "draw" || i.type === "path") ? { ...i, ox: (i.ox || 0) + dx, oy: (i.oy || 0) + dy }
     : (i.type === "arrow" || i.type === "line")
       ? { ...i, x1: i.x1 + dx, y1: i.y1 + dy, x2: i.x2 + dx, y2: i.y2 + dy }
     : { ...i, x: Math.round(i.x + dx), y: Math.round(i.y + dy) };
@@ -20931,6 +21063,21 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
           });
           ctx.closePath(); ctx.fill();
+        } else if (it.type === "path") {
+          // Path2D over the very string the screen draws. Writing the curve out
+          // a second time with bezierCurveTo would be two implementations of one
+          // shape, and they would part company the first time either changed.
+          const d2 = pathD(it.nodes, it.closed);
+          if (d2) {
+            const p2 = new Path2D(d2);
+            ctx.save();
+            ctx.translate(it.ox || 0, it.oy || 0);
+            if (it.fill) { ctx.fillStyle = it.fill; ctx.fill(p2); }
+            ctx.strokeStyle = it.color; ctx.lineWidth = it.width;
+            ctx.lineCap = "round"; ctx.lineJoin = "round";
+            ctx.stroke(p2);
+            ctx.restore();
+          }
         } else if (it.type === "draw") {
           ctx.strokeStyle = it.color; ctx.lineWidth = it.width;
           ctx.lineCap = "round"; ctx.lineJoin = "round";
@@ -21657,7 +21804,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   </div>
                 );
               }
-              if (it.type === "draw" || it.type === "arrow" || it.type === "line") {
+              if (it.type === "draw" || it.type === "arrow" || it.type === "line" || it.type === "path") {
                 // One SVG layer per stroke, the size of the whole frame, with hits
                 // only on the ink — a bounding box would swallow clicks meant for
                 // whatever sits under the stroke's empty corner.
@@ -21675,7 +21822,19 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   <svg key={it.id} width={W} height={H} viewBox={`0 0 ${W} ${H}`}
                     style={{ position: "absolute", left: 0, top: 0, overflow: "visible",
                       pointerEvents: "none" }}>
-                    {it.type === "draw" ? (
+                    {it.type === "path" ? (
+                      // The offset rides on a transform rather than being baked
+                      // into every coordinate, so moving the path stays one number
+                      // — the same trick the freehand stroke uses with ox/oy.
+                      <g transform={`translate(${it.ox || 0}, ${it.oy || 0})`}>
+                        <path d={pathD(it.nodes, it.closed)}
+                          fill={it.fill || "none"} stroke={it.color} strokeWidth={it.width}
+                          strokeLinecap="round" strokeLinejoin="round"
+                          onPointerDown={e => onItemDown(e, it)}
+                          style={{ pointerEvents: tool === "select" ? (it.fill ? "painted" : "stroke") : "none",
+                            cursor: "move", filter: on ? "drop-shadow(0 0 2px #15151c)" : "none" }} />
+                      </g>
+                    ) : it.type === "draw" ? (
                       <polyline points={pts} fill="none" stroke={it.color} strokeWidth={it.width}
                         strokeLinecap="round" strokeLinejoin="round"
                         onPointerDown={e => onItemDown(e, it)}
@@ -21799,8 +21958,63 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               );
             })}
 
+            {/* The path being drawn: what is placed so far, the segment that is
+                not there yet, and a square on every node. The first one is filled
+                because clicking it is what closes the shape. */}
+            {cam && pathDraft?.nodes?.length > 0 && (() => {
+              const k = 1 / cam.s;
+              return (
+                <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}
+                  style={{ position: "absolute", left: 0, top: 0, overflow: "visible", pointerEvents: "none", zIndex: 6 }}>
+                  <path d={pathD(pathDraft.nodes, false)} fill="none" stroke={palette[0]}
+                    strokeWidth={Math.max(2, Math.round(H / 120))} strokeLinecap="round" strokeLinejoin="round" />
+                  <path ref={pathPreviewRef} d="" fill="none" stroke="#15151c" opacity="0.6"
+                    strokeWidth={1.5 * k} strokeDasharray={`${5 * k} ${4 * k}`} />
+                  {pathDraft.nodes.map((n, i) => (
+                    <Fragment key={"pd" + i}>
+                      {n.h1x != null && <line x1={n.x} y1={n.y} x2={n.h1x} y2={n.h1y} stroke="#15151c" strokeWidth={k} opacity="0.45" />}
+                      {n.h2x != null && <line x1={n.x} y1={n.y} x2={n.h2x} y2={n.h2y} stroke="#15151c" strokeWidth={k} opacity="0.45" />}
+                      <rect x={n.x - 3.5 * k} y={n.y - 3.5 * k} width={7 * k} height={7 * k}
+                        fill={i === 0 ? "#15151c" : "#fff"} stroke="#15151c" strokeWidth={1.4 * k} />
+                    </Fragment>
+                  ))}
+                </svg>
+              );
+            })()}
+
+            {/* A finished path, selected: every node and handle is a grip. Round
+                grips are handles, square ones are the points themselves. */}
+            {cam && !editing && (() => {
+              const it = items.find(i => i.id === sel && i.type === "path" && !i.locked);
+              if (!it?.nodes?.length) return null;
+              const k = 1 / cam.s;
+              const grip = (x, y, which, idx, round) => (
+                <rect x={x - 4 * k} y={y - 4 * k} width={8 * k} height={8 * k} rx={round ? 4 * k : 1 * k}
+                  fill={round ? "#15151c" : "#fff"} stroke="#15151c" strokeWidth={1.4 * k}
+                  style={{ pointerEvents: "auto", cursor: "move" }}
+                  onPointerDown={(e) => { e.stopPropagation();
+                    dragRef.current = { mode: "pathedit", id: it.id, idx, which }; }} />
+              );
+              return (
+                <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}
+                  style={{ position: "absolute", left: 0, top: 0, overflow: "visible", pointerEvents: "none", zIndex: 7 }}>
+                  <g transform={`translate(${it.ox || 0}, ${it.oy || 0})`}>
+                    {it.nodes.map((n, i) => (
+                      <Fragment key={"pe" + i}>
+                        {n.h1x != null && <line x1={n.x} y1={n.y} x2={n.h1x} y2={n.h1y} stroke="#15151c" strokeWidth={k} opacity="0.45" />}
+                        {n.h2x != null && <line x1={n.x} y1={n.y} x2={n.h2x} y2={n.h2y} stroke="#15151c" strokeWidth={k} opacity="0.45" />}
+                        {n.h1x != null && grip(n.h1x, n.h1y, 1, i, true)}
+                        {n.h2x != null && grip(n.h2x, n.h2y, 2, i, true)}
+                        {grip(n.x, n.y, 0, i, false)}
+                      </Fragment>
+                    ))}
+                  </g>
+                </svg>
+              );
+            })()}
+
             {!editing && items.filter(it => (it.id === sel || pick.includes(it.id))
-              && !["comment", "draw", "arrow", "line"].includes(it.type)).map(it => {
+              && !["comment", "draw", "arrow", "line", "path"].includes(it.type)).map(it => {
               const b = boxOf(it);
               const xf = [it.rot ? `rotate(${it.rot}deg)` : "",
                 it.flipX ? "scaleX(-1)" : "", it.flipY ? "scaleY(-1)" : ""].filter(Boolean).join(" ");
@@ -21858,7 +22072,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         const left = cam.x + (b.x + b.w / 2) * cam.s;
         const top = cam.y + b.y * cam.s - 46;
         const isText = selItem.type === "text" || selItem.type === "sticky";
-        const isStroke = selItem.type === "draw" || selItem.type === "arrow" || selItem.type === "line";
+        const isStroke = selItem.type === "draw" || selItem.type === "arrow" || selItem.type === "line" || selItem.type === "path";
         const colourKey = isStroke ? "color" : selItem.type === "sticky" ? "fill" : isText ? "color" : "fill";
         // One height and one rounding for every control in this bar. Two fields
         // of different heights side by side is the first thing the eye catches.
@@ -22405,6 +22619,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 10 }}
         onPointerDown={e => e.stopPropagation()}>
         <BoardToolbar orientation="vertical"
+          lineTools={["arrow", "line", "pen", "path"]}
           tool={tool} setTool={setTool} setEditing={setEditing}
           lastShape={lastShape} setLastShape={setLastShape}
           shapesOpen={shapesOpen} setShapesOpen={setShapesOpen}
@@ -23115,13 +23330,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             <div style={two}>
               {num(Math.round(boxOf(selItem).x), v => {
                 const b = boxOf(selItem), d2 = (Number(v) || 0) - b.x;
-                if (selItem.type === "draw") set2({ ox: (selItem.ox || 0) + d2 });
+                if (selItem.type === "draw" || selItem.type === "path") set2({ ox: (selItem.ox || 0) + d2 });
                 else if (selItem.type === "arrow" || selItem.type === "line") set2({ x1: selItem.x1 + d2, x2: selItem.x2 + d2 });
                 else set2({ x: Math.round(selItem.x + d2) });
               }, "X")}
               {num(Math.round(boxOf(selItem).y), v => {
                 const b = boxOf(selItem), d2 = (Number(v) || 0) - b.y;
-                if (selItem.type === "draw") set2({ oy: (selItem.oy || 0) + d2 });
+                if (selItem.type === "draw" || selItem.type === "path") set2({ oy: (selItem.oy || 0) + d2 });
                 else if (selItem.type === "arrow" || selItem.type === "line") set2({ y1: selItem.y1 + d2, y2: selItem.y2 + d2 });
                 else set2({ y: Math.round(selItem.y + d2) });
               }, "Y")}
@@ -23219,7 +23434,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               );
             })()}
 
-            {!["draw", "arrow", "line"].includes(selItem.type) && (<>
+            {!["draw", "arrow", "line", "path"].includes(selItem.type) && (<>
               {label(de ? "Maße" : "Layout")}
               <div style={two}>
                 {num(Math.round(selItem.w), v => set2({ w: Math.max(8, Number(v) || 8) }), "W")}
@@ -23413,7 +23628,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               </div>
               </>
             ) : (() => {
-              const key = (selItem.type === "draw" || selItem.type === "arrow" || selItem.type === "line")
+              const key = (selItem.type === "draw" || selItem.type === "arrow" || selItem.type === "line" || selItem.type === "path")
                 ? "color" : selItem.type === "text" ? "color" : "fill";
               const cur = selItem[key] || "#000000";
               return (<>
@@ -27152,6 +27367,53 @@ const creationFormats = (de) => {
     { group: "device", kind: "other", name: "MacBook Pro 14\"", w: 3024, h: 1964 },
   ];
 };
+
+// ── Bézier paths ─────────────────────────────────────────────────────────────
+// A node is { x, y } plus two optional handles, held in the SAME coordinates as
+// the node rather than as offsets: every piece of this — the d string, the
+// bounding box, the export, dragging a handle — reads them directly, and only
+// the one place that mirrors a handle would have preferred offsets.
+//
+//   h1 = the handle pointing back toward the previous node (incoming)
+//   h2 = the handle pointing on toward the next one (outgoing)
+//
+// A segment is a curve when either end of it carries a handle, and a straight
+// line when neither does. That is what lets one path mix corners and curves the
+// way a pen tool must.
+const pathSeg = (a, b) => {
+  const c1 = (a.h2x != null) ? [a.h2x, a.h2y] : null;
+  const c2 = (b.h1x != null) ? [b.h1x, b.h1y] : null;
+  if (!c1 && !c2) return `L ${b.x} ${b.y}`;
+  // One-sided curves are real: a corner running into a smooth point has a
+  // handle at one end only, and the missing side sits on its own node.
+  const p1 = c1 || [a.x, a.y], p2 = c2 || [b.x, b.y];
+  return `C ${p1[0]} ${p1[1]} ${p2[0]} ${p2[1]} ${b.x} ${b.y}`;
+};
+const pathD = (nodes, closed) => {
+  const n = nodes || [];
+  if (n.length < 2) return n.length ? `M ${n[0].x} ${n[0].y}` : "";
+  let d = `M ${n[0].x} ${n[0].y}`;
+  for (let i = 1; i < n.length; i++) d += " " + pathSeg(n[i - 1], n[i]);
+  if (closed) d += " " + pathSeg(n[n.length - 1], n[0]) + " Z";
+  return d;
+};
+// Nodes AND handles. A hull rather than the true curve bounds — a curve never
+// leaves its control points, so the box always contains the path, and computing
+// the exact extrema would buy a few pixels for a great deal of arithmetic.
+const pathBBox = (nodes, ox = 0, oy = 0) => {
+  const xs = [], ys = [];
+  (nodes || []).forEach(n => {
+    xs.push(n.x); ys.push(n.y);
+    if (n.h1x != null) { xs.push(n.h1x); ys.push(n.h1y); }
+    if (n.h2x != null) { xs.push(n.h2x); ys.push(n.h2y); }
+  });
+  if (!xs.length) return { x: 0, y: 0, w: 0, h: 0 };
+  const x = Math.min(...xs), y = Math.min(...ys);
+  return { x: x + ox, y: y + oy, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+};
+// Dragging a handle moves its opposite one to match, which is what makes a node
+// smooth. Same length on both sides, so the curve runs through without a kink.
+const mirrorHandle = (n, hx, hy) => ({ ...n, h2x: hx, h2y: hy, h1x: 2 * n.x - hx, h1y: 2 * n.y - hy });
 
 // Shift constrains a line to the nearest 45° ray from where it started. The
 // point is PROJECTED onto that ray rather than kept at the cursor's distance: a
