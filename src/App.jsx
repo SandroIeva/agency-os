@@ -47762,8 +47762,8 @@ export default function CircularMenu() {
                         <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.45 }}>
                           {tgLink
                             ? (appLanguage === "de"
-                                ? `Alles, was in der Glocke landet, kommt auch bei dir in Telegram an${tgLink.display_name ? ` (${tgLink.display_name})` : ""}. Gilt für jeden deiner Workspaces.`
-                                : `Whatever reaches the bell reaches you in Telegram too${tgLink.display_name ? ` (${tgLink.display_name})` : ""}. For every workspace you are in.`)
+                                ? "Alles, was in der Glocke landet, kommt auch bei dir in Telegram an."
+                                : "Whatever reaches the bell reaches you in Telegram too.")
                             : (appLanguage === "de"
                                 ? "Einmal verbinden, für alle Workspaces — auch für die, denen du später beitrittst."
                                 : "Connect once, for every workspace — including the ones you join later.")}
