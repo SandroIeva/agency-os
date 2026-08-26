@@ -77,7 +77,9 @@ const deepLink = (appUrl, n) => {
 };
 
 export default async function handler(req) {
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  const reqUrl = new URL(req.url);
+  const setup = reqUrl.searchParams.get("setup");
+  if (req.method !== "POST" && !setup) return json({ error: "Method not allowed" }, 405);
 
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const url = process.env.SUPABASE_URL;
@@ -96,6 +98,42 @@ export default async function handler(req) {
     return json({ error: "Telegram is not configured", code: "not_configured", missing }, 503);
   }
   const db = createClient(url, serviceKey, { auth: { persistSession: false } });
+
+  // ── One-time wiring ───────────────────────────────────────────────────────
+  // Registering the webhook by hand means pasting a bot token into a terminal,
+  // which is the one step most likely to go wrong and the one place the token
+  // is most likely to end up somewhere it should not. The function already HAS
+  // the token, so it can do it itself and then report what Telegram thinks the
+  // wiring looks like. Guarded by the hook secret; it can only ever point the
+  // webhook at this very deployment, so there is nothing here to steal.
+  if (setup) {
+    if (!process.env.TELEGRAM_HOOK_SECRET || setup !== process.env.TELEGRAM_HOOK_SECRET) {
+      return json({ error: "Unauthorized" }, 401);
+    }
+    if (!process.env.TELEGRAM_WEBHOOK_SECRET) {
+      return json({ error: "TELEGRAM_WEBHOOK_SECRET is not set", code: "not_configured" }, 503);
+    }
+    const set = await api(botToken, "setWebhook", {
+      url: `${appUrl}/api/telegram`,
+      secret_token: process.env.TELEGRAM_WEBHOOK_SECRET,
+      allowed_updates: ["message", "edited_message"],
+      drop_pending_updates: true,
+    });
+    const info = await api(botToken, "getWebhookInfo", {});
+    const me = await api(botToken, "getMe", {});
+    // Deliberately narrow: the bot's public identity and what Telegram says
+    // about the hook. No token, no secret.
+    return json({
+      set: !!set?.ok,
+      set_error: set?.ok ? undefined : set?.description,
+      bot: me?.ok ? { username: me.result?.username, name: me.result?.first_name } : null,
+      webhook: info?.ok ? {
+        url: info.result?.url,
+        pending: info.result?.pending_update_count,
+        last_error: info.result?.last_error_message || null,
+      } : null,
+    });
+  }
 
   const tgSecret = req.headers.get("x-telegram-bot-api-secret-token");
   const hookSecret = req.headers.get("x-i7-hook-secret");
