@@ -20692,6 +20692,27 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     || (pick.length < 2 && selItem?.groupId && enteredGroup !== selItem.groupId
         ? selItem.groupId : null);
 
+  // With more than one thing selected, the panel used to show whichever was
+  // clicked last — so two objects of different colours reported the colour of
+  // one of them, and editing anything changed only that one.
+  //
+  // A proxy rather than rewriting every field: the panel reads selItem.x,
+  // selItem.fill and forty more, and each of those should answer "the value" or
+  // "nothing" by the same rule. id and type come through untouched, because the
+  // panel needs to know what it is talking to even when the answers disagree.
+  const panelSel = pick.length > 1 ? items.filter(i => pick.includes(i.id)) : [];
+  const panelMixed = (k) => panelSel.length > 1
+    && !panelSel.every(i => cvSame(i[k], panelSel[0][k]));
+  const panelItem = (selItem && panelSel.length > 1)
+    ? new Proxy(selItem, {
+        get(t, k) {
+          if (typeof k === "symbol" || k === "id" || k === "type") return t[k];
+          const v = t[k];
+          return panelSel.every(i => cvSame(i[k], v)) ? v : undefined;
+        },
+      })
+    : selItem;
+
   const ungroupSel = (gid) => {
     if (!canUngroup(gid)) return;
     markChange();
@@ -21586,7 +21607,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
             borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
             <span style={{ fontSize: 11, color: theme.textFaint, minWidth: 13 }}>{glyph}</span>
-            <NumberField value={value} onCommit={onChange}
+            {/* Not a number means the selection does not agree on one, and an
+                empty field says that better than NaN does. */}
+            <NumberField value={Number.isFinite(value) ? value : undefined} onCommit={onChange}
               style={{ width: "100%", border: "none", outline: "none", background: "transparent",
                 color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
             {suffix && <span style={{ fontSize: 11.5, color: theme.textFaint }}>{suffix}</span>}
@@ -23526,9 +23549,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         )}
 
         {selItem && (() => {
+          // Shadows the outer one for the whole panel. Every selItem.* below now
+          // answers for the SELECTION rather than for one member of it.
+          const selItem = panelItem;
+          const many = panelSel.length > 1 ? panelSel.map(i => i.id) : null;
           const isText = selItem.type === "text" || selItem.type === "sticky";
-          const set = (k, v) => patch(selItem.id, { [k]: v });
-          const set2 = (o) => patch(selItem.id, o);
+          // A field that reports on all of them also writes to all of them.
+          const set = (k, v) => (many ? patchMany(many, { [k]: v }) : patch(selItem.id, { [k]: v }));
+          const set2 = (o) => (many ? patchMany(many, o) : patch(selItem.id, o));
           // Effects only. A group selection means the group is the object, so a
           // shadow lands on every member and the renderer draws it once around
           // the lot. NOT set2's job: position and size through the same door
@@ -23886,19 +23914,24 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             ) : (() => {
               const key = (selItem.type === "draw" || selItem.type === "arrow" || selItem.type === "line" || selItem.type === "path")
                 ? "color" : selItem.type === "text" ? "color" : "fill";
+              // "They differ" and "there is none" both arrive as undefined from
+              // the proxy, and they need opposite answers: one shows an empty
+              // field, the other offers to add the thing. panelMixed tells them
+              // apart by asking the selection directly.
+              const mixed = panelMixed(key);
               const cur = selItem[key] || "#000000";
               // A surface can be taken away and put back; so can an outline. What
               // cannot is the colour of TEXT, which would leave nothing to read.
               const isFill = key === "fill" && selItem.type !== "image";
               const isPathStroke = selItem.type === "path";
-              if (isPathStroke && !selItem.width) return (
+              if (!mixed && isPathStroke && !selItem.width) return (
                 <div onClick={() => set2({ width: Math.max(2, Math.round(H / 120)), color: selItem.color || palette[0] })}
                   style={{ marginTop: 6, padding: "9px 12px", borderRadius: 9, textAlign: "center",
                     cursor: "pointer", border: `1px dashed ${line}`, color: theme.textDim, fontSize: 12 }}>
                   {de ? "Kontur hinzufügen" : "Add a stroke"}
                 </div>
               );
-              if (isFill && selItem.fill == null) return (
+              if (!mixed && isFill && selItem.fill == null) return (
                 <div onClick={() => set2({ fill: palette[1] || "#DDDDDD" })}
                   style={{ marginTop: 6, padding: "9px 12px", borderRadius: 9, textAlign: "center",
                     cursor: "pointer", border: `1px dashed ${line}`, color: theme.textDim, fontSize: 12 }}>
@@ -23915,14 +23948,20 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       y: e.currentTarget.getBoundingClientRect().top })}
                     style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, cursor: "pointer",
                     border: `1px solid ${line}`, backgroundColor: "#fff",
-                    ...swatchBg(cur, selItem.fillAlpha) }} />
+                    // A chequer for a selection that disagrees: it shows no colour
+                    // without pretending to be transparent either.
+                    ...(mixed
+                      ? { backgroundImage: "conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)",
+                          backgroundSize: "8px 8px" }
+                      : swatchBg(cur, selItem.fillAlpha)) }} />
                   {paintLabel(cur) ? (
                     <span style={{ flex: 1, minWidth: 0, color: theme.text, fontFamily: FONT, fontSize: 12.5,
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {paintLabel(cur)}
                     </span>
                   ) : (
-                    <input value={String(cur).replace("#", "").toUpperCase()}
+                    <input value={mixed ? "" : String(cur).replace("#", "").toUpperCase()}
+                      placeholder={mixed ? (de ? "Mehrere" : "Mixed") : undefined}
                       onChange={e => { const v = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
                         if (v.length === 6) set(key, "#" + v); }}
                       style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
@@ -23934,7 +23973,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   {!paintLabel(cur) && (
                     <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0,
                       paddingLeft: 8, borderLeft: `1px solid ${line}` }}>
-                      <NumberField value={selItem.fillAlpha == null ? 100 : selItem.fillAlpha}
+                      <NumberField value={panelMixed("fillAlpha") ? undefined : (selItem.fillAlpha == null ? 100 : selItem.fillAlpha)}
                         min={0} max={100} onCommit={v => set("fillAlpha", v)}
                         style={{ width: 30, border: "none", outline: "none", background: "transparent",
                           color: theme.text, fontFamily: FONT, fontSize: 12.5, textAlign: "right" }} />
