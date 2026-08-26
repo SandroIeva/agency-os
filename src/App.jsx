@@ -27423,14 +27423,19 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
 
         {/* Tabs, drawn like the Audience tabs rather than as pills */}
         <div ref={ind.containerRef}
-          style={{ padding: "0 24px", display: "flex", alignItems: "center", gap: 22,
+          style={{ padding: "0 24px", display: "flex", alignItems: "center", gap: 4,
             borderBottom: `1px solid ${theme.borderFaint}`, position: "relative" }}>
           {CREATION_SECTIONS.map(k => {
             const on = section === k.key;
             return (
               <div key={k.key} ref={ind.registerTab(k.key)}
                 onClick={() => { setSection(k.key); setFolderId(null); }}
-                style={{ padding: "12px 2px", cursor: "pointer", fontSize: 13.5,
+                // 14 a side, like the Files Manager's tabs. TabUnderline insets 8
+                // each way, so the line lands twelve pixels wider than the word;
+                // at the 2px this had, it came out twelve NARROWER, which is what
+                // made it look cut off. The container's gap drops to 4 to match,
+                // since this padding is now what spaces the tabs apart.
+                style={{ padding: "12px 14px", cursor: "pointer", fontSize: 13.5,
                   fontFamily: FONT,
                   // Weight is NOT switched with the tab: bolding the active label
                   // changes its width, which shoves the neighbours sideways — that
