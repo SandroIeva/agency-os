@@ -152,9 +152,14 @@ export default async function handler(req) {
     if (!n) return json({ ok: true, skipped: "gone" });
 
     const { data: link } = await db.from("messenger_links")
-      .select("chat_id, types, muted_orgs, lang, active")
+      .select("chat_id, types, muted_orgs, lang, active, enabled")
       .eq("provider", "telegram").eq("kind", "user").eq("user_id", n.user_id).maybeSingle();
-    if (!link || !link.active) return json({ ok: true, skipped: "no_link" });
+    if (!link) return json({ ok: true, skipped: "no_link" });
+    // Two gates that mean different things: the person turned it off, or
+    // Telegram refuses to deliver. Reported apart so the settings panel can say
+    // which of the two it is.
+    if (!link.enabled) return json({ ok: true, skipped: "disabled" });
+    if (!link.active) return json({ ok: true, skipped: "inactive" });
     if (n.org_id && (link.muted_orgs || []).includes(n.org_id)) return json({ ok: true, skipped: "muted" });
 
     const wanted = { ...DEFAULT_TYPES, ...(link.types || {}) };
