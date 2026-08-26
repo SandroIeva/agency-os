@@ -83,8 +83,17 @@ export default async function handler(req) {
   const url = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
   const appUrl = (process.env.PUBLIC_APP_URL || "https://app.i7os.com").replace(/\/$/, "");
+  // Names of what is missing, never values. "Not configured" on its own sends
+  // you hunting through four variables; this says which one to look at.
+  const missing = [
+    !botToken && "TELEGRAM_BOT_TOKEN",
+    !url && "SUPABASE_URL",
+    !serviceKey && "SUPABASE_SERVICE_ROLE_KEY",
+    !process.env.TELEGRAM_WEBHOOK_SECRET && "TELEGRAM_WEBHOOK_SECRET",
+    !process.env.TELEGRAM_HOOK_SECRET && "TELEGRAM_HOOK_SECRET",
+  ].filter(Boolean);
   if (!botToken || !url || !serviceKey) {
-    return json({ error: "Telegram is not configured", code: "not_configured" }, 503);
+    return json({ error: "Telegram is not configured", code: "not_configured", missing }, 503);
   }
   const db = createClient(url, serviceKey, { auth: { persistSession: false } });
 
