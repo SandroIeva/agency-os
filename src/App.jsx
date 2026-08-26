@@ -18895,12 +18895,16 @@ const cvSame = (a, b) => cvStableStr(a) === cvStableStr(b);
 
 function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, userOrg,
                         theme, darkMode, appLanguage, onUpload, onDone, onAutoSave, onPublish, onClose,
-                        canvasRow = null }) {
+                        canvasRow = null, onRename = null }) {
   const de = appLanguage === "de";
   // ── Sharing ────────────────────────────────────────────────────────────────
   // Only when the editor is standing on a saved canvas: the same editor is also
   // used for brand slots, which are part of a document and have nothing of
   // their own to share.
+  // The title in the bar is the CANVAS's name — the board's own name is the one
+  // above the frame. Two different things with two different labels, and until
+  // now only one of them could be changed.
+  const [titleDraft, setTitleDraft] = useState(null);   // null = not editing
   const [shareOpen, setShareOpen] = useState(false);
   const [shareVis, setShareVis] = useState(canvasRow?.visibility || "workspace");
   const [shareProject, setShareProject] = useState(canvasRow?.project_id || null);
@@ -22089,7 +22093,28 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
             strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
         </motion.div>
-        <div style={{ fontSize: 13, fontWeight: 600, color: theme.text }}>{title}</div>
+        {titleDraft !== null ? (
+          <input autoFocus value={titleDraft}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={() => { const v = titleDraft.trim(); setTitleDraft(null); if (v && v !== title) onRename?.(v); }}
+            onKeyDown={(e) => {
+              if (e.nativeEvent?.isComposing || e.keyCode === 229) return;
+              if (e.key === "Enter") e.currentTarget.blur();
+              // Escape clears the draft BEFORE the blur it causes, so the blur
+              // handler finds nothing to save and the old name stands.
+              if (e.key === "Escape") setTitleDraft(null);
+            }}
+            style={{ fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: FONT,
+              background: "transparent", border: "none", outline: "none", padding: 0,
+              borderBottom: `1px solid ${theme.textFaint}`,
+              width: `${Math.max(8, (titleDraft || "").length + 1)}ch` }} />
+        ) : (
+          <div onDoubleClick={() => onRename && setTitleDraft(title || "")}
+            title={onRename ? (de ? "Doppelklick zum Umbenennen" : "Double-click to rename") : undefined}
+            style={{ fontSize: 13, fontWeight: 600, color: theme.text, cursor: onRename ? "text" : "default" }}>
+            {title}
+          </div>
+        )}
         <div style={{ fontSize: 11.5, color: theme.textDim }}>{W} × {H} px</div>
         <div style={{ flex: 1 }} />
         {err && <div style={{ fontSize: 11.5, color: "#D9342B" }}>{err}</div>}
@@ -27871,6 +27896,9 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
         <CanvasEditor
           size={[editing.w, editing.h]} title={editing.name || "Canvas"}
           doc={editing.doc} originRect={null} canvasRow={editing}
+          // The list's own rename: it writes the row AND patches the list, so the
+          // card behind the editor is already right when the editor closes.
+          onRename={(name) => { rename(editing, name); setEditing(e => (e ? { ...e, name } : e)); }}
           brand={brand} orgId={userOrg?.id} session={session} userOrg={userOrg}
           theme={theme} darkMode={darkMode} appLanguage={appLanguage}
           onUpload={(file) => upload(file, "export")}
