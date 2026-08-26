@@ -27298,6 +27298,21 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
     );
   };
 
+  // The dialog keeps ONE height, whichever tab is open. Switching tabs used to
+  // resize the whole overlay under the cursor, which is the kind of movement you
+  // feel before you can name it.
+  //
+  // Derived, not written down: the fullest tab decides, so adding a format later
+  // adjusts the box instead of quietly overflowing it. Four columns fixed, or the
+  // row count this depends on would be a guess about the available width.
+  const FMT_COLS = 4, FMT_TILE_H = 124, FMT_GAP = 10;
+  const formatBodyH = (() => {
+    const counts = {};
+    creationFormats(de).forEach(f => { counts[f.group] = (counts[f.group] || 0) + 1; });
+    const rows = Math.max(1, ...Object.values(counts).map(n => Math.ceil(n / FMT_COLS)));
+    return rows * FMT_TILE_H + (rows - 1) * FMT_GAP;
+  })();
+
   const iconBtn = (glyph, act, on, title) => (
     <motion.div whileTap={{ scale: 0.94 }} onClick={act} title={title}
       style={{ width: 34, height: 34, borderRadius: 10, display: "flex", alignItems: "center",
@@ -27651,7 +27666,10 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                 fontFamily: FONT, fontSize: 12 }}>{err}</div>
             )}
 
-            <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "16px 22px 22px" }}>
+            {/* A fixed height, capped so a short window still fits it on screen.
+                The tabs with less in them simply have room to spare — better than
+                an overlay that grows and shrinks as you read across it. */}
+            <div className="no-scrollbar" style={{ height: `min(${formatBodyH}px, 56vh)`, overflowY: "auto", padding: "16px 22px 22px" }}>
               {newTab === "custom" ? (() => {
                 const w = Math.max(16, Math.min(8000, parseInt(cw, 10) || 0));
                 const h = Math.max(16, Math.min(8000, parseInt(chh, 10) || 0));
@@ -27726,7 +27744,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                   </div>
                 );
               })() : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${FMT_COLS}, minmax(0, 1fr))`, gap: FMT_GAP }}>
                   {creationFormats(de).filter(f => f.group === newTab).map((f, i) => {
                     // Every shape drawn to the same box, so a banner looks like a
                     // banner beside a portrait post instead of both being a word.
