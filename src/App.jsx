@@ -47786,48 +47786,59 @@ export default function CircularMenu() {
                         unlink and pair again afterwards — so the switch stays,
                         and the link stays with it. */}
                     {tgLink && (
-                      <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${theme.borderFaint}` }}>
+                      <div style={{ marginTop: 22, paddingTop: 20, borderTop: `1px solid ${theme.borderFaint}` }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
-                              {appLanguage === "de" ? "Benachrichtigungen senden" : "Send notifications"}
-                            </div>
-                            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
-                              {appLanguage === "de"
-                                ? "Aus schaltet still, ohne die Verbindung zu lösen."
-                                : "Off goes quiet without breaking the link."}
-                            </div>
+                          <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
+                            {appLanguage === "de" ? "Benachrichtigungen senden" : "Send notifications"}
                           </div>
+                          {/* The Appearance row's switch, to the pixel: 44×24, radius 12,
+                              two of padding, a 20px knob travelling exactly 20 on the
+                              same spring. Only the ON colour differs — anthracite, not
+                              the lilac that row still carries, because the design system
+                              dropped lilac. And in dark mode it inverts, the way the nav
+                              menu's selected pill does: anthracite on a dark card is a
+                              switch you cannot see, which is the other half of what was
+                              wrong with mine. */}
                           <div onClick={() => patchTgLink({ enabled: !tgLink.enabled })}
-                            style={{ width: 42, height: 24, borderRadius: 999, flexShrink: 0, cursor: "pointer",
-                              background: tgLink.enabled ? "#15151c" : (darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.14)"),
-                              transition: "background 0.16s ease", padding: 3,
-                              display: "flex", justifyContent: tgLink.enabled ? "flex-end" : "flex-start" }}>
-                            <motion.div layout transition={{ type: "spring", stiffness: 500, damping: 34 }}
-                              style={{ width: 18, height: 18, borderRadius: "50%", background: "#fff",
-                                boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} />
+                            style={{ width: 44, height: 24, borderRadius: 12, padding: 2, flexShrink: 0,
+                              background: tgLink.enabled
+                                ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c")
+                                : (darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.15)"),
+                              cursor: "pointer", transition: "background 0.3s ease",
+                              display: "flex", alignItems: "center" }}>
+                            <motion.div
+                              animate={{ x: tgLink.enabled ? 20 : 0 }}
+                              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                              style={{ width: 20, height: 20, borderRadius: 10,
+                                background: (darkMode && tgLink.enabled) ? "#15151c" : "#fff",
+                                boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
                           </div>
                         </div>
 
                         {tgLink.enabled && (
-                          <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "10px 18px" }}>
+                          /* Two columns, fixed. auto-fit collapsed to one on a narrow
+                             panel and to three on a wide one, so the same six rows kept
+                             rearranging themselves as the window moved. */
+                          <div style={{ marginTop: 20, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 24px" }}>
                             {TG_TYPES.map(t => {
                               const on = tgTypeOn(t);
                               return (
                                 <div key={t.key} onClick={() => patchTgLink({ types: { ...(tgLink.types || {}), [t.key]: !on } })}
-                                  style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer" }}>
-                                  <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0,
-                                    background: on ? "#15151c" : "transparent",
-                                    border: `1.5px solid ${on ? "#15151c" : (darkMode ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.2)")}`,
-                                    display: "flex", alignItems: "center", justifyContent: "center",
-                                    transition: "background 0.14s ease, border-color 0.14s ease" }}>
+                                  style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                                  {/* The checklist box from the timeline modal, unchanged
+                                      but for the same dark-mode inversion as the switch. */}
+                                  <motion.div whileTap={{ scale: 0.9 }}
+                                    style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                                      border: `1.5px solid ${on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : theme.borderFaint}`,
+                                      background: on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
+                                      display: "flex", alignItems: "center", justifyContent: "center" }}>
                                     {on && (
-                                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff"
-                                        strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M20 6 9 17l-5-5" />
+                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                                        stroke={darkMode ? "#15151c" : "#fff"} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="20 6 9 17 4 12" />
                                       </svg>
                                     )}
-                                  </div>
+                                  </motion.div>
                                   <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text }}>
                                     {appLanguage === "de" ? t.de : t.en}
                                   </span>
