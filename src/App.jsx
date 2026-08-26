@@ -6465,6 +6465,47 @@ function CommentPopup({ authorName, createdAt, canEdit, text,
   );
 }
 
+// ── Dropping files onto a board ──────────────────────────────────────────────
+// Only what a browser will actually paint. PDF is deliberately absent: it would
+// upload happily, cost storage, and then show as nothing — a broken picture is
+// worse than a refusal that says why.
+const DROP_IMAGE_MIME = /^image\/(png|jpe?g|gif|svg\+xml|webp|avif)$/i;
+const DROP_IMAGE_EXT = /\.(png|jpe?g|gif|svg|webp|avif)$/i;
+// A file dragged from some sources arrives with an empty type, and then the
+// name is the only thing left to go on. A file that DOES declare a type is
+// judged by it — a .png that says application/pdf is not a png.
+const isDroppableImage = (f) => !!f && (f.type ? DROP_IMAGE_MIME.test(f.type) : DROP_IMAGE_EXT.test(f.name || ""));
+const dropRejectMsg = (de) => de
+  ? "Nur Bilder: PNG, JPG, GIF, SVG, WebP oder AVIF."
+  : "Images only: PNG, JPG, GIF, SVG, WebP or AVIF.";
+// Dragging an element around inside the app is also a drag. Without this the
+// layer list's own reordering would light up the canvas as if a file were coming.
+const dtHasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes("Files");
+// Natural size, or zeros if it cannot be measured — an SVG without an intrinsic
+// size is the usual reason, and the caller falls back to a default box.
+const measureImageSize = (url) => new Promise((res) => {
+  const im = new Image();
+  im.onload = () => res({ w: im.naturalWidth || 0, h: im.naturalHeight || 0 });
+  im.onerror = () => res({ w: 0, h: 0 });
+  im.src = url;
+});
+// The dashed frame that says "let go here". Same one on both surfaces, because
+// they are the same gesture.
+const DropVeil = ({ label, darkMode }) => (
+  <div style={{ position: "absolute", inset: 0, zIndex: 8, pointerEvents: "none",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    background: darkMode ? "rgba(10,10,14,0.45)" : "rgba(255,255,255,0.55)",
+    backdropFilter: "blur(1.5px)", WebkitBackdropFilter: "blur(1.5px)" }}>
+    <div style={{ position: "absolute", inset: 14, borderRadius: 18,
+      border: `2px dashed ${darkMode ? "rgba(255,255,255,0.32)" : "rgba(0,0,0,0.28)"}` }} />
+    <div style={{ padding: "10px 18px", borderRadius: 999, fontFamily: FONT, fontSize: 13, fontWeight: 500,
+      background: darkMode ? "rgba(255,255,255,0.94)" : "#15151c",
+      color: darkMode ? "#15151c" : "#fff", boxShadow: "0 8px 30px rgba(0,0,0,0.25)" }}>
+      {label}
+    </div>
+  </div>
+);
+
 // One colour per person, derived from their id rather than assigned: everyone
 // on the board computes the same colour for the same person without anybody
 // handing it out, and it survives a reload.
@@ -6496,6 +6537,12 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   const [sel, setSel] = useState(null);
   const [selIds, setSelIds] = useState([]); // multi-selection (marquee); always includes `sel` when single
   const [marquee, setMarquee] = useState(null); // {x,y,w,h} world-space selection rectangle
+  // Drag-and-drop of files. dragenter and dragleave fire for every child the
+  // pointer crosses, so a counter is the only reliable way to know the pointer
+  // has really left the surface rather than moved onto something inside it.
+  const [dropOver, setDropOver] = useState(false);
+  const [dropBusy, setDropBusy] = useState(false);
+  const dropDepth = useRef(0);
   const [hoverId, setHoverId] = useState(null); // text node under the cursor — shows the mind-map group frame
   const [editing, setEditing] = useState(null);
   const [tempStroke, setTempStroke] = useState(null);
@@ -7521,12 +7568,40 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
     return pub.publicUrl;
   };
-  // Drop / paste path: upload, then place the image at the drop position.
+  // A file let go ANYWHERE else — on the toolbar, on a panel, on the gap beside
+  // the frame — is a browser navigating to that file, which throws the whole
+  // editor away along with anything not yet saved. Swallowing the default
+  // everywhere makes a miss do nothing, which is the only acceptable outcome.
+  // Only for files: element drags inside the app (the layer list reorders this
+  // way) must keep working.
+  useEffect(() => {
+    const swallow = (e) => { if (dtHasFiles(e)) e.preventDefault(); };
+    window.addEventListener("dragover", swallow);
+    window.addEventListener("drop", swallow);
+    return () => {
+      window.removeEventListener("dragover", swallow);
+      window.removeEventListener("drop", swallow);
+    };
+  }, []);
+
+  // Drop / paste path: upload, then place the images at the drop position.
+  // All of them, in the order they were dropped — dropping four pictures and
+  // getting one was the old behaviour and it looked like a failure.
   const handleImageFiles = async (files, at) => {
-    const file = Array.from(files || []).find(f => f.type.startsWith("image/"));
-    if (!file || !board) return;
-    const url = await uploadBoardImage(file);
-    if (url) addImageFromUrl(url, at);
+    const list = Array.from(files || []);
+    const good = list.filter(isDroppableImage);
+    if (!good.length) { if (list.length) alert(dropRejectMsg(de)); return; }
+    if (!board) return;
+    setDropBusy(true);
+    let k = 0;
+    for (const f of good) {
+      const url = await uploadBoardImage(f);
+      // Each one steps down and right, or four files land in one stack and it
+      // looks like only the last arrived.
+      if (url) addImageFromUrl(url, at ? { x: at.x + k * 28, y: at.y + k * 28 } : undefined);
+      k++;
+    }
+    setDropBusy(false);
   };
 
   // ── Context-menu actions ────────────────────────────────────────────────────
@@ -8433,8 +8508,16 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           setCtxMenu({ x: e.clientX, y: e.clientY, at: pt, id: hit?.id || null });
         }}
         onPointerLeave={() => setHoverId(null)}
-        onDrop={(e) => { e.preventDefault(); handleImageFiles(e.dataTransfer.files, toWorld(e)); }}
-        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          if (!dtHasFiles(e)) return;
+          e.preventDefault(); dropDepth.current = 0; setDropOver(false);
+          handleImageFiles(e.dataTransfer.files, toWorld(e));
+        }}
+        // preventDefault on dragover is what makes the surface a drop target at
+        // all; without it the browser navigates to the file and the board is gone.
+        onDragOver={(e) => { if (!dtHasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
+        onDragEnter={(e) => { if (!dtHasFiles(e)) return; e.preventDefault(); dropDepth.current += 1; setDropOver(true); }}
+        onDragLeave={(e) => { if (!dtHasFiles(e)) return; dropDepth.current = Math.max(0, dropDepth.current - 1); if (!dropDepth.current) setDropOver(false); }}
         style={{ position: "absolute", inset: 0, cursor: cursorForTool, touchAction: "none" }}>
         {/* Dot grid on its own layer so it can be MASKED (not overlaid). A CSS mask
             fades the dots' own alpha to zero toward the bottom, so they genuinely
@@ -8452,6 +8535,10 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           backgroundSize: `${24 * cam.s}px ${24 * cam.s}px`, backgroundPosition: `${cam.x}px ${cam.y}px`,
           WebkitMaskImage: "linear-gradient(to bottom, #000 0%, #000 calc(100% - 260px), transparent calc(100% - 90px))",
           maskImage: "linear-gradient(to bottom, #000 0%, #000 calc(100% - 260px), transparent calc(100% - 90px))" }} />
+        {(dropOver || dropBusy) && (
+          <DropVeil darkMode={darkMode}
+            label={dropBusy ? (de ? "Lädt hoch …" : "Uploading …") : (de ? "Bild hier ablegen" : "Drop image here")} />
+        )}
         {/* Other people's pointers. Placed by hand from board coordinates
             rather than inside the transformed layer: a cursor that scales with
             the zoom is tiny at 20 % and enormous at 400 %, when what it means —
@@ -19581,6 +19668,59 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const patch = (id, p) => { markChange(); setItems(list => list.map(i => (i.id === id ? { ...i, ...p } : i))); };
   const addItem = (it) => { markChange(); setItems(list => [...list, it]); setSel(it.id); setTool("select"); };
 
+  // ── Dropping image files onto the artboard ────────────────────────────────
+  // A file let go ANYWHERE else — on the toolbar, on a panel, on the gap beside
+  // the frame — is a browser navigating to that file, which throws the whole
+  // editor away along with anything not yet saved. Swallowing the default
+  // everywhere makes a miss do nothing, which is the only acceptable outcome.
+  // Only for files: element drags inside the app (the layer list reorders this
+  // way) must keep working.
+  useEffect(() => {
+    const swallow = (e) => { if (dtHasFiles(e)) e.preventDefault(); };
+    window.addEventListener("dragover", swallow);
+    window.addEventListener("drop", swallow);
+    return () => {
+      window.removeEventListener("dragover", swallow);
+      window.removeEventListener("drop", swallow);
+    };
+  }, []);
+
+  // dragenter and dragleave fire for every child the pointer crosses, so a
+  // counter is the only reliable way to tell "left the surface" from "moved
+  // onto something inside it".
+  const [dropOver, setDropOver] = useState(false);
+  const [dropBusy, setDropBusy] = useState(false);
+  const dropDepth = useRef(0);
+  const placeDroppedImages = async (files, at) => {
+    const list = Array.from(files || []);
+    const good = list.filter(isDroppableImage);
+    if (!good.length) { if (list.length) setErr(dropRejectMsg(de)); return; }
+    if (!onUpload) return;
+    setErr(""); setDropBusy(true);
+    try {
+      let k = 0;
+      for (const f of good) {
+        const url = await onUpload(f);
+        if (!url) continue;
+        const nat = await measureImageSize(url);
+        // Fitted to the frame rather than dropped in at full size: a phone photo
+        // is four thousand pixels wide and would bury the whole artboard.
+        const maxW = W * 0.6, maxH = H * 0.6;
+        let w = nat.w || maxW, h = nat.h || maxW * 0.66;
+        const k2 = Math.min(1, maxW / w, maxH / h);
+        w = Math.max(24, Math.round(w * k2)); h = Math.max(24, Math.round(h * k2));
+        // Centred on the pointer, then pulled inside the frame: everything
+        // outside it is clipped away, so an image dropped on the grey would
+        // upload, save, and be invisible.
+        const off = k * 24;
+        const x = Math.max(0, Math.min(Math.round(at.x - w / 2) + off, Math.max(0, Math.round(W - w))));
+        const y = Math.max(0, Math.min(Math.round(at.y - h / 2) + off, Math.max(0, Math.round(H - h))));
+        addItem({ id: crypto.randomUUID(), type: "image", url, fit: "cover", x, y, w, h });
+        k++;
+      }
+    } finally { setDropBusy(false); }
+  };
+
   // Where the frame sits when nothing is being flown in: centred in what is left
   // of the viewport once the two rails have taken their share.
   const fitCam = () => {
@@ -21149,6 +21289,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
       {/* the stage */}
       <div ref={stageRef}
+        // preventDefault on dragover is what makes this a drop target at all;
+        // without it the browser navigates to the file and the editor is gone.
+        onDragOver={(e) => { if (!dtHasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
+        onDragEnter={(e) => { if (!dtHasFiles(e)) return; e.preventDefault(); dropDepth.current += 1; setDropOver(true); }}
+        onDragLeave={(e) => { if (!dtHasFiles(e)) return; dropDepth.current = Math.max(0, dropDepth.current - 1); if (!dropDepth.current) setDropOver(false); }}
+        onDrop={(e) => {
+          if (!dtHasFiles(e)) return;
+          e.preventDefault(); dropDepth.current = 0; setDropOver(false);
+          if (cam) placeDroppedImages(e.dataTransfer.files, toArt(e));
+        }}
         onPointerDown={onStageDown} onPointerMove={onStageMove}
         onPointerUp={onStageUp} onPointerLeave={onStageUp}
         onContextMenu={(e) => {
@@ -21534,6 +21684,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           </div>
         )}
 
+        {(dropOver || dropBusy) && (
+          <DropVeil darkMode={darkMode}
+            label={dropBusy ? (de ? "Lädt hoch …" : "Uploading …") : (de ? "Bild hier ablegen" : "Drop image here")} />
+        )}
         {/* Other people's pointers. Placed by hand from canvas coordinates
             rather than inside the zoomed layer: a cursor that scales with the
             zoom is tiny at 20% and enormous at 400%, while what it means —
