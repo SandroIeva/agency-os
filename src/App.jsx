@@ -27314,10 +27314,10 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
     creationFormats(de).forEach(f => { counts[f.group] = (counts[f.group] || 0) + 1; });
     const rows = Math.max(1, ...Object.values(counts).map(n => Math.ceil(n / FMT_COLS)));
     const body = rows * FMT_TILE_H + (rows - 1) * FMT_GAP;
-    // 172 is the chrome above and below — title row, tabs, footer — and the 56
-    // is the room asked for on top of that. The tab row grew, so this did too;
-    // left alone, the extra height would have come out of the tiles.
-    return body + 172 + 56;
+    // 175 is the chrome above and below — title row, tabs, footer — and the 56
+    // is the room asked for on top of that. It tracks those three: left alone,
+    // every pixel added to them would come out of the tiles instead.
+    return body + 175 + 56;
   })();
 
   const iconBtn = (glyph, act, on, title) => (
@@ -27760,9 +27760,9 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                   {creationFormats(de).filter(f => f.group === newTab).map((f, i) => {
                     // Every shape drawn to the same box, so a banner looks like a
                     // banner beside a portrait post instead of both being a word.
-                    // Fifteen percent off: the box stays the size it is, the shape
-                    // just stops filling it edge to edge.
-                    const k = Math.min(128 / f.w, 75 / f.h);
+                    // Another fifth off. The box stays the size it is; the shape
+                    // just sits in it with room around it.
+                    const k = Math.min(102 / f.w, 60 / f.h);
                     return (
                       // Its own hover rather than the shared .hover-row: that one is
                       // tuned for list rows on a flat panel and reads as a hard step
@@ -27788,7 +27788,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
             {/* Flush with the close button's edge, and the same 22 below as at the
                 sides. Present on every tab, so the box does not change height when
                 the button is not the thing you press. */}
-            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 22px 22px", minHeight: 38 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 22px 25px", minHeight: 38 }}>
               <div style={{ flex: 1, fontSize: 11.5, fontFamily: FONT, color: theme.textFaint }}>
                 {newTab === "custom" ? "" : (de ? "Ein Format anklicken, um es anzulegen." : "Click a size to create it.")}
               </div>
