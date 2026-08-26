@@ -21837,7 +21837,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             <div style={{ position: "absolute", inset: 0, borderRadius: "inherit",
               overflow: frameClip ? "hidden" : "visible" }}>
             {groupShadowWrap(items.filter(it => !it.isMask && !it.hidden), (it) => {
-              const on = it.id === sel || pick.includes(it.id);
+              // Not while a GROUP is selected: the group's own frame says what is
+              // selected, and a line around each member says the opposite.
+              const on = (it.id === sel || pick.includes(it.id)) && !selGid;
               const xf = [it.rot ? `rotate(${it.rot}deg)` : "",
                 it.flipX ? "scaleX(-1)" : "", it.flipY ? "scaleY(-1)" : ""].filter(Boolean).join(" ");
               const common = {
@@ -22278,7 +22280,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           none of that exists on a canvas text field, and faking the buttons
           would be worse than not showing them. */}
       {cam && selItem && sel !== "frame" && !editing && (() => {
-        const b = boxOf(selItem);
+        // Over the GROUP when a group is selected, not over whichever member was
+        // clicked — the bar belongs to the thing with the frame around it.
+        const gMembers = selGid ? items.filter(i => i.groupId === selGid && !i.hidden) : null;
+        const b = (gMembers && gMembers.length > 1) ? unionRotBox(gMembers) : boxOf(selItem);
         const left = cam.x + (b.x + b.w / 2) * cam.s;
         const top = cam.y + b.y * cam.s - 46;
         const isText = selItem.type === "text" || selItem.type === "sticky";
@@ -22290,6 +22295,38 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         const iconBtn = { width: BAR_H, height: BAR_H, borderRadius: BAR_R, display: "flex",
           alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff" };
         const div2 = <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.16)", margin: "0 3px" }} />;
+        // A colour swatch on a group would ask which member it means. What a
+        // group can be asked instead is to stop being one.
+        if (gMembers && gMembers.length > 1) return (
+          <div style={{ position: "fixed", left, top, transform: "translateX(-50%)", zIndex: 6 }}
+            onPointerDown={e => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", gap: 3, padding: 5, borderRadius: 11,
+              background: "#15151c", boxShadow: "0 8px 24px rgba(0,0,0,0.28)" }}>
+              <div onClick={() => ungroupSel(selGid)}
+                title={de ? "Gruppierung aufheben" : "Ungroup"}
+                style={{ display: "flex", alignItems: "center", gap: 7, padding: "0 11px", height: BAR_H,
+                  borderRadius: BAR_R, cursor: "pointer", color: "#fff", fontFamily: FONT, fontSize: 12 }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="8" height="8" rx="1.5" />
+                  <rect x="13" y="13" width="8" height="8" rx="1.5" />
+                </svg>
+                {de ? "Gruppierung aufheben" : "Ungroup"}
+              </div>
+              {div2}
+              <div onClick={() => {
+                  const ids = new Set(gMembers.map(m => m.id));
+                  markChange();
+                  setItems(list => list.filter(i2 => !ids.has(i2.id)));
+                  setSel(null); setPick([]);
+                }}
+                title={de ? "Löschen" : "Delete"} style={{ ...iconBtn, color: "#ff8589" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
+                  strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+              </div>
+            </div>
+          </div>
+        );
         return (
           <div style={{ position: "fixed", left, top, transform: "translateX(-50%)", zIndex: 6 }}
             onPointerDown={e => e.stopPropagation()}>
