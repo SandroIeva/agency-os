@@ -6173,7 +6173,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
   mediaOpen, setMediaOpen, mediaBtnRef, imgMenuOpen, setImgMenuOpen, imgBtnRef,
   fileRef, onFiles, zoomPct, onZoom, onResetZoom,
   shapes = WB_SHAPE_TYPES, hide = [], extra = null,
-  lineTools = ["arrow", "line", "pen"], theme, darkMode, de }) {
+  lineTools = ["arrow", "line", "pen"], mediaFlyout = null, theme, darkMode, de }) {
 
   const vertical = orientation === "vertical";
   const sw = 1.9;
@@ -6182,7 +6182,8 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
   const toolBtn = (id, title, icon) => {
     const on = tool === id;
     return (
-      <motion.div key={id} whileTap={{ scale: 0.9 }} onClick={() => { setTool(id); setEditing?.(null); }} title={title}
+      <motion.div key={id} whileTap={{ scale: 0.9 }}
+        onClick={() => { closeFlyouts(null); setTool(id); setEditing?.(null); }} title={title}
         style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
           background: on ? "#15151c" : "transparent", color: on ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
         {icon}
@@ -6214,6 +6215,15 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
     display: "flex", flexDirection: vertical ? "column" : "row", alignItems: "center", gap: 4, padding: 6, borderRadius: 14,
     background: darkMode ? "rgba(22,22,30,0.95)" : "rgba(255,255,255,0.98)",
     border: `1px solid ${theme.borderFaint}`, boxShadow: "0 14px 40px rgba(0,0,0,0.18)",
+  };
+  // One flyout at a time. Two panels open beside each other overlap, and the one
+  // underneath stays live — you can click a shape you cannot see. Picking a tool
+  // closes them all: the flyout has done its job the moment you leave it.
+  const closeFlyouts = (keep) => {
+    if (keep !== "shapes") setShapesOpen(false);
+    if (keep !== "line") setLineToolOpen(false);
+    if (keep !== "media") setMediaOpen?.(false);
+    if (keep !== "img") setImgMenuOpen?.(false);
   };
   const flyIn = vertical ? { opacity: 0, x: -8, scale: 0.96 } : { opacity: 0, y: 8, scale: 0.96 };
   const flyTo = vertical ? { opacity: 1, x: 0, scale: 1 } : { opacity: 1, y: 0, scale: 1 };
@@ -6271,7 +6281,8 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
 
       {/* Shapes — one button, Figma-style flyout with all shapes */}
       <div style={{ position: "relative" }}>
-        <motion.div whileTap={{ scale: 0.9 }} onClick={() => setShapesOpen(o => !o)} title={de ? "Formen" : "Shapes"}
+        <motion.div whileTap={{ scale: 0.9 }}
+          onClick={() => { closeFlyouts("shapes"); setShapesOpen(o => !o); }} title={de ? "Formen" : "Shapes"}
           style={{ ...dropBtn, background: shapes.includes(tool) ? "#15151c" : "transparent",
             color: shapes.includes(tool) ? "#fff" : theme.text }}>
           {shapeIcon(lastShape)}{chev}
@@ -6299,7 +6310,8 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
 
       {/* Arrow / line / free-hand — one button with a Figma-style flyout */}
       <div style={{ position: "relative" }}>
-        <motion.div whileTap={{ scale: 0.9 }} onClick={() => setLineToolOpen(o => !o)} title={de ? "Pfeil / Linie / Freihand" : "Arrow / line / free-hand"}
+        <motion.div whileTap={{ scale: 0.9 }}
+          onClick={() => { closeFlyouts("line"); setLineToolOpen(o => !o); }} title={de ? "Pfeil / Linie / Freihand" : "Arrow / line / free-hand"}
           style={{ ...dropBtn, background: lineActive ? "#15151c" : "transparent", color: lineActive ? "#fff" : theme.text }}>
           {lineIcon(lastLineTool)}{chev}
         </motion.div>
@@ -6330,13 +6342,21 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
       {/* Emoji + Sticker — one button (with a dropdown chevron, like shapes/arrow);
           the picker toggles between the two inside */}
       {!skip("media") && (
-        <motion.div ref={mediaBtnRef} whileTap={{ scale: 0.9 }} onClick={() => setMediaOpen(o => !o)} title={de ? "Emoji / Sticker" : "Emoji / sticker"}
-          style={{ ...dropBtn, background: mediaOpen ? "#15151c" : "transparent", color: mediaOpen ? "#fff" : theme.text }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><line x1="9" y1="9.5" x2="9.01" y2="9.5"/><line x1="15" y1="9.5" x2="15.01" y2="9.5"/></svg>
-          {chev}
-        </motion.div>
+        // Wrapped, so the panel can hang off the button through the same
+        // flyoutWrap the shapes and line menus use. It was placed by hand at a
+        // fixed left and top, which is why it sat somewhere else entirely.
+        <div style={{ position: "relative" }}>
+          <motion.div ref={mediaBtnRef} whileTap={{ scale: 0.9 }}
+            onClick={() => { closeFlyouts("media"); setMediaOpen(o => !o); }} title={de ? "Emoji / Sticker" : "Emoji / sticker"}
+            style={{ ...dropBtn, background: mediaOpen ? "#15151c" : "transparent", color: mediaOpen ? "#fff" : theme.text }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><line x1="9" y1="9.5" x2="9.01" y2="9.5"/><line x1="15" y1="9.5" x2="15.01" y2="9.5"/></svg>
+            {chev}
+          </motion.div>
+          {mediaOpen && mediaFlyout && <div style={flyoutWrap}>{mediaFlyout}</div>}
+        </div>
       )}
-      <motion.div ref={imgBtnRef} whileTap={{ scale: 0.9 }} onClick={() => setImgMenuOpen(o => !o)} title={de ? "Bild einfügen" : "Insert image"}
+      <motion.div ref={imgBtnRef} whileTap={{ scale: 0.9 }}
+        onClick={() => { closeFlyouts("img"); setImgMenuOpen(o => !o); }} title={de ? "Bild einfügen" : "Insert image"}
         style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
           background: imgMenuOpen ? "#15151c" : "transparent", color: imgMenuOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
@@ -8715,7 +8735,75 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           const W = 246, H = rows.length * 34 + 16;
           const left = Math.min(ctxMenu.x, window.innerWidth - W - 8);
           const top = Math.min(ctxMenu.y, window.innerHeight - H - 8);
-          return createPortal(
+          // Handed to the toolbar, which hangs it off the media button through the
+  // same wrapper the shapes and line flyouts use. It was placed by hand before,
+  // at a fixed left and top that had nothing to do with where the button is.
+  const mediaPanel = mediaOpen ? (
+
+        <div style={{ width: 286,
+          borderRadius: 14, background: panel, border: `1px solid ${line}`,
+          boxShadow: "0 18px 44px rgba(0,0,0,0.22)", padding: 10 }}
+          onPointerDown={e => e.stopPropagation()}>
+          <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+            {[["emoji", "Emoji"], ["sticker", "Sticker"]].map(([k, l]) => (
+              <div key={k} onClick={() => setMediaTab(k)}
+                style={{ padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontSize: 12.5,
+                  fontWeight: 600, color: mediaTab === k ? "#fff" : theme.textDim,
+                  background: mediaTab === k ? "#15151c" : "transparent" }}>{l}</div>
+            ))}
+            <div style={{ flex: 1 }} />
+            <div onClick={() => setMediaOpen(false)} style={{ cursor: "pointer", color: theme.textDim,
+              padding: "6px 8px", fontSize: 13 }}>✕</div>
+          </div>
+          <div style={{ maxHeight: 300, overflowY: "auto" }}>
+            {mediaTab === "emoji" ? Object.entries(EMOJI_GROUPS).map(([g, list]) => (
+              <div key={g} style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6,
+                  color: theme.textFaint, margin: "4px 0 4px" }}>{g}</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
+                  {list.map((ch, i2) => (
+                    <div key={g + i2} onClick={() => {
+                        // The sticker's own line, with the glyph as its source:
+                        // square, centred, contained — so it arrives with handles,
+                        // rotates from its corners, and keeps its proportion.
+                        const sz = Math.round(Math.min(W, H) * 0.3);
+                        addItem({ id: crypto.randomUUID(), type: "image", url: emojiImageUrl(ch),
+                          emoji: ch, fit: "contain",
+                          x: Math.round((W - sz) / 2), y: Math.round((H - sz) / 2),
+                          w: sz, h: sz });
+                        setMediaOpen(false);
+                      }}
+                      style={{ width: 28, height: 28, display: "flex", alignItems: "center",
+                        justifyContent: "center", fontSize: 19, cursor: "pointer", borderRadius: 6 }}>
+                      {ch}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )) : Object.entries(WB_STICKERS).map(([cat, files]) => (
+              <div key={cat} style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6,
+                  color: theme.textFaint, margin: "4px 0 4px" }}>{cat}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4 }}>
+                  {files.map(f => (
+                    <div key={f} onClick={() => {
+                        const sz = Math.round(Math.min(W, H) * 0.3);
+                        addItem({ id: crypto.randomUUID(), type: "image", url: wbStickerUrl(cat, f),
+                          fit: "contain", x: Math.round((W - sz) / 2), y: Math.round((H - sz) / 2),
+                          w: sz, h: sz });
+                        setMediaOpen(false);
+                      }}
+                      style={{ aspectRatio: "1", borderRadius: 7, cursor: "pointer",
+                        background: `center/contain no-repeat url(${wbStickerUrl(cat, f)})` }} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+  ) : null;
+
+  return createPortal(
             <>
               {/* Both of these MUST stop their pointer events. A portal renders
                   into document.body but its React events still bubble along the
@@ -22910,6 +22998,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         onPointerDown={e => e.stopPropagation()}>
         <BoardToolbar orientation="vertical"
           lineTools={["arrow", "line", "pen", "path"]}
+          mediaFlyout={mediaPanel}
           tool={tool} setTool={setTool} setEditing={setEditing}
           lastShape={lastShape} setLastShape={setLastShape}
           shapesOpen={shapesOpen} setShapesOpen={setShapesOpen}
@@ -24218,69 +24307,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       {/* Emoji and stickers, from the same two module-level lists Brainstorm
           draws on — WB_STICKERS ships with the app, so a sticker is a local file
           and the export never has to reach across an origin for it. */}
-      {mediaOpen && (
-        <div style={{ position: "absolute", left: RAIL_W + 6, top: 68, zIndex: 8, width: 286,
-          borderRadius: 14, background: panel, border: `1px solid ${line}`,
-          boxShadow: "0 18px 44px rgba(0,0,0,0.22)", padding: 10 }}
-          onPointerDown={e => e.stopPropagation()}>
-          <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
-            {[["emoji", "Emoji"], ["sticker", "Sticker"]].map(([k, l]) => (
-              <div key={k} onClick={() => setMediaTab(k)}
-                style={{ padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontSize: 12.5,
-                  fontWeight: 600, color: mediaTab === k ? "#fff" : theme.textDim,
-                  background: mediaTab === k ? "#15151c" : "transparent" }}>{l}</div>
-            ))}
-            <div style={{ flex: 1 }} />
-            <div onClick={() => setMediaOpen(false)} style={{ cursor: "pointer", color: theme.textDim,
-              padding: "6px 8px", fontSize: 13 }}>✕</div>
-          </div>
-          <div style={{ maxHeight: 300, overflowY: "auto" }}>
-            {mediaTab === "emoji" ? Object.entries(EMOJI_GROUPS).map(([g, list]) => (
-              <div key={g} style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6,
-                  color: theme.textFaint, margin: "4px 0 4px" }}>{g}</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
-                  {list.map((ch, i2) => (
-                    <div key={g + i2} onClick={() => {
-                        // The sticker's own line, with the glyph as its source:
-                        // square, centred, contained — so it arrives with handles,
-                        // rotates from its corners, and keeps its proportion.
-                        const sz = Math.round(Math.min(W, H) * 0.3);
-                        addItem({ id: crypto.randomUUID(), type: "image", url: emojiImageUrl(ch),
-                          emoji: ch, fit: "contain",
-                          x: Math.round((W - sz) / 2), y: Math.round((H - sz) / 2),
-                          w: sz, h: sz });
-                        setMediaOpen(false);
-                      }}
-                      style={{ width: 28, height: 28, display: "flex", alignItems: "center",
-                        justifyContent: "center", fontSize: 19, cursor: "pointer", borderRadius: 6 }}>
-                      {ch}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )) : Object.entries(WB_STICKERS).map(([cat, files]) => (
-              <div key={cat} style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6,
-                  color: theme.textFaint, margin: "4px 0 4px" }}>{cat}</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4 }}>
-                  {files.map(f => (
-                    <div key={f} onClick={() => {
-                        const sz = Math.round(Math.min(W, H) * 0.3);
-                        addItem({ id: crypto.randomUUID(), type: "image", url: wbStickerUrl(cat, f),
-                          fit: "contain", x: Math.round((W - sz) / 2), y: Math.round((H - sz) / 2),
-                          w: sz, h: sz });
-                        setMediaOpen(false);
-                      }}
-                      style={{ aspectRatio: "1", borderRadius: 7, cursor: "pointer",
-                        background: `center/contain no-repeat url(${wbStickerUrl(cat, f)})` }} />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+
 
       {/* The same asset browser, asked for a fill rather than for an object. */}
       {fillImgFor && (
