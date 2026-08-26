@@ -20838,6 +20838,28 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // cannot align one way and drag another.
   const unitOf = (it) => (it?.groupId && enteredGroup !== it.groupId)
     ? items.filter(q => q.groupId === it.groupId) : (it ? [it] : []);
+  // boxOf is the shape's OWN box, before it is turned. Once it is, the space it
+  // takes on the artboard is a larger rectangle around it — so aligning a
+  // rotated object against boxOf sets the unrotated edge flush and leaves the
+  // visible one short of the frame. That gap is the difference between the two.
+  //
+  // Half-extents of a rotated rectangle: |w/2·cos| + |h/2·sin| across, the other
+  // way round down. The centre does not move, so the box grows around it.
+  const rotBoxOf = (it) => {
+    const b = boxOf(it);
+    const r = ((it?.rot || 0) * Math.PI) / 180;
+    if (!r) return b;
+    const c = Math.abs(Math.cos(r)), s2 = Math.abs(Math.sin(r));
+    const w = b.w * c + b.h * s2, h = b.w * s2 + b.h * c;
+    return { x: b.x + (b.w - w) / 2, y: b.y + (b.h - h) / 2, w, h };
+  };
+  const unionRotBox = (list) => {
+    const bs = (list || []).map(rotBoxOf);
+    if (!bs.length) return { x: 0, y: 0, w: 0, h: 0 };
+    const x = Math.min(...bs.map(b => b.x)), y = Math.min(...bs.map(b => b.y));
+    return { x, y, w: Math.max(...bs.map(b => b.x + b.w)) - x,
+             h: Math.max(...bs.map(b => b.y + b.h)) - y };
+  };
   const unionBox = (list) => {
     const bs = list.map(boxOf);
     const x = Math.min(...bs.map(b => b.x)), y = Math.min(...bs.map(b => b.y));
@@ -20856,7 +20878,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       if (!o) continue;
       const members = unitOf(o);
       members.forEach(m => seen.add(m.id));
-      units.push({ ids: members.map(m => m.id), box: unionBox(members) });
+      // Same reason as aligning to the frame: what lines up is what shows.
+      units.push({ ids: members.map(m => m.id), box: unionRotBox(members) });
     }
     return units;
   };
@@ -23379,7 +23402,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               // element on the frame used to pull it out of its own group.
               const unit = unitOf(selItem);
               const ids = new Set(unit.map(u => u.id));
-              const b = unionBox(unit);
+              // The rotated bounds, so "flush left" means the leftmost pixel of
+              // the thing you can see.
+              const b = unionRotBox(unit);
               const move = (nx, ny) => {
                 const dx = nx == null ? 0 : nx - b.x, dy = ny == null ? 0 : ny - b.y;
                 if (!dx && !dy) return;
