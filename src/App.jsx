@@ -20039,7 +20039,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       const it = { id: crypto.randomUUID(), type: tool, x1: p.x, y1: p.y, x2: p.x, y2: p.y,
         color: palette[0], width: Math.max(2, Math.round(H / 120)) };
       setItems(list => [...list, it]);
-      dragRef.current = { mode: "arrow", id: it.id };
+      dragRef.current = { mode: "arrow", id: it.id, ax: p.x, ay: p.y };
       return;
     }
     dragRef.current = { mode: "create", type: tool, ox: p.x, oy: p.y,
@@ -20082,12 +20082,40 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const box = { x: Math.round(Math.min(d.ox, p.x)), y: Math.round(Math.min(d.oy, p.y)),
       w: Math.round(Math.abs(p.x - d.ox)), h: Math.round(Math.abs(p.y - d.oy)) };
     if (d.mode === "draw") {
-      setItems(list => list.map(i => (i.id === d.id ? { ...i, pts: [...i.pts, [p.x, p.y]] } : i)));
+      // Freehand until Shift goes down; from then on a straight segment, snapped
+      // to 45°, anchored where Shift was pressed rather than at the very start —
+      // so a stroke can be drawn by hand and then finished with a straight run.
+      if (!e.shiftKey) {
+        d.penAnchor = null;
+        setItems(list => list.map(i => (i.id === d.id ? { ...i, pts: [...i.pts, [p.x, p.y]] } : i)));
+        return;
+      }
+      const cur = items.find(i => i.id === d.id);
+      if (!cur || !cur.pts?.length) return;
+      // Computed out here, not inside the updater: StrictMode runs an updater
+      // twice, and an anchor set in there would be read back already truncated.
+      if (d.penAnchor == null) d.penAnchor = Math.max(1, cur.pts.length);
+      const a0 = cur.pts[d.penAnchor - 1] || cur.pts[0];
+      const sp = snap45(a0[0], a0[1], p.x, p.y);
+      setItems(list => list.map(i => (i.id === d.id
+        ? { ...i, pts: [...i.pts.slice(0, d.penAnchor), [Math.round(sp.x), Math.round(sp.y)]] }
+        : i)));
       return;
     }
-    if (d.mode === "arrow") { patch(d.id, { x2: p.x, y2: p.y }); return; }
+    if (d.mode === "arrow") {
+      const q = e.shiftKey ? snap45(d.ax, d.ay, p.x, p.y) : p;
+      patch(d.id, { x2: Math.round(q.x), y2: Math.round(q.y) });
+      return;
+    }
     if (d.mode === "arrowend") {
-      patch(d.id, d.which === 1 ? { x1: p.x, y1: p.y } : { x2: p.x, y2: p.y });
+      // Anchored on the OTHER end, which is what the line is being angled from.
+      const cur = items.find(i => i.id === d.id);
+      const ax = d.which === 1 ? cur?.x2 : cur?.x1;
+      const ay = d.which === 1 ? cur?.y2 : cur?.y1;
+      const q = (e.shiftKey && ax != null && ay != null) ? snap45(ax, ay, p.x, p.y) : p;
+      patch(d.id, d.which === 1
+        ? { x1: Math.round(q.x), y1: Math.round(q.y) }
+        : { x2: Math.round(q.x), y2: Math.round(q.y) });
       return;
     }
     if (d.mode === "orbit") {
@@ -27123,6 +27151,20 @@ const creationFormats = (de) => {
     { group: "device", kind: "other", name: de ? "Desktop (16:9)" : "Desktop (16:9)", w: 1920, h: 1080 },
     { group: "device", kind: "other", name: "MacBook Pro 14\"", w: 3024, h: 1964 },
   ];
+};
+
+// Shift constrains a line to the nearest 45° ray from where it started. The
+// point is PROJECTED onto that ray rather than kept at the cursor's distance: a
+// pointer that drifts a little off horizontal should give the line the length it
+// moved sideways, not the slightly longer diagonal it actually travelled.
+const snap45 = (ax, ay, px, py) => {
+  const dx = px - ax, dy = py - ay;
+  if (!dx && !dy) return { x: px, y: py };
+  const step = Math.PI / 4;
+  const a = Math.round(Math.atan2(dy, dx) / step) * step;
+  const ux = Math.cos(a), uy = Math.sin(a);
+  const along = dx * ux + dy * uy;      // never negative: the nearest ray is within 22.5°
+  return { x: ax + ux * along, y: ay + uy * along };
 };
 
 // An emoji as a PICTURE rather than as a letter. Placed as text it carried a
