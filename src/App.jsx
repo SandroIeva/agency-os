@@ -27128,7 +27128,9 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   // The same three-pill group the file manager uses for Alle / Bilder / Videos,
   // asking the one question that separates these: is this a starting point kept
   // to be reused, or something made for the brand?
-  const [canvasFilter, setCanvasFilter] = useState("all"); // all | template | brand
+  // Two views, not three. "All" mixed the templates in among the work, so the
+  // list you were looking at was never quite either one.
+  const [canvasFilter, setCanvasFilter] = useState("overview"); // overview | template
   const [newMenuOpen, setNewMenuOpen] = useState(false);   // "Neu erstellen" dropdown
   const [newTab, setNewTab] = useState("custom");          // tab inside the format dialog
   const [cw, setCw] = useState("1080");
@@ -27257,8 +27259,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   };
 
   const visible = (rows || [])
-    .filter(r => canvasFilter === "all" ? true
-      : canvasFilter === "template" ? !!r.is_template : !r.is_template)
+    .filter(r => canvasFilter === "template" ? !!r.is_template : !r.is_template)
     .filter(r => (folderId ? r.folder_id === folderId : !r.folder_id))
     .filter(r => !q.trim() || (r.name || "").toLowerCase().includes(q.trim().toLowerCase()))
     .sort((a, b) => sortMode === "name"
@@ -27517,9 +27518,8 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
           <div style={{ flex: 1 }} />
           <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11,
             background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
-            {filterBtn("all", de ? "Alle" : "All")}
-            {filterBtn("template", de ? "Templates" : "Templates")}
-            {filterBtn("brand", de ? "Brand" : "Brand")}
+            {filterBtn("overview", de ? "Übersicht" : "Overview")}
+            {filterBtn("template", "Templates")}
           </div>
           <motion.div whileTap={{ scale: 0.96 }}
             onClick={() => setSortMode(m => m === "updated" ? "name" : "updated")}
