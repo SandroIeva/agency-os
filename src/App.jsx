@@ -12727,11 +12727,19 @@ const CHAT_AGENTS = [
 ];
 const AGENT_BY_KEY = Object.fromEntries(CHAT_AGENTS.map(a => [a.key, a]));
 
-function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t, session, userOrg, orgMembers, darkMode, theme, createNotification, notifications = [], markNotifRead, appLanguage = "en", llmProvider, llmKeys, onOpenAiSettings }) {
-  // An agent without a model is a name that will never answer. The same test the
-  // rest of the app uses — Gemini counts as connected because its key lives on
-  // the server, not with the user.
-  const aiConnected = !!((llmKeys && llmProvider && llmKeys[llmProvider]) || llmProvider === "gemini");
+function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t, session, userOrg, orgMembers, darkMode, theme, createNotification, notifications = [], markNotifRead, appLanguage = "en", llmProvider, llmKeys, onOpenAiSettings, getProviderToken, ensureValidToken }) {
+  // An agent without a model is a name that will never answer. Two ways to have
+  // one: a key stored for the chosen provider, or a Google sign-in, which is
+  // what Gemini authenticates with.
+  //
+  // Gemini with NEITHER is not connected. api/chat-multi refuses a request that
+  // carries no key and no OAuth token — everything is BYOK today — and "gemini"
+  // is the default provider, so treating it as always-available hid this
+  // warning from the one account that needed it: a new one with no keys at all.
+  const aiConnected = !!(
+    (llmKeys && llmProvider && llmKeys[llmProvider]) ||
+    ((llmProvider || "gemini") === "gemini" && getProviderToken?.())
+  );
   const [search, setSearch] = useState("");
   const [conversations, setConversations] = useState([]);
   const [activeConvId, setActiveConvId] = useState(null);
@@ -13023,6 +13031,14 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     if (!agent) return;
     const de = appLanguage === "de";
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
+    // The same detour the notes, skills and image-prompt call sites take: with
+    // no key stored, Gemini goes through the Google sign-in. Without this the
+    // request reached the server carrying no credential of any kind and came
+    // back 400 — which then got posted into the thread as the agent's reply.
+    let oauthToken = null;
+    if ((llmProvider || "gemini") === "gemini" && !apiKey && ensureValidToken) {
+      try { oauthToken = await ensureValidToken(); } catch (_) {}
+    }
     setAgentThinking(true);
     try {
       const resp = await fetch("/api/chat-multi", {
@@ -13035,6 +13051,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
           systemPrompt: agent.brief[de ? "de" : "en"],
           provider: llmProvider || "gemini",
           apiKey: apiKey || undefined,
+          oauthToken: oauthToken || undefined,
           orgId: userOrg?.id, userId: myId, feature: "agent-chat",
           maxTokens: 2000,
         }),
@@ -28528,10 +28545,13 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
             ) : boards.length === 0 ? (
               // gap 9 instead of 14: the title and its sentence belong together,
               // and at 14 they read as two separate statements.
-              // translateY rather than a margin: the box keeps its size, so the
-              // centring underneath is untouched and the whole block — picture,
-              // title, sentence, button — rises exactly twenty-five pixels.
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, textAlign: "center", gap: 9, transform: "translateY(-25px)" }}>
+              // Padding at the bottom rather than translateY: with box-sizing
+              // border-box the box keeps its height, and half of the padding is
+              // what the centred content moves up — 50 to rise 25. A transform
+              // would have pushed content above the scroll container's origin
+              // in a short window, where scrolling cannot reach it; padding
+              // spills downward instead, which is scrollable.
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, textAlign: "center", gap: 9, paddingBottom: 50 }}>
                 {/* Same visual as the empty board itself. This is the screen the
                     mockup was drawn from — the one you reach with no boards at
                     all, where "New board" is the right thing to offer. */}
@@ -28731,7 +28751,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           {loadingItems ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
           ) : items.length === 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, textAlign: "center", gap: 9, padding: 20, transform: "translateY(-25px)" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, textAlign: "center", gap: 9, padding: "20px 20px 70px" }}>
               {/* The three fanned references, as supplied. A picture of what a
                   moodboard becomes says more here than an icon of a picture. */}
               <motion.img
@@ -29770,9 +29790,9 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
           )}
           {allFiles.length === 0 ? (
             // Same composition as the empty moodboard list: gap 9 so the title
-            // and its sentence read as one statement, and the block lifted
-            // twenty-five pixels off the optical centre.
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: theme.textDim, textAlign: "center", gap: 9, padding: 20, transform: "translateY(-25px)" }}>
+            // and its sentence read as one statement, and 50px of bottom padding
+            // to lift the centred block by 25.
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: theme.textDim, textAlign: "center", gap: 9, padding: "20px 20px 70px" }}>
               {/* The stacked-cards visual, in place of the gradient star badge.
                   Sized by HEIGHT rather than width: this picture is 1.23:1 where
                   the board's is 1.59:1, so matching widths would have made it
@@ -32779,9 +32799,13 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
         // (40px plus its 18px margin) and centres inside that. minHeight rather
         // than height, so a folder row pushing it down lengthens the block
         // instead of cutting the sentence off.
-        <div style={{ minHeight: "calc(100% - 64px)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: 9, padding: "20px 20px 48px" }}>
-          <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{search ? "Keine Treffer" : currentFolder != null ? (appLanguage === "de" ? "Dieser Ordner ist leer" : "This folder is empty") : "Noch keine Dokumente"}</div>
-          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, maxWidth: 340, lineHeight: 1.55 }}>{search ? "Versuche einen anderen Suchbegriff." : "Klicke auf Neues Dokument, um loszulegen."}</div>
+        // The full height is only claimed when the tab is otherwise bare. With
+        // folders or a breadcrumb above it, "100% minus the toolbar" is more
+        // than what is left, and an empty tab would grow a scrollbar; there the
+        // block simply sits under what is above it, which is where it belongs.
+        <div style={{ minHeight: (!showDocFolders && currentFolder == null) ? "calc(100% - 64px)" : undefined, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: 9, padding: "20px 20px 48px" }}>
+          <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{search ? (appLanguage === "de" ? "Keine Treffer" : "No matches") : currentFolder != null ? (appLanguage === "de" ? "Dieser Ordner ist leer" : "This folder is empty") : (appLanguage === "de" ? "Noch keine Dokumente" : "No documents yet")}</div>
+          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, maxWidth: 340, lineHeight: 1.55 }}>{search ? (appLanguage === "de" ? "Versuche einen anderen Suchbegriff." : "Try a different search term.") : (appLanguage === "de" ? "Klicke auf Neues Dokument, um loszulegen." : "Click New document to get started.")}</div>
         </div>
       ) : viewMode === "grid" ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 24 }}>
@@ -44134,6 +44158,7 @@ export default function CircularMenu() {
             <ChatView
               initialTab={chatTab} appLanguage={appLanguage} llmProvider={llmProvider} llmKeys={llmKeys}
               onOpenAiSettings={() => { setSettingsTab("ai"); setCurrentView("settings"); }}
+              getProviderToken={getProviderToken} ensureValidToken={ensureValidToken}
               initialConvId={openChatConvId}
               onConvOpened={() => setOpenChatConvId(null)}
               t={t}
@@ -45290,7 +45315,11 @@ export default function CircularMenu() {
                       whileTap={{ scale: 0.98 }}
                       onMouseEnter={() => setHoverAction(i)}
                       onMouseLeave={() => setHoverAction(-1)}
-                      onClick={() => { setPanelOpen(false); action.go(); }}
+                      // Cleared here as well as on mouseleave: clicking unmounts
+                      // the panel, and React fires no leave event on unmount —
+                      // the index would survive and light this card up again the
+                      // next time the panel opened, pointer nowhere near it.
+                      onClick={() => { setHoverAction(-1); setPanelOpen(false); action.go(); }}
                       style={{ flex: 1, padding: "14px 12px", borderRadius: 14,
                         // Halved again: two steps of grey in dark mode rather
                         // than four, and the border barely moves. It should
