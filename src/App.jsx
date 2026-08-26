@@ -22102,7 +22102,35 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               );
             })()}
 
-            {!editing && items.filter(it => (it.id === sel || pick.includes(it.id))
+            {/* A GROUP is one object, so it gets one frame. Drawing the chrome
+                per member said "two things are selected", which is the opposite
+                of what grouping them was for — and it is what you would undo the
+                grouping to get back to.
+                No handles on it: resizing a group means scaling every member,
+                and a member can be a path or a freehand stroke, whose geometry
+                is points rather than a width and a height. Moving, styling and
+                deleting already treat the group as one. */}
+            {!editing && cam && selGid && (() => {
+              const members = items.filter(i => i.groupId === selGid && !i.hidden);
+              if (members.length < 2) return null;
+              const b = unionRotBox(members);
+              const k = 1 / cam.s;
+              return (
+                <div style={{ position: "absolute", left: b.x, top: b.y, width: b.w, height: b.h,
+                  pointerEvents: "none" }}>
+                  <div style={{ position: "absolute", inset: 0,
+                    outline: `${1.6 * k}px solid #2F6BFF`, outlineOffset: 0 }} />
+                  <div style={{ position: "absolute", left: "50%", top: `calc(100% + ${9 * k}px)`,
+                    transform: "translateX(-50%)", padding: `${3 * k}px ${7 * k}px`,
+                    borderRadius: 4 * k, background: "#2F6BFF", color: "#fff",
+                    fontFamily: FONT, fontSize: 11 * k, fontWeight: 600, whiteSpace: "nowrap" }}>
+                    {Math.round(b.w)} × {Math.round(b.h)}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {!editing && !selGid && items.filter(it => (it.id === sel || pick.includes(it.id))
               && !["comment", "draw", "arrow", "line", "path"].includes(it.type)).map(it => {
               const b = boxOf(it);
               const xf = [it.rot ? `rotate(${it.rot}deg)` : "",
