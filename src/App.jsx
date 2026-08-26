@@ -27314,9 +27314,10 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
     creationFormats(de).forEach(f => { counts[f.group] = (counts[f.group] || 0) + 1; });
     const rows = Math.max(1, ...Object.values(counts).map(n => Math.ceil(n / FMT_COLS)));
     const body = rows * FMT_TILE_H + (rows - 1) * FMT_GAP;
-    // 156 is the chrome above and below — title row, tabs, footer — and the 56
-    // is the room asked for on top of that.
-    return body + 156 + 56;
+    // 172 is the chrome above and below — title row, tabs, footer — and the 56
+    // is the room asked for on top of that. The tab row grew, so this did too;
+    // left alone, the extra height would have come out of the tiles.
+    return body + 172 + 56;
   })();
 
   const iconBtn = (glyph, act, on, title) => (
@@ -27652,13 +27653,16 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
             {/* The workspace's own filter pills, same container and same states —
                 six of them read as tabs without inventing a tab. */}
             <div style={{ padding: "14px 22px 0" }}>
-              <div style={{ display: "inline-flex", gap: 3, padding: 3, borderRadius: 11, flexWrap: "wrap",
+              {/* Bigger than the filter pills elsewhere on purpose: here they are
+                  the navigation of the whole dialog, and at list-filter size they
+                  read as smaller than the field directly beneath them. */}
+              <div style={{ display: "inline-flex", gap: 4, padding: 4, borderRadius: 13, flexWrap: "wrap",
                 background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
                 {FORMAT_TABS(de).map(tb => {
                   const on = newTab === tb.key;
                   return (
                     <motion.div key={tb.key} whileTap={{ scale: 0.95 }} onClick={() => setNewTab(tb.key)}
-                      style={{ padding: "6px 13px", borderRadius: 8, cursor: "pointer", fontSize: 12.5,
+                      style={{ padding: "10px 20px", borderRadius: 9, cursor: "pointer", fontSize: 13,
                         fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap",
                         background: on ? (darkMode ? "rgba(255,255,255,0.10)" : "#fff") : "transparent",
                         color: on ? theme.text : theme.textDim,
