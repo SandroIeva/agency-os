@@ -8735,74 +8735,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           const W = 246, H = rows.length * 34 + 16;
           const left = Math.min(ctxMenu.x, window.innerWidth - W - 8);
           const top = Math.min(ctxMenu.y, window.innerHeight - H - 8);
-          // Handed to the toolbar, which hangs it off the media button through the
-  // same wrapper the shapes and line flyouts use. It was placed by hand before,
-  // at a fixed left and top that had nothing to do with where the button is.
-  const mediaPanel = mediaOpen ? (
-
-        <div style={{ width: 286,
-          borderRadius: 14, background: panel, border: `1px solid ${line}`,
-          boxShadow: "0 18px 44px rgba(0,0,0,0.22)", padding: 10 }}
-          onPointerDown={e => e.stopPropagation()}>
-          <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
-            {[["emoji", "Emoji"], ["sticker", "Sticker"]].map(([k, l]) => (
-              <div key={k} onClick={() => setMediaTab(k)}
-                style={{ padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontSize: 12.5,
-                  fontWeight: 600, color: mediaTab === k ? "#fff" : theme.textDim,
-                  background: mediaTab === k ? "#15151c" : "transparent" }}>{l}</div>
-            ))}
-            <div style={{ flex: 1 }} />
-            <div onClick={() => setMediaOpen(false)} style={{ cursor: "pointer", color: theme.textDim,
-              padding: "6px 8px", fontSize: 13 }}>✕</div>
-          </div>
-          <div style={{ maxHeight: 300, overflowY: "auto" }}>
-            {mediaTab === "emoji" ? Object.entries(EMOJI_GROUPS).map(([g, list]) => (
-              <div key={g} style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6,
-                  color: theme.textFaint, margin: "4px 0 4px" }}>{g}</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
-                  {list.map((ch, i2) => (
-                    <div key={g + i2} onClick={() => {
-                        // The sticker's own line, with the glyph as its source:
-                        // square, centred, contained — so it arrives with handles,
-                        // rotates from its corners, and keeps its proportion.
-                        const sz = Math.round(Math.min(W, H) * 0.3);
-                        addItem({ id: crypto.randomUUID(), type: "image", url: emojiImageUrl(ch),
-                          emoji: ch, fit: "contain",
-                          x: Math.round((W - sz) / 2), y: Math.round((H - sz) / 2),
-                          w: sz, h: sz });
-                        setMediaOpen(false);
-                      }}
-                      style={{ width: 28, height: 28, display: "flex", alignItems: "center",
-                        justifyContent: "center", fontSize: 19, cursor: "pointer", borderRadius: 6 }}>
-                      {ch}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )) : Object.entries(WB_STICKERS).map(([cat, files]) => (
-              <div key={cat} style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6,
-                  color: theme.textFaint, margin: "4px 0 4px" }}>{cat}</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4 }}>
-                  {files.map(f => (
-                    <div key={f} onClick={() => {
-                        const sz = Math.round(Math.min(W, H) * 0.3);
-                        addItem({ id: crypto.randomUUID(), type: "image", url: wbStickerUrl(cat, f),
-                          fit: "contain", x: Math.round((W - sz) / 2), y: Math.round((H - sz) / 2),
-                          w: sz, h: sz });
-                        setMediaOpen(false);
-                      }}
-                      style={{ aspectRatio: "1", borderRadius: 7, cursor: "pointer",
-                        background: `center/contain no-repeat url(${wbStickerUrl(cat, f)})` }} />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-  ) : null;
-
+        
   return createPortal(
             <>
               {/* Both of these MUST stop their pointer events. A portal renders
@@ -21769,6 +21702,74 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     <div style={{ fontSize: 10.5, fontFamily: FONT, letterSpacing: 0.6, textTransform: "uppercase",
       color: theme.textFaint, margin: "18px 0 2px" }}>{s}</div>
   );
+
+  // Handed to the toolbar, which hangs it off the media button through the
+  // same wrapper the shapes and line flyouts use. It was placed by hand before,
+  // at a fixed left and top that had nothing to do with where the button is.
+  const mediaPanel = mediaOpen ? (
+
+        <div style={{ width: 286,
+          borderRadius: 14, background: panel, border: `1px solid ${line}`,
+          boxShadow: "0 18px 44px rgba(0,0,0,0.22)", padding: 10 }}
+          onPointerDown={e => e.stopPropagation()}>
+          <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+            {[["emoji", "Emoji"], ["sticker", "Sticker"]].map(([k, l]) => (
+              <div key={k} onClick={() => setMediaTab(k)}
+                style={{ padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontSize: 12.5,
+                  fontWeight: 600, color: mediaTab === k ? "#fff" : theme.textDim,
+                  background: mediaTab === k ? "#15151c" : "transparent" }}>{l}</div>
+            ))}
+            <div style={{ flex: 1 }} />
+            <div onClick={() => setMediaOpen(false)} style={{ cursor: "pointer", color: theme.textDim,
+              padding: "6px 8px", fontSize: 13 }}>✕</div>
+          </div>
+          <div style={{ maxHeight: 300, overflowY: "auto" }}>
+            {mediaTab === "emoji" ? Object.entries(EMOJI_GROUPS).map(([g, list]) => (
+              <div key={g} style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6,
+                  color: theme.textFaint, margin: "4px 0 4px" }}>{g}</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
+                  {list.map((ch, i2) => (
+                    <div key={g + i2} onClick={() => {
+                        // The sticker's own line, with the glyph as its source:
+                        // square, centred, contained — so it arrives with handles,
+                        // rotates from its corners, and keeps its proportion.
+                        const sz = Math.round(Math.min(W, H) * 0.3);
+                        addItem({ id: crypto.randomUUID(), type: "image", url: emojiImageUrl(ch),
+                          emoji: ch, fit: "contain",
+                          x: Math.round((W - sz) / 2), y: Math.round((H - sz) / 2),
+                          w: sz, h: sz });
+                        setMediaOpen(false);
+                      }}
+                      style={{ width: 28, height: 28, display: "flex", alignItems: "center",
+                        justifyContent: "center", fontSize: 19, cursor: "pointer", borderRadius: 6 }}>
+                      {ch}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )) : Object.entries(WB_STICKERS).map(([cat, files]) => (
+              <div key={cat} style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6,
+                  color: theme.textFaint, margin: "4px 0 4px" }}>{cat}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4 }}>
+                  {files.map(f => (
+                    <div key={f} onClick={() => {
+                        const sz = Math.round(Math.min(W, H) * 0.3);
+                        addItem({ id: crypto.randomUUID(), type: "image", url: wbStickerUrl(cat, f),
+                          fit: "contain", x: Math.round((W - sz) / 2), y: Math.round((H - sz) / 2),
+                          w: sz, h: sz });
+                        setMediaOpen(false);
+                      }}
+                      style={{ aspectRatio: "1", borderRadius: 7, cursor: "pointer",
+                        background: `center/contain no-repeat url(${wbStickerUrl(cat, f)})` }} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+  ) : null;
 
   return createPortal(
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
