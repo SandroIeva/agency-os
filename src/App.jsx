@@ -6243,7 +6243,9 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
         justifyContent: "center", gap: 3, cursor: "pointer", transition: "background 0.15s ease" };
 
   const lineIcon = (kind) => kind === "path"
-    ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M4 18c6 0 8-12 14-12"/><rect x="2" y="16" width="4" height="4" rx="1"/><rect x="18" y="4" width="4" height="4" rx="1"/></svg>
+    // The nib, which is what every drawing tool uses for this and what people
+    // are looking for. My own two-anchors-and-a-curve read as a chart.
+    ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
     : kind === "line"
     ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="18" x2="18" y2="6"/></svg>
     : kind === "pen"
@@ -17799,7 +17801,7 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
                 it.type === "path" ? (
                   <path key={it.id || i} d={pathD(it.nodes, it.closed)}
                     transform={`translate(${it.ox || 0}, ${it.oy || 0})`}
-                    fill={it.fill || "none"} stroke={it.color} strokeWidth={it.width}
+                    fill={typeof it.fill === "string" ? it.fill : "none"} stroke={it.color} strokeWidth={it.width}
                     strokeLinecap="round" strokeLinejoin="round" />
                 ) : it.type === "draw" ? (
                   <polyline key={it.id || i} fill="none" stroke={it.color} strokeWidth={it.width}
@@ -21072,7 +21074,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             const p2 = new Path2D(d2);
             ctx.save();
             ctx.translate(it.ox || 0, it.oy || 0);
-            if (it.fill) { ctx.fillStyle = it.fill; ctx.fill(p2); }
+            if (typeof it.fill === "string") { ctx.fillStyle = it.fill; ctx.fill(p2); }
             ctx.strokeStyle = it.color; ctx.lineWidth = it.width;
             ctx.lineCap = "round"; ctx.lineJoin = "round";
             ctx.stroke(p2);
@@ -21828,10 +21830,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       // — the same trick the freehand stroke uses with ox/oy.
                       <g transform={`translate(${it.ox || 0}, ${it.oy || 0})`}>
                         <path d={pathD(it.nodes, it.closed)}
-                          fill={it.fill || "none"} stroke={it.color} strokeWidth={it.width}
+                          fill={typeof it.fill === "string" ? it.fill : "none"} stroke={it.color} strokeWidth={it.width}
                           strokeLinecap="round" strokeLinejoin="round"
                           onPointerDown={e => onItemDown(e, it)}
-                          style={{ pointerEvents: tool === "select" ? (it.fill ? "painted" : "stroke") : "none",
+                          // A filled path is clickable on its surface; an unfilled
+                          // one only on its line, or its empty inside would swallow
+                          // clicks meant for whatever sits behind it.
+                          style={{ pointerEvents: tool === "select" ? (typeof it.fill === "string" ? "painted" : "stroke") : "none",
                             cursor: "move", filter: on ? "drop-shadow(0 0 2px #15151c)" : "none" }} />
                       </g>
                     ) : it.type === "draw" ? (
@@ -22255,7 +22260,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               // there produced a fill nothing could paint.
               // The surface around the canvas takes a colour and nothing else:
               // a patterned backdrop competes with the thing being made.
-              tabs={(picker.what === "bg" || (picker.what === "fill" && picker.key === "fill"))
+              // …and a path's surface is an SVG fill, which takes a colour and
+              // nothing else. Offering the tabs there would store an object the
+              // path cannot paint, and the shape would simply vanish.
+              tabs={(picker.what === "bg" || (picker.what === "fill" && picker.key === "fill" && selItem?.type !== "path"))
                 ? ["custom", "gradient", "image", "pattern"] : ["custom"]}
               onImage={() => setFillImgFor(picker)}
               onClose={() => setPicker(null)} />
@@ -23591,7 +23599,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               ], v => set("align", v))}
             </>)}
 
-            {label(selItem.type === "image" ? (de ? "Bild" : "Image") : de ? "Füllung" : "Fill")}
+            {/* A stroke has a colour, not a fill. Calling that row "Füllung" is
+                what made a path's outline look like its surface. */}
+            {label(selItem.type === "image" ? (de ? "Bild" : "Image")
+              : ["draw", "arrow", "line", "path"].includes(selItem.type) ? (de ? "Kontur" : "Stroke")
+              : de ? "Füllung" : "Fill")}
             {selItem.type === "image" ? (
               <>
               {/* Swapping the picture was only possible by deleting it and
@@ -23670,6 +23682,35 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 </div>
               </>);
             })()}
+
+            {/* The mirror of "add a stroke" on a shape: a path is a line until
+                you ask for a surface, because that is what a path usually is. */}
+            {selItem.type === "path" && (<>
+              {label(de ? "Fläche" : "Fill")}
+              {typeof selItem.fill !== "string" ? (
+                <div onClick={() => set2({ fill: palette[1] || "#DDDDDD" })}
+                  style={{ marginTop: 6, padding: "9px 12px", borderRadius: 9, textAlign: "center",
+                    cursor: "pointer", border: `1px dashed ${line}`, color: theme.textDim, fontSize: 12 }}>
+                  {de ? "Fläche hinzufügen" : "Add a fill"}
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, padding: "8px 10px",
+                  borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                  <div onClick={(e) => setPicker({ what: "fill", key: "fill",
+                      x: e.currentTarget.getBoundingClientRect().left,
+                      y: e.currentTarget.getBoundingClientRect().top })}
+                    style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, cursor: "pointer",
+                      border: `1px solid ${line}`, background: selItem.fill }} />
+                  <input value={String(selItem.fill).replace("#", "").toUpperCase()}
+                    onChange={e => { const v = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
+                      if (v.length === 6) set2({ fill: "#" + v }); }}
+                    style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
+                      color: theme.text, fontFamily: FONT, fontSize: 12.5, letterSpacing: 0.4 }} />
+                  <div onClick={() => set2({ fill: undefined })}
+                    style={{ cursor: "pointer", color: theme.textFaint, fontSize: 12, padding: "0 2px" }}>✕</div>
+                </div>
+              )}
+            </>)}
 
             {canStroke(selItem) && (<>
               {label(de ? "Kontur" : "Stroke")}
