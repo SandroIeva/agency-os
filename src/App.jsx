@@ -20104,7 +20104,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         const f = nodes[0];
         if (Math.hypot(p.x - f.x, p.y - f.y) * cam.s < 12) { commitPath(nodes, true); return; }
       }
-      const next = [...nodes, { x: Math.round(p.x), y: Math.round(p.y) }];
+      // Where the DASHED line is, not where the pointer is. The preview was
+      // already snapping and the placement was not, so Shift showed one line and
+      // drew another — and the preview is the whole reason for holding Shift.
+      // The close check above deliberately keeps the raw pointer: closing is
+      // aimed at the first node by hand, not along a ray.
+      const prev = nodes[nodes.length - 1];
+      const q = (e.shiftKey && prev) ? snap45(prev.x, prev.y, p.x, p.y) : p;
+      const next = [...nodes, { x: Math.round(q.x), y: Math.round(q.y) }];
       setPathDraft({ nodes: next });
       // Held and dragged, the click pulls a handle out of the node it just
       // placed — a click alone leaves a corner. That one gesture is the whole
