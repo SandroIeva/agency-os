@@ -270,21 +270,27 @@ export default function BillingSettings({ session, org, isAdmin, entitlements, o
                 // Concrete and actionable: how long it runs, how much is left,
                 // and what happens at the end. "trialing" told the user nothing.
                 ? (de
-                  ? `Du testest i7 OS ${TRIAL_DAYS} Tage lang mit allen ${PLAN_NAMES[TRIAL_PLAN]}-Funktionen — ${trial.daysLeft === 1 ? "noch 1 Tag" : `noch ${trial.daysLeft} Tage`}. Danach bleiben deine Inhalte erhalten, für Änderungen brauchst du einen Plan.`
-                  : `You're trying i7 OS for ${TRIAL_DAYS} days with every ${PLAN_NAMES[TRIAL_PLAN]} feature — ${trial.daysLeft === 1 ? "1 day left" : `${trial.daysLeft} days left`}. Afterwards your content stays, but changes need a plan.`)
+                  ? `Du testest i7 OS ${TRIAL_DAYS} Tage lang mit allen ${PLAN_NAMES[TRIAL_PLAN]}-Funktionen, ${trial.daysLeft === 1 ? "noch 1 Tag" : `noch ${trial.daysLeft} Tage`}. Danach bleiben deine Inhalte erhalten, für Änderungen brauchst du einen Plan.`
+                  : `You're trying i7 OS for ${TRIAL_DAYS} days with every ${PLAN_NAMES[TRIAL_PLAN]} feature, ${trial.daysLeft === 1 ? "1 day left" : `${trial.daysLeft} days left`}. Afterwards your content stays, but changes need a plan.`)
                 : trial?.expired
                 ? (de
-                  ? "Deine Testphase ist beendet. Deine Inhalte bleiben erhalten und lassen sich exportieren — für Änderungen brauchst du einen Plan."
-                  : "Your trial has ended. Your content stays and can be exported — changes need a plan.")
+                  ? "Deine Testphase ist beendet. Deine Inhalte bleiben erhalten und lassen sich exportieren. Für Änderungen brauchst du einen Plan."
+                  : "Your trial has ended. Your content stays and can be exported. Changes need a plan.")
                 : comped
                 // Manually granted: name the Stripe subscription separately so
                 // the two plan names on this screen don't look contradictory.
                 ? (de
-                  ? `Manuell freigeschaltet — nicht über Stripe abgerechnet.${billing?.plan ? ` Hinterlegtes Abo: ${PLAN_NAMES[billing.plan] || billing.plan}.` : ""}`
-                  : `Granted manually — not billed through Stripe.${billing?.plan ? ` Stripe subscription: ${PLAN_NAMES[billing.plan] || billing.plan}.` : ""}`)
+                  ? `Manuell freigeschaltet, nicht über Stripe abgerechnet.${billing?.plan ? ` Hinterlegtes Abo: ${PLAN_NAMES[billing.plan] || billing.plan}.` : ""}`
+                  : `Granted manually, not billed through Stripe.${billing?.plan ? ` Stripe subscription: ${PLAN_NAMES[billing.plan] || billing.plan}.` : ""}`)
                 : hasSubscription
                 ? `${billing.status}${periodEnd ? ` · ${billing.cancelAtPeriodEnd ? (de ? "Endet" : "Ends") : (de ? "Verlängert sich" : "Renews")} ${periodEnd}` : ""}`
-                : (de ? "Ein Abo gilt für alle Workspaces deines Kontos." : "One plan covers every workspace on your account.")}
+                // This used to say what the note beside the checkout button
+                // already says, word for word, half a screen apart. The line
+                // above the price cards is the one place to say why any of this
+                // is worth paying for, so it says that instead.
+                : (de
+                  ? "Brand, Projekte, Aufgaben und KI in einem Werkzeug statt in fünf Abos."
+                  : "Brand, projects, tasks and AI in one tool instead of five subscriptions.")}
             </div>
           </div>
           {hasSubscription && isOwner && (
@@ -359,8 +365,11 @@ export default function BillingSettings({ session, org, isAdmin, entitlements, o
               })}
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginTop: 20 }}>
-              <div style={{ fontSize: 11, color: theme.textDim, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 32, marginTop: 20 }}>
+              {/* Capped rather than left to fill the row: at full width the
+                  note ran right up to the button and the two read as one
+                  block. It wraps a line early now and keeps its distance. */}
+              <div style={{ fontSize: 11, color: theme.textDim, minWidth: 0, maxWidth: 460, lineHeight: 1.5 }}>
                 {!isOwner && (de ? "Nur der Besitzer dieses Workspaces kann das Abo verwalten. Ein Abo deckt alle Workspaces seines Kontos ab." : "Only this workspace’s owner can manage the subscription. One plan covers every workspace on their account.")}
               </div>
               <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }} onClick={startCheckout} disabled={!isOwner || Boolean(action) || loading} style={{ padding: "12px 28px", whiteSpace: "nowrap", flexShrink: 0, border: 0, borderRadius: 999, background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontFamily: APP_FONT, fontSize: 13, fontWeight: 600, cursor: !isOwner || action || loading ? "not-allowed" : "pointer", opacity: !isOwner || action || loading ? 0.55 : 1 }}>
