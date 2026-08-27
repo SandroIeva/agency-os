@@ -243,8 +243,31 @@ export default async function handler(req) {
   // wiring looks like. Guarded by the hook secret; it can only ever point the
   // webhook at this very deployment, so there is nothing here to steal.
   if (setup) {
-    if (!process.env.TELEGRAM_HOOK_SECRET || setup !== process.env.TELEGRAM_HOOK_SECRET) {
-      return json({ error: "Unauthorized" }, 401);
+    // Told apart on purpose. These two used to answer identically, and a bare
+    // "Unauthorized" cannot distinguish "the variable is missing on this
+    // deployment" from "you pasted the wrong string" — which matters, because
+    // there are two similarly named secrets and one of them is the other one's
+    // neighbour in the Vercel list.
+    if (!process.env.TELEGRAM_HOOK_SECRET) {
+      return json({
+        error: "TELEGRAM_HOOK_SECRET is not set on this deployment",
+        code: "not_configured",
+        hint: "Set it in Vercel, then REDEPLOY: env vars only reach builds made after they are saved.",
+      }, 503);
+    }
+    if (setup !== process.env.TELEGRAM_HOOK_SECRET) {
+      // The received length is the caller's own input, so saying it back costs
+      // nothing. Whether it matches is one bit, and it is the bit that says
+      // "you sent the wrong secret entirely" rather than "it got mangled".
+      const same = setup.length === process.env.TELEGRAM_HOOK_SECRET.length;
+      return json({
+        error: "Unauthorized",
+        code: "bad_secret",
+        received_length: setup.length,
+        hint: same
+          ? "Right length, wrong value. Check for a stray character, or a copy of an older secret."
+          : "Wrong length. This is probably TELEGRAM_WEBHOOK_SECRET, which is a different variable, or the value got cut off.",
+      }, 401);
     }
     if (!process.env.TELEGRAM_WEBHOOK_SECRET) {
       return json({ error: "TELEGRAM_WEBHOOK_SECRET is not set", code: "not_configured" }, 503);
