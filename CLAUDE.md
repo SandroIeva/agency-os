@@ -167,7 +167,14 @@ publication, so canvas collaboration rides entirely on broadcast).
 
 `chat-multi` (unified Claude/OpenAI/Gemini chat), `fetch-brand` (multi-mode POST/GET: brand analysis / weather / preview / **`mode:"pdf"`** brand-book PDF parse / **`mode:"zip"`** brand-package ZIP inspect), `send` (multi-mode POST, dispatched by `mode`: `"invite"` / `"project-invite"` / `"push-setup"` email via Resend, `"push"` web-push via VAPID), `google-fonts` (CORS proxy, **edge**), `img-proxy` (CORS image proxy for PDF export, **edge**), `drive-download` (**edge**), `workspace-delete` (**edge**: admin-only; wipes ALL of a workspace's storage assets via the service key — using the `org_storage_objects` RPC — then deletes the org so nothing is left on the server), `redirect` (short links `/i/:slug`), `refresh-token` (Google OAuth), `tts`,
 `telegram` (**edge**: one bot for the whole product; the Telegram webhook and
-the notifications fan-out in one file, told apart by their auth header), `zernio` (multi-mode POST, social integration via Zernio: `status`/`connect`/`disconnect`/`analytics`/`presign`/`post` — see `docs/zernio-integration.md`). Plus billing (Stripe): `billing-status`, `create-checkout-session`, `create-customer-portal-session`, `stripe-webhook`.
+the notifications fan-out in one file, told apart by their auth header. Four
+GET verbs, and **you can run the first two yourself, they need no secret**:
+`?check=1` reports the wiring as booleans, `?wire=1` repairs it and does nothing
+when nothing is wrong, `?setup=<TELEGRAM_HOOK_SECRET>` forces the full
+registration including the bot's name and descriptions. Buttons under a
+notification only arrive when `callback_query` is in `allowed_updates`, which is
+what `?check=1` answers. The bot's profile PICTURE cannot be set by the API at
+all, only in BotFather; `public/i7os-bot-avatar.png` is the file for it), `zernio` (multi-mode POST, social integration via Zernio: `status`/`connect`/`disconnect`/`analytics`/`presign`/`post` — see `docs/zernio-integration.md`). Plus billing (Stripe): `billing-status`, `create-checkout-session`, `create-customer-portal-session`, `stripe-webhook`.
 
 Also `lifecycle-sweep` (**edge**, daily Vercel Cron via `vercel.json`): warns, then purges storage, then deletes rows of workspaces whose owner has had no plan for 30/90 days (60/180 if they ever paid). Disarmed unless `LIFECYCLE_PURGE_ENABLED=true`.
 
