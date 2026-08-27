@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import qrcode from "qrcode-generator";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "./supabase";
+import { notifLines } from "./notificationText";
 import { buildSystemPrompt } from "./systemPrompt";
 import { getTranslation } from "./translations";
 import { openGooglePicker, openGoogleFolderPicker } from "./googlePicker";
@@ -2295,7 +2296,9 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
           type: "comment_added",
           title: "Neuer Kommentar",
           body: `${myName} hat "${editingTask.title}" kommentiert`,
-          metadata: { task_id: editingTask.id, comment_id: data.id },
+          // title and body stay for anything still reading them; actor and
+          // subject are what notifLines renders from, in the READER's language.
+          metadata: { task_id: editingTask.id, comment_id: data.id, actor: myName, subject: editingTask.title },
         });
       }
     }
@@ -2560,7 +2563,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
           type: "task_assigned",
           title: "Neue Aufgabe zugewiesen",
           body: `${myName} hat dir "${data.title}" zugewiesen`,
-          metadata: { task_id: data.id },
+          metadata: { task_id: data.id, actor: myName, subject: data.title },
         });
       }
       resetForm();
@@ -2590,7 +2593,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
         type: "task_assigned",
         title: "Aufgabe zugewiesen",
         body: `${myName} hat dir "${taskForm.title}" zugewiesen`,
-        metadata: { task_id: editingTask.id },
+        metadata: { task_id: editingTask.id, actor: myName, subject: taskForm.title },
       });
     }
     resetForm();
@@ -6927,7 +6930,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
         supabase.from("whiteboard_items").update({ data }).eq("id", id).then(() => {});
         mentioned.forEach(mm => {
           if (mm.id && mm.id !== session?.user?.id && !prevMentions.includes(mm.id)) {
-            createNotification?.({ userId: mm.id, type: "comment_mention", title: de ? "Erwähnung im Brainstorm" : "Mentioned in Brainstorm", body: `${myName()}: ${text.slice(0, 90)}`, metadata: { board_id: board?.id } });
+            createNotification?.({ userId: mm.id, type: "comment_mention", title: de ? "Erwähnung im Brainstorm" : "Mentioned in Brainstorm", body: `${myName()}: ${text.slice(0, 90)}`, metadata: { board_id: board?.id, actor: myName(), subject: board?.title || (de ? "Brainstorm" : "Brainstorm") } });
           }
         });
       }
@@ -13280,7 +13283,9 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
           type: "chat_message",
           title: `Neue Nachricht von ${myName}`,
           body: notifBody,
-          metadata: { conversation_id: activeConvId },
+          // No subject: the body IS the message somebody typed, and that is not
+          // ours to translate.
+          metadata: { conversation_id: activeConvId, actor: myName },
         });
       });
     }
@@ -15498,7 +15503,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
         type: "project_added",
         title: "Zu einem Projekt hinzugefügt",
         body: `${myName} hat dich zum Projekt "${editing.name}" hinzugefügt`,
-        metadata: { project_id: editing.id, project_name: editing.name },
+        metadata: { project_id: editing.id, project_name: editing.name, actor: myName, subject: editing.name },
       });
     }
     loadMembers(editing.id);
@@ -33785,7 +33790,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
       type: "comment_mention",
       title: "Du wurdest in einem Kommentar erwähnt",
       body: `${myName}: ${body.trim().slice(0, 90)}`,
-      metadata: { document_id: openDoc.id, document_title: openDoc.title, block_id: blockId },
+      metadata: { document_id: openDoc.id, document_title: openDoc.title, block_id: blockId, actor: myName, subject: openDoc.title },
     }));
   };
 
@@ -45807,6 +45812,7 @@ export default function CircularMenu() {
                           Keine Benachrichtigungen
                         </div>
                       ) : notifications.map(n => {
+                        const { title: nTitle, body: nBody } = notifLines(n, appLanguage === "de");
                         const iconMap = {
                           task_assigned: "📋", comment_added: "💬",
                           calendar_reminder: n.metadata?.hangoutLink ? "📹" : "📅",
@@ -45838,13 +45844,13 @@ export default function CircularMenu() {
                               <div style={{
                                 fontSize: 13, fontFamily: FONT, color: theme.text,
                                 fontWeight: n.read ? 400 : 600, lineHeight: 1.4,
-                              }}>{n.title}</div>
-                              {n.body && (
+                              }}>{nTitle}</div>
+                              {nBody && (
                                 <div style={{
                                   fontSize: 12, fontFamily: FONT, color: theme.textDim,
                                   marginTop: 2, lineHeight: 1.4,
                                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                                }}>{n.body}</div>
+                                }}>{nBody}</div>
                               )}
                               <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 4 }}>{timeAgo}</div>
                             </div>
@@ -47067,7 +47073,9 @@ export default function CircularMenu() {
                     )}
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    {notifications.slice(0, 3).map((n, i) => (
+                    {notifications.slice(0, 3).map((n, i) => {
+                      const { title: nTitle, body: nBody } = notifLines(n, appLanguage === "de");
+                      return (
                       <motion.div key={n.id} className="hover-row"
                         initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.2 + i * 0.06, duration: 0.35, ease: [0.22, 0.68, 0.35, 1.0] }}
@@ -47079,10 +47087,10 @@ export default function CircularMenu() {
                           background: n.read ? "transparent" : "#E84393" }} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD",
-                            fontWeight: n.read ? 400 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.title}</div>
-                          {n.body && (
+                            fontWeight: n.read ? 400 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nTitle}</div>
+                          {nBody && (
                             <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e60",
-                              marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.body}</div>
+                              marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nBody}</div>
                           )}
                         </div>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -47090,7 +47098,8 @@ export default function CircularMenu() {
                           strokeLinecap="round" strokeLinejoin="round"
                           style={{ flexShrink: 0, marginTop: 3 }}><path d="M9 18l6-6-6-6"/></svg>
                       </motion.div>
-                    ))}
+                      );
+                    })}
                     {notifications.length === 0 && (
                       <div style={{ fontSize: 12.5, fontFamily: FONT, padding: "12px 14px",
                         color: darkMode ? "#ffffff40" : "#1a1a2e60" }}>

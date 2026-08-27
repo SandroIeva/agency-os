@@ -10,6 +10,11 @@
 //   x-telegram-bot-api-secret-token  → Telegram's webhook (set via setWebhook)
 //   x-i7-hook-secret                 → the notifications trigger, through pg_net
 import { createClient } from "@supabase/supabase-js";
+// The SAME renderer the app's bell uses. A notification row holds data, and
+// this turns it into a sentence for whoever is reading it — here, in the
+// language of the chat it is being sent to. Two copies of this table would
+// drift, and the drift would be a German sentence under English buttons.
+import { notifLines } from "../src/notificationText.js";
 
 export const config = { runtime: "edge" };
 
@@ -120,12 +125,13 @@ const deepLink = (appUrl, n) => {
 // ever says who assigned what, so a task whose whole content is in its
 // description arrived here as a title and nothing else.
 const DETAIL_MAX = 600;
-const notifText = (workspace, n, detail) => {
+const notifText = (workspace, n, lang, detail) => {
+  const { title, body } = notifLines(n, lang !== "en");
   const d = String(detail || "").trim();
   return [
     workspace ? `<b>${esc(workspace)}</b>` : null,
-    `<b>${esc(n.title)}</b>`,
-    n.body ? esc(n.body) : null,
+    `<b>${esc(title)}</b>`,
+    body ? esc(body) : null,
     d ? "\n" + esc(d.length > DETAIL_MAX ? d.slice(0, DETAIL_MAX).trimEnd() + "…" : d) : null,
   ].filter(Boolean).join("\n");
 };
@@ -358,7 +364,7 @@ export default async function handler(req) {
     }
     const res = await api(botToken, "sendMessage", {
       chat_id: link.chat_id,
-      text: notifText(workspace, n, detail),
+      text: notifText(workspace, n, link.lang, detail),
       parse_mode: "HTML",
       disable_web_page_preview: true,
       reply_markup: { inline_keyboard: taskKeyboard(t, appUrl, n, !!taskId) },
@@ -486,19 +492,22 @@ export default async function handler(req) {
       const { data: me } = await db.from("profiles").select("display_name, email").eq("id", link.user_id).maybeSingle();
       const fromName = me?.display_name || (me?.email || "").split("@")[0] || "?";
       const { data: full } = await db.from("tasks").select("title").eq("id", task.id).maybeSingle();
+      // Written the way the app writes one: title and body for anything still
+      // reading them, actor and subject for everything that renders. The person
+      // receiving this may well read English.
       await db.from("notifications").insert({
         user_id: target.id,
         org_id: task.org_id,
         type: "task_assigned",
         title: t.passedTitle,
         body: t.passedBody(fromName, full?.title || ""),
-        metadata: { task_id: task.id },
+        metadata: { task_id: task.id, actor: fromName, subject: full?.title || "" },
       });
 
       await api(botToken, "editMessageText", {
         chat_id: cbChat,
         message_id: cb.message.message_id,
-        text: `${notifText(await orgName(db, n.org_id), n, task.description)}\n\n<i>${esc(t.markPassed(target.name))}</i>`,
+        text: `${notifText(await orgName(db, n.org_id), n, link.lang, task.description)}\n\n<i>${esc(t.markPassed(target.name))}</i>`,
         parse_mode: "HTML",
         disable_web_page_preview: true,
         reply_markup: { inline_keyboard: taskKeyboard(t, appUrl, n, true) },
@@ -522,7 +531,7 @@ export default async function handler(req) {
     await api(botToken, "editMessageText", {
       chat_id: cbChat,
       message_id: cb.message.message_id,
-      text: `${notifText(await orgName(db, n.org_id), n, task.description)}\n\n<i>${esc(t.markMoved(t.cols[target]))}</i>`,
+      text: `${notifText(await orgName(db, n.org_id), n, link.lang, task.description)}\n\n<i>${esc(t.markMoved(t.cols[target]))}</i>`,
       parse_mode: "HTML",
       disable_web_page_preview: true,
       reply_markup: { inline_keyboard: taskKeyboard(t, appUrl, n, true) },
