@@ -49156,6 +49156,56 @@ export default function CircularMenu() {
                   {slackErr && (
                     <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{slackErr}</div>
                   )}
+                  {/* Telegram, in the list with the others. It used to be a
+                      section of its own on the Account tab, which is not where
+                      anybody looks for an integration. */}
+                  {TELEGRAM_BOT && session && (
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: "16px 20px", borderTop: `1px solid ${theme.borderFaint}`,
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      {/* Wikimedia's public-domain mark, not a hand drawing: a
+                          brand people recognise at a glance is worth nothing if
+                          it is merely reminiscent of itself. */}
+                      <svg width="20" height="20" viewBox="0 0 240 240" aria-hidden="true">
+                        <defs>
+                          <linearGradient id="i7TelegramRow" x1="120" y1="240" x2="120" y2="0" gradientUnits="userSpaceOnUse">
+                            <stop offset="0" stopColor="#1d93d2" />
+                            <stop offset="1" stopColor="#38b0e3" />
+                          </linearGradient>
+                        </defs>
+                        <circle cx="120" cy="120" r="120" fill="url(#i7TelegramRow)" />
+                        <path d="M81.229,128.772l14.237,39.406s1.78,3.687,3.686,3.687,30.255-29.492,30.255-29.492l31.525-60.89L81.736,118.6Z" fill="#c8daea"/>
+                        <path d="M100.106,138.878l-2.733,29.046s-1.144,8.9,7.754,0,17.415-15.763,17.415-15.763" fill="#a9c9dd"/>
+                        <path d="M81.486,130.178,52.2,120.636s-3.5-1.42-2.373-4.64c.232-.664.7-1.229,2.1-2.2,6.489-4.523,120.106-45.36,120.106-45.36s3.208-1.081,5.1-.362a2.766,2.766,0,0,1,1.885,2.055,9.357,9.357,0,0,1,.254,2.585c-.009.752-.1,1.449-.169,2.542-.692,11.165-21.4,94.493-21.4,94.493s-1.239,4.876-5.678,5.043A8.13,8.13,0,0,1,146.1,172.5c-8.711-7.493-38.819-27.727-45.472-32.177a1.27,1.27,0,0,1-.546-.9c-.093-.469.417-1.05.417-1.05s52.426-46.6,53.821-51.492c.108-.379-.3-.566-.848-.4-3.482,1.281-63.844,39.4-70.506,43.607A3.21,3.21,0,0,1,81.486,130.178Z" fill="#fff"/>
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Telegram</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                        {tgLink
+                          ? (appLanguage === "de" ? "Verbunden. Alles aus der Glocke kommt auch dort an." : "Connected. Whatever reaches the bell reaches you there too.")
+                          : (appLanguage === "de" ? "Einmal verbinden, für alle Workspaces, auch für spätere." : "Connect once, for every workspace, later ones included.")}
+                      </div>
+                    </div>
+                    <motion.button whileTap={{ scale: 0.97 }}
+                      onClick={tgBusy ? undefined : (tgLink ? disconnectTg : startTgConnect)}
+                      style={{ padding: "8px 14px", borderRadius: 10, cursor: tgBusy ? "wait" : "pointer",
+                        border: `1px solid ${tgLink ? theme.borderFaint : "transparent"}`,
+                        background: tgLink ? "transparent" : "#15151c",
+                        color: tgLink ? theme.text : "#fff",
+                        fontFamily: FONT, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0,
+                        opacity: tgBusy ? 0.6 : 1 }}>
+                      {tgLink ? (appLanguage === "de" ? "Trennen" : "Disconnect")
+                        : (appLanguage === "de" ? "Verbinden" : "Connect")}
+                    </motion.button>
+                  </div>
+                  )}
                   {slackLink?.last_error && !slackErr && (
                     <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>
                       {appLanguage === "de"
@@ -49165,6 +49215,139 @@ export default function CircularMenu() {
                   )}
                 </div>
               </motion.div>
+              )}
+
+              {/* Telegram's own settings: the master switch, which of the eight
+                  notification types to send, the pairing panel while connecting,
+                  and any error. They belong to the row above rather than to a
+                  section of their own, and they only appear once there is
+                  something to say. */}
+              {settingsTab === "workspace" && TELEGRAM_BOT && session && (tgLink || tgConnect || tgErr) && (
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.24, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+                  style={{ marginTop: 14 }}>
+                  <div style={{ borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`, padding: "20px 24px" }}>
+                    <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 4 }}>
+                      Telegram
+                    </div>
+                  {/* Connecting and receiving are two different questions.
+                      Without this, the only way to go quiet for a week is to
+                      unlink and pair again afterwards — so the switch stays,
+                      and the link stays with it. */}
+                  {tgLink && (
+                    <div style={{ marginTop: 22, paddingTop: 20, borderTop: `1px solid ${theme.borderFaint}` }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                        <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
+                          {appLanguage === "de" ? "Benachrichtigungen senden" : "Send notifications"}
+                        </div>
+                        {/* The Appearance row's switch, to the pixel: 44×24, radius 12,
+                            two of padding, a 20px knob travelling exactly 20 on the
+                            same spring. Only the ON colour differs — anthracite, not
+                            the lilac that row still carries, because the design system
+                            dropped lilac. And in dark mode it inverts, the way the nav
+                            menu's selected pill does: anthracite on a dark card is a
+                            switch you cannot see, which is the other half of what was
+                            wrong with mine. */}
+                        <div onClick={() => patchTgLink({ enabled: !tgLink.enabled })}
+                          style={{ width: 44, height: 24, borderRadius: 12, padding: 2, flexShrink: 0,
+                            background: tgLink.enabled
+                              ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c")
+                              : (darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.15)"),
+                            cursor: "pointer", transition: "background 0.3s ease",
+                            display: "flex", alignItems: "center" }}>
+                          <motion.div
+                            animate={{ x: tgLink.enabled ? 20 : 0 }}
+                            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                            style={{ width: 20, height: 20, borderRadius: 10,
+                              background: (darkMode && tgLink.enabled) ? "#15151c" : "#fff",
+                              boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                        </div>
+                      </div>
+
+                      {tgLink.enabled && (
+                        /* Two columns, fixed. auto-fit collapsed to one on a narrow
+                           panel and to three on a wide one, so the same six rows kept
+                           rearranging themselves as the window moved. */
+                        <div style={{ marginTop: 20, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 24px" }}>
+                          {TG_TYPES.map(t => {
+                            const on = tgTypeOn(t);
+                            return (
+                              <div key={t.key} onClick={() => patchTgLink({ types: { ...(tgLink.types || {}), [t.key]: !on } })}
+                                style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                                {/* The checklist box from the timeline modal, unchanged
+                                    but for the same dark-mode inversion as the switch. */}
+                                <motion.div whileTap={{ scale: 0.9 }}
+                                  style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                                    border: `1.5px solid ${on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : theme.borderFaint}`,
+                                    background: on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
+                                    display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  {on && (
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                                      stroke={darkMode ? "#15151c" : "#fff"} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                      <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                  )}
+                                </motion.div>
+                                <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text }}>
+                                  {appLanguage === "de" ? t.de : t.en}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Not the same thing as the switch above, so it does not
+                          move it: Telegram refused the last delivery. Almost
+                          always the bot was blocked in the chat. */}
+                      {!tgLink.active && (
+                        <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 10,
+                          background: darkMode ? "rgba(229,72,77,0.10)" : "rgba(229,72,77,0.07)",
+                          border: "1px solid rgba(229,72,77,0.22)",
+                          fontSize: 12, fontFamily: FONT, color: theme.text, lineHeight: 1.45 }}>
+                          {appLanguage === "de"
+                            ? "Telegram nimmt gerade nichts an — meistens wurde der Bot im Chat blockiert. Entblockiere ihn dort und verbinde hier neu."
+                            : "Telegram is refusing delivery — usually the bot was blocked in the chat. Unblock it there and connect again here."}
+                          {tgLink.last_error && (
+                            <div style={{ marginTop: 4, color: theme.textDim }}>{tgLink.last_error}</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* The pairing panel. Two ways in, because the button alone
+                      fails on any machine without Telegram installed — that
+                      person needs the code on their phone, and the QR is how
+                      it gets there without being typed. */}
+                  {tgConnect && (
+                    <div style={{ marginTop: 18, paddingTop: 18, borderTop: `1px solid ${theme.borderFaint}`,
+                      display: "flex", alignItems: "center", gap: 18 }}>
+                      <img src={tgConnect.qr} alt="" width={116} height={116}
+                        style={{ borderRadius: 10, background: "#fff", padding: 6, flexShrink: 0, imageRendering: "pixelated" }} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
+                          {appLanguage === "de" ? "Telegram sollte sich geöffnet haben — drück dort auf START." : "Telegram should have opened — press START there."}
+                        </div>
+                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 4, lineHeight: 1.45 }}>
+                          {appLanguage === "de"
+                            ? "Kein Telegram auf diesem Rechner? Scanne den Code mit dem Handy. Der Code gilt zehn Minuten und nur einmal — gib ihn nicht weiter."
+                            : "No Telegram on this machine? Scan the code with your phone. The code lasts ten minutes and works once — do not pass it on."}
+                        </div>
+                        <a href={tgConnect.url} target="_blank" rel="noopener noreferrer"
+                          style={{ display: "inline-block", marginTop: 8, fontSize: 12, fontFamily: FONT, color: theme.textDim, textDecoration: "underline" }}>
+                          {appLanguage === "de" ? "Nochmal in Telegram öffnen" : "Open in Telegram again"}
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                  {tgErr && (
+                    <div style={{ marginTop: 12, fontSize: 12, fontFamily: FONT, color: "#e5484d" }}>{tgErr}</div>
+                  )}
+
+                  </div>
+                </motion.div>
               )}
 
               {/* Storage usage — lives under Workspace, styled like the other sections */}
@@ -49327,195 +49510,6 @@ export default function CircularMenu() {
                   )}
                 </div>
               </motion.div>
-              )}
-
-              {/* Telegram. Hidden entirely until VITE_TELEGRAM_BOT is set at
-                  BUILD time. A local checkout whose .env.local predates that
-                  variable will not show this section, while production does. */}
-              {settingsTab === "account" && TELEGRAM_BOT && session && (
-                <motion.div
-                  initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.22, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
-                  style={{ marginTop: 24 }}>
-                  <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
-                    Telegram
-                  </div>
-                  <div style={{ borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`, padding: "20px 24px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                      {/* The mark itself, taken from Wikimedia's public-domain file rather
-                          than drawn by hand — a brand people recognise at a glance is
-                          worth nothing if it is merely reminiscent of itself.
-                          The tile stays neutral in BOTH states: the logo brings its own
-                          blue, and a blue disc on a green wash reads as neither one.
-                          Being connected shows as the dot instead. */}
-                      <div style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0, position: "relative",
-                        background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-                        border: `1px solid ${theme.borderFaint}`,
-                        display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <svg width="27" height="27" viewBox="0 0 240 240" aria-hidden="true">
-                          <defs>
-                            {/* A gradient id has to be unique in the whole document, so it
-                                carries the component's name rather than the file's
-                                "linear-gradient", which any other inline SVG could reuse. */}
-                            <linearGradient id="i7TelegramMark" x1="120" y1="240" x2="120" y2="0" gradientUnits="userSpaceOnUse">
-                              <stop offset="0" stopColor="#1d93d2" />
-                              <stop offset="1" stopColor="#38b0e3" />
-                            </linearGradient>
-                          </defs>
-                          <circle cx="120" cy="120" r="120" fill="url(#i7TelegramMark)" />
-                            <path d="M81.229,128.772l14.237,39.406s1.78,3.687,3.686,3.687,30.255-29.492,30.255-29.492l31.525-60.89L81.737,118.6Z" fill="#c8daea" />
-                            <path d="M100.106,138.878l-2.733,29.046s-1.144,8.9,7.754,0,17.415-15.763,17.415-15.763" fill="#a9c6d8" />
-                            <path d="M81.486,130.178,52.2,120.636s-3.5-1.42-2.373-4.64c.232-.664.7-1.229,2.1-2.2,6.489-4.523,120.106-45.36,120.106-45.36s3.208-1.081,5.1-.362a2.766,2.766,0,0,1,1.885,2.055,9.357,9.357,0,0,1,.254,2.585c-.009.752-.1,1.449-.169,2.542-.692,11.165-21.4,94.493-21.4,94.493s-1.239,4.876-5.678,5.043A8.13,8.13,0,0,1,146.1,172.5c-8.711-7.493-38.819-27.727-45.472-32.177a1.27,1.27,0,0,1-.546-.9c-.093-.469.417-1.05.417-1.05s52.426-46.6,53.821-51.492c.108-.379-.3-.566-.848-.4-3.482,1.281-63.844,39.4-70.506,43.607A3.21,3.21,0,0,1,81.486,130.178Z" fill="#fff" />
-                        </svg>
-                        {tgLink && (
-                          <span style={{ position: "absolute", right: -3, bottom: -3, width: 13, height: 13,
-                            borderRadius: "50%", background: "#00B894", border: `2px solid ${theme.cardBg}` }} />
-                        )}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
-                          {tgLink
-                            ? (appLanguage === "de" ? "Verbunden" : "Connected")
-                            : (appLanguage === "de" ? "Benachrichtigungen auf Telegram" : "Notifications on Telegram")}
-                        </div>
-                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.45 }}>
-                          {tgLink
-                            ? (appLanguage === "de"
-                                ? "Alles, was in der Glocke landet, kommt auch bei dir in Telegram an."
-                                : "Whatever reaches the bell reaches you in Telegram too.")
-                            : (appLanguage === "de"
-                                ? "Einmal verbinden, für alle Workspaces — auch für die, denen du später beitrittst."
-                                : "Connect once, for every workspace — including the ones you join later.")}
-                        </div>
-                      </div>
-                      <motion.div whileTap={{ scale: 0.97 }}
-                        onClick={tgBusy ? undefined : (tgLink ? disconnectTg : startTgConnect)}
-                        style={{ padding: "9px 18px", borderRadius: 999, cursor: tgBusy ? "default" : "pointer",
-                          border: `1px solid ${tgLink ? theme.borderFaint : "transparent"}`,
-                          background: tgLink ? "transparent" : "#15151c",
-                          color: tgLink ? theme.text : "#fff",
-                          fontSize: 12.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0, opacity: tgBusy ? 0.5 : 1 }}>
-                        {tgLink ? (appLanguage === "de" ? "Trennen" : "Disconnect")
-                                : (appLanguage === "de" ? "Verbinden" : "Connect")}
-                      </motion.div>
-                    </div>
-
-                    {/* Connecting and receiving are two different questions.
-                        Without this, the only way to go quiet for a week is to
-                        unlink and pair again afterwards — so the switch stays,
-                        and the link stays with it. */}
-                    {tgLink && (
-                      <div style={{ marginTop: 22, paddingTop: 20, borderTop: `1px solid ${theme.borderFaint}` }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                          <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
-                            {appLanguage === "de" ? "Benachrichtigungen senden" : "Send notifications"}
-                          </div>
-                          {/* The Appearance row's switch, to the pixel: 44×24, radius 12,
-                              two of padding, a 20px knob travelling exactly 20 on the
-                              same spring. Only the ON colour differs — anthracite, not
-                              the lilac that row still carries, because the design system
-                              dropped lilac. And in dark mode it inverts, the way the nav
-                              menu's selected pill does: anthracite on a dark card is a
-                              switch you cannot see, which is the other half of what was
-                              wrong with mine. */}
-                          <div onClick={() => patchTgLink({ enabled: !tgLink.enabled })}
-                            style={{ width: 44, height: 24, borderRadius: 12, padding: 2, flexShrink: 0,
-                              background: tgLink.enabled
-                                ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c")
-                                : (darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.15)"),
-                              cursor: "pointer", transition: "background 0.3s ease",
-                              display: "flex", alignItems: "center" }}>
-                            <motion.div
-                              animate={{ x: tgLink.enabled ? 20 : 0 }}
-                              transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                              style={{ width: 20, height: 20, borderRadius: 10,
-                                background: (darkMode && tgLink.enabled) ? "#15151c" : "#fff",
-                                boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
-                          </div>
-                        </div>
-
-                        {tgLink.enabled && (
-                          /* Two columns, fixed. auto-fit collapsed to one on a narrow
-                             panel and to three on a wide one, so the same six rows kept
-                             rearranging themselves as the window moved. */
-                          <div style={{ marginTop: 20, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 24px" }}>
-                            {TG_TYPES.map(t => {
-                              const on = tgTypeOn(t);
-                              return (
-                                <div key={t.key} onClick={() => patchTgLink({ types: { ...(tgLink.types || {}), [t.key]: !on } })}
-                                  style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-                                  {/* The checklist box from the timeline modal, unchanged
-                                      but for the same dark-mode inversion as the switch. */}
-                                  <motion.div whileTap={{ scale: 0.9 }}
-                                    style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0,
-                                      border: `1.5px solid ${on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : theme.borderFaint}`,
-                                      background: on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
-                                      display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                    {on && (
-                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                                        stroke={darkMode ? "#15151c" : "#fff"} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                        <polyline points="20 6 9 17 4 12" />
-                                      </svg>
-                                    )}
-                                  </motion.div>
-                                  <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text }}>
-                                    {appLanguage === "de" ? t.de : t.en}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-
-                        {/* Not the same thing as the switch above, so it does not
-                            move it: Telegram refused the last delivery. Almost
-                            always the bot was blocked in the chat. */}
-                        {!tgLink.active && (
-                          <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 10,
-                            background: darkMode ? "rgba(229,72,77,0.10)" : "rgba(229,72,77,0.07)",
-                            border: "1px solid rgba(229,72,77,0.22)",
-                            fontSize: 12, fontFamily: FONT, color: theme.text, lineHeight: 1.45 }}>
-                            {appLanguage === "de"
-                              ? "Telegram nimmt gerade nichts an — meistens wurde der Bot im Chat blockiert. Entblockiere ihn dort und verbinde hier neu."
-                              : "Telegram is refusing delivery — usually the bot was blocked in the chat. Unblock it there and connect again here."}
-                            {tgLink.last_error && (
-                              <div style={{ marginTop: 4, color: theme.textDim }}>{tgLink.last_error}</div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* The pairing panel. Two ways in, because the button alone
-                        fails on any machine without Telegram installed — that
-                        person needs the code on their phone, and the QR is how
-                        it gets there without being typed. */}
-                    {tgConnect && (
-                      <div style={{ marginTop: 18, paddingTop: 18, borderTop: `1px solid ${theme.borderFaint}`,
-                        display: "flex", alignItems: "center", gap: 18 }}>
-                        <img src={tgConnect.qr} alt="" width={116} height={116}
-                          style={{ borderRadius: 10, background: "#fff", padding: 6, flexShrink: 0, imageRendering: "pixelated" }} />
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
-                            {appLanguage === "de" ? "Telegram sollte sich geöffnet haben — drück dort auf START." : "Telegram should have opened — press START there."}
-                          </div>
-                          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 4, lineHeight: 1.45 }}>
-                            {appLanguage === "de"
-                              ? "Kein Telegram auf diesem Rechner? Scanne den Code mit dem Handy. Der Code gilt zehn Minuten und nur einmal — gib ihn nicht weiter."
-                              : "No Telegram on this machine? Scan the code with your phone. The code lasts ten minutes and works once — do not pass it on."}
-                          </div>
-                          <a href={tgConnect.url} target="_blank" rel="noopener noreferrer"
-                            style={{ display: "inline-block", marginTop: 8, fontSize: 12, fontFamily: FONT, color: theme.textDim, textDecoration: "underline" }}>
-                            {appLanguage === "de" ? "Nochmal in Telegram öffnen" : "Open in Telegram again"}
-                          </a>
-                        </div>
-                      </div>
-                    )}
-                    {tgErr && (
-                      <div style={{ marginTop: 12, fontSize: 12, fontFamily: FONT, color: "#e5484d" }}>{tgErr}</div>
-                    )}
-                  </div>
-                </motion.div>
               )}
 
               {settingsTab === "appearance" && (
