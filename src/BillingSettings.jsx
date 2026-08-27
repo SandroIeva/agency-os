@@ -365,21 +365,18 @@ export default function BillingSettings({ session, org, isAdmin, entitlements, o
               })}
             </div>
 
-            {/* The note has the row under the button rather than the space
-                beside it. Next to the button it was a column of small text
-                pressed against a large control, and no amount of width
-                capping made the two stop reading as one block. */}
-            <div style={{ marginTop: 20 }}>
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }} onClick={startCheckout} disabled={!isOwner || Boolean(action) || loading} style={{ padding: "12px 28px", whiteSpace: "nowrap", flexShrink: 0, border: 0, borderRadius: 999, background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontFamily: APP_FONT, fontSize: 13, fontWeight: 600, cursor: !isOwner || action || loading ? "not-allowed" : "pointer", opacity: !isOwner || action || loading ? 0.55 : 1 }}>
-                  {action === "checkout" ? (de ? "Öffnet Checkout …" : "Opening checkout …") : (de ? "Weiter zum Checkout" : "Continue to checkout")}
-                </motion.button>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 32, marginTop: 20 }}>
+              {/* Two sentences, two lines, broken where the full stop is rather
+                  than wherever the column happens to run out. Left to wrap on
+                  its own it broke mid-sentence and finished a few pixels from
+                  the button, and the two read as one block. */}
+              <div style={{ fontSize: 11, color: theme.textDim, minWidth: 0, lineHeight: 1.5 }}>
+                {!isOwner && <div>{de ? "Nur der Besitzer dieses Workspaces kann das Abo verwalten." : "Only this workspace’s owner can manage the subscription."}</div>}
+                {!isOwner && <div>{de ? "Ein Abo deckt alle Workspaces seines Kontos ab." : "One plan covers every workspace on their account."}</div>}
               </div>
-              {!isOwner && (
-                <div style={{ fontSize: 11, color: theme.textDim, lineHeight: 1.5, marginTop: 14 }}>
-                  {de ? "Nur der Besitzer dieses Workspaces kann das Abo verwalten. Ein Abo deckt alle Workspaces seines Kontos ab." : "Only this workspace’s owner can manage the subscription. One plan covers every workspace on their account."}
-                </div>
-              )}
+              <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }} onClick={startCheckout} disabled={!isOwner || Boolean(action) || loading} style={{ padding: "12px 28px", whiteSpace: "nowrap", flexShrink: 0, border: 0, borderRadius: 999, background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontFamily: APP_FONT, fontSize: 13, fontWeight: 600, cursor: !isOwner || action || loading ? "not-allowed" : "pointer", opacity: !isOwner || action || loading ? 0.55 : 1 }}>
+                {action === "checkout" ? (de ? "Öffnet Checkout …" : "Opening checkout …") : (de ? "Weiter zum Checkout" : "Continue to checkout")}
+              </motion.button>
             </div>
           </>
         )}
