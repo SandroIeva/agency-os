@@ -49318,27 +49318,29 @@ export default function CircularMenu() {
                   onClick={() => setOsVisualsModalOpen(true)}
                   style={{
                     borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`,
-                    padding: "20px 24px", cursor: "pointer",
+                    padding: "16px 20px", cursor: "pointer",
                     display: "flex", alignItems: "center", gap: 14,
                   }}
                 >
+                  {/* The same tile the Preferences rows carry: 36 square, radius 10,
+                      grey, an 18px glyph in the same stroke. It was 44 and lilac,
+                      which made this row read as a different kind of thing. */}
                   <div style={{
-                    width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-                    background: "linear-gradient(135deg, rgba(139, 122, 255, 0.18), rgba(100, 80, 220, 0.12))",
-                    border: "1px solid rgba(139, 122, 255, 0.2)",
+                    width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                    background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
                     display: "flex", alignItems: "center", justifyContent: "center",
                   }}>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8B7AFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.svgStroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
                       <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
                     </svg>
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
-                      Icons anpassen
+                      {appLanguage === "de" ? "Icons anpassen" : "Customise icons"}
                     </div>
                     <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.4 }}>
-                      Eigene Icons für Calendar-Events, Reminder, Tasks und mehr hochladen
+                      {appLanguage === "de" ? "Eigene Icons für Termine, Aufgaben und mehr" : "Your own icons for events, tasks and more"}
                     </div>
                   </div>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, color: theme.textDim }}>
