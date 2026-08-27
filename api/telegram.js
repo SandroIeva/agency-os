@@ -40,12 +40,13 @@ const T = {
     status: (n) => `Verbunden. Aktive Benachrichtigungen: ${n}.`,
     help: "Ich schicke dir Benachrichtigungen aus i7OS. Verbinden kannst du dich in der App unter Einstellungen → Konto. /stop trennt die Verbindung.",
     open: "In i7OS öffnen",
-    btnDone: "Erledigt",
+    cols: { progress: "In Arbeit", review: "Review", done: "Erledigt" },
     btnPass: "Weitergeben",
     btnBack: "Zurück",
     pickWho: "An wen?",
-    cbDone: "Erledigt.",
-    cbAlready: "War schon erledigt.",
+    cbMoved: (col) => `Nach ${col} verschoben.`,
+    cbAlreadyIn: (col) => `Steht schon unter ${col}.`,
+    markMoved: (col) => `Über Telegram nach ${col} verschoben.`,
     cbNoOne: "In diesem Workspace ist sonst niemand.",
     cbPassed: (name) => `An ${name} weitergegeben.`,
     markPassed: (name) => `Über Telegram an ${name} weitergegeben.`,
@@ -55,7 +56,7 @@ const T = {
     cbDenied: "Du hast auf diesen Workspace keinen Zugriff.",
     cbReadOnly: "Dieses Konto hat keinen aktiven Plan. Zum Ändern wird einer gebraucht.",
     cbFailed: "Hat nicht geklappt. Versuch es in der App.",
-    markDone: "Erledigt über Telegram.",
+
   },
   en: {
     linked: (name) => `✅ Connected. Your i7OS notifications arrive here from now on${name ? `, ${name}` : ""}.`,
@@ -66,12 +67,13 @@ const T = {
     status: (n) => `Connected. Active notification types: ${n}.`,
     help: "I send you notifications from i7OS. Connect in the app under Settings → Account. /stop disconnects.",
     open: "Open in i7OS",
-    btnDone: "Done",
+    cols: { progress: "In progress", review: "Review", done: "Done" },
     btnPass: "Hand over",
     btnBack: "Back",
     pickWho: "To whom?",
-    cbDone: "Marked done.",
-    cbAlready: "Already done.",
+    cbMoved: (col) => `Moved to ${col}.`,
+    cbAlreadyIn: (col) => `Already in ${col}.`,
+    markMoved: (col) => `Moved to ${col} from Telegram.`,
     cbNoOne: "There is nobody else in this workspace.",
     cbPassed: (name) => `Handed to ${name}.`,
     markPassed: (name) => `Handed to ${name} from Telegram.`,
@@ -81,7 +83,7 @@ const T = {
     cbDenied: "You do not have access to that workspace.",
     cbReadOnly: "This account has no active plan. Changes need one.",
     cbFailed: "That did not work. Try it in the app.",
-    markDone: "Marked done from Telegram.",
+
   },
 };
 
@@ -181,13 +183,22 @@ const handoverCandidates = async (db, task, exceptUserId) => {
 // is refused rather than guessed at.
 const ID_HINT = 8;
 
+// The columns a task can be pushed into from a chat. "todo" is missing on
+// purpose: nothing that arrives as a notification needs a button to put it back
+// where it already was. These keys are the board's own (DEFAULT_COLUMNS in
+// App.jsx) and the values in the column_key text field, verified against
+// production, which holds todo, progress, review and done and no other spelling.
+const MOVE_COLUMNS = ["progress", "review", "done"];
+
 // The keyboard a task notification carries. One definition, because the
-// fan-out draws it, "back" restores it, and both have to agree.
+// fan-out draws it, "back" restores it, a move redraws it, and all three have
+// to agree. It stays on the message after a move, so the card can be walked
+// across the board from the chat rather than in one direction only.
 const taskKeyboard = (t, appUrl, n, hasTask) => [
-  ...(hasTask ? [[
-    { text: t.btnDone, callback_data: `d:${n.id}` },
-    { text: t.btnPass, callback_data: `f:${n.id}` },
-  ]] : []),
+  ...(hasTask ? [
+    MOVE_COLUMNS.map(key => ({ text: t.cols[key], callback_data: `c:${n.id}:${key}` })),
+    [{ text: t.btnPass, callback_data: `f:${n.id}` }],
+  ] : []),
   [{ text: t.open, url: deepLink(appUrl, n) }],
 ];
 const resolveHint = (candidates, hint) => {
@@ -401,11 +412,12 @@ export default async function handler(req) {
     const second = rest.indexOf(":");
     const notifId = second > 0 ? rest.slice(0, second) : rest;
     const hint = second > 0 ? rest.slice(second + 1) : "";
-    // d = done, f = offer the list of people, p = hand it to one of them,
-    // b = back out of that list. "a" was assign-to-me and no longer exists;
-    // messages already sitting in someone's chat still carry that button, so an
-    // unknown action is answered with a shrug rather than left to spin.
-    if (!cbChat || !notifId || !["d", "f", "p", "b"].includes(action)) return answer("");
+    // c = move to a column, f = offer the list of people, p = hand it to one of
+    // them, b = back out of that list. "d" was the single done button and "a"
+    // was assign-to-me; messages already sitting in a chat still carry those,
+    // so d is honoured as a move to done and anything else unknown is answered
+    // with a shrug rather than left to spin.
+    if (!cbChat || !notifId || !["c", "d", "f", "p", "b"].includes(action)) return answer("");
 
     // The chat is the identity. A button is only ever pressed in the chat the
     // message was sent to, so nobody else can reach this task through it.
@@ -489,29 +501,33 @@ export default async function handler(req) {
         text: `${notifText(await orgName(db, n.org_id), n, task.description)}\n\n<i>${esc(t.markPassed(target.name))}</i>`,
         parse_mode: "HTML",
         disable_web_page_preview: true,
-        reply_markup: { inline_keyboard: [[{ text: t.open, url: deepLink(appUrl, n) }]] },
+        reply_markup: { inline_keyboard: taskKeyboard(t, appUrl, n, true) },
       });
       return answer(t.cbPassed(target.name));
     }
 
-    if (task.column_key === "done") return answer(t.cbAlready);
+    // Everything left is a column move. "d" is the old single done button,
+    // still sitting in chats that were sent before this existed.
+    const target = action === "d" ? "done" : hint;
+    if (!MOVE_COLUMNS.includes(target)) return answer("");
+    if (task.column_key === target) return answer(t.cbAlreadyIn(t.cols[target]));
 
     const { error: upErr } = await db.from("tasks")
-      .update({ column_key: "done", updated_at: new Date().toISOString() }).eq("id", task.id);
+      .update({ column_key: target, updated_at: new Date().toISOString() }).eq("id", task.id);
     if (upErr) return answer(t.cbFailed, true);
 
-    // The message says what happened to it, so the chat still reads correctly
-    // tomorrow. The action buttons go with it: pressing "done" twice is not a
-    // thing anyone means to do.
+    // The message says where the card stands now, so the chat still reads
+    // correctly tomorrow. The buttons stay: a card that went into review can go
+    // back into progress, and the message is the remote control for it.
     await api(botToken, "editMessageText", {
       chat_id: cbChat,
       message_id: cb.message.message_id,
-      text: `${notifText(await orgName(db, n.org_id), n, task.description)}\n\n<i>${esc(t.markDone)}</i>`,
+      text: `${notifText(await orgName(db, n.org_id), n, task.description)}\n\n<i>${esc(t.markMoved(t.cols[target]))}</i>`,
       parse_mode: "HTML",
       disable_web_page_preview: true,
-      reply_markup: { inline_keyboard: [[{ text: t.open, url: deepLink(appUrl, n) }]] },
+      reply_markup: { inline_keyboard: taskKeyboard(t, appUrl, n, true) },
     });
-    return answer(t.cbDone);
+    return answer(t.cbMoved(t.cols[target]));
   }
 
   const msg = update?.message || update?.edited_message;
