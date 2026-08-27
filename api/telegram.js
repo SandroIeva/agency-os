@@ -216,7 +216,8 @@ export default async function handler(req) {
   const reqUrl = new URL(req.url);
   const setup = reqUrl.searchParams.get("setup");
   const check = reqUrl.searchParams.get("check");
-  if (req.method !== "POST" && !setup && !check) return json({ error: "Method not allowed" }, 405);
+  const wire = reqUrl.searchParams.get("wire");
+  if (req.method !== "POST" && !setup && !check && !wire) return json({ error: "Method not allowed" }, 405);
 
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const url = process.env.SUPABASE_URL;
@@ -253,6 +254,45 @@ export default async function handler(req) {
       webhook_points_here: (info?.result?.url || "") === `${appUrl}/api/telegram`,
       pending: info?.result?.pending_update_count ?? null,
       failing: !!info?.result?.last_error_message,
+    });
+  }
+
+  // ── Repair the wiring, without holding a secret ────────────────────────────
+  // Unauthenticated on purpose, and safe because it has no inputs. Every value
+  // it writes is a constant in this file: the webhook can only ever be pointed
+  // at this deployment's own URL, with the secret this deployment already
+  // holds. A stranger calling it gains nothing they could not get by waiting.
+  //
+  // It also does nothing when nothing is wrong, which is what keeps it from
+  // being a way to burn Telegram's rate limit. drop_pending_updates is false
+  // here, unlike ?setup=: a repair must not throw away messages queued while
+  // the thing was broken. ?setup= stays secret-guarded for the forced,
+  // everything-including-the-name version.
+  if (wire) {
+    if (!process.env.TELEGRAM_WEBHOOK_SECRET) {
+      return json({ error: "TELEGRAM_WEBHOOK_SECRET is not set on this deployment", code: "not_configured" }, 503);
+    }
+    const before = await api(botToken, "getWebhookInfo", {});
+    const allowed = before?.result?.allowed_updates;
+    const pointsHere = (before?.result?.url || "") === `${appUrl}/api/telegram`;
+    const takesButtons = !allowed?.length || allowed.includes("callback_query");
+    if (pointsHere && takesButtons) {
+      return json({ changed: false, reason: "already wired", buttons_delivered: true });
+    }
+    const set = await api(botToken, "setWebhook", {
+      url: `${appUrl}/api/telegram`,
+      secret_token: process.env.TELEGRAM_WEBHOOK_SECRET,
+      allowed_updates: ["message", "edited_message", "callback_query"],
+      drop_pending_updates: false,
+    });
+    const after = await api(botToken, "getWebhookInfo", {});
+    const now = after?.result?.allowed_updates;
+    return json({
+      changed: !!set?.ok,
+      was: { webhook_points_here: pointsHere, buttons_delivered: takesButtons },
+      buttons_delivered: !now?.length || now.includes("callback_query"),
+      webhook_points_here: (after?.result?.url || "") === `${appUrl}/api/telegram`,
+      error: set?.ok ? undefined : set?.description,
     });
   }
 
