@@ -641,18 +641,31 @@ export default async function handler(req) {
         chat_id: cbChat, message_id: cb.message.message_id,
         text: `<b>${esc(headLine(org.name, project?.name))}</b>\n${esc(title)}\n\n<i>${esc(t.markMade)}</i>`,
         parse_mode: "HTML",
+        // The same keyboard a notification carries, addressed to the task
+        // itself. Assigning something to yourself produces no notification, so
+        // without this the one message you get about it could not be acted on.
         reply_markup: { inline_keyboard: [
           // Only when the message did not already carry one. A description
           // typed as line two needs no second asking.
           ...(description ? [] : [[{ text: t.btnDescribe, callback_data: `x:${made.task.id}` }]]),
-          [{ text: t.open, url: `${appUrl}/?task=${encodeURIComponent(made.task.id)}` }],
+          ...taskKeyboard(t, appUrl, { id: made.task.id, metadata: { task_id: made.task.id } }, true),
         ] },
       });
       return answer(t.newMade(title));
     }
 
-    const { data: n } = await db.from("notifications")
+    let { data: n } = await db.from("notifications")
       .select("id, user_id, org_id, type, title, body, metadata").eq("id", notifId).maybeSingle();
+    // A task made here never produced a notification: nobody needed telling,
+    // the person who made it was already looking. Its buttons therefore address
+    // the TASK, and this turns that id back into the shape everything below
+    // expects. notifLines has no entry for this type, so it falls back to the
+    // title it is given, which is the task's own.
+    if (!n) {
+      const { data: tk } = await db.from("tasks").select("id, title, org_id").eq("id", notifId).maybeSingle();
+      if (tk) n = { id: tk.id, org_id: tk.org_id, type: "task_created", title: tk.title, body: null,
+                    metadata: { task_id: tk.id } };
+    }
     const taskId = n?.metadata?.task_id;
     if (!taskId) return answer(t.cbGone, true);
 
