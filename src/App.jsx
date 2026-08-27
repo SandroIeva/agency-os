@@ -1472,6 +1472,43 @@ const priColors = { high: "#EF4444", medium: "#F59E0B", low: "#999999" };
 const ASSIGNEE_COLORS = ["#8B7AFF", "#E84393", "#00B894", "#F59E0B", "#5B8DEF", "#E88D67", "#6C5CE7", "#FD79A8"];
 
 // Hardcoded fallback columns — always visible even if Supabase fails
+// The joins a card draws from. Written once because the first load and the
+// live update both need exactly these, and a card fetched without them loses
+// its avatars.
+const TASK_SELECT = "*, creator:profiles!tasks_creator_profile_fkey(display_name, avatar_url, initials), assignee:profiles!tasks_assignee_profile_fkey(display_name, avatar_url, initials)";
+
+// What a realtime event does to the list we already have.
+//
+// It MERGES. The previous version of this replaced the whole list with a fresh
+// query, and a fresh query that came back empty for any reason at all emptied
+// the board. Nothing here can do that: an update touches one row, a delete
+// removes one row, and an insert adds one. The worst a malformed event can do
+// is nothing.
+//
+// Pure and at module scope so it can be tested without a browser, which is the
+// part I skipped last time.
+const applyTaskEvent = (prev, payload, draggingId) => {
+  const list = Array.isArray(prev) ? prev : [];
+  const row = payload?.new || payload?.old;
+  const id = row?.id;
+  if (!id) return list;
+  const evt = payload.eventType;
+
+  if (evt === "DELETE") return list.filter(t => t.id !== id);
+
+  const known = list.some(t => t.id === id);
+  if (evt === "UPDATE") {
+    // Not while a hand is holding this card: replacing it mid-drag drops it
+    // back where it started.
+    if (!known || draggingId === id) return list;
+    // Spread over the row we have, so creator and assignee survive: a realtime
+    // payload is the raw table row and carries neither.
+    return list.map(t => (t.id === id ? { ...t, ...payload.new } : t));
+  }
+  if (evt === "INSERT" && !known) return [...list, payload.new];
+  return list;
+};
+
 const DEFAULT_COLUMNS = [
   { id: "col-todo", key: "todo", labelKey: "kanban.todo", color: "#8E94A3", position: 0 },
   { id: "col-progress", key: "progress", labelKey: "kanban.inProgress", color: "#F59E0B", position: 1 },
@@ -2163,8 +2200,8 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
       // 2. Load tasks — org-scoped if user has an org, otherwise personal
       const orgId = userOrg?.id;
       const taskQuery = orgId
-        ? supabase.from("tasks").select("*, creator:profiles!tasks_creator_profile_fkey(display_name, avatar_url, initials), assignee:profiles!tasks_assignee_profile_fkey(display_name, avatar_url, initials)").eq("org_id", orgId).order("position")
-        : supabase.from("tasks").select("*, creator:profiles!tasks_creator_profile_fkey(display_name, avatar_url, initials), assignee:profiles!tasks_assignee_profile_fkey(display_name, avatar_url, initials)").eq("creator_id", u.id).order("position");
+        ? supabase.from("tasks").select(TASK_SELECT).eq("org_id", orgId).order("position")
+        : supabase.from("tasks").select(TASK_SELECT).eq("creator_id", u.id).order("position");
       const { data: taskData, error: taskError } = await taskQuery;
       if (taskError) {
         // Fallback without joins if FK doesn't exist
@@ -2233,6 +2270,35 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
     };
     init();
   }, [session, userOrg?.id, orgMembers]);
+
+  // ── Somebody else moved a card ────────────────────────────────────────────
+  // tasks is in the realtime publication already and the dashboard has listened
+  // to it all along; the board never did, so a colleague dragging a card, or a
+  // button pressed in Telegram or Slack, only showed up on a reload.
+  //
+  // Every event is merged into the list by applyTaskEvent. A newly inserted row
+  // arrives without its creator and assignee joins, so it is re-read with them
+  // — outside the state updater, because StrictMode invokes updaters twice and
+  // a fetch inside one would run twice.
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    const filter = userOrg?.id ? `org_id=eq.${userOrg.id}` : `creator_id=eq.${session.user.id}`;
+    const onChange = (payload) => {
+      setTasks(prev => applyTaskEvent(prev, payload, dragItem.current));
+      if (payload?.eventType === "INSERT" && payload.new?.id) {
+        supabase.from("tasks").select(TASK_SELECT).eq("id", payload.new.id).maybeSingle()
+          .then(({ data }) => {
+            if (!data) return;
+            setTasks(prev => prev.map(t => (t.id === data.id ? { ...t, ...data } : t)));
+          });
+      }
+    };
+    const ch = supabase
+      .channel("kanban-tasks-" + (userOrg?.id || session.user.id))
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter }, onChange)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [session?.user?.id, userOrg?.id]);
 
   // Auto-open task edit form when navigating from startview card.
   // Guarded by a ref so each openTaskId only auto-opens ONCE: the effect also
