@@ -2137,26 +2137,6 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
   const descRef = useRef(null);
   const dragItem = useRef(null);
 
-  // The task query lives here because TWO things run it: the first load, and
-  // the realtime subscription below. Scoping written twice is scoping that
-  // drifts, and the copy that drifts is the one deciding what other people's
-  // changes look like.
-  const fetchTasks = useCallback(async () => {
-    const u = session?.user;
-    if (!u) return null;
-    const orgId = userOrg?.id;
-    const withJoins = orgId
-      ? supabase.from("tasks").select("*, creator:profiles!tasks_creator_profile_fkey(display_name, avatar_url, initials), assignee:profiles!tasks_assignee_profile_fkey(display_name, avatar_url, initials)").eq("org_id", orgId).order("position")
-      : supabase.from("tasks").select("*, creator:profiles!tasks_creator_profile_fkey(display_name, avatar_url, initials), assignee:profiles!tasks_assignee_profile_fkey(display_name, avatar_url, initials)").eq("creator_id", u.id).order("position");
-    const { data, error } = await withJoins;
-    if (!error) return data || [];
-    // Fallback without joins if the FK doesn't exist
-    const { data: fb } = await (orgId
-      ? supabase.from("tasks").select("*").eq("org_id", orgId).order("position")
-      : supabase.from("tasks").select("*").eq("creator_id", u.id).order("position"));
-    return fb || [];
-  }, [session?.user?.id, userOrg?.id]); // eslint-disable-line
-
   // Always use these columns
   const colEntries = DEFAULT_COLUMNS;
 
@@ -2182,7 +2162,20 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
 
       // 2. Load tasks — org-scoped if user has an org, otherwise personal
       const orgId = userOrg?.id;
-      setTasks(await fetchTasks() || []);
+      const taskQuery = orgId
+        ? supabase.from("tasks").select("*, creator:profiles!tasks_creator_profile_fkey(display_name, avatar_url, initials), assignee:profiles!tasks_assignee_profile_fkey(display_name, avatar_url, initials)").eq("org_id", orgId).order("position")
+        : supabase.from("tasks").select("*, creator:profiles!tasks_creator_profile_fkey(display_name, avatar_url, initials), assignee:profiles!tasks_assignee_profile_fkey(display_name, avatar_url, initials)").eq("creator_id", u.id).order("position");
+      const { data: taskData, error: taskError } = await taskQuery;
+      if (taskError) {
+        // Fallback without joins if FK doesn't exist
+        const fallbackQuery = orgId
+          ? supabase.from("tasks").select("*").eq("org_id", orgId).order("position")
+          : supabase.from("tasks").select("*").eq("creator_id", u.id).order("position");
+        const { data: fb } = await fallbackQuery;
+        setTasks(fb || []);
+      } else {
+        setTasks(taskData || []);
+      }
 
       // 3. Build team members map — load all org profiles from DB
       const memberMap = {};
@@ -2240,42 +2233,6 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
     };
     init();
   }, [session, userOrg?.id, orgMembers]);
-
-  // ── Somebody else moved a card ────────────────────────────────────────────
-  // tasks and task_checklist_items are both in the realtime publication
-  // already, and the dashboard has listened to tasks all along. The board
-  // itself did not, so a colleague dragging a card — or pressing a button in
-  // Telegram — only showed up on a page reload.
-  //
-  // A refetch rather than patching the payload in: a realtime row is the raw
-  // table row, without the creator and assignee joins the cards render, so
-  // patching would blank out the avatars on every change someone else made.
-  //
-  // Two guards. The refetch is debounced, because moving one card writes one
-  // row but reordering a column writes several. And it never runs mid-drag:
-  // dragItem is set from onDragStart, so replacing the list under a hand that
-  // is holding a card would drop it back where it started.
-  useEffect(() => {
-    if (!session?.user?.id) return;
-    const filter = userOrg?.id ? `org_id=eq.${userOrg.id}` : `creator_id=eq.${session.user.id}`;
-    let timer = null;
-    // The wait is bounded. onDragEnd clears the ref even when a card is
-    // dropped nowhere, but a ref that somehow stayed set must not turn this
-    // into a timer that fires every quarter second for the rest of the session.
-    const pull = (tries = 0) => {
-      clearTimeout(timer);
-      timer = setTimeout(async () => {
-        if (dragItem.current && tries < 20) { pull(tries + 1); return; }
-        const rows = await fetchTasks();
-        if (rows) setTasks(rows);
-      }, 250);
-    };
-    const ch = supabase
-      .channel("kanban-tasks-" + (userOrg?.id || session.user.id))
-      .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter }, pull)
-      .subscribe();
-    return () => { clearTimeout(timer); supabase.removeChannel(ch); };
-  }, [session?.user?.id, userOrg?.id, fetchTasks]);
 
   // Auto-open task edit form when navigating from startview card.
   // Guarded by a ref so each openTaskId only auto-opens ONCE: the effect also
@@ -43280,7 +43237,7 @@ export default function CircularMenu() {
     const url = new URL(window.location.href);
     url.searchParams.delete("slack");
     window.history.replaceState({}, "", url.pathname + (url.search || ""));
-    if (status === "connected") { readSlackLink().then(setSlackLink); setSettingsTab("account"); setCurrentView("settings"); }
+    if (status === "connected") { readSlackLink().then(setSlackLink); setSettingsTab("workspace"); setCurrentView("settings"); }
     else if (status !== "cancelled") {
       setSlackErr(appLanguage === "de"
         ? "Die Verbindung zu Slack ist nicht zustande gekommen. Versuch es noch einmal."
