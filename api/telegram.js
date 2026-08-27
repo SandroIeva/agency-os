@@ -237,6 +237,9 @@ export default async function handler(req) {
     const info = await api(botToken, "getWebhookInfo", {});
     const allowed = info?.result?.allowed_updates;
     return json({
+      // Which commit is actually answering. Vercel sets this on every build, so
+      // "is my fix live yet" stops being a guess: compare it with git log.
+      commit: (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7) || null,
       bot: me?.ok ? me.result?.username || null : null,
       // Telegram treats an absent list as "the default set", and callback_query
       // is in that set. Present but missing it is the state where every button

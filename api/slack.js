@@ -191,7 +191,12 @@ export default async function handler(req) {
     const { count } = await db.from("slack_installations").select("team_id", { count: "exact", head: true });
     const { count: links } = await db.from("messenger_links")
       .select("id", { count: "exact", head: true }).eq("provider", "slack");
-    return json({ configured: true, installations: count ?? 0, connected_people: links ?? 0, redirect_uri: redirectUri });
+    return json({
+      // Which commit is actually answering. Vercel sets this on every build, so
+      // "is my fix live yet" stops being a guess: compare it with git log.
+      commit: (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7) || null,
+      configured: true, installations: count ?? 0, connected_people: links ?? 0, redirect_uri: redirectUri,
+    });
   }
 
   // ── Send somebody to Slack's consent screen ───────────────────────────────
