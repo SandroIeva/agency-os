@@ -141,7 +141,7 @@ Multi-tenant: nearly every row carries `org_id` (workspace) and often `project_i
   which is what makes the trigger safe to ship before the bot exists.
 
 Storage buckets: `brand-assets` (also whiteboard image uploads under `whiteboards/<orgId>/…`), `user-files`, `chat-attachments`, `project-logos`, `os-visuals`.
-RPCs: `accept_project_invitation`, `delete_organization`, `redeem_push_setup_token` (api/redirect also calls a click-count RPC).
+RPCs: `accept_project_invitation`, `delete_organization`, `redeem_push_setup_token`, `remove_org_member` (an admin removes somebody from a workspace: org_members AND their project_members in that org AND any pending invite — the browser cannot do the second, since project_members may only be deleted by the project's owner; refuses self, refuses the workspace owner) (api/redirect also calls a click-count RPC).
 Realtime channels: `wb-<boardId>` (whiteboard items), `chat-<convId>`, `team-calendar-<orgId>`, `canvas-<canvasId>` (Artboards: cursors AND the
 document itself — `brand_canvases` is deliberately NOT in the realtime
 publication, so canvas collaboration rides entirely on broadcast).

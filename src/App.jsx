@@ -41961,6 +41961,27 @@ export default function CircularMenu() {
       alert((appLanguage === "de" ? "Konnte nicht gespeichert werden: " : "Could not save: ") + error.message);
     }
   };
+  // Removing somebody is not one delete, which is why it goes through an RPC.
+  // A project invitation grants access WITHOUT workspace membership, so deleting
+  // the org_members row alone would leave the person inside every project they
+  // had been added to — still working, still counted against the seats. And the
+  // browser cannot clear those: project_members may only be deleted by the
+  // project's owner, who is usually not the admin doing the removing.
+  const removeOrgMember = async (userId, name) => {
+    if (!userOrg?.id) return;
+    const who = name || (appLanguage === "de" ? "Dieses Mitglied" : "This member");
+    const ok = window.confirm(appLanguage === "de"
+      ? `${who} aus „${userOrg.name}" entfernen?\n\nDer Zugriff auf den Workspace und auf alle seine Projekte endet sofort. Erstellte Inhalte bleiben erhalten.`
+      : `Remove ${who} from “${userOrg.name}”?\n\nAccess to the workspace and to every project in it ends immediately. What they created stays.`);
+    if (!ok) return;
+    const prev = orgMembers;
+    setOrgMembers(p => p.filter(m => m.user_id !== userId));   // optimistic
+    const { error } = await supabase.rpc("remove_org_member", { p_org: userOrg.id, p_user: userId });
+    if (error) {
+      setOrgMembers(prev);
+      alert((appLanguage === "de" ? "Konnte nicht entfernt werden: " : "Could not remove: ") + error.message);
+    }
+  };
   const [teamInvites, setTeamInvites] = useState([]);        // pending invites sent by admin
   const [inviteEmails, setInviteEmails] = useState([]);      // email chips for invite input
   const [inviteInputVal, setInviteInputVal] = useState("");  // current text in invite input
@@ -42222,7 +42243,7 @@ export default function CircularMenu() {
         // 2. Check if user is in any org
         const { data: memberships } = await supabase
           .from("org_members")
-          .select("org_id, role, organizations(id, name, slug, logo_url, brand_color)")
+          .select("org_id, role, organizations(id, name, slug, logo_url, brand_color, created_by)")
           .eq("user_id", uid);
 
         if (memberships && memberships.length > 0) {
@@ -48109,6 +48130,28 @@ export default function CircularMenu() {
                                       })}
                                     </div>
                                   </div>
+                                  {/* Not for yourself and not for the workspace's
+                                      owner: one would lock you out of your own
+                                      settings, the other would strand the plan
+                                      everybody else is working under. The RPC
+                                      refuses both as well — this only keeps the
+                                      button from being there to press. */}
+                                  {userOrgRole === "admin" && m.user_id !== session?.user?.id
+                                    && m.user_id !== userOrg?.created_by && (
+                                    <div style={{ paddingTop: 12, marginTop: 12, borderTop: `1px solid ${theme.borderFaint}` }}>
+                                      <div onClick={() => removeOrgMember(m.user_id, m.profiles?.display_name)}
+                                        style={{ display: "inline-flex", alignItems: "center", gap: 8,
+                                          padding: "8px 14px", borderRadius: 9, cursor: "pointer",
+                                          border: "1px solid rgba(229,72,77,0.35)", color: "#e5484d",
+                                          fontFamily: FONT, fontSize: 12.5, fontWeight: 500 }}>
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                          strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                                          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+                                        </svg>
+                                        {appLanguage === "de" ? "Aus Workspace entfernen" : "Remove from workspace"}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               </motion.div>
                             )}
