@@ -174,14 +174,37 @@ const OS_ICON_BG = "#15151c";
 // under it said the label again in longer words ("Notiz" / "Symbol für
 // Notizen"), and seven of them turned a list into a wall.
 const OS_VISUAL_SLOTS = [
-  { key: "calendar_event", label: "Kalender-Termin", labelEn: "Calendar event", defaultEmoji: "📅", defaultBg: OS_ICON_BG },
-  { key: "calendar_meet", label: "Google Meet", labelEn: "Google Meet", defaultEmoji: "📹", defaultBg: OS_ICON_BG },
-  { key: "reminder", label: "Erinnerung", labelEn: "Reminder", defaultEmoji: "⏰", defaultBg: OS_ICON_BG },
-  { key: "task_high", label: "Wichtige Aufgabe", labelEn: "High priority task", defaultEmoji: "⚡", defaultBg: OS_ICON_BG },
-  { key: "task_default", label: "Aufgabe", labelEn: "Task", defaultEmoji: "◎", defaultBg: OS_ICON_BG },
-  { key: "note", label: "Notiz", labelEn: "Note", defaultEmoji: "📝", defaultBg: OS_ICON_BG },
-  { key: "chat_message", label: "Chat-Nachricht", labelEn: "Chat message", defaultEmoji: "💬", defaultBg: OS_ICON_BG },
+  { key: "calendar_event", label: "Kalender-Termin", labelEn: "Calendar event", defaultBg: OS_ICON_BG },
+  { key: "calendar_meet", label: "Google Meet", labelEn: "Google Meet", defaultBg: OS_ICON_BG },
+  { key: "reminder", label: "Erinnerung", labelEn: "Reminder", defaultBg: OS_ICON_BG },
+  { key: "task_high", label: "Wichtige Aufgabe", labelEn: "High priority task", defaultBg: OS_ICON_BG },
+  { key: "task_default", label: "Aufgabe", labelEn: "Task", defaultBg: OS_ICON_BG },
+  { key: "note", label: "Notiz", labelEn: "Note", defaultBg: OS_ICON_BG },
+  { key: "chat_message", label: "Chat-Nachricht", labelEn: "Chat message", defaultBg: OS_ICON_BG },
 ];
+
+// ONE drawing per slot, read by the dashboard cards and by the settings dialog
+// that customises them. They used to disagree: the card drew a line icon while
+// the dialog showed the platform's emoji, so the preview promised something the
+// product never rendered. Emoji have no place here anyway. They arrive with
+// their own colours, their own shapes, and a different design on every OS, so
+// seven of them side by side never read as one set. These are white strokes on
+// anthracite, the same weight, like the rest of the OS.
+// Wrapped in <g> rather than a fragment: this sits at module scope and has no
+// business depending on which JSX runtime the file is compiled with.
+const OS_VISUAL_ICON = {
+  calendar_event: <g><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M3.5 10h17M8 3v4M16 3v4" /></g>,
+  calendar_meet: <g><rect x="2.5" y="6" width="13" height="12" rx="2.5" /><path d="M15.5 10.5 21.5 7v10l-6-3.5Z" /></g>,
+  reminder: <g><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" /></g>,
+  task_high: <path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5Z" />,
+  task_default: <g><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="3" /></g>,
+  note: <g><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></g>,
+  chat_message: <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />,
+};
+const osVisualIcon = (key, size = 22) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#fff"
+    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{OS_VISUAL_ICON[key]}</svg>
+);
 
 const EMOJI_GROUPS = {
   smileys: ["😀","😃","😄","😁","😆","😅","🤣","😂","🙂","🙃","😉","😊","😇","🥰","😍","🤩","😘","😗","😚","😙","🥲","😋","😛","😜","🤪","😝","🤑","🤗","🤭","🫢","🫣","🤫","🤔","🫡","🤐","🤨","😐","😑","😶","😏","😒","🙄","😬","🤥","🫨","🫠","😌","😔","😪","🤤","😴","😷","🤒","🤕","🤢","🤮","🤧","🥵","🥶","🥴","😵","🤯","🤠","🥳","🥸","😎","🤓","🧐","😕","🫤","😟","🙁","☹️","😮","😯","😲","😳","🥺","🥹","😦","😧","😨","😰","😥","😢","😭","😱","😖","😣","😞","😓","😩","😫","🥱","😤","😡","😠","🤬","😈","👿","💀","☠️","💩","🤡","👹","👺","👻","👽","👾","🤖"],
@@ -43536,10 +43559,7 @@ export default function CircularMenu() {
         // and its own idea of what a bolt looks like, and it changes with the
         // platform's font. These are white on anthracite like everything else.
         icon: projLogo || customIcon ? null
-          : (step ? step.icon
-            : tk.priority === "high"
-              ? stepIcon(<path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5Z" />)
-              : stepIcon(<><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="3" /></>)),
+          : (step ? step.icon : stepIcon(OS_VISUAL_ICON[slotKey])),
         iconBg: step ? step.iconBg : (customBg || slotDef?.defaultBg || OS_ICON_BG),
         logoUrl: projLogo || customIcon,
         // Project logos always fill the full circle (not affected by OS visual modes).
@@ -43570,10 +43590,7 @@ export default function CircularMenu() {
       const customBg = slotData?.bg_color || null;
       const fullbleed = slotData?.mode === "fullbleed" && customIcon;
       return {
-        icon: customIcon ? null
-          : (ev.isMeet
-            ? stepIcon(<><rect x="2.5" y="6" width="13" height="12" rx="2.5" /><path d="M15.5 10.5 21.5 7v10l-6-3.5Z" /></>)
-            : stepIcon(<><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M3.5 10h17M8 3v4M16 3v4" /></>)),
+        icon: customIcon ? null : stepIcon(OS_VISUAL_ICON[slotKey]),
         iconBg: customBg || slotDef?.defaultBg || OS_ICON_BG,
         logoUrl: customIcon,
         fullbleed,
@@ -50042,7 +50059,7 @@ export default function CircularMenu() {
               transition={{ type: "spring", stiffness: 280, damping: 24 }}
               onClick={(e) => e.stopPropagation()}
               style={{
-                width: "100%", maxWidth: 560, maxHeight: "85vh",
+                width: "100%", maxWidth: 680, maxHeight: "85vh",
                 background: darkMode ? "rgba(22,22,30,0.98)" : "rgba(255,255,255,0.99)",
                 border: `1px solid ${theme.border}`,
                 borderRadius: 22, overflow: "hidden",
@@ -50064,7 +50081,7 @@ export default function CircularMenu() {
               {/* Slot list. A flat list with hairlines, not seven nested cards:
                   the cards drew a box around every row and the rows are the
                   whole content of this dialog. */}
-              <div style={{ flex: 1, overflowY: "auto", padding: "4px 20px 12px", display: "flex", flexDirection: "column" }}>
+              <div style={{ flex: 1, overflowY: "auto", padding: "4px 24px 12px", display: "flex", flexDirection: "column" }}>
                 {OS_VISUAL_SLOTS.map((slot, i) => {
                   const de = appLanguage === "de";
                   const slotData = osVisuals[slot.key] || {};
@@ -50087,17 +50104,38 @@ export default function CircularMenu() {
                         width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
                         background: fullbleed ? "transparent" : effectiveBg,
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        overflow: "hidden", fontSize: 19, color: "#fff",
+                        overflow: "hidden", color: "#fff",
                       }}>
                         {customIcon ? (
                           <img src={customIcon} alt="" style={fullbleed
                             ? { width: "100%", height: "100%", objectFit: "cover" }
                             : { width: 26, height: 26, objectFit: "contain" }} />
-                        ) : slot.defaultEmoji}
+                        ) : osVisualIcon(slot.key)}
                       </div>
 
                       <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
                         {de ? slot.label : (slot.labelEn || slot.label)}
+                      </div>
+
+                      {/* Zurücksetzen sits BEFORE the controls, not after them:
+                          trailing, it pushed the upload button out of line with
+                          the close button above it, and it only appears once a
+                          slot has been customised. Fixed width so the row does
+                          not reflow the moment it does. */}
+                      <div style={{ width: 26, flexShrink: 0, display: "flex", justifyContent: "center" }}>
+                        {hasAnyOverride && (
+                          <motion.button whileTap={{ scale: 0.95 }}
+                            onClick={() => { setOsVisualPicker(null); resetOsVisual(slot.key); }}
+                            title={de ? "Zurücksetzen" : "Reset"}
+                            style={{
+                              width: 26, height: 26, borderRadius: 9, cursor: "pointer",
+                              background: "transparent", border: "none", color: theme.textDim,
+                              display: "flex", alignItems: "center", justifyContent: "center", padding: 0,
+                            }}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                          </motion.button>
+                        )}
                       </div>
 
                       {/* Icon on a colour, or the picture filling the whole circle */}
@@ -50151,7 +50189,10 @@ export default function CircularMenu() {
                       <label style={{
                         height: 28, boxSizing: "border-box", padding: "0 12px", borderRadius: 9,
                         cursor: uploading ? "wait" : "pointer", flexShrink: 0, whiteSpace: "nowrap",
-                        display: "flex", alignItems: "center",
+                        // Fixed width, because the label is not: right-aligned,
+                        // "Ersetzen" pulled every control on its row a few pixels
+                        // over and no two rows lined up down the column.
+                        minWidth: 92, display: "flex", alignItems: "center", justifyContent: "center",
                         background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
                         color: theme.text, fontSize: 11.5, fontFamily: FONT, fontWeight: 500,
                         opacity: uploading ? 0.5 : 1,
@@ -50165,23 +50206,6 @@ export default function CircularMenu() {
                         />
                       </label>
 
-                      {/* Kept as a fixed-width slot so the row does not reflow
-                          the moment something is customised. */}
-                      <div style={{ width: 28, flexShrink: 0, display: "flex", justifyContent: "center" }}>
-                        {hasAnyOverride && (
-                          <motion.button whileTap={{ scale: 0.95 }}
-                            onClick={() => { setOsVisualPicker(null); resetOsVisual(slot.key); }}
-                            title={de ? "Zurücksetzen" : "Reset"}
-                            style={{
-                              width: 28, height: 28, borderRadius: 9, cursor: "pointer",
-                              background: "transparent", border: "none", color: theme.textDim,
-                              display: "flex", alignItems: "center", justifyContent: "center", padding: 0,
-                            }}
-                          >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-                          </motion.button>
-                        )}
-                      </div>
                     </div>
                   );
                 })}
