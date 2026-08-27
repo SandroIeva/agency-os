@@ -41,17 +41,13 @@ const T = {
     help: "Ich schicke dir Benachrichtigungen aus i7 OS. Verbinden kannst du dich in der App unter Einstellungen → Konto. /stop trennt die Verbindung.",
     open: "In i7 OS öffnen",
     btnDone: "Erledigt",
-    btnMine: "Mir zuweisen",
     cbDone: "Erledigt.",
     cbAlready: "War schon erledigt.",
-    cbMine: "Dir zugewiesen.",
-    cbMineAlready: "Gehört dir schon.",
     cbGone: "Diese Aufgabe gibt es nicht mehr.",
     cbDenied: "Du hast auf diesen Workspace keinen Zugriff.",
     cbReadOnly: "Dieses Konto hat keinen aktiven Plan. Zum Ändern wird einer gebraucht.",
     cbFailed: "Hat nicht geklappt. Versuch es in der App.",
     markDone: "Erledigt über Telegram.",
-    markMine: "Über Telegram dir zugewiesen.",
   },
   en: {
     linked: (name) => `✅ Connected. Your i7 OS notifications arrive here from now on${name ? `, ${name}` : ""}.`,
@@ -63,17 +59,13 @@ const T = {
     help: "I send you notifications from i7 OS. Connect in the app under Settings → Account. /stop disconnects.",
     open: "Open in i7 OS",
     btnDone: "Done",
-    btnMine: "Assign to me",
     cbDone: "Marked done.",
     cbAlready: "Already done.",
-    cbMine: "Assigned to you.",
-    cbMineAlready: "Already yours.",
     cbGone: "That task is gone.",
     cbDenied: "You do not have access to that workspace.",
     cbReadOnly: "This account has no active plan. Changes need one.",
     cbFailed: "That did not work. Try it in the app.",
     markDone: "Marked done from Telegram.",
-    markMine: "Assigned to you from Telegram.",
   },
 };
 
@@ -101,14 +93,24 @@ const deepLink = (appUrl, n) => {
   return appUrl;
 };
 
-// The workspace name over the title, the title, the body. Built in one place
-// because a button press rewrites the very message the fan-out sent, and the
-// two have to produce the same three lines or the edit reflows the card.
-const notifText = (workspace, n) => [
-  workspace ? `<b>${esc(workspace)}</b>` : null,
-  `<b>${esc(n.title)}</b>`,
-  n.body ? esc(n.body) : null,
-].filter(Boolean).join("\n");
+// The workspace name over the title, the title, the body, then whatever the
+// task itself says. Built in one place because a button press rewrites the very
+// message the fan-out sent, and the two have to produce the same lines or the
+// edit reflows the card.
+//
+// The description is the point of the last block: the notification body only
+// ever says who assigned what, so a task whose whole content is in its
+// description arrived here as a title and nothing else.
+const DETAIL_MAX = 600;
+const notifText = (workspace, n, detail) => {
+  const d = String(detail || "").trim();
+  return [
+    workspace ? `<b>${esc(workspace)}</b>` : null,
+    `<b>${esc(n.title)}</b>`,
+    n.body ? esc(n.body) : null,
+    d ? "\n" + esc(d.length > DETAIL_MAX ? d.slice(0, DETAIL_MAX).trimEnd() + "…" : d) : null,
+  ].filter(Boolean).join("\n");
+};
 
 const orgName = async (db, orgId) => {
   if (!orgId) return "";
@@ -180,6 +182,41 @@ export default async function handler(req) {
       allowed_updates: ["message", "edited_message", "callback_query"],
       drop_pending_updates: true,
     });
+    // Everything about the bot's public face that the API is allowed to set.
+    // Its PICTURE is not on that list: a bot's profile photo can only be set in
+    // BotFather (/setuserpic), there is no method for it. Name, both
+    // descriptions and the command menu are set here so they cannot drift from
+    // what the product actually does.
+    const brand = {};
+    brand.name = (await api(botToken, "setMyName", { name: "i7 OS" }))?.ok || false;
+    brand.short = (await api(botToken, "setMyShortDescription", {
+      short_description: "Notifications from your i7 OS workspace, and a button that closes a task without opening the app.",
+    }))?.ok || false;
+    brand.shortDe = (await api(botToken, "setMyShortDescription", {
+      language_code: "de",
+      short_description: "Benachrichtigungen aus deinem i7 OS Workspace, plus ein Knopf, der Aufgaben ohne Umweg erledigt.",
+    }))?.ok || false;
+    // Shown on the empty chat screen, before anyone has pressed Start.
+    brand.about = (await api(botToken, "setMyDescription", {
+      description: "i7 OS is the workspace OS for creative agencies. Connect this bot in the app under Settings, Account, and your notifications arrive here. Tasks can be marked done straight from the chat.",
+    }))?.ok || false;
+    brand.aboutDe = (await api(botToken, "setMyDescription", {
+      language_code: "de",
+      description: "i7 OS ist das Workspace-Betriebssystem für Kreativagenturen. Verbinde diesen Bot in der App unter Einstellungen, Konto, dann kommen deine Benachrichtigungen hier an. Aufgaben lassen sich direkt aus dem Chat erledigen.",
+    }))?.ok || false;
+    const cmds = (list) => [
+      { command: "status", description: list[0] },
+      { command: "stop", description: list[1] },
+      { command: "help", description: list[2] },
+    ];
+    brand.commands = (await api(botToken, "setMyCommands", {
+      commands: cmds(["Show the connection", "Disconnect", "What this bot does"]),
+    }))?.ok || false;
+    brand.commandsDe = (await api(botToken, "setMyCommands", {
+      language_code: "de",
+      commands: cmds(["Verbindung anzeigen", "Verbindung trennen", "Was der Bot kann"]),
+    }))?.ok || false;
+
     const info = await api(botToken, "getWebhookInfo", {});
     const me = await api(botToken, "getMe", {});
     // Deliberately narrow: the bot's public identity and what Telegram says
@@ -187,6 +224,9 @@ export default async function handler(req) {
     return json({
       set: !!set?.ok,
       set_error: set?.ok ? undefined : set?.description,
+      brand,
+      // The one piece of branding no endpoint can do for you.
+      avatar: "set the profile picture in BotFather: /setuserpic",
       bot: me?.ok ? { username: me.result?.username, name: me.result?.first_name } : null,
       webhook: info?.ok ? {
         url: info.result?.url,
@@ -232,22 +272,28 @@ export default async function handler(req) {
     const workspace = await orgName(db, n.org_id);
     const t = T[link.lang === "en" ? "en" : "de"];
 
-    // A notification about a task can be acted on without opening anything.
+    // A notification about a task can be acted on without opening anything, and
+    // brings the task's own description with it. There is no "assign to me":
+    // the only person this message reaches is the assignee, so the button asked
+    // them to do the thing that had just been done to them.
+    //
     // The callback carries the NOTIFICATION id, not the task id: the handler
     // needs the notification anyway to rebuild this exact message, and one uuid
     // fits Telegram's 64-byte callback_data where two would not.
     const taskId = n.metadata?.task_id;
+    let detail = "";
+    if (taskId) {
+      const { data: task } = await db.from("tasks").select("description").eq("id", taskId).maybeSingle();
+      detail = task?.description || "";
+    }
     const keyboard = [
-      ...(taskId ? [[
-        { text: t.btnDone, callback_data: `d:${n.id}` },
-        { text: t.btnMine, callback_data: `a:${n.id}` },
-      ]] : []),
+      ...(taskId ? [[{ text: t.btnDone, callback_data: `d:${n.id}` }]] : []),
       [{ text: t.open, url: deepLink(appUrl, n) }],
     ];
 
     const res = await api(botToken, "sendMessage", {
       chat_id: link.chat_id,
-      text: notifText(workspace, n),
+      text: notifText(workspace, n, detail),
       parse_mode: "HTML",
       disable_web_page_preview: true,
       reply_markup: { inline_keyboard: keyboard },
@@ -294,7 +340,10 @@ export default async function handler(req) {
     const cut = String(cb.data || "").indexOf(":");
     const action = cut > 0 ? cb.data.slice(0, cut) : "";
     const notifId = cut > 0 ? cb.data.slice(cut + 1) : "";
-    if (!cbChat || !notifId || (action !== "d" && action !== "a")) return answer("");
+    // "a" was assign-to-me and no longer exists. Messages already in someone's
+    // chat still carry that button, so it is accepted and answered with the
+    // shrug rather than left to spin.
+    if (!cbChat || !notifId || action !== "d") return answer("");
 
     // The chat is the identity. A button is only ever pressed in the chat the
     // message was sent to, so nobody else can reach this task through it.
@@ -309,7 +358,7 @@ export default async function handler(req) {
     if (!taskId) return answer(t.cbGone, true);
 
     const { data: task } = await db.from("tasks")
-      .select("id, org_id, project_id, column_key, assignee_id").eq("id", taskId).maybeSingle();
+      .select("id, org_id, project_id, column_key, description").eq("id", taskId).maybeSingle();
     if (!task) return answer(t.cbGone, true);
 
     // Two gates that the database would normally apply and here does not. The
@@ -324,14 +373,10 @@ export default async function handler(req) {
       if (readOnly) return answer(t.cbReadOnly, true);
     }
 
-    const done = action === "d";
-    if (done && task.column_key === "done") return answer(t.cbAlready);
-    if (!done && task.assignee_id === link.user_id) return answer(t.cbMineAlready);
+    if (task.column_key === "done") return answer(t.cbAlready);
 
-    const patch = done
-      ? { column_key: "done", updated_at: new Date().toISOString() }
-      : { assignee_id: link.user_id, updated_at: new Date().toISOString() };
-    const { error: upErr } = await db.from("tasks").update(patch).eq("id", task.id);
+    const { error: upErr } = await db.from("tasks")
+      .update({ column_key: "done", updated_at: new Date().toISOString() }).eq("id", task.id);
     if (upErr) return answer(t.cbFailed, true);
 
     // The message says what happened to it, so the chat still reads correctly
@@ -340,12 +385,12 @@ export default async function handler(req) {
     await api(botToken, "editMessageText", {
       chat_id: cbChat,
       message_id: cb.message.message_id,
-      text: `${notifText(await orgName(db, n.org_id), n)}\n\n<i>${esc(done ? t.markDone : t.markMine)}</i>`,
+      text: `${notifText(await orgName(db, n.org_id), n, task.description)}\n\n<i>${esc(t.markDone)}</i>`,
       parse_mode: "HTML",
       disable_web_page_preview: true,
       reply_markup: { inline_keyboard: [[{ text: t.open, url: deepLink(appUrl, n) }]] },
     });
-    return answer(done ? t.cbDone : t.cbMine);
+    return answer(t.cbDone);
   }
 
   const msg = update?.message || update?.edited_message;
