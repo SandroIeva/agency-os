@@ -9,6 +9,15 @@ Multi-tenant workspace OS for creative agencies. React 19 + Vite SPA, Supabase (
 3. **Verify before shipping:** `npx vite build` must end with `✓ built` (cold build takes ~20–25 min on the current machine; warm cache can be seconds — both are normal). There are no tests; the build is the gate. The build only covers the browser bundle — it says nothing about whether the `api/` functions resolve their imports (see "Verifying a deploy").
 4. **Deploy = push:** committing to `main` and pushing triggers the Vercel deploy. Commit messages end with `Co-Authored-By: Claude <model> <noreply@anthropic.com>`.
 5. **Language:** every user-visible string AND every AI-generated output must respect `appLanguage` (`de`/`en`), usually via the local `const de = appLanguage === "de"` or the `t(...)` translations helper (`src/translations.js`). Never hardcode German (or English) in new UI.
+   **No emoji in the UI.** Every icon is a drawn line glyph, white on anthracite
+   `#15151c`, `viewBox="0 0 24 24"`, `strokeWidth="1.8"`, round caps. An emoji
+   brings its own colours and is redrawn by every OS, so a row of them never
+   reads as one set. Reuse the path App.jsx already draws for that thing, and
+   where two places show the same symbol, define it ONCE at module scope
+   (`OS_VISUAL_ICON` is the pattern: the dashboard cards and the OS Visuals
+   dialog read the same map, after years of quietly disagreeing). The emoji
+   picker, the stickers and whiteboard emoji elements are content, not chrome,
+   and stay.
    **No em dashes in user-visible text.** Not in UI strings, not in AI output,
    not in labels. Write two sentences, or use a comma. The owner has asked for
    this twice and calls it "dieser komische Bindestrich". Code comments are
