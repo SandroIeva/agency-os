@@ -48080,9 +48080,13 @@ export default function CircularMenu() {
                               <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{m.profiles?.display_name || "Unknown"}</div>
                               <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.profiles?.email || ""}</div>
                             </div>
+                            {/* Lilac is now a statement — "this person can change
+                                everything" — and it only says that if the other roles
+                                do not wear it too. */}
                             <div style={{
-                              padding: "4px 10px", borderRadius: 20, flexShrink: 0,
-                              background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent,
+                              padding: "4px 10px", borderRadius: 20, flexShrink: 0, fontSize: 11, fontFamily: FONT,
+                              background: isAdminRow ? theme.accentBg : (darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)"),
+                              color: isAdminRow ? theme.accent : theme.textDim,
                             }}>{roleLabel}</div>
                             {expandable && (
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
@@ -48226,10 +48230,13 @@ export default function CircularMenu() {
                               >⧉</motion.button>
                             </div>
                           </div>
+                          {/* Amber, because this one is not a state to note but a
+                             thing still waiting on somebody — grey let it sit there
+                             unread for as long as it liked. */}
                           <div style={{
                             padding: "3px 10px", borderRadius: 8,
-                            background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
-                            fontSize: 11, fontFamily: FONT, color: theme.textDim, flexShrink: 0,
+                            background: darkMode ? "rgba(240,155,39,0.16)" : "rgba(240,155,39,0.14)",
+                            fontSize: 11, fontFamily: FONT, color: darkMode ? "#F0A93B" : "#9A6008", flexShrink: 0,
                           }}>{appLanguage === "de" ? "Ausstehend" : "Pending"}</div>
                         </div>
                       ))}
@@ -48923,7 +48930,10 @@ export default function CircularMenu() {
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Slack</div>
                       <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{t("settings.slackSub")}</div>
                     </div>
-                    <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent }}>{t("settings.comingSoon")}</div>
+                    {/* Something that does not exist yet has no business being the
+                        brightest thing on the page. */}
+                    <div style={{ padding: "4px 10px", borderRadius: 20, fontSize: 11, fontFamily: FONT,
+                      background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)", color: theme.textDim }}>{t("settings.comingSoon")}</div>
                   </div>
                 </div>
               </motion.div>
