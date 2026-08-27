@@ -151,7 +151,9 @@ Multi-tenant: nearly every row carries `org_id` (workspace) and often `project_i
   the browser)
 - **Misc:** `notifications`, `reminders`, `calendar_events`, `notes`, `push_subscriptions`, `short_links`, `os_visuals`
 - **Messenger bridge:** `messenger_links` (a link belongs to a PERSON, not a
-  workspace — `provider` is ready for Slack), `messenger_link_tokens` (one-time,
+  workspace — `provider` is `telegram` or `slack`; the Slack rows also carry
+  `slack_team_id` and `slack_user_id`, and `chat_id` is the DM channel),
+  `slack_installations` (bot token per Slack workspace, service key only), `messenger_link_tokens` (one-time,
   10 min, minted by the `create_messenger_link_token` RPC). An `after insert`
   trigger on `notifications` calls `/api/telegram` through **pg_net**, with the
   shared secret read from **Vault** (`telegram_hook_secret`). No secret, no call —
@@ -166,6 +168,14 @@ publication, so canvas collaboration rides entirely on broadcast).
 ## Serverless functions (`api/`)
 
 `chat-multi` (unified Claude/OpenAI/Gemini chat), `fetch-brand` (multi-mode POST/GET: brand analysis / weather / preview / **`mode:"pdf"`** brand-book PDF parse / **`mode:"zip"`** brand-package ZIP inspect), `send` (multi-mode POST, dispatched by `mode`: `"invite"` / `"project-invite"` / `"push-setup"` email via Resend, `"push"` web-push via VAPID), `google-fonts` (CORS proxy, **edge**), `img-proxy` (CORS image proxy for PDF export, **edge**), `drive-download` (**edge**), `workspace-delete` (**edge**: admin-only; wipes ALL of a workspace's storage assets via the service key — using the `org_storage_objects` RPC — then deletes the org so nothing is left on the server), `redirect` (short links `/i/:slug`), `refresh-token` (Google OAuth), `tts`,
+`slack` (**edge**: the second messenger, sharing `server/messenger.js` with
+Telegram. Verbs: `?mode=install&state=<one-time token>` sends somebody to
+Slack's consent screen, `/slack/callback` (rewritten in vercel.json) brings them
+back, `?check=1` says whether it is configured, POST with `x-i7-hook-secret` is
+the notifications trigger and POST with `x-slack-signature` is a button press.
+Unlike Telegram, Slack hands out a bot token PER workspace, stored in
+`slack_installations` — service key only, RLS on with zero policies. Needs
+`SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET`),
 `telegram` (**edge**: one bot for the whole product; the Telegram webhook and
 the notifications fan-out in one file, told apart by their auth header. Four
 GET verbs, and **you can run the first two yourself, they need no secret**:

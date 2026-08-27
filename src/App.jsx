@@ -43150,6 +43150,88 @@ export default function CircularMenu() {
     if (error) { setTgLink(before); setTgErr(error.message); }
   };
 
+  // ── Slack ─────────────────────────────────────────────────────────────────
+  // Unlike Telegram there is no build-time flag to hide this behind. The
+  // endpoint knows whether it is configured, so the section asks it once rather
+  // than depending on a variable that only reaches builds made after it was
+  // saved. That caught us out with VITE_TELEGRAM_BOT.
+  const [slackReady, setSlackReady] = useState(false);
+  const [slackLink, setSlackLink] = useState(null);
+  const [slackBusy, setSlackBusy] = useState(false);
+  const [slackErr, setSlackErr] = useState("");
+
+  const readSlackLink = useCallback(async () => {
+    if (!session?.user?.id) return null;
+    const { data } = await supabase.from("messenger_links")
+      .select("id, chat_id, active, enabled, types, last_error")
+      .eq("provider", "slack").eq("user_id", session.user.id).maybeSingle();
+    return data || null;
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch("/api/slack?check=1");
+        if (alive) setSlackReady(r.ok);
+      } catch { if (alive) setSlackReady(false); }
+      const row = await readSlackLink();
+      if (alive) setSlackLink(row);
+    })();
+    return () => { alive = false; };
+  }, [session?.user?.id, readSlackLink]);
+
+  // Slack sends people back to /?slack=<status>. Read once, then taken out of
+  // the URL so a reload does not replay it.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("slack");
+    if (!status) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("slack");
+    window.history.replaceState({}, "", url.pathname + (url.search || ""));
+    if (status === "connected") { readSlackLink().then(setSlackLink); setSettingsTab("account"); setCurrentView("settings"); }
+    else if (status !== "cancelled") {
+      setSlackErr(appLanguage === "de"
+        ? "Die Verbindung zu Slack ist nicht zustande gekommen. Versuch es noch einmal."
+        : "The Slack connection did not go through. Try again.");
+    }
+  }, []); // eslint-disable-line
+
+  const startSlackConnect = async () => {
+    setSlackBusy(true); setSlackErr("");
+    try {
+      const { data: token, error } = await supabase.rpc("create_messenger_link_token", {
+        p_org: userOrg?.id || null, p_kind: "user", p_lang: appLanguage === "en" ? "en" : "de",
+      });
+      if (error || !token) throw error || new Error("token");
+      // Full navigation, not a popup: Slack's consent screen is a page, and a
+      // blocked popup would look like a dead button.
+      window.location.href = `/api/slack?mode=install&state=${encodeURIComponent(token)}`;
+    } catch (e) {
+      setSlackErr(appLanguage === "de" ? "Verbindung konnte nicht vorbereitet werden." : "Could not prepare the connection.");
+      setSlackBusy(false);
+    }
+  };
+
+  const patchSlackLink = async (patch) => {
+    if (!slackLink) return;
+    const before = slackLink;
+    setSlackLink({ ...slackLink, ...patch });
+    setSlackErr("");
+    const { error } = await supabase.from("messenger_links").update(patch).eq("id", slackLink.id);
+    if (error) { setSlackLink(before); setSlackErr(error.message); }
+  };
+
+  const disconnectSlack = async () => {
+    if (!slackLink) return;
+    setSlackBusy(true); setSlackErr("");
+    const { error } = await supabase.from("messenger_links").delete().eq("id", slackLink.id);
+    if (error) setSlackErr(error.message); else setSlackLink(null);
+    setSlackBusy(false);
+  };
+
   const disconnectTg = async () => {
     if (!tgLink) return;
     setTgBusy(true); setTgErr("");
@@ -49041,15 +49123,46 @@ export default function CircularMenu() {
                         <path d="M10.11 12.638c.926 0 1.682.756 1.682 1.681S11.036 16 10.11 16s-1.681-.756-1.681-1.68v-1.682zm0-.847c-.924 0-1.68-.755-1.68-1.68s.756-1.681 1.68-1.681h4.21c.924 0 1.68.756 1.68 1.68 0 .926-.756 1.681-1.68 1.681z" fill="#ECB22E"/>
                       </svg>
                     </div>
-                    <div style={{ flex: 1 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Slack</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{t("settings.slackSub")}</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                        {!slackReady ? t("settings.slackSub")
+                          : slackLink
+                            ? (appLanguage === "de" ? "Verbunden. Benachrichtigungen kommen als Direktnachricht." : "Connected. Notifications arrive as a direct message.")
+                            : (appLanguage === "de" ? "Benachrichtigungen als Slack-Direktnachricht, mit Knöpfen." : "Notifications as a Slack direct message, with buttons.")}
+                      </div>
                     </div>
-                    {/* Something that does not exist yet has no business being the
-                        brightest thing on the page. */}
-                    <div style={{ padding: "4px 10px", borderRadius: 20, fontSize: 11, fontFamily: FONT,
-                      background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)", color: theme.textDim }}>{t("settings.comingSoon")}</div>
+                    {/* Until the endpoint says it is configured this stays what it
+                        was. Asked at runtime rather than read from a build-time
+                        flag, which is what made the Telegram section invisible on
+                        a checkout whose env file predated the variable. */}
+                    {!slackReady ? (
+                      <div style={{ padding: "4px 10px", borderRadius: 20, fontSize: 11, fontFamily: FONT,
+                        background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)", color: theme.textDim }}>{t("settings.comingSoon")}</div>
+                    ) : (
+                      <motion.button whileTap={{ scale: 0.97 }}
+                        onClick={slackBusy ? undefined : (slackLink ? disconnectSlack : startSlackConnect)}
+                        style={{ padding: "8px 14px", borderRadius: 10, cursor: slackBusy ? "wait" : "pointer",
+                          border: `1px solid ${slackLink ? theme.borderFaint : "transparent"}`,
+                          background: slackLink ? "transparent" : "#15151c",
+                          color: slackLink ? theme.text : "#fff",
+                          fontFamily: FONT, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0,
+                          opacity: slackBusy ? 0.6 : 1 }}>
+                        {slackLink ? (appLanguage === "de" ? "Trennen" : "Disconnect")
+                          : (appLanguage === "de" ? "Verbinden" : "Connect")}
+                      </motion.button>
+                    )}
                   </div>
+                  {slackErr && (
+                    <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{slackErr}</div>
+                  )}
+                  {slackLink?.last_error && !slackErr && (
+                    <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>
+                      {appLanguage === "de"
+                        ? "Slack nimmt gerade nichts an. Trenne die Verbindung und verbinde neu."
+                        : "Slack is refusing delivery. Disconnect and connect again."}
+                    </div>
+                  )}
                 </div>
               </motion.div>
               )}

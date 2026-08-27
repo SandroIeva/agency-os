@@ -4,6 +4,7 @@
   "trailingSlash": false,
   "rewrites": [
     { "source": "/i/:slug", "destination": "/api/redirect?slug=:slug" },
+    { "source": "/slack/callback", "destination": "/api/slack?mode=callback" },
     { "source": "/((?!api/|@|node_modules/|src/|i/|.*\\.).*)", "destination": "/" }
   ],
   "crons": [
