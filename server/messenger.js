@@ -189,3 +189,61 @@ export const handTaskTo = async (db, task, target, byUserId) => {
   });
   return { ok: true };
 };
+
+// ── Making a task from a line of text ───────────────────────────────────────
+
+// The first line is the title, the rest is the description. That is how people
+// already write a task into a chat, so it needs no syntax to learn.
+export const splitDraft = (text) => {
+  const lines = String(text || "").replace(/\r/g, "").split("\n");
+  const title = (lines.shift() || "").trim().slice(0, 200);
+  const description = lines.join("\n").trim() || null;
+  return { title, description };
+};
+
+// Where a task could go. Workspaces the person belongs to, and within one
+// workspace the projects they are a MEMBER of: the board hides tasks whose
+// project you are not in, so offering the others would create invisible work.
+export const workspacesFor = async (db, userId) => {
+  const { data } = await db.from("org_members").select("org_id").eq("user_id", userId);
+  const ids = [...new Set((data || []).map(r => r.org_id).filter(Boolean))];
+  if (!ids.length) return [];
+  const { data: orgs } = await db.from("organizations").select("id, name").in("id", ids);
+  return (orgs || []).map(o => ({ id: o.id, name: o.name || "?" }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+};
+
+export const projectsFor = async (db, userId, orgId) => {
+  const { data: mine } = await db.from("project_members").select("project_id").eq("user_id", userId);
+  const ids = [...new Set((mine || []).map(r => r.project_id).filter(Boolean))];
+  if (!ids.length) return [];
+  const { data: rows } = await db.from("projects").select("id, name").eq("org_id", orgId).in("id", ids);
+  return (rows || []).map(r => ({ id: r.id, name: r.name || "?" }))
+    .sort((a, b) => a.name.localeCompare(b.name)).slice(0, 12);
+};
+
+// The write. Both gates again, because a service-key insert goes past RLS and
+// past enforce_read_only, which returns early when auth.uid() is null. There is
+// no per-plan limit on the NUMBER of tasks — plan_limits caps storage, seats,
+// workspaces, projects and scans, and nothing else — so read-only is the whole
+// of the paywall here.
+export const createTask = async (db, { userId, orgId, projectName, title, description }) => {
+  if (!userId || !orgId || !title) return { ok: false, reason: "incomplete" };
+  const { data: member } = await db.from("org_members").select("id")
+    .eq("org_id", orgId).eq("user_id", userId).maybeSingle();
+  if (!member) return { ok: false, reason: "denied" };
+  if (await orgIsReadOnly(db, orgId)) return { ok: false, reason: "read_only" };
+
+  const { data, error } = await db.from("tasks").insert({
+    title,
+    description: description || null,
+    org_id: orgId,
+    project_name: projectName || null,
+    column_key: "todo",
+    priority: "medium",
+    creator_id: userId,
+    assignee_id: userId,
+  }).select("id, title").maybeSingle();
+  if (error) return { ok: false, reason: "failed" };
+  return { ok: true, task: data };
+};

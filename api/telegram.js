@@ -19,6 +19,7 @@ import { notifLines } from "../src/notificationText.js";
 // formatting below is Telegram's: HTML, and an inline_keyboard.
 import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
+  splitDraft, workspacesFor, projectsFor, createTask,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
 } from "../server/messenger.js";
@@ -60,6 +61,15 @@ const T = {
     cbMoved: (col) => `Nach ${col} verschoben.`,
     cbAlreadyIn: (col) => `Steht schon unter ${col}.`,
     markMoved: (col) => `Über Telegram nach ${col} verschoben.`,
+    newAsk: (title) => `<b>Neue Aufgabe</b>\n${title}\n\nWohin?`,
+    newNoProject: "Kein Projekt",
+    newNoWorkspace: "Du bist in keinem Workspace.",
+    newMade: (title) => `Angelegt: ${title}`,
+    markMade: "Über Telegram angelegt.",
+    newDenied: "Auf diesen Workspace hast du keinen Zugriff.",
+    newReadOnly: "Dieses Konto hat keinen aktiven Plan. Zum Anlegen wird einer gebraucht.",
+    newFailed: "Konnte nicht angelegt werden. Versuch es in der App.",
+    newGone: "Der Text zu dieser Aufgabe ist weg. Schick ihn noch einmal.",
     cbNoOne: "In diesem Workspace ist sonst niemand.",
     cbPassed: (name) => `An ${name} weitergegeben.`,
     markPassed: (name) => `Über Telegram an ${name} weitergegeben.`,
@@ -85,6 +95,15 @@ const T = {
     cbMoved: (col) => `Moved to ${col}.`,
     cbAlreadyIn: (col) => `Already in ${col}.`,
     markMoved: (col) => `Moved to ${col} from Telegram.`,
+    newAsk: (title) => `<b>New task</b>\n${title}\n\nWhere?`,
+    newNoProject: "No project",
+    newNoWorkspace: "You are not in any workspace.",
+    newMade: (title) => `Created: ${title}`,
+    markMade: "Created from Telegram.",
+    newDenied: "You do not have access to that workspace.",
+    newReadOnly: "This account has no active plan. Creating needs one.",
+    newFailed: "Could not create it. Try the app.",
+    newGone: "The text for this task is gone. Send it again.",
     cbNoOne: "There is nobody else in this workspace.",
     cbPassed: (name) => `Handed to ${name}.`,
     markPassed: (name) => `Handed to ${name} from Telegram.`,
@@ -475,7 +494,10 @@ export default async function handler(req) {
     // was assign-to-me; messages already sitting in a chat still carry those,
     // so d is honoured as a move to done and anything else unknown is answered
     // with a shrug rather than left to spin.
-    if (!cbChat || !notifId || !["c", "d", "f", "p", "b"].includes(action)) return answer("");
+    // n and w belong to a NEW task and carry a workspace id where the others
+    // carry a notification id, so they are handled before anything tries to
+    // load a notification that was never involved.
+    if (!cbChat || !notifId || !["c", "d", "f", "p", "b", "n", "w"].includes(action)) return answer("");
 
     // The chat is the identity. A button is only ever pressed in the chat the
     // message was sent to, so nobody else can reach this task through it.
@@ -483,6 +505,51 @@ export default async function handler(req) {
       .select("user_id, lang, active").eq("provider", "telegram").eq("chat_id", String(cbChat)).maybeSingle();
     const t = T[link?.lang === "en" ? "en" : "de"];
     if (!link?.active || !link.user_id) return answer(t.notLinked, true);
+
+    if (action === "n" || action === "w") {
+      // The text was never stored. It is the message this one replies to, which
+      // Telegram hands back on every press, so a draft cannot go stale in a
+      // table and cannot outlive the chat it was typed in.
+      const draft = cb.message?.reply_to_message?.text || "";
+      const { title, description } = splitDraft(draft);
+      if (!title) return answer(t.newGone, true);
+
+      const orgs = await workspacesFor(db, link.user_id);
+      const org = resolveHint(orgs, notifId);
+      if (!org) return answer(t.newDenied, true);
+
+      if (action === "w") {
+        const projects = await projectsFor(db, link.user_id, org.id);
+        await api(botToken, "editMessageReplyMarkup", {
+          chat_id: cbChat, message_id: cb.message.message_id,
+          reply_markup: { inline_keyboard: [
+            [{ text: t.newNoProject, callback_data: `n:${org.id.slice(0, ID_HINT)}:` }],
+            ...projects.map(pr => [{ text: pr.name.slice(0, 60), callback_data: `n:${org.id.slice(0, ID_HINT)}:${pr.id.slice(0, ID_HINT)}` }]),
+          ] },
+        });
+        return answer("");
+      }
+
+      const project = hint ? resolveHint(await projectsFor(db, link.user_id, org.id), hint) : null;
+      if (hint && !project) return answer(t.newGone, true);
+      const made = await createTask(db, {
+        userId: link.user_id, orgId: org.id,
+        projectName: project?.name || null, title, description,
+      });
+      if (!made.ok) {
+        return answer(made.reason === "read_only" ? t.newReadOnly
+          : made.reason === "denied" ? t.newDenied : t.newFailed, true);
+      }
+      // The question is answered, so the buttons go and the message says what
+      // happened. The task itself is one tap away.
+      await api(botToken, "editMessageText", {
+        chat_id: cbChat, message_id: cb.message.message_id,
+        text: `<b>${esc(headLine(org.name, project?.name))}</b>\n${esc(title)}\n\n<i>${esc(t.markMade)}</i>`,
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: [[{ text: t.open, url: `${appUrl}/?task=${encodeURIComponent(made.task.id)}` }]] },
+      });
+      return answer(t.newMade(title));
+    }
 
     const { data: n } = await db.from("notifications")
       .select("id, user_id, org_id, type, title, body, metadata").eq("id", notifId).maybeSingle();
@@ -645,5 +712,45 @@ export default async function handler(req) {
     return reply(t.status(Object.values(wanted).filter(Boolean).length));
   }
 
-  return reply(t.help);
+  // ── Anything else is a new task ───────────────────────────────────────────
+  // No command to remember: what you would type to a colleague is what you
+  // type here. Nothing is written yet. The bot asks where it should go, and
+  // only the button press creates it, so a message sent by mistake stays a
+  // message.
+  if (!link || !link.active) return reply(t.notLinked);
+
+  const { title } = splitDraft(text);
+  if (!title) return reply(t.help);
+
+  const orgs = await workspacesFor(db, link.user_id);
+  if (!orgs.length) return reply(t.newNoWorkspace);
+
+  // The draft text is not stored anywhere and does not ride in callback_data,
+  // which holds 64 bytes. The bot REPLIES to the message, so Telegram hands the
+  // original back as reply_to_message when a button is pressed.
+  const askProjects = async (org) => {
+    const projects = await projectsFor(db, link.user_id, org.id);
+    const rows = [
+      [{ text: t.newNoProject, callback_data: `n:${org.id.slice(0, ID_HINT)}:` }],
+      ...projects.map(pr => [{ text: pr.name.slice(0, 60), callback_data: `n:${org.id.slice(0, ID_HINT)}:${pr.id.slice(0, ID_HINT)}` }]),
+    ];
+    return api(botToken, "sendMessage", {
+      chat_id: chatId,
+      text: t.newAsk(esc(title)),
+      parse_mode: "HTML",
+      reply_to_message_id: msg.message_id,
+      reply_markup: { inline_keyboard: rows },
+    }).then(() => json({ ok: true }));
+  };
+
+  // One workspace is the normal case, and asking about it would be a question
+  // with one answer.
+  if (orgs.length === 1) return askProjects(orgs[0]);
+  return api(botToken, "sendMessage", {
+    chat_id: chatId,
+    text: t.newAsk(esc(title)),
+    parse_mode: "HTML",
+    reply_to_message_id: msg.message_id,
+    reply_markup: { inline_keyboard: orgs.map(o => [{ text: o.name.slice(0, 60), callback_data: `w:${o.id.slice(0, ID_HINT)}` }]) },
+  }).then(() => json({ ok: true }));
 }
