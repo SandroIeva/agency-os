@@ -205,6 +205,10 @@ export const splitDraft = (text) => {
 // workspace the projects they are a MEMBER of: the board hides tasks whose
 // project you are not in, so offering the others would create invisible work.
 export const workspacesFor = async (db, userId) => {
+  // Without this, a caller that forgot to select user_id asks for
+  // "user_id = undefined", gets nothing back, and the bot tells a member of
+  // four workspaces that they are in none. Which is exactly what happened.
+  if (!userId) return [];
   const { data } = await db.from("org_members").select("org_id").eq("user_id", userId);
   const ids = [...new Set((data || []).map(r => r.org_id).filter(Boolean))];
   if (!ids.length) return [];
@@ -214,6 +218,7 @@ export const workspacesFor = async (db, userId) => {
 };
 
 export const projectsFor = async (db, userId, orgId) => {
+  if (!userId || !orgId) return [];
   const { data: mine } = await db.from("project_members").select("project_id").eq("user_id", userId);
   const ids = [...new Set((mine || []).map(r => r.project_id).filter(Boolean))];
   if (!ids.length) return [];

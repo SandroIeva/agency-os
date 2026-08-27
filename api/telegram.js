@@ -695,7 +695,10 @@ export default async function handler(req) {
   }
 
   const { data: link } = await db.from("messenger_links")
-    .select("id, lang, types, active").eq("provider", "telegram").eq("chat_id", String(chatId)).maybeSingle();
+    // user_id included: the free-text handler below needs to know WHOSE
+    // workspaces to offer, and this select was written when the only things
+    // reading it were /stop and /status.
+    .select("id, user_id, lang, types, active").eq("provider", "telegram").eq("chat_id", String(chatId)).maybeSingle();
   const t = T[link?.lang === "en" ? "en" : "de"];
 
   if (text.startsWith("/stop")) {
