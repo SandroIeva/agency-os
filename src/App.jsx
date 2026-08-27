@@ -49116,7 +49116,9 @@ export default function CircularMenu() {
               </motion.div>
               )}
 
-              {/* OS Visuals — click to open icon customization modal */}
+              {/* Telegram. Hidden entirely until VITE_TELEGRAM_BOT is set at
+                  BUILD time. A local checkout whose .env.local predates that
+                  variable will not show this section, while production does. */}
               {settingsTab === "account" && TELEGRAM_BOT && session && (
                 <motion.div
                   initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
