@@ -48071,9 +48071,13 @@ export default function CircularMenu() {
                               <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{m.profiles?.display_name || "Unknown"}</div>
                               <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.profiles?.email || ""}</div>
                             </div>
+                            {/* The row's own badge is a label, not a choice, so it stays
+                                quiet — but in the same family as the pill below it
+                                rather than in a colour the design system dropped. */}
                             <div style={{
                               padding: "4px 10px", borderRadius: 20, flexShrink: 0,
-                              background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent,
+                              background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
+                              fontSize: 11, fontFamily: FONT, color: theme.textSub || theme.text,
                             }}>{roleLabel}</div>
                             {expandable && (
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
@@ -48099,8 +48103,15 @@ export default function CircularMenu() {
                                         return (
                                           <div key={role} onClick={() => updateMember(m.user_id, { ...WS_ROLE_PRESETS[role], workspace_role: role })}
                                             style={{ padding: "6px 12px", borderRadius: 8, fontSize: 12, fontFamily: FONT, fontWeight: on ? 600 : 500, cursor: "pointer", userSelect: "none",
-                                              background: on ? theme.accent + "1f" : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
-                                              color: on ? theme.accent : theme.textDim, border: `1px solid ${on ? theme.accent + "55" : theme.borderFaint}` }}>
+                                              // Filled anthracite with white on it, the way every other
+                                              // selected thing in this app reads. A pale lilac wash with
+                                              // lilac text says "tinted", not "chosen" — and lilac is out.
+                                              // Inverted in dark mode, like the nav menu's selected pill:
+                                              // anthracite on a dark panel is a button you cannot see.
+                                              background: on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c")
+                                                : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
+                                              color: on ? (darkMode ? "#15151c" : "#fff") : theme.textDim,
+                                              border: `1px solid ${on ? "transparent" : theme.borderFaint}` }}>
                                             {WS_ROLE_LABELS[role]}
                                           </div>
                                         );
@@ -48121,8 +48132,11 @@ export default function CircularMenu() {
                                           <div key={perm.key} onClick={isAdminRow ? undefined : () => updateMember(m.user_id, { [perm.key]: !checked, workspace_role: deriveWsRole({ ...m, [perm.key]: !checked }) })}
                                             style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", cursor: isAdminRow ? "default" : "pointer", opacity: isAdminRow ? 0.85 : 1 }}>
                                             <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                                              background: checked ? theme.accent : "transparent", border: `1.5px solid ${checked ? theme.accent : theme.borderFaint}` }}>
-                                              {checked && <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                                              background: checked ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
+                                              border: `1.5px solid ${checked ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : theme.borderFaint}` }}>
+                                              {/* The tick inverts with its box, or a white one on a light
+                                                  box in dark mode is a checkbox that looks empty when ticked. */}
+                                              {checked && <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke={darkMode ? "#15151c" : "#fff"} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                                             </div>
                                             <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>{appLanguage === "de" ? perm.de : perm.en}</div>
                                           </div>
