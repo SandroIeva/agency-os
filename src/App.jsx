@@ -47810,7 +47810,9 @@ export default function CircularMenu() {
                         {userOrg.logo_url && (
                           <motion.div onClick={removeOrgLogo} whileTap={{ scale: 0.97 }}
                             style={{ padding: "7px 12px", borderRadius: 999, background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}
-                          >{appLanguage === "de" ? "Entfernen" : "Remove"}</motion.div>
+                          // Named, not just "Remove": it sits in the workspace panel,
+                          // and a bare "Remove" there reads as the workspace.
+                          >{appLanguage === "de" ? "Logo entfernen" : "Remove logo"}</motion.div>
                         )}
                       </div>
                     ) : (
@@ -47885,7 +47887,10 @@ export default function CircularMenu() {
                     <div style={{ display: "flex", gap: 10, alignItems: "stretch" }}>
                       <div style={{
                         flex: 1, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6,
-                        padding: "8px 14px", borderRadius: 10, minHeight: 40,
+                        // 42, the same as the key fields further down. They sat at
+                        // 40 and 37: near enough to look like a mistake rather than
+                        // a difference, which is exactly how it read.
+                        padding: "8px 14px", borderRadius: 10, minHeight: 42, boxSizing: "border-box",
                         background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
                         border: `1px solid ${theme.borderFaint}`,
                       }}>
@@ -48764,8 +48769,8 @@ export default function CircularMenu() {
                                     ? (appLanguage === "de" ? "Key gespeichert · zum Ersetzen neuen Key eingeben" : "Key saved · enter a new one to replace")
                                     : (p.id === "claude" ? "sk-ant-api03-…" : p.id === "openai" ? "sk-…" : "AIza…")}
                                   style={{
-                                    flex: 1, width: "100%", boxSizing: "border-box",
-                                    padding: hasKey ? "10px 116px 10px 14px" : "10px 14px", borderRadius: 10,
+                                    flex: 1, width: "100%", boxSizing: "border-box", height: 42,
+                                    padding: hasKey ? "0 116px 0 14px" : "0 14px", borderRadius: 10,
                                     background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
                                     border: `1px solid ${theme.borderFaint}`,
                                     color: theme.text, fontSize: 12, fontFamily: FONT,
