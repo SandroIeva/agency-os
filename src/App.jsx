@@ -48704,8 +48704,8 @@ export default function CircularMenu() {
                         >
                           <div style={{
                             width: 36, height: 36, borderRadius: 10,
-                            background: isActive ? p.color + "18" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"),
-                            border: isActive ? `1.5px solid ${p.color}40` : "1.5px solid transparent",
+                            background: isActive ? theme.accent + "18" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"),
+                            border: isActive ? `1.5px solid ${theme.accent}40` : "1.5px solid transparent",
                             display: "flex", alignItems: "center", justifyContent: "center",
                             transition: "all 0.2s ease",
                           }}>
@@ -48727,11 +48727,15 @@ export default function CircularMenu() {
                           {/* Active radio */}
                           <div style={{
                             width: 20, height: 20, borderRadius: "50%",
-                            border: `2px solid ${isActive ? p.color : theme.textFaint}`,
+                            // The accent, not the provider's own colour. Selection is
+                            // selection wherever it happens; letting each row colour it
+                            // meant the same control was blue for Gemini, green for
+                            // OpenAI and terracotta for Claude.
+                            border: `2px solid ${isActive ? theme.accent : theme.textFaint}`,
                             display: "flex", alignItems: "center", justifyContent: "center",
                             transition: "all 0.2s ease",
                           }}>
-                            {isActive && <div style={{ width: 10, height: 10, borderRadius: "50%", background: p.color }} />}
+                            {isActive && <div style={{ width: 10, height: 10, borderRadius: "50%", background: theme.accent }} />}
                           </div>
                         </div>
 
