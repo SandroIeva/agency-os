@@ -241,7 +241,7 @@ async function openGoogleFolderPickerInner({ accessToken, locale = "en", registe
         .setDeveloperKey(VITE_GOOGLE_API_KEY)
         .setOrigin(pickerOrigin())
         .setLocale(locale)
-        .setTitle(locale === "de" ? "Ordner für i7 OS auswählen" : "Select folder for i7 OS")
+        .setTitle(locale === "de" ? "Ordner für i7OS auswählen" : "Select folder for i7OS")
         .addView(myDriveView)
         .addView(sharedDrivesView)
         .enableFeature(google.picker.Feature.SUPPORT_DRIVES)

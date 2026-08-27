@@ -18,6 +18,10 @@ Multi-tenant workspace OS for creative agencies. React 19 + Vite SPA, Supabase (
    dialog read the same map, after years of quietly disagreeing). The emoji
    picker, the stickers and whiteboard emoji elements are content, not chrome,
    and stay.
+   **The product is written `i7OS`, closed up.** Never "i7 OS" with a space,
+   in any user-visible string: UI, emails, push titles, the bot's messages, the
+   PWA manifest, the page title. The owner asked for this on 2026-08-27 after
+   seeing "i7 OS" in a Telegram message.
    **No em dashes in user-visible text.** Not in UI strings, not in AI output,
    not in labels. Write two sentences, or use a comma. The owner has asked for
    this twice and calls it "dieser komische Bindestrich". Code comments are

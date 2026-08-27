@@ -32,17 +32,25 @@ const DEFAULT_TYPES = {
 
 const T = {
   de: {
-    linked: (name) => `✅ Verbunden. Du bekommst deine i7 OS-Benachrichtigungen ab jetzt hier${name ? `, ${name}` : ""}.`,
+    linked: (name) => `✅ Verbunden. Du bekommst deine i7OS-Benachrichtigungen ab jetzt hier${name ? `, ${name}` : ""}.`,
     already: "Du bist bereits verbunden. /stop trennt die Verbindung.",
-    expired: "Dieser Link ist abgelaufen. Öffne i7 OS → Einstellungen → Konto und verbinde noch einmal.",
+    expired: "Dieser Link ist abgelaufen. Öffne i7OS → Einstellungen → Konto und verbinde noch einmal.",
     stopped: "Verbindung getrennt. Du bekommst hier keine Benachrichtigungen mehr.",
     notLinked: "Hier ist nichts verbunden.",
     status: (n) => `Verbunden. Aktive Benachrichtigungen: ${n}.`,
-    help: "Ich schicke dir Benachrichtigungen aus i7 OS. Verbinden kannst du dich in der App unter Einstellungen → Konto. /stop trennt die Verbindung.",
-    open: "In i7 OS öffnen",
+    help: "Ich schicke dir Benachrichtigungen aus i7OS. Verbinden kannst du dich in der App unter Einstellungen → Konto. /stop trennt die Verbindung.",
+    open: "In i7OS öffnen",
     btnDone: "Erledigt",
+    btnPass: "Weitergeben",
+    btnBack: "Zurück",
+    pickWho: "An wen?",
     cbDone: "Erledigt.",
     cbAlready: "War schon erledigt.",
+    cbNoOne: "In diesem Workspace ist sonst niemand.",
+    cbPassed: (name) => `An ${name} weitergegeben.`,
+    markPassed: (name) => `Über Telegram an ${name} weitergegeben.`,
+    passedTitle: "Aufgabe weitergegeben",
+    passedBody: (from, title) => `${from} hat dir "${title}" weitergegeben`,
     cbGone: "Diese Aufgabe gibt es nicht mehr.",
     cbDenied: "Du hast auf diesen Workspace keinen Zugriff.",
     cbReadOnly: "Dieses Konto hat keinen aktiven Plan. Zum Ändern wird einer gebraucht.",
@@ -50,17 +58,25 @@ const T = {
     markDone: "Erledigt über Telegram.",
   },
   en: {
-    linked: (name) => `✅ Connected. Your i7 OS notifications arrive here from now on${name ? `, ${name}` : ""}.`,
+    linked: (name) => `✅ Connected. Your i7OS notifications arrive here from now on${name ? `, ${name}` : ""}.`,
     already: "You are already connected. /stop disconnects.",
-    expired: "This link has expired. Open i7 OS → Settings → Account and connect again.",
+    expired: "This link has expired. Open i7OS → Settings → Account and connect again.",
     stopped: "Disconnected. No more notifications here.",
     notLinked: "Nothing is connected here.",
     status: (n) => `Connected. Active notification types: ${n}.`,
-    help: "I send you notifications from i7 OS. Connect in the app under Settings → Account. /stop disconnects.",
-    open: "Open in i7 OS",
+    help: "I send you notifications from i7OS. Connect in the app under Settings → Account. /stop disconnects.",
+    open: "Open in i7OS",
     btnDone: "Done",
+    btnPass: "Hand over",
+    btnBack: "Back",
+    pickWho: "To whom?",
     cbDone: "Marked done.",
     cbAlready: "Already done.",
+    cbNoOne: "There is nobody else in this workspace.",
+    cbPassed: (name) => `Handed to ${name}.`,
+    markPassed: (name) => `Handed to ${name} from Telegram.`,
+    passedTitle: "Task handed to you",
+    passedBody: (from, title) => `${from} handed you "${title}"`,
     cbGone: "That task is gone.",
     cbDenied: "You do not have access to that workspace.",
     cbReadOnly: "This account has no active plan. Changes need one.",
@@ -136,6 +152,49 @@ const mayTouchTask = async (db, userId, task) => {
   return false;
 };
 
+// Everybody who could take this task over, minus whoever is asking. Workspace
+// members, or the project's members when the task belongs to no workspace.
+// Sorted by name so the row a button sits in does not move between the moment
+// the list is drawn and the moment somebody presses it.
+const handoverCandidates = async (db, task, exceptUserId) => {
+  let ids = [];
+  if (task.org_id) {
+    const { data } = await db.from("org_members").select("user_id").eq("org_id", task.org_id);
+    ids = (data || []).map(r => r.user_id);
+  } else if (task.project_id) {
+    const { data } = await db.from("project_members").select("user_id").eq("project_id", task.project_id);
+    ids = (data || []).map(r => r.user_id);
+  }
+  ids = [...new Set(ids)].filter(id => id && id !== exceptUserId);
+  if (!ids.length) return [];
+  const { data: profiles } = await db.from("profiles").select("id, display_name, email").in("id", ids);
+  return (profiles || [])
+    .map(pr => ({ id: pr.id, name: pr.display_name || (pr.email || "").split("@")[0] || "?" }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, 20); // a keyboard, not a directory
+};
+
+// callback_data is capped at 64 bytes and two uuids do not fit in it. The
+// target therefore travels as the first 8 characters of its id and is resolved
+// against the live list on the way back, which also re-checks membership for
+// free. Eight hex characters collide once in four billion; an actual collision
+// is refused rather than guessed at.
+const ID_HINT = 8;
+
+// The keyboard a task notification carries. One definition, because the
+// fan-out draws it, "back" restores it, and both have to agree.
+const taskKeyboard = (t, appUrl, n, hasTask) => [
+  ...(hasTask ? [[
+    { text: t.btnDone, callback_data: `d:${n.id}` },
+    { text: t.btnPass, callback_data: `f:${n.id}` },
+  ]] : []),
+  [{ text: t.open, url: deepLink(appUrl, n) }],
+];
+const resolveHint = (candidates, hint) => {
+  const hits = candidates.filter(c => c.id.slice(0, ID_HINT) === hint);
+  return hits.length === 1 ? hits[0] : null;
+};
+
 export default async function handler(req) {
   const reqUrl = new URL(req.url);
   const setup = reqUrl.searchParams.get("setup");
@@ -188,21 +247,21 @@ export default async function handler(req) {
     // descriptions and the command menu are set here so they cannot drift from
     // what the product actually does.
     const brand = {};
-    brand.name = (await api(botToken, "setMyName", { name: "i7 OS" }))?.ok || false;
+    brand.name = (await api(botToken, "setMyName", { name: "i7OS" }))?.ok || false;
     brand.short = (await api(botToken, "setMyShortDescription", {
-      short_description: "Notifications from your i7 OS workspace, and a button that closes a task without opening the app.",
+      short_description: "Notifications from your i7OS workspace, and a button that closes a task without opening the app.",
     }))?.ok || false;
     brand.shortDe = (await api(botToken, "setMyShortDescription", {
       language_code: "de",
-      short_description: "Benachrichtigungen aus deinem i7 OS Workspace, plus ein Knopf, der Aufgaben ohne Umweg erledigt.",
+      short_description: "Benachrichtigungen aus deinem i7OS Workspace, plus ein Knopf, der Aufgaben ohne Umweg erledigt.",
     }))?.ok || false;
     // Shown on the empty chat screen, before anyone has pressed Start.
     brand.about = (await api(botToken, "setMyDescription", {
-      description: "i7 OS is the workspace OS for creative agencies. Connect this bot in the app under Settings, Account, and your notifications arrive here. Tasks can be marked done straight from the chat.",
+      description: "i7OS is the workspace OS for creative agencies. Connect this bot in the app under Settings, Account, and your notifications arrive here. Tasks can be marked done straight from the chat.",
     }))?.ok || false;
     brand.aboutDe = (await api(botToken, "setMyDescription", {
       language_code: "de",
-      description: "i7 OS ist das Workspace-Betriebssystem für Kreativagenturen. Verbinde diesen Bot in der App unter Einstellungen, Konto, dann kommen deine Benachrichtigungen hier an. Aufgaben lassen sich direkt aus dem Chat erledigen.",
+      description: "i7OS ist das Workspace-Betriebssystem für Kreativagenturen. Verbinde diesen Bot in der App unter Einstellungen, Konto, dann kommen deine Benachrichtigungen hier an. Aufgaben lassen sich direkt aus dem Chat erledigen.",
     }))?.ok || false;
     const cmds = (list) => [
       { command: "status", description: list[0] },
@@ -286,17 +345,12 @@ export default async function handler(req) {
       const { data: task } = await db.from("tasks").select("description").eq("id", taskId).maybeSingle();
       detail = task?.description || "";
     }
-    const keyboard = [
-      ...(taskId ? [[{ text: t.btnDone, callback_data: `d:${n.id}` }]] : []),
-      [{ text: t.open, url: deepLink(appUrl, n) }],
-    ];
-
     const res = await api(botToken, "sendMessage", {
       chat_id: link.chat_id,
       text: notifText(workspace, n, detail),
       parse_mode: "HTML",
       disable_web_page_preview: true,
-      reply_markup: { inline_keyboard: keyboard },
+      reply_markup: { inline_keyboard: taskKeyboard(t, appUrl, n, !!taskId) },
     });
 
     if (res?.ok) {
@@ -337,13 +391,21 @@ export default async function handler(req) {
       api(botToken, "answerCallbackQuery", { callback_query_id: cb.id, text: body, show_alert: alert })
         .then(() => json({ ok: true }));
 
+    // p carries a third field, so the id is read up to the NEXT colon rather
+    // than to the end of the string. All three parts are derived here, from the
+    // colons rather than from arithmetic on the id's length: computed that way
+    // a string with no colon at all still produced a stray "hint".
     const cut = String(cb.data || "").indexOf(":");
     const action = cut > 0 ? cb.data.slice(0, cut) : "";
-    const notifId = cut > 0 ? cb.data.slice(cut + 1) : "";
-    // "a" was assign-to-me and no longer exists. Messages already in someone's
-    // chat still carry that button, so it is accepted and answered with the
-    // shrug rather than left to spin.
-    if (!cbChat || !notifId || action !== "d") return answer("");
+    const rest = cut > 0 ? cb.data.slice(cut + 1) : "";
+    const second = rest.indexOf(":");
+    const notifId = second > 0 ? rest.slice(0, second) : rest;
+    const hint = second > 0 ? rest.slice(second + 1) : "";
+    // d = done, f = offer the list of people, p = hand it to one of them,
+    // b = back out of that list. "a" was assign-to-me and no longer exists;
+    // messages already sitting in someone's chat still carry that button, so an
+    // unknown action is answered with a shrug rather than left to spin.
+    if (!cbChat || !notifId || !["d", "f", "p", "b"].includes(action)) return answer("");
 
     // The chat is the identity. A button is only ever pressed in the chat the
     // message was sent to, so nobody else can reach this task through it.
@@ -371,6 +433,65 @@ export default async function handler(req) {
     if (task.org_id) {
       const { data: readOnly } = await db.rpc("org_is_read_only", { p_org: task.org_id });
       if (readOnly) return answer(t.cbReadOnly, true);
+    }
+
+    const editKeyboard = (rows) => api(botToken, "editMessageReplyMarkup", {
+      chat_id: cbChat, message_id: cb.message.message_id, reply_markup: { inline_keyboard: rows },
+    });
+
+    // Only the keyboard changes here. Rewriting the text as well would make
+    // opening and closing a list of names look like the message itself keeps
+    // changing, which it has not.
+    if (action === "b") {
+      await editKeyboard(taskKeyboard(t, appUrl, n, true));
+      return answer("");
+    }
+
+    if (action === "f") {
+      const people = await handoverCandidates(db, task, link.user_id);
+      if (!people.length) return answer(t.cbNoOne, true);
+      await editKeyboard([
+        ...people.map(pr => [{ text: pr.name, callback_data: `p:${n.id}:${pr.id.slice(0, ID_HINT)}` }]),
+        [{ text: t.btnBack, callback_data: `b:${n.id}` }],
+      ]);
+      return answer(t.pickWho);
+    }
+
+    if (action === "p") {
+      // Resolved against the list as it is NOW, which re-checks membership on
+      // the way back: somebody removed from the workspace since the buttons
+      // were drawn simply is not there any more.
+      const target = resolveHint(await handoverCandidates(db, task, link.user_id), hint);
+      if (!target) return answer(t.cbGone, true);
+
+      const { error: passErr } = await db.from("tasks")
+        .update({ assignee_id: target.id, updated_at: new Date().toISOString() }).eq("id", task.id);
+      if (passErr) return answer(t.cbFailed, true);
+
+      // The new assignee is told the same way the app tells them. The insert
+      // trips the notifications trigger, so if they use Telegram too, this
+      // lands in their chat with its own buttons a second later.
+      const { data: me } = await db.from("profiles").select("display_name, email").eq("id", link.user_id).maybeSingle();
+      const fromName = me?.display_name || (me?.email || "").split("@")[0] || "?";
+      const { data: full } = await db.from("tasks").select("title").eq("id", task.id).maybeSingle();
+      await db.from("notifications").insert({
+        user_id: target.id,
+        org_id: task.org_id,
+        type: "task_assigned",
+        title: t.passedTitle,
+        body: t.passedBody(fromName, full?.title || ""),
+        metadata: { task_id: task.id },
+      });
+
+      await api(botToken, "editMessageText", {
+        chat_id: cbChat,
+        message_id: cb.message.message_id,
+        text: `${notifText(await orgName(db, n.org_id), n, task.description)}\n\n<i>${esc(t.markPassed(target.name))}</i>`,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+        reply_markup: { inline_keyboard: [[{ text: t.open, url: deepLink(appUrl, n) }]] },
+      });
+      return answer(t.cbPassed(target.name));
     }
 
     if (task.column_key === "done") return answer(t.cbAlready);

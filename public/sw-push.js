@@ -1,7 +1,7 @@
 // Service Worker for Web Push Notifications
 self.addEventListener("push", (event) => {
   const data = event.data ? event.data.json() : {};
-  const title = data.title || "i7 OS";
+  const title = data.title || "i7OS";
   const options = {
     body: data.body || "",
     icon: "/logo-dark.svg",

@@ -4511,7 +4511,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
         position: "relative",
         // Bottom padding so content can scroll past the Hub logo area
         paddingBottom: 140,
-        // Fade out bottom — content gracefully disappears before the i7 OS logo
+        // Fade out bottom — content gracefully disappears before the i7OS logo
         maskImage: "linear-gradient(180deg, #000 0%, #000 calc(100% - 120px), transparent 100%)",
         WebkitMaskImage: "linear-gradient(180deg, #000 0%, #000 calc(100% - 120px), transparent 100%)",
       }}>
@@ -11463,7 +11463,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
           }
         }
 
-        // Load Supabase Storage virtual folders + files (i7 OS Storage)
+        // Load Supabase Storage virtual folders + files (i7OS Storage)
         if (session?.user?.id) {
           // 1. Load ALL folders for breadcrumb resolution + current-level filtering
           const { data: folderRows } = await supabase
@@ -11709,7 +11709,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
     setUploading(false);
     setUploadProgress(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
-    const where = useDrive ? (localDriveFolder?.name || "Drive-Ordner") : "i7 OS Storage";
+    const where = useDrive ? (localDriveFolder?.name || "Drive-Ordner") : "i7OS Storage";
     // Report what actually happened — the old toast claimed every selected file
     // was uploaded even when some (or all) failed.
     const failed = fileList.length - okCount;
@@ -11933,7 +11933,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
             border: `1px solid ${theme.borderFaint}`,
           }}>
             {[
-              { id: "supabase", label: "i7 OS Storage",
+              { id: "supabase", label: "i7OS Storage",
                 icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6"/></svg>,
                 color: theme.accent,
               },
@@ -12197,9 +12197,9 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
                   videos: "Videos",
                   docs: "Dokumente",
                   zip: "ZIP-Dateien",
-                }[filesFilter] || "Dateien"} in ${activeSource === "supabase" ? "i7 OS Storage" : "Google Drive"}`
+                }[filesFilter] || "Dateien"} in ${activeSource === "supabase" ? "i7OS Storage" : "Google Drive"}`
               ) : (
-                `Noch keine Dateien in ${activeSource === "supabase" ? "i7 OS Storage" : "Google Drive"}`
+                `Noch keine Dateien in ${activeSource === "supabase" ? "i7OS Storage" : "Google Drive"}`
               )}
             </div>
           )}
@@ -12337,7 +12337,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
                 <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 6, letterSpacing: -0.2 }}>Neuer Ordner</div>
                 <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 18, lineHeight: 1.5 }}>
                   {activeSource === "supabase"
-                    ? `Wird in i7 OS Storage angelegt${currentSbFolder ? ` (in „${sbFolderPath[sbFolderPath.length - 1]?.name || ""}")` : ""}.`
+                    ? `Wird in i7OS Storage angelegt${currentSbFolder ? ` (in „${sbFolderPath[sbFolderPath.length - 1]?.name || ""}")` : ""}.`
                     : `Wird in ${localDriveFolder?.name ? `Drive · ${localDriveFolder.name}` : "deinem Drive"} angelegt.`}
                 </div>
                 <input
@@ -12728,7 +12728,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
                         padding: 4, overflow: "visible",
                       }}
                     >
-                      {/* i7 OS Storage */}
+                      {/* i7OS Storage */}
                       <motion.div
                         whileHover={{ background: theme.hoverBg }} whileTap={{ scale: 0.99 }}
                         onClick={() => {
@@ -12745,7 +12745,7 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
                           </svg>
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>i7 OS Storage</div>
+                          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>i7OS Storage</div>
                           <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>In der App verwaltet</div>
                         </div>
                       </motion.div>
@@ -25833,7 +25833,7 @@ const uiKeyFor = (zKey) => (zKey === "twitter" ? "x" : zKey);
 // POST /api/zernio — shared by the Analytics tab and the post composer.
 // Zernio's own error messages reach us in English and used to be shown
 // verbatim — so a Zernio quota notice ("Add a payment method to connect more
-// than 2 accounts.") read as if i7 OS were asking for money. They are now
+// than 2 accounts.") read as if i7OS were asking for money. They are now
 // attributed to Zernio, and the ones we have actually seen are translated.
 // Anything unrecognised is passed through unchanged rather than guessed at: a
 // mistranslated error is worse than an English one.
@@ -25849,7 +25849,7 @@ const ZERNIO_MESSAGE_DE = [
 ];
 function zernioErrorText(error, de) {
   if (!error) return null;
-  // Our own plan gate — i7 OS's rule, not Zernio's, so it speaks in our voice
+  // Our own plan gate — i7OS's rule, not Zernio's, so it speaks in our voice
   // and gets no attribution. Attributing it would blame the provider for a
   // limit we set.
   if (error.code === "social_needs_plan") {
@@ -46226,7 +46226,7 @@ export default function CircularMenu() {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
                   </div>
                   <div>
-                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, lineHeight: 1.2 }}>{appLanguage === "de" ? "i7 OS Assistent" : "i7 OS Assistant"}</div>
+                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, lineHeight: 1.2 }}>{appLanguage === "de" ? "i7OS Assistent" : "i7OS Assistant"}</div>
                     {dialogMessages.length > 0 && (
                       <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
                         {dialogMessages.length} {appLanguage === "de" ? "Nachrichten" : "messages"}
@@ -49443,7 +49443,7 @@ export default function CircularMenu() {
 
               {/* Version */}
               <div style={{ marginTop: 24, textAlign: "center" }}>
-                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>i7 OS v0.1.0</div>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>i7OS v0.1.0</div>
               </div>
 
               {/* Delete-workspace confirmation modal */}
@@ -50210,13 +50210,13 @@ export default function CircularMenu() {
               {/* Body */}
               {pushSetupOverlay.status === "needsPwa" ? (
                 <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 20 }}>
-                  Auf iPhone funktionieren Push-Benachrichtigungen nur, wenn i7 OS zum Home-Bildschirm hinzugefügt ist.
+                  Auf iPhone funktionieren Push-Benachrichtigungen nur, wenn i7OS zum Home-Bildschirm hinzugefügt ist.
                   <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", fontSize: 12 }}>
                     <div style={{ fontWeight: 600, color: theme.text, marginBottom: 6 }}>So geht's:</div>
                     <div style={{ marginBottom: 4 }}>1. Tippe unten auf <strong>Teilen</strong> (das Symbol mit dem Pfeil nach oben ↑)</div>
                     <div style={{ marginBottom: 4 }}>2. Scrolle und wähle <strong>"Zum Home-Bildschirm"</strong></div>
                     <div style={{ marginBottom: 4 }}>3. Tippe <strong>"Hinzufügen"</strong></div>
-                    <div>4. Öffne i7 OS vom <strong>Home-Bildschirm</strong> und aktiviere die Benachrichtigungen dort</div>
+                    <div>4. Öffne i7OS vom <strong>Home-Bildschirm</strong> und aktiviere die Benachrichtigungen dort</div>
                   </div>
                 </div>
               ) : pushSetupOverlay.message ? (
@@ -50311,7 +50311,7 @@ export default function CircularMenu() {
                   const eventEnd = new Date(eventTime.getTime() + 15 * 60000);
                   const calBody = {
                     summary: "⏰ " + remTitle.trim(),
-                    description: "Erinnerung aus i7 OS",
+                    description: "Erinnerung aus i7OS",
                     start: { dateTime: eventTime.toISOString(), timeZone: tz },
                     end: { dateTime: eventEnd.toISOString(), timeZone: tz },
                     reminders: {

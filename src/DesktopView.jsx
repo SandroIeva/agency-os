@@ -126,7 +126,7 @@ export default function DesktopView() {
         {/* ── Bottom bar: y=1622/1802=90% of card height ── */}
         <div style={s.bottomBar}>
 
-          {/* Logo — i7 OS: fontSize=75.8→2.19vw, opacity=0.8 */}
+          {/* Logo — i7OS: fontSize=75.8→2.19vw, opacity=0.8 */}
           <div style={s.logo}>
             <span style={s.logoI7}>i7</span>
             <span style={s.logoBadge}>OS</span>
@@ -367,7 +367,7 @@ const s = {
     zIndex: 5,
   },
 
-  // Logo — i7 OS: fontSize=75.8→2.19vw, opacity=0.8
+  // Logo — i7OS: fontSize=75.8→2.19vw, opacity=0.8
   logo: {
     display: "flex",
     alignItems: "baseline",

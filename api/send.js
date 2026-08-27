@@ -31,11 +31,11 @@ async function sendResend({ from, to, subject, html }) {
 const inviteHtml = ({ token, orgName, inviterName }) => `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px; text-align: center;">
             <div style="margin-bottom: 32px;">
-              <img src="${APP_URL}/i7OS-Logo.png" alt="i7 OS" width="96" height="59" style="display: block; margin: 0 auto 16px; border: 0;" />
+              <img src="${APP_URL}/i7OS-Logo.png" alt="i7OS" width="96" height="59" style="display: block; margin: 0 auto 16px; border: 0;" />
               <h1 style="font-size: 22px; font-weight: 600; color: #1a1a2e; margin: 0;">You're invited to join a workspace</h1>
             </div>
             <p style="font-size: 15px; color: #444; line-height: 1.6; margin-bottom: 24px;">
-              <strong>${inviterName || "A team member"}</strong> has invited you to join <strong>${orgName || "their workspace"}</strong> on i7 OS.
+              <strong>${inviterName || "A team member"}</strong> has invited you to join <strong>${orgName || "their workspace"}</strong> on i7OS.
             </p>
             <div style="background: #f8f7ff; border: 1px solid #e8e5ff; border-radius: 12px; padding: 16px 20px; margin-bottom: 28px;">
               <div style="font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Your Invite Code</div>
@@ -43,7 +43,7 @@ const inviteHtml = ({ token, orgName, inviterName }) => `
             </div>
             <a href="${APP_URL}/?invite=${token}" style="display: inline-block; padding: 12px 28px; background: #111111; color: white; text-decoration: none; border-radius: 10px; font-weight: 500; font-size: 14px; margin-bottom: 24px;">Join Workspace</a>
             <p style="font-size: 13px; color: #888; line-height: 1.6; margin-bottom: 24px;">
-              Click the button to join directly,<br/>or copy the invite code and enter it manually in i7 OS.
+              Click the button to join directly,<br/>or copy the invite code and enter it manually in i7OS.
             </p>
             <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0 16px;" />
             <p style="font-size: 11px; color: #999; text-align: center; margin: 0;">
@@ -55,7 +55,7 @@ const inviteHtml = ({ token, orgName, inviterName }) => `
 const projectInviteHtml = ({ projectName, inviterName, token }) => `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px; text-align: center;">
             <div style="margin-bottom: 32px;">
-              <img src="${APP_URL}/i7OS-Logo.png" alt="i7 OS" width="96" height="59" style="display: block; margin: 0 auto 16px; border: 0;" />
+              <img src="${APP_URL}/i7OS-Logo.png" alt="i7OS" width="96" height="59" style="display: block; margin: 0 auto 16px; border: 0;" />
               <h1 style="font-size: 22px; font-weight: 600; color: #1a1a2e; margin: 0;">Projekt-Einladung</h1>
             </div>
             <p style="font-size: 15px; color: #444; line-height: 1.6; margin-bottom: 24px;">
@@ -75,7 +75,7 @@ const projectInviteHtml = ({ projectName, inviterName, token }) => `
 const pushSetupHtml = ({ userName, setupUrl }) => `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px; text-align: center;">
             <div style="margin-bottom: 32px;">
-              <img src="${APP_URL}/i7OS-Logo.png" alt="i7 OS" width="96" height="59" style="display: block; margin: 0 auto 16px; border: 0;" />
+              <img src="${APP_URL}/i7OS-Logo.png" alt="i7OS" width="96" height="59" style="display: block; margin: 0 auto 16px; border: 0;" />
               <h1 style="font-size: 20px; font-weight: 600; color: #1a1a2e; margin: 0;">Push-Benachrichtigungen aktivieren</h1>
             </div>
             <p style="font-size: 15px; color: #444; line-height: 1.6; margin-bottom: 8px;">
@@ -95,12 +95,12 @@ const pushSetupHtml = ({ userName, setupUrl }) => `
                 1. Öffne den Link in Safari<br/>
                 2. Tippe auf das <strong>Teilen-Symbol</strong> (↑)<br/>
                 3. Wähle <strong>"Zum Home-Bildschirm"</strong><br/>
-                4. Öffne i7 OS dann vom Home-Bildschirm und aktiviere dort die Benachrichtigungen
+                4. Öffne i7OS dann vom Home-Bildschirm und aktiviere dort die Benachrichtigungen
               </p>
             </div>
             <hr style="border: none; border-top: 1px solid #eee; margin: 28px 0 16px;" />
             <p style="font-size: 11px; color: #999;">
-              Du erhältst diese E-Mail, weil du Push-Benachrichtigungen in i7 OS aktivieren möchtest.
+              Du erhältst diese E-Mail, weil du Push-Benachrichtigungen in i7OS aktivieren möchtest.
             </p>
           </div>
         `;
@@ -122,7 +122,7 @@ export default async function handler(req, res) {
       const r = await sendResend({
         from: "Agency OS <invite@i7os.com>",
         to: email,
-        subject: `${inviterName || "Someone"} invited you to join ${orgName || "their workspace"} on i7 OS`,
+        subject: `${inviterName || "Someone"} invited you to join ${orgName || "their workspace"} on i7OS`,
         html: inviteHtml({ token, orgName, inviterName }),
       });
       return r.ok ? res.status(200).json({ success: true, id: r.id }) : res.status(r.status).json({ error: r.error });
@@ -133,17 +133,17 @@ export default async function handler(req, res) {
       if (!email) return res.status(400).json({ error: "Missing email" });
       const usedPct = Math.min(100, Math.max(0, Math.round(Number(pct) || 90)));
       const r = await sendResend({
-        from: "i7 OS <invite@i7os.com>",
+        from: "i7OS <invite@i7os.com>",
         to: email,
-        subject: `Dein Workspace-Speicher ist zu ${usedPct}% voll — i7 OS`,
+        subject: `Dein Workspace-Speicher ist zu ${usedPct}% voll — i7OS`,
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px; text-align: center;">
             <div style="margin-bottom: 28px;">
-              <img src="${APP_URL}/i7OS-Logo.png" alt="i7 OS" width="96" height="59" style="display: block; margin: 0 auto 16px; border: 0;" />
+              <img src="${APP_URL}/i7OS-Logo.png" alt="i7OS" width="96" height="59" style="display: block; margin: 0 auto 16px; border: 0;" />
               <h1 style="font-size: 20px; font-weight: 600; color: #1a1a2e; margin: 0;">Dein Speicher wird knapp</h1>
             </div>
             <p style="font-size: 15px; color: #444; line-height: 1.6; margin-bottom: 24px;">
-              Dein i7 OS Workspace nutzt bereits <strong>${usedPct}%</strong> des verfügbaren Speichers.
+              Dein i7OS Workspace nutzt bereits <strong>${usedPct}%</strong> des verfügbaren Speichers.
               Sobald er voll ist, kannst du keine neuen Dateien mehr hochladen.
             </p>
             <a href="${APP_URL}/?view=settings" style="display: inline-block; padding: 12px 28px; background: #111111; color: white; text-decoration: none; border-radius: 10px; font-weight: 500; font-size: 14px; margin-bottom: 24px;">Speicher upgraden</a>
@@ -166,19 +166,19 @@ export default async function handler(req, res) {
       const days = Math.max(0, Math.round(Number(daysLeft) || 14));
       const names = Array.isArray(workspaces) ? workspaces.filter(Boolean) : [];
       const r = await sendResend({
-        from: "i7 OS <invite@i7os.com>",
+        from: "i7OS <invite@i7os.com>",
         to: email,
         subject: days <= 3
-          ? `Letzte Erinnerung: Deine Dateien werden in ${days} Tagen gelöscht — i7 OS`
-          : `Deine i7 OS Dateien werden in ${days} Tagen gelöscht`,
+          ? `Letzte Erinnerung: Deine Dateien werden in ${days} Tagen gelöscht — i7OS`
+          : `Deine i7OS Dateien werden in ${days} Tagen gelöscht`,
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
             <div style="text-align: center; margin-bottom: 28px;">
-              <img src="${APP_URL}/i7OS-Logo.png" alt="i7 OS" width="96" height="59" style="display: block; margin: 0 auto 16px; border: 0;" />
+              <img src="${APP_URL}/i7OS-Logo.png" alt="i7OS" width="96" height="59" style="display: block; margin: 0 auto 16px; border: 0;" />
               <h1 style="font-size: 20px; font-weight: 600; color: #1a1a2e; margin: 0;">Deine Dateien werden bald gelöscht</h1>
             </div>
             <p style="font-size: 15px; color: #444; line-height: 1.6;">
-              Dein i7 OS Konto hat seit einer Weile keinen aktiven Plan. In <strong>${days} Tagen</strong>
+              Dein i7OS Konto hat seit einer Weile keinen aktiven Plan. In <strong>${days} Tagen</strong>
               entfernen wir deshalb die hochgeladenen Dateien${names.length ? ` aus ${names.length === 1 ? "deinem Workspace" : "deinen Workspaces"} <strong>${names.join(", ")}</strong>` : ""}.
             </p>
             <p style="font-size: 15px; color: #444; line-height: 1.6;">
@@ -194,7 +194,7 @@ export default async function handler(req, res) {
             </p>
             <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0 16px;" />
             <p style="font-size: 11px; color: #999; text-align: center; margin: 0;">
-              Du erhältst diese E-Mail, weil dein i7 OS Konto derzeit keinen aktiven Plan hat.
+              Du erhältst diese E-Mail, weil dein i7OS Konto derzeit keinen aktiven Plan hat.
             </p>
           </div>
         `,
@@ -206,7 +206,7 @@ export default async function handler(req, res) {
       const { email, token, projectName, inviterName } = req.body;
       if (!email || !token) return res.status(400).json({ error: "Missing email or token" });
       const r = await sendResend({
-        from: "i7 OS <invite@i7os.com>",
+        from: "i7OS <invite@i7os.com>",
         to: email,
         subject: `${inviterName || "Jemand"} hat dich zum Projekt "${projectName || ""}" eingeladen`,
         html: projectInviteHtml({ projectName, inviterName, token }),
@@ -219,9 +219,9 @@ export default async function handler(req, res) {
       if (!email || !token) return res.status(400).json({ error: "Missing email or token" });
       const setupUrl = `${APP_URL}/?push-setup=true&token=${encodeURIComponent(token)}`;
       const r = await sendResend({
-        from: "i7 OS <invite@i7os.com>",
+        from: "i7OS <invite@i7os.com>",
         to: email,
-        subject: "Push-Benachrichtigungen aktivieren — i7 OS",
+        subject: "Push-Benachrichtigungen aktivieren — i7OS",
         html: pushSetupHtml({ userName, setupUrl }),
       });
       return r.ok ? res.status(200).json({ success: true, id: r.id }) : res.status(r.status).json({ error: r.error });
@@ -237,7 +237,7 @@ export default async function handler(req, res) {
       try {
         await webpush.sendNotification(
           subscription,
-          JSON.stringify({ title: title || "i7 OS", body: body || "", tag: tag || "reminder", url: url || "/" })
+          JSON.stringify({ title: title || "i7OS", body: body || "", tag: tag || "reminder", url: url || "/" })
         );
         return res.status(200).json({ success: true });
       } catch (error) {

@@ -1,6 +1,6 @@
 {
-  "name": "i7 OS",
-  "short_name": "i7 OS",
+  "name": "i7OS",
+  "short_name": "i7OS",
   "description": "Agency Operating System",
   "start_url": "/",
   "display": "standalone",

@@ -932,7 +932,7 @@ export default function PublicBrandLanding({ token }) {
       {isMobile ? (
         /* ── Mobile: top bar with logo + burger dropdown ── */
         <div style={{ position: "relative", flexShrink: 0, height: 54, background: "#fff", borderRadius: 16, border: "1px solid #e9eaee", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 8px 0 16px", zIndex: 30 }}>
-          <img src="/i7OS-Logo.png" alt="i7 OS" style={{ height: 22 }} />
+          <img src="/i7OS-Logo.png" alt="i7OS" style={{ height: 22 }} />
           <div onClick={() => setMobileNavOpen(o => !o)} style={{ width: 40, height: 40, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#15151c" }}>
             {mobileNavOpen
               ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -961,7 +961,7 @@ export default function PublicBrandLanding({ token }) {
       ) : (
         /* ── Desktop: icon rail — nav vertically centred, downloads + share pinned bottom ── */
         <aside style={{ width: 72, flexShrink: 0, background: "#fff", borderRadius: 14, border: "1px solid #e9eaee", padding: "20px 0 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-          <img src="/i7OS-Logo.png" alt="i7 OS" style={{ width: 36, marginLeft: 3, marginTop: 5 }} />
+          <img src="/i7OS-Logo.png" alt="i7OS" style={{ width: 36, marginLeft: 3, marginTop: 5 }} />
           <div style={{ flex: 1 }} />
           {NAV.map(n => railBtn(n.key, n.label, () => go(n.key), current === n.key))}
           <div style={{ flex: 1 }} />

@@ -177,7 +177,7 @@ export default function AdminView() {
   return shell(
     <>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, marginBottom: 22 }}>
-        <div style={{ fontSize: 20, fontWeight: 600 }}>i7 OS — Interne Übersicht</div>
+        <div style={{ fontSize: 20, fontWeight: 600 }}>i7OS — Interne Übersicht</div>
         {/* Fetches the session first — load() no longer looks it up itself.
             Safe outside an auth callback, which a click always is. */}
         <button onClick={() => { setState({ status: "loading" }); supabase.auth.getSession().then(({ data }) => load(data?.session)); }}

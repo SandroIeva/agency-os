@@ -270,8 +270,8 @@ export default function BillingSettings({ session, org, isAdmin, entitlements, o
                 // Concrete and actionable: how long it runs, how much is left,
                 // and what happens at the end. "trialing" told the user nothing.
                 ? (de
-                  ? `Du testest i7 OS ${TRIAL_DAYS} Tage lang mit allen ${PLAN_NAMES[TRIAL_PLAN]}-Funktionen, ${trial.daysLeft === 1 ? "noch 1 Tag" : `noch ${trial.daysLeft} Tage`}. Danach bleiben deine Inhalte erhalten, für Änderungen brauchst du einen Plan.`
-                  : `You're trying i7 OS for ${TRIAL_DAYS} days with every ${PLAN_NAMES[TRIAL_PLAN]} feature, ${trial.daysLeft === 1 ? "1 day left" : `${trial.daysLeft} days left`}. Afterwards your content stays, but changes need a plan.`)
+                  ? `Du testest i7OS ${TRIAL_DAYS} Tage lang mit allen ${PLAN_NAMES[TRIAL_PLAN]}-Funktionen, ${trial.daysLeft === 1 ? "noch 1 Tag" : `noch ${trial.daysLeft} Tage`}. Danach bleiben deine Inhalte erhalten, für Änderungen brauchst du einen Plan.`
+                  : `You're trying i7OS for ${TRIAL_DAYS} days with every ${PLAN_NAMES[TRIAL_PLAN]} feature, ${trial.daysLeft === 1 ? "1 day left" : `${trial.daysLeft} days left`}. Afterwards your content stays, but changes need a plan.`)
                 : trial?.expired
                 ? (de
                   ? "Deine Testphase ist beendet. Deine Inhalte bleiben erhalten und lassen sich exportieren. Für Änderungen brauchst du einen Plan."
