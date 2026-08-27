@@ -232,7 +232,8 @@ export const projectsFor = async (db, userId, orgId) => {
 // no per-plan limit on the NUMBER of tasks — plan_limits caps storage, seats,
 // workspaces, projects and scans, and nothing else — so read-only is the whole
 // of the paywall here.
-export const createTask = async (db, { userId, orgId, projectName, title, description }) => {
+export const createTask = async (db, { userId, orgId, projectName, title, description,
+                                       priority, dueDate, assigneeId }) => {
   if (!userId || !orgId || !title) return { ok: false, reason: "incomplete" };
   const { data: member } = await db.from("org_members").select("id")
     .eq("org_id", orgId).eq("user_id", userId).maybeSingle();
@@ -245,10 +246,59 @@ export const createTask = async (db, { userId, orgId, projectName, title, descri
     org_id: orgId,
     project_name: projectName || null,
     column_key: "todo",
-    priority: "medium",
+    priority: priority || "medium",
+    due_date: dueDate || null,
     creator_id: userId,
-    assignee_id: userId,
+    assignee_id: assigneeId || userId,
   }).select("id, title").maybeSingle();
   if (error) return { ok: false, reason: "failed" };
   return { ok: true, task: data };
+};
+
+// ── The questions a new task still needs answering ──────────────────────────
+// Every answer rides in the button's own callback_data and nothing is stored:
+//   n:<org8>:<proj8>:<prio>:<due>:<asg8>
+// The number of segments IS the step, so the flow has no memory to keep, keep
+// clean, or expire. Telegram allows 64 bytes and the longest form is 32.
+// A dash means "deliberately none", so it is never confused with "not asked".
+export const DRAFT_STEPS = ["project", "priority", "due", "assignee"];
+export const draftStep = (parts) => DRAFT_STEPS[Math.max(0, parts.length - 2)] || null;
+export const draftDone = (parts) => parts.length >= 6;
+
+export const PRIORITY_CODES = { h: "high", m: "medium", l: "low" };
+
+// Relative, because nobody types a date into a chat. Computed from today in the
+// person's own time zone where the runtime can do it, and from UTC where it
+// cannot: an edge runtime does not always carry the full Intl data, and a due
+// date that is silently wrong is worse than one that is occasionally a day off
+// for somebody awake after midnight.
+export const DUE_CODES = ["0", "t", "m", "f", "w"];
+export const dueDateFor = (code, timezone, now = new Date()) => {
+  if (!code || code === "0" || code === "-") return null;
+  let y = now.getUTCFullYear(), mo = now.getUTCMonth(), d = now.getUTCDate();
+  if (timezone) {
+    try {
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit",
+      }).format(now).split("-").map(Number);
+      if (parts.length === 3 && parts.every(Number.isFinite)) {
+        y = parts[0]; mo = parts[1] - 1; d = parts[2];
+      }
+    } catch (_) { /* no tz data in this runtime; UTC it is */ }
+  }
+  const at = new Date(Date.UTC(y, mo, d));
+  if (code === "m") at.setUTCDate(at.getUTCDate() + 1);
+  if (code === "w") at.setUTCDate(at.getUTCDate() + 7);
+  if (code === "f") {
+    // The coming Friday. Today, when today is a Friday.
+    const ahead = (5 - at.getUTCDay() + 7) % 7;
+    at.setUTCDate(at.getUTCDate() + ahead);
+  }
+  // Midnight UTC, which is exactly how the app's own date field stores it.
+  return at.toISOString();
+};
+
+export const timezoneOf = async (db, userId) => {
+  const { data } = await db.from("profiles").select("timezone").eq("id", userId).maybeSingle();
+  return data?.timezone || null;
 };

@@ -20,6 +20,7 @@ import { notifLines } from "../src/notificationText.js";
 import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
   splitDraft, workspacesFor, projectsFor, createTask,
+  draftStep, draftDone, PRIORITY_CODES, dueDateFor, timezoneOf,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
 } from "../server/messenger.js";
@@ -66,6 +67,13 @@ const T = {
     newNoWorkspace: "Du bist in keinem Workspace.",
     newMade: (title) => `Angelegt: ${title}`,
     markMade: "Über Telegram angelegt.",
+    askProject: "Projekt?",
+    askPriority: "Priorität?",
+    askDue: "Frist?",
+    askAssignee: "Für wen?",
+    prio: { h: "Hoch", m: "Mittel", l: "Niedrig" },
+    due: { "0": "Keine Frist", t: "Heute", m: "Morgen", f: "Freitag", w: "In einer Woche" },
+    forMe: "Für mich",
     newDenied: "Auf diesen Workspace hast du keinen Zugriff.",
     newReadOnly: "Dieses Konto hat keinen aktiven Plan. Zum Anlegen wird einer gebraucht.",
     newFailed: "Konnte nicht angelegt werden. Versuch es in der App.",
@@ -100,6 +108,13 @@ const T = {
     newNoWorkspace: "You are not in any workspace.",
     newMade: (title) => `Created: ${title}`,
     markMade: "Created from Telegram.",
+    askProject: "Project?",
+    askPriority: "Priority?",
+    askDue: "Due?",
+    askAssignee: "For whom?",
+    prio: { h: "High", m: "Medium", l: "Low" },
+    due: { "0": "No date", t: "Today", m: "Tomorrow", f: "Friday", w: "In a week" },
+    forMe: "For me",
     newDenied: "You do not have access to that workspace.",
     newReadOnly: "This account has no active plan. Creating needs one.",
     newFailed: "Could not create it. Try the app.",
@@ -486,12 +501,13 @@ export default async function handler(req) {
     // than to the end of the string. All three parts are derived here, from the
     // colons rather than from arithmetic on the id's length: computed that way
     // a string with no colon at all still produced a stray "hint".
-    const cut = String(cb.data || "").indexOf(":");
-    const action = cut > 0 ? cb.data.slice(0, cut) : "";
-    const rest = cut > 0 ? cb.data.slice(cut + 1) : "";
-    const second = rest.indexOf(":");
-    const notifId = second > 0 ? rest.slice(0, second) : rest;
-    const hint = second > 0 ? rest.slice(second + 1) : "";
+    // A new task's answers accumulate across the segments, so the whole thing
+    // is split. The first three keep their old meaning, which is all the
+    // column and handover buttons ever look at.
+    const parts = String(cb.data || "").split(":");
+    const action = parts.length > 1 ? parts[0] : "";
+    const notifId = parts[1] || "";
+    const hint = parts[2] || "";
     // c = move to a column, f = offer the list of people, p = hand it to one of
     // them, b = back out of that list. "d" was the single done button and "a"
     // was assign-to-me; messages already sitting in a chat still carry those,
@@ -512,7 +528,8 @@ export default async function handler(req) {
     if (action === "n" || action === "w") {
       // The text was never stored. It is the message this one replies to, which
       // Telegram hands back on every press, so a draft cannot go stale in a
-      // table and cannot outlive the chat it was typed in.
+      // table and cannot outlive the chat it was typed in. Every ANSWER rides
+      // in the button that was pressed, so the flow keeps no state either.
       const draft = cb.message?.reply_to_message?.text || "";
       const { title, description } = splitDraft(draft);
       if (!title) return answer(t.newGone, true);
@@ -521,30 +538,78 @@ export default async function handler(req) {
       const org = resolveHint(orgs, notifId);
       if (!org) return answer(t.newDenied, true);
 
-      if (action === "w") {
-        const projects = await projectsFor(db, link.user_id, org.id);
-        await api(botToken, "editMessageReplyMarkup", {
+      const projects = await projectsFor(db, link.user_id, org.id);
+      const project = hint && hint !== "-" ? resolveHint(projects, hint) : null;
+
+      // What has been answered so far, over the question being asked, so the
+      // message is the form rather than a trail of them.
+      const chosen = [
+        org.name,
+        parts.length > 2 ? (project?.name || t.newNoProject) : null,
+        parts.length > 3 ? t.prio[parts[3]] : null,
+        parts.length > 4 ? t.due[parts[4]] : null,
+      ].filter(Boolean).join(" · ");
+
+      const ask = async (question, rows) => {
+        await api(botToken, "editMessageText", {
           chat_id: cbChat, message_id: cb.message.message_id,
-          reply_markup: { inline_keyboard: [
-            [{ text: t.newNoProject, callback_data: `n:${org.id.slice(0, ID_HINT)}:` }],
-            ...projects.map(pr => [{ text: pr.name.slice(0, 60), callback_data: `n:${org.id.slice(0, ID_HINT)}:${pr.id.slice(0, ID_HINT)}` }]),
-          ] },
+          text: `<b>${esc(chosen)}</b>\n${esc(title)}\n\n${esc(question)}`,
+          parse_mode: "HTML",
+          reply_markup: { inline_keyboard: rows },
         });
         return answer("");
+      };
+
+      // "w" only picks the workspace; the project question follows.
+      const here = `n:${org.id.slice(0, ID_HINT)}`;
+      if (action === "w") {
+        return ask(t.askProject, [
+          [{ text: t.newNoProject, callback_data: `${here}:-` }],
+          ...projects.map(pr => [{ text: pr.name.slice(0, 60), callback_data: `${here}:${pr.id.slice(0, ID_HINT)}` }]),
+        ]);
       }
 
-      const project = hint ? resolveHint(await projectsFor(db, link.user_id, org.id), hint) : null;
-      if (hint && !project) return answer(t.newGone, true);
+      const so_far = parts.slice(0, 6).join(":");
+      if (!draftDone(parts)) {
+        const step = draftStep(parts);
+        if (step === "priority") {
+          return ask(t.askPriority, [Object.keys(PRIORITY_CODES).map(k => (
+            { text: t.prio[k], callback_data: `${so_far}:${k}` }))]);
+        }
+        if (step === "due") {
+          return ask(t.askDue, [
+            [{ text: t.due["0"], callback_data: `${so_far}:0` }],
+            [{ text: t.due.t, callback_data: `${so_far}:t` }, { text: t.due.m, callback_data: `${so_far}:m` }],
+            [{ text: t.due.f, callback_data: `${so_far}:f` }, { text: t.due.w, callback_data: `${so_far}:w` }],
+          ]);
+        }
+        // assignee
+        const people = await handoverCandidates(db, { org_id: org.id, project_id: null }, link.user_id);
+        return ask(t.askAssignee, [
+          [{ text: t.forMe, callback_data: `${so_far}:-` }],
+          ...people.map(pr => [{ text: pr.name.slice(0, 60), callback_data: `${so_far}:${pr.id.slice(0, ID_HINT)}` }]),
+        ]);
+      }
+
+      const asgHint = parts[5];
+      let assigneeId = link.user_id;
+      if (asgHint && asgHint !== "-") {
+        const person = resolveHint(await handoverCandidates(db, { org_id: org.id, project_id: null }, link.user_id), asgHint);
+        if (!person) return answer(t.newGone, true);
+        assigneeId = person.id;
+      }
+
       const made = await createTask(db, {
         userId: link.user_id, orgId: org.id,
         projectName: project?.name || null, title, description,
+        priority: PRIORITY_CODES[parts[3]] || "medium",
+        dueDate: dueDateFor(parts[4], await timezoneOf(db, link.user_id)),
+        assigneeId,
       });
       if (!made.ok) {
         return answer(made.reason === "read_only" ? t.newReadOnly
           : made.reason === "denied" ? t.newDenied : t.newFailed, true);
       }
-      // The question is answered, so the buttons go and the message says what
-      // happened. The task itself is one tap away.
       await api(botToken, "editMessageText", {
         chat_id: cbChat, message_id: cb.message.message_id,
         text: `<b>${esc(headLine(org.name, project?.name))}</b>\n${esc(title)}\n\n<i>${esc(t.markMade)}</i>`,
