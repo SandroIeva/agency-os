@@ -124,16 +124,74 @@ const deepLink = (appUrl, n) => {
 // The description is the point of the last block: the notification body only
 // ever says who assigned what, so a task whose whole content is in its
 // description arrived here as a title and nothing else.
-const DETAIL_MAX = 600;
-const notifText = (workspace, n, lang, detail) => {
+// `extra` is already-escaped HTML built by taskBlock. It is NOT escaped again
+// here, which is the whole reason it is built in one place.
+const notifText = (workspace, n, lang, extra) => {
   const { title, body } = notifLines(n, lang !== "en");
-  const d = String(detail || "").trim();
   return [
     workspace ? `<b>${esc(workspace)}</b>` : null,
     `<b>${esc(title)}</b>`,
     body ? esc(body) : null,
-    d ? "\n" + esc(d.length > DETAIL_MAX ? d.slice(0, DETAIL_MAX).trimEnd() + "…" : d) : null,
+    extra ? "\n" + extra : null,
   ].filter(Boolean).join("\n");
+};
+
+const DETAIL_MAX = 600;
+const CHECKLIST_MAX = 8;
+const PRIORITY = {
+  de: { high: "Hoch", medium: "Mittel", low: "Niedrig" },
+  en: { high: "High", medium: "Medium", low: "Low" },
+};
+
+// What the card itself says, under the notification. The body only ever names
+// who assigned what, so everything that decides what you DO about the message —
+// how urgent it is, when it is due, how big it is — was missing from the chat.
+//
+// Fetched fresh on every send AND on every button press, so a message that gets
+// rewritten shows the checklist as it stands now, not as it stood when the
+// notification was written.
+const taskBlock = async (db, taskId, lang) => {
+  const de = lang !== "en";
+  const { data: task } = await db.from("tasks")
+    .select("description, priority, due_date").eq("id", taskId).maybeSingle();
+  if (!task) return "";
+  const blocks = [];
+
+  const d = String(task.description || "").trim();
+  if (d) blocks.push(esc(d.length > DETAIL_MAX ? d.slice(0, DETAIL_MAX).trimEnd() + "…" : d));
+
+  const facts = [];
+  const prio = PRIORITY[de ? "de" : "en"][task.priority];
+  if (prio) facts.push(`${de ? "Priorität" : "Priority"}: ${prio}`);
+  if (task.due_date) {
+    // The app writes a date-only field through new Date("YYYY-MM-DD"), which
+    // parses as UTC midnight, and every stored due_date is 00:00 UTC. Reading
+    // it back in UTC is therefore exact, and needs no timezone and no Intl,
+    // which the edge runtime does not always carry in full.
+    const t = new Date(task.due_date);
+    const dd = String(t.getUTCDate()).padStart(2, "0");
+    const mm = String(t.getUTCMonth() + 1).padStart(2, "0");
+    const yy = t.getUTCFullYear();
+    facts.push(`${de ? "Frist" : "Due"}: ${de ? `${dd}.${mm}.${yy}` : `${yy}-${mm}-${dd}`}`);
+  }
+  if (facts.length) blocks.push(esc(facts.join(" · ")));
+
+  const { data: items } = await db.from("task_checklist_items")
+    .select("text, checked").eq("task_id", taskId).order("position", { ascending: true });
+  if (items?.length) {
+    const done = items.filter(i => i.checked).length;
+    // [x] and [ ], not a tick character: this is the one surface where we
+    // cannot draw an icon, and a tick is a coloured emoji on some clients and
+    // a thin glyph on others.
+    const rows = items.slice(0, CHECKLIST_MAX)
+      .map(i => `${i.checked ? "[x]" : "[ ]"} ${esc(i.text || "")}`);
+    if (items.length > CHECKLIST_MAX) {
+      rows.push(de ? `und ${items.length - CHECKLIST_MAX} weitere`
+                   : `and ${items.length - CHECKLIST_MAX} more`);
+    }
+    blocks.push(`<b>${de ? "Checkliste" : "Checklist"} ${done}/${items.length}</b>\n${rows.join("\n")}`);
+  }
+  return blocks.join("\n\n");
 };
 
 const orgName = async (db, orgId) => {
@@ -441,14 +499,10 @@ export default async function handler(req) {
     // needs the notification anyway to rebuild this exact message, and one uuid
     // fits Telegram's 64-byte callback_data where two would not.
     const taskId = n.metadata?.task_id;
-    let detail = "";
-    if (taskId) {
-      const { data: task } = await db.from("tasks").select("description").eq("id", taskId).maybeSingle();
-      detail = task?.description || "";
-    }
+    const extra = taskId ? await taskBlock(db, taskId, link.lang) : "";
     const res = await api(botToken, "sendMessage", {
       chat_id: link.chat_id,
-      text: notifText(workspace, n, link.lang, detail),
+      text: notifText(workspace, n, link.lang, extra),
       parse_mode: "HTML",
       disable_web_page_preview: true,
       reply_markup: { inline_keyboard: taskKeyboard(t, appUrl, n, !!taskId) },
@@ -522,7 +576,7 @@ export default async function handler(req) {
     if (!taskId) return answer(t.cbGone, true);
 
     const { data: task } = await db.from("tasks")
-      .select("id, org_id, project_id, column_key, description").eq("id", taskId).maybeSingle();
+      .select("id, org_id, project_id, column_key").eq("id", taskId).maybeSingle();
     if (!task) return answer(t.cbGone, true);
 
     // Two gates that the database would normally apply and here does not. The
@@ -591,7 +645,7 @@ export default async function handler(req) {
       await api(botToken, "editMessageText", {
         chat_id: cbChat,
         message_id: cb.message.message_id,
-        text: `${notifText(await orgName(db, n.org_id), n, link.lang, task.description)}\n\n<i>${esc(t.markPassed(target.name))}</i>`,
+        text: `${notifText(await orgName(db, n.org_id), n, link.lang, await taskBlock(db, task.id, link.lang))}\n\n<i>${esc(t.markPassed(target.name))}</i>`,
         parse_mode: "HTML",
         disable_web_page_preview: true,
         reply_markup: { inline_keyboard: taskKeyboard(t, appUrl, n, true) },
@@ -615,7 +669,7 @@ export default async function handler(req) {
     await api(botToken, "editMessageText", {
       chat_id: cbChat,
       message_id: cb.message.message_id,
-      text: `${notifText(await orgName(db, n.org_id), n, link.lang, task.description)}\n\n<i>${esc(t.markMoved(t.cols[target]))}</i>`,
+      text: `${notifText(await orgName(db, n.org_id), n, link.lang, await taskBlock(db, task.id, link.lang))}\n\n<i>${esc(t.markMoved(t.cols[target]))}</i>`,
       parse_mode: "HTML",
       disable_web_page_preview: true,
       reply_markup: { inline_keyboard: taskKeyboard(t, appUrl, n, true) },
