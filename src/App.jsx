@@ -48748,13 +48748,13 @@ export default function CircularMenu() {
                               <div style={{ padding: "0 20px 18px" }}>
                                 {editingKeyId !== p.id ? (
                                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                                    <div style={{ flex: 1, padding: "10px 14px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, color: hasKey ? theme.textSub : theme.textDim, fontSize: 12, fontFamily: FONT, display: "flex", alignItems: "center", gap: 8 }}>
+                                    <div style={{ flex: 1, height: 42, boxSizing: "border-box", padding: "0 14px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, color: hasKey ? theme.textSub : theme.textDim, fontSize: 12, fontFamily: FONT, display: "flex", alignItems: "center", gap: 8 }}>
                                       {hasKey && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><path d="M20 6L9 17l-5-5" stroke={theme.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                                       {hasKey ? (appLanguage === "de" ? "Key gespeichert" : "Key saved") : (appLanguage === "de" ? "Kein Key hinterlegt" : "No key set")}
                                     </div>
                                     <motion.div whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.11)" : "rgba(0,0,0,0.07)" }} whileTap={{ scale: 0.97 }}
                                       onClick={() => { setEditingKeyId(p.id); setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" })); setLlmKeyStatus(prev => { const n = { ...prev }; delete n[p.id]; return n; }); }}
-                                      style={{ padding: "10px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 12, fontFamily: FONT, color: theme.textSub, fontWeight: 500, whiteSpace: "nowrap" }}>
+                                      style={{ height: 42, boxSizing: "border-box", display: "flex", alignItems: "center", padding: "0 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 12, fontFamily: FONT, color: theme.textSub, fontWeight: 500, whiteSpace: "nowrap" }}>
                                       {appLanguage === "de" ? "Bearbeiten" : "Edit"}
                                     </motion.div>
                                   </div>
