@@ -9,6 +9,10 @@ Multi-tenant workspace OS for creative agencies. React 19 + Vite SPA, Supabase (
 3. **Verify before shipping:** `npx vite build` must end with `✓ built` (cold build takes ~20–25 min on the current machine; warm cache can be seconds — both are normal). There are no tests; the build is the gate. The build only covers the browser bundle — it says nothing about whether the `api/` functions resolve their imports (see "Verifying a deploy").
 4. **Deploy = push:** committing to `main` and pushing triggers the Vercel deploy. Commit messages end with `Co-Authored-By: Claude <model> <noreply@anthropic.com>`.
 5. **Language:** every user-visible string AND every AI-generated output must respect `appLanguage` (`de`/`en`), usually via the local `const de = appLanguage === "de"` or the `t(...)` translations helper (`src/translations.js`). Never hardcode German (or English) in new UI.
+   **No em dashes in user-visible text.** Not in UI strings, not in AI output,
+   not in labels. Write two sentences, or use a comma. The owner has asked for
+   this twice and calls it "dieser komische Bindestrich". Code comments are
+   exempt — nobody reads those in the product.
 6. **Design system:**
    - No purple/lilac accents. Active/selected states use anthracite **`#15151c`** (dark pill, white text). Exception: in dark mode the main nav menu's selected pill is *inverted* (light bg `rgba(244,244,247,0.95)`, text `#15151c`).
    - Use the shared **`<Dropdown>`** component in App.jsx for any select/menu. Never a native `<select>`, never a one-off menu.

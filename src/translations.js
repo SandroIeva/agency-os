@@ -73,10 +73,10 @@ const translations = {
   "touchpoints.edit":          { de: "Bearbeiten",                en: "Edit" },
   "touchpoints.connect":       { de: "Verbinden",                 en: "Connect" },
   "touchpoints.addMore":       { de: "Kanal verbinden",           en: "Connect a channel" },
-  "touchpoints.noneConnected": { de: "Noch keine Kanäle verbunden — wähle unten eine Plattform aus.", en: "No channels connected yet — pick a platform below." },
+  "touchpoints.noneConnected": { de: "Noch keine Kanäle verbunden. Wähle unten eine Plattform aus.", en: "No channels connected yet. Pick a platform below." },
   "touchpoints.next":          { de: "Demnächst",                 en: "Coming up" },
   "touchpoints.strategyTitle": { de: "Strategie-Analyse",         en: "Strategy analysis" },
-  "touchpoints.strategyHint":  { de: "Der Assistent analysiert deine Kanäle und Inhalte, leitet Stärken, Lücken und Empfehlungen ab — und heftet die wichtigsten Insights direkt auf dein Dashboard.", en: "The assistant analyses your channels and content, surfaces strengths, gaps and recommendations — and pins the key insights straight to your dashboard." },
+  "touchpoints.strategyHint":  { de: "Der Assistent analysiert deine Kanäle und Inhalte, leitet Stärken, Lücken und Empfehlungen ab und heftet die wichtigsten Insights direkt auf dein Dashboard.", en: "The assistant analyses your channels and content, surfaces strengths, gaps and recommendations, and pins the key insights straight to your dashboard." },
   "touchpoints.startAnalysis": { de: "Analyse starten",           en: "Start analysis" },
   "common.soon":               { de: "BALD",                      en: "SOON" },
 
@@ -231,7 +231,7 @@ const translations = {
   "dash.priority": { de: "Priorität", en: "Priority" },
   "dash.upcoming": { de: "Geplant", en: "Upcoming" },
   "dash.all": { de: "Alle", en: "All" },
-  "dash.noTasks": { de: "Keine offenen Aufgaben — alles erledigt!", en: "No open tasks — all done!" },
+  "dash.noTasks": { de: "Keine offenen Aufgaben. Alles erledigt!", en: "No open tasks. All done!" },
   "dash.completed": { de: "Erledigt", en: "Completed" },
   "dash.overdue": { de: "Überfällig", en: "Overdue" },
   "dash.wed": { de: "Mi", en: "Wed" },
@@ -264,7 +264,7 @@ const translations = {
   "settings.googleCalDrive": { de: "Google Kalender & Drive", en: "Google Calendar & Drive" },
   "settings.calFilesSynced": { de: "Kalender & Dateien synchronisiert", en: "Calendar & files synced" },
   "settings.signInToConnect": { de: "Anmelden zum Verbinden", en: "Sign in to connect" },
-  "settings.keySaved": { de: "Key gespeichert — neuen eingeben zum Ersetzen", en: "Key saved — enter new to replace" },
+  "settings.keySaved": { de: "Key gespeichert. Neuen eingeben zum Ersetzen", en: "Key saved. Enter new to replace" },
   "settings.geminiKeyOpt": { de: "Gemini API Key (optional)", en: "Gemini API Key (optional)" },
   "settings.claudeKey": { de: "Claude API Key", en: "Claude API Key" },
   "settings.chatgptKey": { de: "ChatGPT API Key", en: "ChatGPT API Key" },
@@ -358,14 +358,14 @@ const translations = {
 
   // Step 0
   "brand.hero.title": { de: "Lass uns deine Brand definieren", en: "Let´s define your Brand" },
-  "brand.hero.subtitle": { de: "Wir gehen Schritt für Schritt durch, was wir wissen sollten — du kannst überall überspringen, was du noch nicht hast.", en: "We´ll go through, step by step, everything we need to know —and you can skip anything you don´t have yet." },
+  "brand.hero.subtitle": { de: "Wir gehen Schritt für Schritt durch, was wir wissen sollten. Du kannst überall überspringen, was du noch nicht hast.", en: "We´ll go through, step by step, everything we need to know —and you can skip anything you don´t have yet." },
   "brand.hero.brandNameLabel": { de: "Brand-Name", en: "Brand name" },
   "brand.hero.brandNamePlaceholder": { de: "z.B. Agency OS", en: "e.g. Agency OS" },
 
   // Step 1 — Sources
   "brand.sources.title": { de: "Was hast du schon?", en: "What do you have already?" },
-  "brand.sources.subtitle": { de: "Vorhandene Quellen sparen dir später viel Zeit — wir extrahieren Farben, Texte und Style automatisch.", en: "Existing sources save you a ton of time later — we extract colors, copy and style automatically." },
-  "brand.sources.empty": { de: "Du hast noch nichts? Kein Problem — überspring den nächsten Schritt mit „Weiter“.", en: "Got nothing yet? No problem — skip the next step with “Next”." },
+  "brand.sources.subtitle": { de: "Vorhandene Quellen sparen dir später viel Zeit. Wir extrahieren Farben, Texte und Style automatisch.", en: "Existing sources save you a ton of time later. We extract colors, copy and style automatically." },
+  "brand.sources.empty": { de: "Du hast noch nichts? Kein Problem. Überspring den nächsten Schritt mit „Weiter“.", en: "Got nothing yet? No problem. Skip the next step with “Next”." },
   "brand.sources.website": { de: "Website", en: "Website" },
   "brand.sources.websiteHint": { de: "Wir ziehen später Texte, Farben und Tonalität automatisch", en: "We´ll extract copy, colors and tone of voice automatically" },
   "brand.sources.figma": { de: "Figma / Design System", en: "Figma / Design System" },
@@ -373,7 +373,7 @@ const translations = {
   "brand.sources.brandbook": { de: "Brand Book (PDF)", en: "Brand Book (PDF)" },
   "brand.sources.brandbookHint": { de: "Style Guide, Identity Manual, Pitch Deck", en: "Style Guide, Identity Manual, Pitch Deck" },
   "brand.sources.zip": { de: "Brand-Paket (ZIP)", en: "Brand pack (ZIP)" },
-  "brand.sources.zipHint": { de: "Logos, Schriften, Templates — alles in einem Archiv", en: "Logos, fonts, templates — all in one archive" },
+  "brand.sources.zipHint": { de: "Logos, Schriften, Templates. Alles in einem Archiv", en: "Logos, fonts, templates. All in one archive" },
   "brand.sources.choosePdf": { de: "PDF auswählen →", en: "Choose PDF →" },
   "brand.sources.chooseZip": { de: "ZIP auswählen →", en: "Choose ZIP →" },
   "brand.sources.analyse": { de: "Analysieren", en: "Analyse" },
@@ -391,7 +391,7 @@ const translations = {
 
   // Step 2 — Logos
   "brand.logos.title": { de: "Deine Logo-Varianten", en: "Your logo variants" },
-  "brand.logos.subtitle": { de: "Lade die wichtigsten Logo-Versionen hoch — du kannst auch eigene Varianten hinzufügen.", en: "Upload the key logo versions — you can also add custom variants." },
+  "brand.logos.subtitle": { de: "Lade die wichtigsten Logo-Versionen hoch. Du kannst auch eigene Varianten hinzufügen.", en: "Upload the key logo versions. You can also add custom variants." },
   "brand.logos.primary": { de: "Primary", en: "Primary" },
   "brand.logos.dark": { de: "Dark", en: "Dark" },
   "brand.logos.light": { de: "Light", en: "Light" },
@@ -404,7 +404,7 @@ const translations = {
 
   // Step 3 — Colors
   "brand.colors.title": { de: "Deine Brand-Farben", en: "Your brand colors" },
-  "brand.colors.subtitle": { de: "Lege Primary und Secondary fest — Akzentfarben kannst du beliebig viele ergänzen.", en: "Set primary and secondary — add as many accent colors as you like." },
+  "brand.colors.subtitle": { de: "Lege Primary und Secondary fest. Akzentfarben kannst du beliebig viele ergänzen.", en: "Set primary and secondary. Add as many accent colors as you like." },
   "brand.colors.primarySlot": { de: "Primary", en: "Primary" },
   "brand.colors.secondarySlot": { de: "Secondary", en: "Secondary" },
   "brand.colors.accents": { de: "Akzentfarben", en: "Accent colors" },
@@ -423,7 +423,7 @@ const translations = {
   // Step 5 — Next steps checklist
   "brand.nextSteps.title": { de: "Was kommt als Nächstes?", en: "What´s next?" },
   "brand.nextSteps.subtitle": { de: "Markiere, was du schon hast und wo wir dich unterstützen sollen. Im nächsten Schritt arbeiten wir die offenen Punkte zusammen aus.", en: "Mark what you already have and where you need help. In the next step we´ll work the open ones out together." },
-  "brand.nextSteps.empty": { de: "Nichts markiert? Auch okay — du kannst die Themen jederzeit später angehen.", en: "Nothing marked? That´s fine — you can pick these up anytime later." },
+  "brand.nextSteps.empty": { de: "Nichts markiert? Auch okay. Du kannst die Themen jederzeit später angehen.", en: "Nothing marked? That´s fine. You can pick these up anytime later." },
   "brand.nextSteps.have": { de: "Habe ich", en: "I have it" },
   "brand.nextSteps.help": { de: "Brauche Hilfe", en: "Need help" },
   "brand.nextSteps.skip": { de: "Nicht relevant", en: "Not relevant" },
@@ -442,7 +442,7 @@ const translations = {
 
   // Step 6 — Recap
   "brand.recap.title": { de: "Sieht gut aus, oder?", en: "Looks good, doesn´t it?" },
-  "brand.recap.subtitle": { de: "Du kannst alles später jederzeit anpassen — auch noch fehlende Stücke ergänzen.", en: "You can adjust everything later anytime — and add missing pieces." },
+  "brand.recap.subtitle": { de: "Du kannst alles später jederzeit anpassen und fehlende Stücke ergänzen.", en: "You can adjust everything later anytime, and add missing pieces." },
   "brand.recap.logoVariants": { de: "Logo-Varianten", en: "Logo variants" },
   "brand.recap.website": { de: "Website", en: "Website" },
   "brand.recap.figma": { de: "Figma", en: "Figma" },
@@ -467,23 +467,23 @@ const translations = {
 
   // Tab-specific titles + empty states (new 5-tab structure)
   "brand.tab.identity.title": { de: "Identität", en: "Identity" },
-  "brand.tab.identity.subtitle": { de: "Wer ihr seid — Name, Claim, Voice und Beschreibung.", en: "Who you are — name, claim, voice and description." },
+  "brand.tab.identity.subtitle": { de: "Wer ihr seid. Name, Claim, Voice und Beschreibung.", en: "Who you are. Name, claim, voice and description." },
   "brand.tab.design.title": { de: "Design System", en: "Design System" },
-  "brand.tab.design.subtitle": { de: "Wie ihr aussieht — Logos, Farben, Typografie, Brand Book und Asset-Library.", en: "How you look — logos, colors, typography, brand book and asset library." },
+  "brand.tab.design.subtitle": { de: "Wie ihr aussieht. Logos, Farben, Typografie, Brand Book und Asset-Library.", en: "How you look. Logos, colors, typography, brand book and asset library." },
   "brand.tab.design.guidelines": { de: "Guidelines & Brand Books", en: "Guidelines & brand books" },
   "brand.tab.design.assets": { de: "Asset-Quellen", en: "Asset sources" },
-  "brand.tab.design.empty": { de: "Noch nichts hinterlegt — lade Logos, ein Brand Book oder ein ZIP hoch.", en: "Nothing here yet — upload logos, a brand book or a ZIP." },
+  "brand.tab.design.empty": { de: "Noch nichts hinterlegt. Lade Logos, ein Brand Book oder ein ZIP hoch.", en: "Nothing here yet. Upload logos, a brand book or a ZIP." },
   "brand.tab.audience.title": { de: "Audience", en: "Audience" },
-  "brand.tab.audience.subtitle": { de: "Mit wem ihr redet — Personas, Zielgruppen-Segmente und ICP.", en: "Who you talk to — personas, audience segments and ICP." },
+  "brand.tab.audience.subtitle": { de: "Mit wem ihr redet. Personas, Zielgruppen-Segmente und ICP.", en: "Who you talk to. Personas, audience segments and ICP." },
   "brand.tab.channels.title": { de: "Channels", en: "Channels" },
-  "brand.tab.channels.subtitle": { de: "Wo ihr stattfindet — Website, Social Media, Newsletter und Ads.", en: "Where you show up — website, social media, newsletter and ads." },
+  "brand.tab.channels.subtitle": { de: "Wo ihr stattfindet. Website, Social Media, Newsletter und Ads.", en: "Where you show up. Website, social media, newsletter and ads." },
   "brand.tab.channels.empty": { de: "Noch keine Channels verknüpft. Sobald wir deine Website analysieren, suchen wir Social-Profile automatisch.", en: "No channels linked yet. When we analyse your website we'll pull social profiles automatically." },
   "brand.tab.channels.website": { de: "Website", en: "Website" },
   "brand.tab.channels.social": { de: "Social Media", en: "Social media" },
   "brand.tab.channels.newsletter": { de: "Newsletter", en: "Newsletter" },
   "brand.tab.channels.add": { de: "Channel hinzufügen", en: "Add channel" },
   "brand.tab.strategy.title": { de: "Strategie", en: "Strategy" },
-  "brand.tab.strategy.subtitle": { de: "Was euch ausmacht — Positionierung, Personas, Value Props, Kern-Botschaften und Competitor-Insights.", en: "What sets you apart — positioning, personas, value props, key messages and competitor insights." },
+  "brand.tab.strategy.subtitle": { de: "Was euch ausmacht. Positionierung, Personas, Value Props, Kern-Botschaften und Competitor-Insights.", en: "What sets you apart. Positioning, personas, value props, key messages and competitor insights." },
   "brand.tab.strategy.positioning": { de: "Positionierung", en: "Positioning" },
   "brand.tab.strategy.claim": { de: "Claim / Tagline", en: "Claim / tagline" },
   "brand.tab.strategy.keyMessages": { de: "Kern-Botschaften", en: "Key messages" },
@@ -494,7 +494,7 @@ const translations = {
 
   // Step 7 — Celebration
   "brand.done.title": { de: "Deine Brand ist angelegt", en: "Your brand is ready" },
-  "brand.done.subtitle": { de: "Du kannst jetzt loslegen — oder direkt in den nächsten Schritt springen.", en: "You can start now — or jump into the next step." },
+  "brand.done.subtitle": { de: "Du kannst jetzt loslegen oder direkt in den nächsten Schritt springen.", en: "You can start now, or jump straight into the next step." },
   "brand.done.cta": { de: "Zur Brand-Übersicht", en: "Open brand overview" },
 
   // ── Errors ───────────────────────────────────

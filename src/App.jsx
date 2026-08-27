@@ -10958,8 +10958,11 @@ function formatTokens(n) {
   return String(n);
 }
 const TOKEN_FEATURE_LABELS = {
-  de: { chat: "Chat", voice: "Sprache", dictation: "Diktat", skill: "Skills", "brand-persona": "Brand: Persona", "brand-onboarding": "Brand: Onboarding", "image-to-prompt": "Bild → Prompt", other: "Sonstiges" },
-  en: { chat: "Chat", voice: "Voice", dictation: "Dictation", skill: "Skills", "brand-persona": "Brand: Persona", "brand-onboarding": "Brand: Onboarding", "image-to-prompt": "Image → Prompt", other: "Other" },
+  // Plain nouns, capitalised like everything else in this card. "Bild → Prompt"
+  // named the mechanism; "agent-chat" fell through as its raw key, lower case
+  // and hyphenated, because nothing had ever named it.
+  de: { chat: "Chat", voice: "Sprache", dictation: "Diktat", skill: "Skills", "brand-persona": "Brand: Persona", "brand-onboarding": "Brand: Onboarding", "image-to-prompt": "Bilder", "agent-chat": "Agenten", "image-generate": "Bilder", other: "Sonstiges" },
+  en: { chat: "Chat", voice: "Voice", dictation: "Dictation", skill: "Skills", "brand-persona": "Brand: Persona", "brand-onboarding": "Brand: Onboarding", "image-to-prompt": "Images", "agent-chat": "Agents", "image-generate": "Images", other: "Other" },
 };
 // AI token usage for the current month, per workspace — grey "KI-Nutzung" label +
 // card with the monthly total and a per-feature breakdown. Same section styling
@@ -11004,8 +11007,8 @@ function TokenUsageBar({ orgId, theme, darkMode, appLanguage = "de" }) {
         {breakdown.map(([feat, val]) => {
           const pct = total ? Math.round((val / total) * 100) : 0;
           return (
-            <div key={feat} style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5, fontSize: 12, color: theme.textDim }}>
+            <div key={feat} style={{ marginBottom: 18 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 12, color: theme.textDim }}>
                 <span>{labels[feat] || feat}</span>
                 <span>{formatTokens(val)} · {pct}%</span>
               </div>
@@ -11016,8 +11019,8 @@ function TokenUsageBar({ orgId, theme, darkMode, appLanguage = "de" }) {
           );
         })}
         <div style={{ marginTop: breakdown.length ? 6 : 12, fontSize: 11, color: theme.textFaint, lineHeight: 1.5 }}>
-          {de ? "Text und Chat laufen über deine eigenen API-Keys — hierfür werden keine Credits verbraucht."
-              : "Text and chat run on your own API keys — these use no credits."}
+          {de ? "Text und Chat laufen über deine eigenen API-Keys. Credits verbrauchen sie nicht."
+              : "Text and chat run on your own API keys. They use no credits."}
         </div>
       </div>
     </div>
