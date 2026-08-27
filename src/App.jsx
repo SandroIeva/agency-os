@@ -41967,16 +41967,16 @@ export default function CircularMenu() {
   // had been added to — still working, still counted against the seats. And the
   // browser cannot clear those: project_members may only be deleted by the
   // project's owner, who is usually not the admin doing the removing.
-  const removeOrgMember = async (userId, name) => {
+  const [removeMemberOf, setRemoveMemberOf] = useState(null);   // the member awaiting confirmation
+  const [removingMember, setRemovingMember] = useState(false);
+  const removeOrgMember = async (userId) => {
     if (!userOrg?.id) return;
-    const who = name || (appLanguage === "de" ? "Dieses Mitglied" : "This member");
-    const ok = window.confirm(appLanguage === "de"
-      ? `${who} aus „${userOrg.name}" entfernen?\n\nDer Zugriff auf den Workspace und auf alle seine Projekte endet sofort. Erstellte Inhalte bleiben erhalten.`
-      : `Remove ${who} from “${userOrg.name}”?\n\nAccess to the workspace and to every project in it ends immediately. What they created stays.`);
-    if (!ok) return;
+    setRemovingMember(true);
     const prev = orgMembers;
     setOrgMembers(p => p.filter(m => m.user_id !== userId));   // optimistic
     const { error } = await supabase.rpc("remove_org_member", { p_org: userOrg.id, p_user: userId });
+    setRemovingMember(false);
+    setRemoveMemberOf(null);
     if (error) {
       setOrgMembers(prev);
       alert((appLanguage === "de" ? "Konnte nicht entfernt werden: " : "Could not remove: ") + error.message);
@@ -48113,7 +48113,7 @@ export default function CircularMenu() {
                                   )}
                                   {/* Granular permissions — admins have all (read-only) */}
                                   <div>
-                                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 600, marginBottom: 8 }}>{appLanguage === "de" ? "Berechtigungen" : "Permissions"}{isAdminRow ? (appLanguage === "de" ? " · Admin hat alle Rechte" : " · admin has all rights") : ""}</div>
+                                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 600, marginTop: 6, marginBottom: 8 }}>{appLanguage === "de" ? "Berechtigungen" : "Permissions"}{isAdminRow ? (appLanguage === "de" ? " · Admin hat alle Rechte" : " · admin has all rights") : ""}</div>
                                     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                                       {WS_PERMISSIONS.map(perm => {
                                         const checked = isAdminRow ? true : !!m[perm.key];
@@ -48138,8 +48138,8 @@ export default function CircularMenu() {
                                       button from being there to press. */}
                                   {userOrgRole === "admin" && m.user_id !== session?.user?.id
                                     && m.user_id !== userOrg?.created_by && (
-                                    <div style={{ paddingTop: 12, marginTop: 12, borderTop: `1px solid ${theme.borderFaint}` }}>
-                                      <div onClick={() => removeOrgMember(m.user_id, m.profiles?.display_name)}
+                                    <div style={{ marginTop: 14 }}>
+                                      <div onClick={() => setRemoveMemberOf(m)}
                                         style={{ display: "inline-flex", alignItems: "center", gap: 8,
                                           padding: "8px 14px", borderRadius: 9, cursor: "pointer",
                                           border: "1px solid rgba(229,72,77,0.35)", color: "#e5484d",
@@ -49422,6 +49422,52 @@ export default function CircularMenu() {
                             </button>
                           );
                         })()}
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Removing a member — the workspace-delete dialog's twin, minus the
+                  type-the-name step: deleting a workspace cannot be undone, while
+                  a member can be invited back in a minute. What it does have to
+                  say is the part that is easy to miss — that the projects go too. */}
+              <AnimatePresence>
+                {removeMemberOf && (
+                  <motion.div
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    onClick={() => !removingMember && setRemoveMemberOf(null)}
+                    style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.5)",
+                      backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
+                      display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+                    <motion.div
+                      initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0 }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ width: "100%", maxWidth: 440, borderRadius: 20, background: darkMode ? "#1b1b24" : "#fff",
+                        border: `1px solid ${theme.borderFaint}`, padding: 24, boxShadow: "0 30px 80px rgba(0,0,0,0.4)" }}>
+                      <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>
+                        {appLanguage === "de" ? "Mitglied entfernen?" : "Remove member?"}
+                      </div>
+                      <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55, marginBottom: 20 }}>
+                        {appLanguage === "de"
+                          ? <><strong style={{ color: theme.text }}>{removeMemberOf.profiles?.display_name || "Dieses Mitglied"}</strong> verliert sofort den Zugriff auf <strong style={{ color: theme.text }}>{userOrg?.name}</strong> und auf alle Projekte darin. Erstellte Inhalte bleiben erhalten, und du kannst die Person jederzeit wieder einladen.</>
+                          : <><strong style={{ color: theme.text }}>{removeMemberOf.profiles?.display_name || "This member"}</strong> loses access to <strong style={{ color: theme.text }}>{userOrg?.name}</strong> and to every project in it, straight away. What they created stays, and you can invite them back at any time.</>}
+                      </div>
+                      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                        <button onClick={() => setRemoveMemberOf(null)} disabled={removingMember}
+                          style={{ padding: "10px 18px", borderRadius: 12, background: "transparent",
+                            border: `1px solid ${theme.border}`, color: theme.text, fontSize: 13, fontWeight: 500,
+                            fontFamily: FONT, cursor: removingMember ? "default" : "pointer" }}>
+                          {appLanguage === "de" ? "Abbrechen" : "Cancel"}
+                        </button>
+                        <button onClick={() => removeOrgMember(removeMemberOf.user_id)} disabled={removingMember}
+                          style={{ padding: "10px 18px", borderRadius: 12, background: "#E84343", border: "none",
+                            color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT,
+                            cursor: removingMember ? "default" : "pointer", opacity: removingMember ? 0.7 : 1 }}>
+                          {removingMember
+                            ? (appLanguage === "de" ? "Entfernt…" : "Removing…")
+                            : (appLanguage === "de" ? "Entfernen" : "Remove")}
+                        </button>
                       </div>
                     </motion.div>
                   </motion.div>
