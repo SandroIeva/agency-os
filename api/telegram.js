@@ -215,7 +215,8 @@ const resolveHint = (candidates, hint) => {
 export default async function handler(req) {
   const reqUrl = new URL(req.url);
   const setup = reqUrl.searchParams.get("setup");
-  if (req.method !== "POST" && !setup) return json({ error: "Method not allowed" }, 405);
+  const check = reqUrl.searchParams.get("check");
+  if (req.method !== "POST" && !setup && !check) return json({ error: "Method not allowed" }, 405);
 
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const url = process.env.SUPABASE_URL;
@@ -234,6 +235,26 @@ export default async function handler(req) {
     return json({ error: "Telegram is not configured", code: "not_configured", missing }, 503);
   }
   const db = createClient(url, serviceKey, { auth: { persistSession: false } });
+
+  // ── Is the wiring alive? ───────────────────────────────────────────────────
+  // Deliberately needs no secret, so checking never has to be handed to
+  // whoever holds one. It answers booleans and the bot's public username:
+  // no token, no secret, no chat ids, no error strings.
+  if (check) {
+    const me = await api(botToken, "getMe", {});
+    const info = await api(botToken, "getWebhookInfo", {});
+    const allowed = info?.result?.allowed_updates;
+    return json({
+      bot: me?.ok ? me.result?.username || null : null,
+      // Telegram treats an absent list as "the default set", and callback_query
+      // is in that set. Present but missing it is the state where every button
+      // silently does nothing.
+      buttons_delivered: !allowed?.length || allowed.includes("callback_query"),
+      webhook_points_here: (info?.result?.url || "") === `${appUrl}/api/telegram`,
+      pending: info?.result?.pending_update_count ?? null,
+      failing: !!info?.result?.last_error_message,
+    });
+  }
 
   // ── One-time wiring ───────────────────────────────────────────────────────
   // Registering the webhook by hand means pasting a bot token into a terminal,
