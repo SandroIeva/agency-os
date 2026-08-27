@@ -15,6 +15,13 @@ import { createClient } from "@supabase/supabase-js";
 // language of the chat it is being sent to. Two copies of this table would
 // drift, and the drift would be a German sentence under English buttons.
 import { notifLines } from "../src/notificationText.js";
+// What a button DOES lives in one place, shared with api/slack.js. Only the
+// formatting below is Telegram's: HTML, and an inline_keyboard.
+import {
+  MOVE_COLUMNS, COLUMN_LABELS, ID_HINT,
+  mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
+  taskFacts, moveTaskTo, handTaskTo,
+} from "../server/messenger.js";
 
 export const config = { runtime: "edge" };
 
@@ -38,6 +45,7 @@ const DEFAULT_TYPES = {
 
 const T = {
   de: {
+    lang: "de",
     linked: (name) => `✅ Verbunden. Du bekommst deine i7OS-Benachrichtigungen ab jetzt hier${name ? `, ${name}` : ""}.`,
     already: "Du bist bereits verbunden. /stop trennt die Verbindung.",
     expired: "Dieser Link ist abgelaufen. Öffne i7OS → Einstellungen → Konto und verbinde noch einmal.",
@@ -46,7 +54,6 @@ const T = {
     status: (n) => `Verbunden. Aktive Benachrichtigungen: ${n}.`,
     help: "Ich schicke dir Benachrichtigungen aus i7OS. Verbinden kannst du dich in der App unter Einstellungen → Konto. /stop trennt die Verbindung.",
     open: "In i7OS öffnen",
-    cols: { progress: "In Arbeit", review: "Review", done: "Erledigt" },
     btnPass: "Weitergeben",
     btnBack: "Zurück",
     pickWho: "An wen?",
@@ -56,8 +63,6 @@ const T = {
     cbNoOne: "In diesem Workspace ist sonst niemand.",
     cbPassed: (name) => `An ${name} weitergegeben.`,
     markPassed: (name) => `Über Telegram an ${name} weitergegeben.`,
-    passedTitle: "Aufgabe weitergegeben",
-    passedBody: (from, title) => `${from} hat dir "${title}" weitergegeben`,
     cbGone: "Diese Aufgabe gibt es nicht mehr.",
     cbDenied: "Du hast auf diesen Workspace keinen Zugriff.",
     cbReadOnly: "Dieses Konto hat keinen aktiven Plan. Zum Ändern wird einer gebraucht.",
@@ -65,6 +70,7 @@ const T = {
 
   },
   en: {
+    lang: "en",
     linked: (name) => `✅ Connected. Your i7OS notifications arrive here from now on${name ? `, ${name}` : ""}.`,
     already: "You are already connected. /stop disconnects.",
     expired: "This link has expired. Open i7OS → Settings → Account and connect again.",
@@ -73,7 +79,6 @@ const T = {
     status: (n) => `Connected. Active notification types: ${n}.`,
     help: "I send you notifications from i7OS. Connect in the app under Settings → Account. /stop disconnects.",
     open: "Open in i7OS",
-    cols: { progress: "In progress", review: "Review", done: "Done" },
     btnPass: "Hand over",
     btnBack: "Back",
     pickWho: "To whom?",
@@ -83,8 +88,6 @@ const T = {
     cbNoOne: "There is nobody else in this workspace.",
     cbPassed: (name) => `Handed to ${name}.`,
     markPassed: (name) => `Handed to ${name} from Telegram.`,
-    passedTitle: "Task handed to you",
-    passedBody: (from, title) => `${from} handed you "${title}"`,
     cbGone: "That task is gone.",
     cbDenied: "You do not have access to that workspace.",
     cbReadOnly: "This account has no active plan. Changes need one.",
@@ -137,60 +140,22 @@ const notifText = (workspace, n, lang, extra) => {
   ].filter(Boolean).join("\n");
 };
 
-const DETAIL_MAX = 600;
-const CHECKLIST_MAX = 8;
-const PRIORITY = {
-  de: { high: "Hoch", medium: "Mittel", low: "Niedrig" },
-  en: { high: "High", medium: "Medium", low: "Low" },
-};
-
-// What the card itself says, under the notification. The body only ever names
-// who assigned what, so everything that decides what you DO about the message —
-// how urgent it is, when it is due, how big it is — was missing from the chat.
-//
-// Fetched fresh on every send AND on every button press, so a message that gets
-// rewritten shows the checklist as it stands now, not as it stood when the
-// notification was written.
+// Telegram's rendering of what the card says. The data comes from taskFacts in
+// server/messenger.js, which Slack reads too; only the HTML is ours.
 const taskBlock = async (db, taskId, lang) => {
-  const de = lang !== "en";
-  const { data: task } = await db.from("tasks")
-    .select("description, priority, due_date").eq("id", taskId).maybeSingle();
-  if (!task) return "";
+  const f = await taskFacts(db, taskId, lang);
+  if (!f) return "";
   const blocks = [];
-
-  const d = String(task.description || "").trim();
-  if (d) blocks.push(esc(d.length > DETAIL_MAX ? d.slice(0, DETAIL_MAX).trimEnd() + "…" : d));
-
-  const facts = [];
-  const prio = PRIORITY[de ? "de" : "en"][task.priority];
-  if (prio) facts.push(`${de ? "Priorität" : "Priority"}: ${prio}`);
-  if (task.due_date) {
-    // The app writes a date-only field through new Date("YYYY-MM-DD"), which
-    // parses as UTC midnight, and every stored due_date is 00:00 UTC. Reading
-    // it back in UTC is therefore exact, and needs no timezone and no Intl,
-    // which the edge runtime does not always carry in full.
-    const t = new Date(task.due_date);
-    const dd = String(t.getUTCDate()).padStart(2, "0");
-    const mm = String(t.getUTCMonth() + 1).padStart(2, "0");
-    const yy = t.getUTCFullYear();
-    facts.push(`${de ? "Frist" : "Due"}: ${de ? `${dd}.${mm}.${yy}` : `${yy}-${mm}-${dd}`}`);
-  }
-  if (facts.length) blocks.push(esc(facts.join(" · ")));
-
-  const { data: items } = await db.from("task_checklist_items")
-    .select("text, checked").eq("task_id", taskId).order("position", { ascending: true });
-  if (items?.length) {
-    const done = items.filter(i => i.checked).length;
-    // [x] and [ ], not a tick character: this is the one surface where we
-    // cannot draw an icon, and a tick is a coloured emoji on some clients and
-    // a thin glyph on others.
-    const rows = items.slice(0, CHECKLIST_MAX)
-      .map(i => `${i.checked ? "[x]" : "[ ]"} ${esc(i.text || "")}`);
-    if (items.length > CHECKLIST_MAX) {
-      rows.push(de ? `und ${items.length - CHECKLIST_MAX} weitere`
-                   : `and ${items.length - CHECKLIST_MAX} more`);
-    }
-    blocks.push(`<b>${de ? "Checkliste" : "Checklist"} ${done}/${items.length}</b>\n${rows.join("\n")}`);
+  if (f.description) blocks.push(esc(f.description));
+  if (f.facts.length) blocks.push(esc(f.facts.join(" · ")));
+  if (f.checklist) {
+    const c = f.checklist;
+    // [x] and [ ], not a tick character: this is a surface where we cannot draw
+    // an icon, and a tick is a coloured emoji on some clients and a thin glyph
+    // on others.
+    const rows = c.shown.map(i => `${i.checked ? "[x]" : "[ ]"} ${esc(i.text)}`);
+    if (c.more) rows.push(esc(c.moreLabel(c.more)));
+    blocks.push(`<b>${esc(c.label)} ${c.done}/${c.total}</b>\n${rows.join("\n")}`);
   }
   return blocks.join("\n\n");
 };
@@ -201,76 +166,17 @@ const orgName = async (db, orgId) => {
   return data?.name || "";
 };
 
-// Whether this person may still write to this task. The service key writes
-// past RLS, so the check RLS would have done has to happen here instead:
-// membership of the task's workspace, or of the one project it belongs to,
-// because a project invite grants access without workspace membership.
-const mayTouchTask = async (db, userId, task) => {
-  if (task.org_id) {
-    const { data } = await db.from("org_members").select("id")
-      .eq("org_id", task.org_id).eq("user_id", userId).maybeSingle();
-    if (data) return true;
-  }
-  if (task.project_id) {
-    const { data } = await db.from("project_members").select("id")
-      .eq("project_id", task.project_id).eq("user_id", userId).maybeSingle();
-    if (data) return true;
-  }
-  return false;
-};
-
-// Everybody who could take this task over, minus whoever is asking. Workspace
-// members, or the project's members when the task belongs to no workspace.
-// Sorted by name so the row a button sits in does not move between the moment
-// the list is drawn and the moment somebody presses it.
-const handoverCandidates = async (db, task, exceptUserId) => {
-  let ids = [];
-  if (task.org_id) {
-    const { data } = await db.from("org_members").select("user_id").eq("org_id", task.org_id);
-    ids = (data || []).map(r => r.user_id);
-  } else if (task.project_id) {
-    const { data } = await db.from("project_members").select("user_id").eq("project_id", task.project_id);
-    ids = (data || []).map(r => r.user_id);
-  }
-  ids = [...new Set(ids)].filter(id => id && id !== exceptUserId);
-  if (!ids.length) return [];
-  const { data: profiles } = await db.from("profiles").select("id, display_name, email").in("id", ids);
-  return (profiles || [])
-    .map(pr => ({ id: pr.id, name: pr.display_name || (pr.email || "").split("@")[0] || "?" }))
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .slice(0, 20); // a keyboard, not a directory
-};
-
-// callback_data is capped at 64 bytes and two uuids do not fit in it. The
-// target therefore travels as the first 8 characters of its id and is resolved
-// against the live list on the way back, which also re-checks membership for
-// free. Eight hex characters collide once in four billion; an actual collision
-// is refused rather than guessed at.
-const ID_HINT = 8;
-
-// The columns a task can be pushed into from a chat. "todo" is missing on
-// purpose: nothing that arrives as a notification needs a button to put it back
-// where it already was. These keys are the board's own (DEFAULT_COLUMNS in
-// App.jsx) and the values in the column_key text field, verified against
-// production, which holds todo, progress, review and done and no other spelling.
-const MOVE_COLUMNS = ["progress", "review", "done"];
-
 // The keyboard a task notification carries. One definition, because the
 // fan-out draws it, "back" restores it, a move redraws it, and all three have
 // to agree. It stays on the message after a move, so the card can be walked
 // across the board from the chat rather than in one direction only.
 const taskKeyboard = (t, appUrl, n, hasTask) => [
   ...(hasTask ? [
-    MOVE_COLUMNS.map(key => ({ text: t.cols[key], callback_data: `c:${n.id}:${key}` })),
+    MOVE_COLUMNS.map(key => ({ text: COLUMN_LABELS[t.lang][key], callback_data: `c:${n.id}:${key}` })),
     [{ text: t.btnPass, callback_data: `f:${n.id}` }],
   ] : []),
   [{ text: t.open, url: deepLink(appUrl, n) }],
 ];
-const resolveHint = (candidates, hint) => {
-  const hits = candidates.filter(c => c.id.slice(0, ID_HINT) === hint);
-  return hits.length === 1 ? hits[0] : null;
-};
-
 export default async function handler(req) {
   const reqUrl = new URL(req.url);
   const setup = reqUrl.searchParams.get("setup");
@@ -588,8 +494,7 @@ export default async function handler(req) {
     // would still take the change.
     if (!(await mayTouchTask(db, link.user_id, task))) return answer(t.cbDenied, true);
     if (task.org_id) {
-      const { data: readOnly } = await db.rpc("org_is_read_only", { p_org: task.org_id });
-      if (readOnly) return answer(t.cbReadOnly, true);
+      if (await orgIsReadOnly(db, task.org_id)) return answer(t.cbReadOnly, true);
     }
 
     const editKeyboard = (rows) => api(botToken, "editMessageReplyMarkup", {
@@ -621,27 +526,10 @@ export default async function handler(req) {
       const target = resolveHint(await handoverCandidates(db, task, link.user_id), hint);
       if (!target) return answer(t.cbGone, true);
 
-      const { error: passErr } = await db.from("tasks")
-        .update({ assignee_id: target.id, updated_at: new Date().toISOString() }).eq("id", task.id);
-      if (passErr) return answer(t.cbFailed, true);
-
-      // The new assignee is told the same way the app tells them. The insert
-      // trips the notifications trigger, so if they use Telegram too, this
-      // lands in their chat with its own buttons a second later.
-      const { data: me } = await db.from("profiles").select("display_name, email").eq("id", link.user_id).maybeSingle();
-      const fromName = me?.display_name || (me?.email || "").split("@")[0] || "?";
-      const { data: full } = await db.from("tasks").select("title").eq("id", task.id).maybeSingle();
-      // Written the way the app writes one: title and body for anything still
-      // reading them, actor and subject for everything that renders. The person
-      // receiving this may well read English.
-      await db.from("notifications").insert({
-        user_id: target.id,
-        org_id: task.org_id,
-        type: "task_assigned",
-        title: t.passedTitle,
-        body: t.passedBody(fromName, full?.title || ""),
-        metadata: { task_id: task.id, actor: fromName, subject: full?.title || "" },
-      });
+      // The write, and the notification that goes with it, are shared with
+      // Slack. The insert trips the notifications trigger, so if the new
+      // assignee uses a messenger too, this reaches them there a second later.
+      if (!(await handTaskTo(db, task, target, link.user_id)).ok) return answer(t.cbFailed, true);
 
       await api(botToken, "editMessageText", {
         chat_id: cbChat,
@@ -658,29 +546,12 @@ export default async function handler(req) {
     // still sitting in chats that were sent before this existed.
     const target = action === "d" ? "done" : hint;
     if (!MOVE_COLUMNS.includes(target)) return answer("");
-    if (task.column_key === target) return answer(t.cbAlreadyIn(t.cols[target]));
+    const label = COLUMN_LABELS[t.lang][target];
+    if (task.column_key === target) return answer(t.cbAlreadyIn(label));
 
-    const { error: upErr } = await db.from("tasks")
-      .update({ column_key: target, updated_at: new Date().toISOString() }).eq("id", task.id);
-    if (upErr) return answer(t.cbFailed, true);
-
-    // Pressing Erledigt here is the same event as dragging the card there, so
-    // it tells whoever asked for the task the same way the board does. Written
-    // as data, so they read it in THEIR language, not in the language of this
-    // chat. The insert trips the notifications trigger, so if they use Telegram
-    // it reaches them there too.
-    if (target === "done" && task.creator_id && task.creator_id !== link.user_id) {
-      const { data: me } = await db.from("profiles").select("display_name, email").eq("id", link.user_id).maybeSingle();
-      const doneBy = me?.display_name || (me?.email || "").split("@")[0] || "?";
-      await db.from("notifications").insert({
-        user_id: task.creator_id,
-        org_id: task.org_id,
-        type: "task_completed",
-        title: "Aufgabe erledigt",
-        body: `${doneBy} hat "${task.title || ""}" erledigt`,
-        metadata: { task_id: task.id, actor: doneBy, subject: task.title || "" },
-      });
-    }
+    // The write, and the "somebody finished your task" notification that a move
+    // into done carries, are shared with Slack.
+    if (!(await moveTaskTo(db, task, target, link.user_id)).ok) return answer(t.cbFailed, true);
 
     // The message says where the card stands now, so the chat still reads
     // correctly tomorrow. The buttons stay: a card that went into review can go
@@ -688,12 +559,12 @@ export default async function handler(req) {
     await api(botToken, "editMessageText", {
       chat_id: cbChat,
       message_id: cb.message.message_id,
-      text: `${notifText(await orgName(db, n.org_id), n, link.lang, await taskBlock(db, task.id, link.lang))}\n\n<i>${esc(t.markMoved(t.cols[target]))}</i>`,
+      text: `${notifText(await orgName(db, n.org_id), n, link.lang, await taskBlock(db, task.id, link.lang))}\n\n<i>${esc(t.markMoved(label))}</i>`,
       parse_mode: "HTML",
       disable_web_page_preview: true,
       reply_markup: { inline_keyboard: taskKeyboard(t, appUrl, n, true) },
     });
-    return answer(t.cbMoved(t.cols[target]));
+    return answer(t.cbMoved(label));
   }
 
   const msg = update?.message || update?.edited_message;
