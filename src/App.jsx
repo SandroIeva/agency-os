@@ -43404,6 +43404,26 @@ export default function CircularMenu() {
     setCurrentView("whiteboard");
   }, [session?.user?.id]);
 
+  // ── Handle ?task=<id> — open a task straight from a Telegram notification ──
+  // Same shape as ?doc= and ?wb=: parked in localStorage first, because the
+  // magic-link login round trip drops the query string on the way back.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlTask = params.get("task");
+    if (urlTask) {
+      localStorage.setItem("agencyos-open-task", urlTask);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("task");
+      window.history.replaceState({}, "", url.pathname + (url.search || ""));
+    }
+    const taskId = urlTask || localStorage.getItem("agencyos-open-task");
+    if (!taskId) return;
+    if (!session?.user?.id) return; // wait for login
+    localStorage.removeItem("agencyos-open-task");
+    setOpenTaskId(taskId);
+    setCurrentView("kanban");
+  }, [session?.user?.id]);
+
   // ── Handle ?push-setup=true&token=... — show setup overlay (no login required) ──
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

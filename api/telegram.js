@@ -40,6 +40,18 @@ const T = {
     status: (n) => `Verbunden. Aktive Benachrichtigungen: ${n}.`,
     help: "Ich schicke dir Benachrichtigungen aus i7 OS. Verbinden kannst du dich in der App unter Einstellungen → Konto. /stop trennt die Verbindung.",
     open: "In i7 OS öffnen",
+    btnDone: "Erledigt",
+    btnMine: "Mir zuweisen",
+    cbDone: "Erledigt.",
+    cbAlready: "War schon erledigt.",
+    cbMine: "Dir zugewiesen.",
+    cbMineAlready: "Gehört dir schon.",
+    cbGone: "Diese Aufgabe gibt es nicht mehr.",
+    cbDenied: "Du hast auf diesen Workspace keinen Zugriff.",
+    cbReadOnly: "Dieses Konto hat keinen aktiven Plan. Zum Ändern wird einer gebraucht.",
+    cbFailed: "Hat nicht geklappt. Versuch es in der App.",
+    markDone: "Erledigt über Telegram.",
+    markMine: "Über Telegram dir zugewiesen.",
   },
   en: {
     linked: (name) => `✅ Connected. Your i7 OS notifications arrive here from now on${name ? `, ${name}` : ""}.`,
@@ -50,6 +62,18 @@ const T = {
     status: (n) => `Connected. Active notification types: ${n}.`,
     help: "I send you notifications from i7 OS. Connect in the app under Settings → Account. /stop disconnects.",
     open: "Open in i7 OS",
+    btnDone: "Done",
+    btnMine: "Assign to me",
+    cbDone: "Marked done.",
+    cbAlready: "Already done.",
+    cbMine: "Assigned to you.",
+    cbMineAlready: "Already yours.",
+    cbGone: "That task is gone.",
+    cbDenied: "You do not have access to that workspace.",
+    cbReadOnly: "This account has no active plan. Changes need one.",
+    cbFailed: "That did not work. Try it in the app.",
+    markDone: "Marked done from Telegram.",
+    markMine: "Assigned to you from Telegram.",
   },
 };
 
@@ -71,9 +95,43 @@ const api = (botToken, method, body) =>
 // that quietly does nothing.
 const deepLink = (appUrl, n) => {
   const m = n?.metadata || {};
+  if (m.task_id) return `${appUrl}/?task=${encodeURIComponent(m.task_id)}`;
   if (m.document_id) return `${appUrl}/?doc=${encodeURIComponent(m.document_id)}`;
   if (m.board_id || m.whiteboard_id) return `${appUrl}/?wb=${encodeURIComponent(m.board_id || m.whiteboard_id)}`;
   return appUrl;
+};
+
+// The workspace name over the title, the title, the body. Built in one place
+// because a button press rewrites the very message the fan-out sent, and the
+// two have to produce the same three lines or the edit reflows the card.
+const notifText = (workspace, n) => [
+  workspace ? `<b>${esc(workspace)}</b>` : null,
+  `<b>${esc(n.title)}</b>`,
+  n.body ? esc(n.body) : null,
+].filter(Boolean).join("\n");
+
+const orgName = async (db, orgId) => {
+  if (!orgId) return "";
+  const { data } = await db.from("organizations").select("name").eq("id", orgId).maybeSingle();
+  return data?.name || "";
+};
+
+// Whether this person may still write to this task. The service key writes
+// past RLS, so the check RLS would have done has to happen here instead:
+// membership of the task's workspace, or of the one project it belongs to,
+// because a project invite grants access without workspace membership.
+const mayTouchTask = async (db, userId, task) => {
+  if (task.org_id) {
+    const { data } = await db.from("org_members").select("id")
+      .eq("org_id", task.org_id).eq("user_id", userId).maybeSingle();
+    if (data) return true;
+  }
+  if (task.project_id) {
+    const { data } = await db.from("project_members").select("id")
+      .eq("project_id", task.project_id).eq("user_id", userId).maybeSingle();
+    if (data) return true;
+  }
+  return false;
 };
 
 export default async function handler(req) {
@@ -116,7 +174,10 @@ export default async function handler(req) {
     const set = await api(botToken, "setWebhook", {
       url: `${appUrl}/api/telegram`,
       secret_token: process.env.TELEGRAM_WEBHOOK_SECRET,
-      allowed_updates: ["message", "edited_message"],
+      // callback_query is what a button press arrives as. Leave it out of this
+      // list and Telegram silently never delivers one, which looks exactly like
+      // a broken handler. Adding a button means re-running this setup call.
+      allowed_updates: ["message", "edited_message", "callback_query"],
       drop_pending_updates: true,
     });
     const info = await api(botToken, "getWebhookInfo", {});
@@ -168,24 +229,28 @@ export default async function handler(req) {
     // remembers to add it to the table above.
     if (wanted[n.type] === false) return json({ ok: true, skipped: "type_off" });
 
-    let workspace = "";
-    if (n.org_id) {
-      const { data: org } = await db.from("organizations").select("name").eq("id", n.org_id).maybeSingle();
-      workspace = org?.name || "";
-    }
+    const workspace = await orgName(db, n.org_id);
     const t = T[link.lang === "en" ? "en" : "de"];
-    const text = [
-      workspace ? `<b>${esc(workspace)}</b>` : null,
-      `<b>${esc(n.title)}</b>`,
-      n.body ? esc(n.body) : null,
-    ].filter(Boolean).join("\n");
+
+    // A notification about a task can be acted on without opening anything.
+    // The callback carries the NOTIFICATION id, not the task id: the handler
+    // needs the notification anyway to rebuild this exact message, and one uuid
+    // fits Telegram's 64-byte callback_data where two would not.
+    const taskId = n.metadata?.task_id;
+    const keyboard = [
+      ...(taskId ? [[
+        { text: t.btnDone, callback_data: `d:${n.id}` },
+        { text: t.btnMine, callback_data: `a:${n.id}` },
+      ]] : []),
+      [{ text: t.open, url: deepLink(appUrl, n) }],
+    ];
 
     const res = await api(botToken, "sendMessage", {
       chat_id: link.chat_id,
-      text,
+      text: notifText(workspace, n),
       parse_mode: "HTML",
       disable_web_page_preview: true,
-      reply_markup: { inline_keyboard: [[{ text: t.open, url: deepLink(appUrl, n) }]] },
+      reply_markup: { inline_keyboard: keyboard },
     });
 
     if (res?.ok) {
@@ -213,6 +278,76 @@ export default async function handler(req) {
   }
 
   let update; try { update = await req.json(); } catch { return json({ ok: true }); }
+
+  // ── A button under a notification ─────────────────────────────────────────
+  // Telegram delivers these as callback_query, never as a message, and only
+  // when "callback_query" is in setWebhook's allowed_updates. Answered within
+  // a few seconds or the button spins forever on the pressing phone, so every
+  // path below ends in answerCallbackQuery.
+  const cb = update?.callback_query;
+  if (cb) {
+    const cbChat = cb.message?.chat?.id;
+    const answer = (body, alert = false) =>
+      api(botToken, "answerCallbackQuery", { callback_query_id: cb.id, text: body, show_alert: alert })
+        .then(() => json({ ok: true }));
+
+    const cut = String(cb.data || "").indexOf(":");
+    const action = cut > 0 ? cb.data.slice(0, cut) : "";
+    const notifId = cut > 0 ? cb.data.slice(cut + 1) : "";
+    if (!cbChat || !notifId || (action !== "d" && action !== "a")) return answer("");
+
+    // The chat is the identity. A button is only ever pressed in the chat the
+    // message was sent to, so nobody else can reach this task through it.
+    const { data: link } = await db.from("messenger_links")
+      .select("user_id, lang, active").eq("provider", "telegram").eq("chat_id", String(cbChat)).maybeSingle();
+    const t = T[link?.lang === "en" ? "en" : "de"];
+    if (!link?.active || !link.user_id) return answer(t.notLinked, true);
+
+    const { data: n } = await db.from("notifications")
+      .select("id, user_id, org_id, type, title, body, metadata").eq("id", notifId).maybeSingle();
+    const taskId = n?.metadata?.task_id;
+    if (!taskId) return answer(t.cbGone, true);
+
+    const { data: task } = await db.from("tasks")
+      .select("id, org_id, project_id, column_key, assignee_id").eq("id", taskId).maybeSingle();
+    if (!task) return answer(t.cbGone, true);
+
+    // Two gates that the database would normally apply and here does not. The
+    // service key writes past RLS, and enforce_read_only returns early when
+    // auth.uid() is null, which it is for every write from this function. Left
+    // out, this button is a door around both the permission model and the
+    // paywall: a workspace nobody may write to, or an account with no plan,
+    // would still take the change.
+    if (!(await mayTouchTask(db, link.user_id, task))) return answer(t.cbDenied, true);
+    if (task.org_id) {
+      const { data: readOnly } = await db.rpc("org_is_read_only", { p_org: task.org_id });
+      if (readOnly) return answer(t.cbReadOnly, true);
+    }
+
+    const done = action === "d";
+    if (done && task.column_key === "done") return answer(t.cbAlready);
+    if (!done && task.assignee_id === link.user_id) return answer(t.cbMineAlready);
+
+    const patch = done
+      ? { column_key: "done", updated_at: new Date().toISOString() }
+      : { assignee_id: link.user_id, updated_at: new Date().toISOString() };
+    const { error: upErr } = await db.from("tasks").update(patch).eq("id", task.id);
+    if (upErr) return answer(t.cbFailed, true);
+
+    // The message says what happened to it, so the chat still reads correctly
+    // tomorrow. The action buttons go with it: pressing "done" twice is not a
+    // thing anyone means to do.
+    await api(botToken, "editMessageText", {
+      chat_id: cbChat,
+      message_id: cb.message.message_id,
+      text: `${notifText(await orgName(db, n.org_id), n)}\n\n<i>${esc(done ? t.markDone : t.markMine)}</i>`,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+      reply_markup: { inline_keyboard: [[{ text: t.open, url: deepLink(appUrl, n) }]] },
+    });
+    return answer(done ? t.cbDone : t.cbMine);
+  }
+
   const msg = update?.message || update?.edited_message;
   const chatId = msg?.chat?.id;
   const text = (msg?.text || "").trim();
