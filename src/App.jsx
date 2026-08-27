@@ -48503,7 +48503,10 @@ export default function CircularMenu() {
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{t("settings.notifications")}</div>
                       <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{t("settings.notificationsSub")}</div>
                     </div>
-                    <div style={{ padding: "4px 10px", borderRadius: 20, background: theme.accentBg, fontSize: 11, fontFamily: FONT, color: theme.accent }}>{appLanguage === "de" ? "Bald verfügbar" : "Coming soon"}</div>
+                    {/* Grey, like Slack's and like the members panel: a thing that
+                        does not exist yet should not be the loudest on the page. */}
+                    <div style={{ padding: "4px 10px", borderRadius: 20, fontSize: 11, fontFamily: FONT,
+                      background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)", color: theme.textDim }}>{appLanguage === "de" ? "Bald verfügbar" : "Coming soon"}</div>
                   </div>
                 </div>
               </motion.div>
