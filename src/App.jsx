@@ -41494,7 +41494,6 @@ export default function CircularMenu() {
   const [osVisuals, setOsVisuals] = useState({});
   const [osVisualsModalOpen, setOsVisualsModalOpen] = useState(false);
   const [osVisualUploading, setOsVisualUploading] = useState(null); // slot_key being uploaded
-  const [osVisualPicker, setOsVisualPicker] = useState(null); // { key, x, y } — anchored colour picker
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -42811,41 +42810,24 @@ export default function CircularMenu() {
     })();
   }, [currentView, userOrg?.id]);
 
-  // ── Load OS visuals (custom icons + bg color + mode per slot) ──
+  // ── Load OS visuals ──
+  // A slot is a picture or it is nothing. The bg_color and mode columns are
+  // still there and are still written, because rows exist that carry values,
+  // but nothing reads them any more: a custom icon always fills its circle and
+  // the circle behind it is always anthracite. Whether the picture shows that
+  // anthracite is decided by the picture, which is what a transparent PNG is
+  // for. That replaces a mode switch and a colour picker with one upload.
   useEffect(() => {
     if (!session?.user?.id) return;
     (async () => {
-      const { data } = await supabase.from("os_visuals").select("slot_key, icon_url, bg_color, mode").eq("user_id", session.user.id);
+      const { data } = await supabase.from("os_visuals").select("slot_key, icon_url").eq("user_id", session.user.id);
       const map = {};
-      (data || []).forEach(row => {
-        map[row.slot_key] = { icon_url: row.icon_url, bg_color: row.bg_color, mode: row.mode || "icon" };
-      });
+      (data || []).forEach(row => { map[row.slot_key] = { icon_url: row.icon_url }; });
       setOsVisuals(map);
     })();
   }, [session?.user?.id]);
 
-  // Read by the debounced colour write below, which fires from a timer and so
-  // cannot see the state of the render it was scheduled in.
-  const osVisualsRef = useRef({});
-  osVisualsRef.current = osVisuals;
-
-  // Upsert helper that merges patch into existing slot row
-  const upsertOsVisual = async (slotKey, patch) => {
-    if (!session?.user?.id) return;
-    const current = osVisualsRef.current[slotKey] || {};
-    const next = { ...current, ...patch };
-    setOsVisuals(prev => ({ ...prev, [slotKey]: next }));
-    await supabase.from("os_visuals").upsert({
-      user_id: session.user.id,
-      slot_key: slotKey,
-      icon_url: next.icon_url || null,
-      bg_color: next.bg_color || null,
-      mode: next.mode || "icon",
-      updated_at: new Date().toISOString(),
-    });
-  };
-
-  const uploadOsVisual = async (slotKey, file, mode = "icon") => {
+  const uploadOsVisual = async (slotKey, file) => {
     if (!file || !session?.user?.id) return;
     setOsVisualUploading(slotKey);
     try {
@@ -42855,27 +42837,25 @@ export default function CircularMenu() {
       if (upErr) throw upErr;
       const { data: pub } = supabase.storage.from("os-visuals").getPublicUrl(path);
       const iconUrl = pub.publicUrl + "?t=" + Date.now(); // cache-bust
-      await upsertOsVisual(slotKey, { icon_url: iconUrl, mode });
+      setOsVisuals(prev => ({ ...prev, [slotKey]: { icon_url: iconUrl } }));
+      // mode is pinned to "fullbleed" so an older client, which still reads the
+      // column, renders the same picture this one does.
+      await supabase.from("os_visuals").upsert({
+        user_id: session.user.id,
+        slot_key: slotKey,
+        icon_url: iconUrl,
+        bg_color: null,
+        mode: "fullbleed",
+        updated_at: new Date().toISOString(),
+      });
     } catch (e) {
       console.error("[OS Visuals] Upload failed:", e);
-      alert("Upload fehlgeschlagen: " + (e.message || "Unbekannter Fehler"));
+      alert(appLanguage === "de"
+        ? "Upload fehlgeschlagen: " + (e.message || "Unbekannter Fehler")
+        : "Upload failed: " + (e.message || "Unknown error"));
     } finally {
       setOsVisualUploading(null);
     }
-  };
-
-  // Dragging in the colour picker fires on every pointermove. The preview has to
-  // follow the hand, the database does not, so the row is written once the
-  // dragging stops.
-  const osVisualBgTimer = useRef(null);
-  const setOsVisualBgColor = (slotKey, color) => {
-    setOsVisuals(prev => ({ ...prev, [slotKey]: { ...(prev[slotKey] || {}), bg_color: color } }));
-    clearTimeout(osVisualBgTimer.current);
-    osVisualBgTimer.current = setTimeout(() => { upsertOsVisual(slotKey, { bg_color: color }); }, 320);
-  };
-
-  const setOsVisualMode = async (slotKey, mode) => {
-    await upsertOsVisual(slotKey, { mode });
   };
 
   const resetOsVisual = async (slotKey) => {
@@ -43548,10 +43528,7 @@ export default function CircularMenu() {
       // Custom OS visual override for task slot if no project logo
       const slotKey = tk.priority === "high" ? "task_high" : "task_default";
       const slotDef = OS_VISUAL_SLOTS.find(s => s.key === slotKey);
-      const slotData = !projLogo ? osVisuals[slotKey] : null;
-      const customIcon = slotData?.icon_url || null;
-      const customBg = slotData?.bg_color || null;
-      const fullbleed = slotData?.mode === "fullbleed" && customIcon;
+      const customIcon = !projLogo ? (osVisuals[slotKey]?.icon_url || null) : null;
       const stepKey = FIRST_STEP_BY_TITLE.get(tk.title);
       const step = stepKey ? stepMeta[stepKey] : null;
       return {
@@ -43560,11 +43537,11 @@ export default function CircularMenu() {
         // platform's font. These are white on anthracite like everything else.
         icon: projLogo || customIcon ? null
           : (step ? step.icon : stepIcon(OS_VISUAL_ICON[slotKey])),
-        iconBg: step ? step.iconBg : (customBg || slotDef?.defaultBg || OS_ICON_BG),
+        iconBg: step ? step.iconBg : (slotDef?.defaultBg || OS_ICON_BG),
         logoUrl: projLogo || customIcon,
-        // Project logos always fill the full circle (not affected by OS visual modes).
-        // OS visual icons only fill when explicitly set to fullbleed mode.
-        fullbleed: projLogo ? true : fullbleed,
+        // A project logo and a custom OS icon both fill the whole circle. What
+        // shows behind a transparent PNG is the anthracite disc.
+        fullbleed: !!(projLogo || customIcon),
         name: tk.title,
         desc: tk.project_name || colLabel(tk.column_key),
         key: tk.id,
@@ -43585,15 +43562,12 @@ export default function CircularMenu() {
       const timeStr = startTime ? startTime.toLocaleTimeString(appLanguage === "de" ? "de-DE" : "en-US", { hour: "2-digit", minute: "2-digit" }) : "";
       const slotKey = ev.isMeet ? "calendar_meet" : "calendar_event";
       const slotDef = OS_VISUAL_SLOTS.find(s => s.key === slotKey);
-      const slotData = osVisuals[slotKey];
-      const customIcon = slotData?.icon_url || null;
-      const customBg = slotData?.bg_color || null;
-      const fullbleed = slotData?.mode === "fullbleed" && customIcon;
+      const customIcon = osVisuals[slotKey]?.icon_url || null;
       return {
         icon: customIcon ? null : stepIcon(OS_VISUAL_ICON[slotKey]),
-        iconBg: customBg || slotDef?.defaultBg || OS_ICON_BG,
+        iconBg: slotDef?.defaultBg || OS_ICON_BG,
         logoUrl: customIcon,
-        fullbleed,
+        fullbleed: !!customIcon,
         name: ev.title,
         desc: timeStr + (ev.isMeet ? " · Google Meet" : ""),
         key: "ev-" + ev.id,
@@ -50084,48 +50058,38 @@ export default function CircularMenu() {
               <div style={{ flex: 1, overflowY: "auto", padding: "4px 24px 12px", display: "flex", flexDirection: "column" }}>
                 {OS_VISUAL_SLOTS.map((slot, i) => {
                   const de = appLanguage === "de";
-                  const slotData = osVisuals[slot.key] || {};
-                  const customIcon = slotData.icon_url;
-                  const customBg = slotData.bg_color;
-                  const mode = slotData.mode || "icon";
-                  const fullbleed = mode === "fullbleed" && customIcon;
+                  const customIcon = osVisuals[slot.key]?.icon_url;
                   const uploading = osVisualUploading === slot.key;
-                  const effectiveBg = customBg || slot.defaultBg;
-                  const hasAnyOverride = !!(customIcon || customBg || mode === "fullbleed");
-                  const pickerHere = osVisualPicker?.key === slot.key;
 
                   return (
                     <div key={slot.key} style={{
                       display: "flex", alignItems: "center", gap: 12, padding: "13px 0",
                       borderBottom: i < OS_VISUAL_SLOTS.length - 1 ? `1px solid ${theme.borderFaint}` : "none",
                     }}>
-                      {/* Live preview, rendered the way the dashboard renders it */}
+                      {/* The dashboard card, at the size the dashboard draws it */}
                       <div style={{
                         width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
-                        background: fullbleed ? "transparent" : effectiveBg,
+                        background: slot.defaultBg,
                         display: "flex", alignItems: "center", justifyContent: "center",
                         overflow: "hidden", color: "#fff",
                       }}>
-                        {customIcon ? (
-                          <img src={customIcon} alt="" style={fullbleed
-                            ? { width: "100%", height: "100%", objectFit: "cover" }
-                            : { width: 26, height: 26, objectFit: "contain" }} />
-                        ) : osVisualIcon(slot.key)}
+                        {customIcon
+                          ? <img src={customIcon} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          : osVisualIcon(slot.key)}
                       </div>
 
                       <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
                         {de ? slot.label : (slot.labelEn || slot.label)}
                       </div>
 
-                      {/* Zurücksetzen sits BEFORE the controls, not after them:
-                          trailing, it pushed the upload button out of line with
-                          the close button above it, and it only appears once a
-                          slot has been customised. Fixed width so the row does
-                          not reflow the moment it does. */}
+                      {/* Zurücksetzen sits BEFORE the upload button, not after
+                          it, so upload keeps its line with the close button in
+                          the header. Fixed width, because it only appears once
+                          a slot carries a picture. */}
                       <div style={{ width: 26, flexShrink: 0, display: "flex", justifyContent: "center" }}>
-                        {hasAnyOverride && (
+                        {customIcon && (
                           <motion.button whileTap={{ scale: 0.95 }}
-                            onClick={() => { setOsVisualPicker(null); resetOsVisual(slot.key); }}
+                            onClick={() => resetOsVisual(slot.key)}
                             title={de ? "Zurücksetzen" : "Reset"}
                             style={{
                               width: 26, height: 26, borderRadius: 9, cursor: "pointer",
@@ -50135,54 +50099,6 @@ export default function CircularMenu() {
                           >
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
                           </motion.button>
-                        )}
-                      </div>
-
-                      {/* Icon on a colour, or the picture filling the whole circle */}
-                      <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 9, flexShrink: 0,
-                        background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>
-                        {[["icon", "Icon"], ["fullbleed", de ? "Bild" : "Image"]].map(([id, l]) => (
-                          <motion.div key={id} whileTap={{ scale: 0.96 }}
-                            onClick={() => setOsVisualMode(slot.key, id)}
-                            style={{
-                              padding: "5px 11px", borderRadius: 7, cursor: "pointer",
-                              fontSize: 11.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap",
-                              background: mode === id ? (darkMode ? "rgba(255,255,255,0.10)" : "#fff") : "transparent",
-                              color: mode === id ? theme.text : theme.textDim,
-                              boxShadow: mode === id ? "0 1px 2px rgba(0,0,0,0.07)" : "none",
-                            }}
-                          >{l}</motion.div>
-                        ))}
-                      </div>
-
-                      {/* Background colour. The palette that used to sit here
-                          offered twelve opinions nobody asked for; this is the
-                          same wheel Brainstorm uses, and it opens the same
-                          picker the Artboards editor opens. The slot is kept
-                          in full-image mode so the row does not jump. */}
-                      <div style={{ width: 26, flexShrink: 0, display: "flex", justifyContent: "center" }}>
-                        {mode === "icon" && (
-                          <motion.div whileTap={{ scale: 0.92 }}
-                            title={de ? "Hintergrundfarbe" : "Background colour"}
-                            onClick={(e) => {
-                              const r = e.currentTarget.getBoundingClientRect();
-                              setOsVisualPicker(prev => prev?.key === slot.key ? null : { key: slot.key, x: r.right, y: r.top });
-                            }}
-                            style={{
-                              width: 26, height: 26, borderRadius: "50%", cursor: "pointer", boxSizing: "border-box",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              // origin + no-repeat are not optional: a background is
-                              // sized to the padding box but painted across the border
-                              // box, and the ring left over gets filled by repeating
-                              // the image, which shows as a ragged rim.
-                              backgroundImage: "url(/color-wheel.png)", backgroundSize: "cover",
-                              backgroundPosition: "center", backgroundRepeat: "no-repeat", backgroundOrigin: "border-box",
-                              border: pickerHere ? `2.5px solid ${darkMode ? "#f4f4f7" : "#15151c"}` : `1.5px solid ${theme.borderFaint}`,
-                            }}
-                          >
-                            <div style={{ width: 13, height: 13, borderRadius: "50%", background: effectiveBg,
-                              border: "1.5px solid rgba(255,255,255,0.85)", boxSizing: "border-box" }} />
-                          </motion.div>
                         )}
                       </div>
 
@@ -50202,50 +50118,23 @@ export default function CircularMenu() {
                           : (de ? "Hochladen" : "Upload")}
                         <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml"
                           style={{ display: "none" }}
-                          onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadOsVisual(slot.key, f, mode); e.target.value = ""; }}
+                          onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadOsVisual(slot.key, f); e.target.value = ""; }}
                         />
                       </label>
-
                     </div>
                   );
                 })}
               </div>
               {/* Footer hint */}
               <div style={{ padding: "12px 24px 16px", borderTop: `1px solid ${theme.borderFaint}`, fontSize: 11, fontFamily: FONT, color: theme.textFaint, textAlign: "center" }}>
-                {appLanguage === "de" ? "PNG oder SVG, quadratisch, mindestens 128 Pixel" : "PNG or SVG, square, at least 128 pixels"}
+                {appLanguage === "de"
+                  ? "Quadratisches PNG oder SVG, mindestens 128 Pixel. Ein transparentes PNG zeigt den dunklen Hintergrund."
+                  : "Square PNG or SVG, at least 128 pixels. A transparent PNG shows the dark background."}
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>, document.body)}
-
-      {/* ── OS Visuals colour picker ──────────────────────────────────────────
-          The Artboards picker, unchanged, with only its colour tab. It is a
-          portal of its OWN rather than a portal inside the modal: a portal
-          renders into document.body but its React events still bubble along the
-          REACT tree, and the modal's backdrop closes on click, so every drag in
-          the mixer would have shut the dialog. */}
-      {osVisualPicker && createPortal(
-        <>
-          <div onPointerDown={() => setOsVisualPicker(null)}
-            style={{ position: "fixed", inset: 0, zIndex: 100008 }} />
-          <div style={{ position: "fixed", zIndex: 100009,
-            // To the right of the wheel where there is room, to its left where
-            // there is not. 344 is the picker's own width.
-            left: osVisualPicker.x + 12 + 344 < window.innerWidth - 12
-              ? osVisualPicker.x + 12
-              : Math.max(12, osVisualPicker.x - 26 - 12 - 344),
-            top: Math.max(12, Math.min(osVisualPicker.y - 24, window.innerHeight - 372)) }}>
-            <ColorPicker
-              value={osVisuals[osVisualPicker.key]?.bg_color
-                || OS_VISUAL_SLOTS.find(sl => sl.key === osVisualPicker.key)?.defaultBg
-                || OS_ICON_BG}
-              onChange={(c) => setOsVisualBgColor(osVisualPicker.key, c)}
-              tabs={["custom"]}
-              theme={theme} darkMode={darkMode} de={appLanguage === "de"}
-              onClose={() => setOsVisualPicker(null)} />
-          </div>
-        </>, document.body)}
 
       {/* ── Push Setup Overlay (Portal) ── */}
       {createPortal(<AnimatePresence>
