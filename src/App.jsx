@@ -43126,7 +43126,7 @@ export default function CircularMenu() {
   // table lives in api/telegram.js, which is where the decision is actually
   // made. A row the person never touches sends nothing to the database, so the
   // two only have to match on what the box LOOKS like when untouched.
-  const TG_TYPES = [
+  const MESSENGER_TYPES = [
     { key: "task_assigned",   de: "Aufgabe zugewiesen",     en: "Task assigned",      def: true },
     { key: "task_completed",  de: "Aufgabe erledigt",       en: "Task done",          def: true },
     { key: "comment_mention", de: "Erwähnungen",            en: "Mentions",           def: true },
@@ -43135,8 +43135,8 @@ export default function CircularMenu() {
     { key: "chat_message",    de: "Nachrichten",            en: "Messages",           def: false },
     { key: "image_ready",     de: "Bild fertig",            en: "Image ready",        def: false },
   ];
-  const tgTypeOn = (t) => {
-    const v = (tgLink?.types || {})[t.key];
+  const typeOn = (link, t) => {
+    const v = (link?.types || {})[t.key];
     return v === undefined ? t.def : !!v;
   };
   // Optimistic, and rolled back on failure: a switch that moves and then turns
@@ -43149,6 +43149,95 @@ export default function CircularMenu() {
     const { error } = await supabase.from("messenger_links").update(patch).eq("id", tgLink.id);
     if (error) { setTgLink(before); setTgErr(error.message); }
   };
+
+  // The notification preferences for ONE messenger: the master switch and which
+  // of the types to send. Telegram and Slack render the same thing bound to
+  // their own link row, because they are the same question asked twice, and a
+  // second copy of this JSX would be a second place to forget a new type.
+  // Connecting and receiving are two different questions. Without the master
+  // switch the only way to go quiet for a week is to unlink and pair again
+  // afterwards, so the switch stays, and the link stays with it.
+  const messengerPrefs = (link, onPatch) => link && (
+    <div style={{ marginTop: 22, paddingTop: 20, borderTop: `1px solid ${theme.borderFaint}` }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
+          {appLanguage === "de" ? "Benachrichtigungen senden" : "Send notifications"}
+        </div>
+        {/* The Appearance row's switch, to the pixel: 44×24, radius 12,
+            two of padding, a 20px knob travelling exactly 20 on the
+            same spring. Only the ON colour differs — anthracite, not
+            the lilac that row still carries, because the design system
+            dropped lilac. And in dark mode it inverts, the way the nav
+            menu's selected pill does: anthracite on a dark card is a
+            switch you cannot see, which is the other half of what was
+            wrong with mine. */}
+        <div onClick={() => onPatch({ enabled: !link.enabled })}
+          style={{ width: 44, height: 24, borderRadius: 12, padding: 2, flexShrink: 0,
+            background: link.enabled
+              ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c")
+              : (darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.15)"),
+            cursor: "pointer", transition: "background 0.3s ease",
+            display: "flex", alignItems: "center" }}>
+          <motion.div
+            animate={{ x: link.enabled ? 20 : 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            style={{ width: 20, height: 20, borderRadius: 10,
+              background: (darkMode && link.enabled) ? "#15151c" : "#fff",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+        </div>
+      </div>
+
+      {link.enabled && (
+        /* Two columns, fixed. auto-fit collapsed to one on a narrow
+           panel and to three on a wide one, so the same six rows kept
+           rearranging themselves as the window moved. */
+        <div style={{ marginTop: 20, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 24px" }}>
+          {MESSENGER_TYPES.map(t => {
+            const on = typeOn(link, t);
+            return (
+              <div key={t.key} onClick={() => onPatch({ types: { ...(link.types || {}), [t.key]: !on } })}
+                style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                {/* The checklist box from the timeline modal, unchanged
+                    but for the same dark-mode inversion as the switch. */}
+                <motion.div whileTap={{ scale: 0.9 }}
+                  style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                    border: `1.5px solid ${on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : theme.borderFaint}`,
+                    background: on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
+                    display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {on && (
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                      stroke={darkMode ? "#15151c" : "#fff"} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </motion.div>
+                <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text }}>
+                  {appLanguage === "de" ? t.de : t.en}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Not the same thing as the switch above, so it does not
+          move it: Telegram refused the last delivery. Almost
+          always the bot was blocked in the chat. */}
+      {!link.active && (
+        <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 10,
+          background: darkMode ? "rgba(229,72,77,0.10)" : "rgba(229,72,77,0.07)",
+          border: "1px solid rgba(229,72,77,0.22)",
+          fontSize: 12, fontFamily: FONT, color: theme.text, lineHeight: 1.45 }}>
+          {appLanguage === "de"
+            ? "Telegram nimmt gerade nichts an — meistens wurde der Bot im Chat blockiert. Entblockiere ihn dort und verbinde hier neu."
+            : "Telegram is refusing delivery — usually the bot was blocked in the chat. Unblock it there and connect again here."}
+          {link.last_error && (
+            <div style={{ marginTop: 4, color: theme.textDim }}>{link.last_error}</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   // ── Slack ─────────────────────────────────────────────────────────────────
   // Unlike Telegram there is no build-time flag to hide this behind. The
@@ -49231,91 +49320,7 @@ export default function CircularMenu() {
                     <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 4 }}>
                       Telegram
                     </div>
-                  {/* Connecting and receiving are two different questions.
-                      Without this, the only way to go quiet for a week is to
-                      unlink and pair again afterwards — so the switch stays,
-                      and the link stays with it. */}
-                  {tgLink && (
-                    <div style={{ marginTop: 22, paddingTop: 20, borderTop: `1px solid ${theme.borderFaint}` }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                        <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
-                          {appLanguage === "de" ? "Benachrichtigungen senden" : "Send notifications"}
-                        </div>
-                        {/* The Appearance row's switch, to the pixel: 44×24, radius 12,
-                            two of padding, a 20px knob travelling exactly 20 on the
-                            same spring. Only the ON colour differs — anthracite, not
-                            the lilac that row still carries, because the design system
-                            dropped lilac. And in dark mode it inverts, the way the nav
-                            menu's selected pill does: anthracite on a dark card is a
-                            switch you cannot see, which is the other half of what was
-                            wrong with mine. */}
-                        <div onClick={() => patchTgLink({ enabled: !tgLink.enabled })}
-                          style={{ width: 44, height: 24, borderRadius: 12, padding: 2, flexShrink: 0,
-                            background: tgLink.enabled
-                              ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c")
-                              : (darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.15)"),
-                            cursor: "pointer", transition: "background 0.3s ease",
-                            display: "flex", alignItems: "center" }}>
-                          <motion.div
-                            animate={{ x: tgLink.enabled ? 20 : 0 }}
-                            transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                            style={{ width: 20, height: 20, borderRadius: 10,
-                              background: (darkMode && tgLink.enabled) ? "#15151c" : "#fff",
-                              boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
-                        </div>
-                      </div>
-
-                      {tgLink.enabled && (
-                        /* Two columns, fixed. auto-fit collapsed to one on a narrow
-                           panel and to three on a wide one, so the same six rows kept
-                           rearranging themselves as the window moved. */
-                        <div style={{ marginTop: 20, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 24px" }}>
-                          {TG_TYPES.map(t => {
-                            const on = tgTypeOn(t);
-                            return (
-                              <div key={t.key} onClick={() => patchTgLink({ types: { ...(tgLink.types || {}), [t.key]: !on } })}
-                                style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-                                {/* The checklist box from the timeline modal, unchanged
-                                    but for the same dark-mode inversion as the switch. */}
-                                <motion.div whileTap={{ scale: 0.9 }}
-                                  style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0,
-                                    border: `1.5px solid ${on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : theme.borderFaint}`,
-                                    background: on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
-                                    display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                  {on && (
-                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                                      stroke={darkMode ? "#15151c" : "#fff"} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                      <polyline points="20 6 9 17 4 12" />
-                                    </svg>
-                                  )}
-                                </motion.div>
-                                <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text }}>
-                                  {appLanguage === "de" ? t.de : t.en}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      {/* Not the same thing as the switch above, so it does not
-                          move it: Telegram refused the last delivery. Almost
-                          always the bot was blocked in the chat. */}
-                      {!tgLink.active && (
-                        <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 10,
-                          background: darkMode ? "rgba(229,72,77,0.10)" : "rgba(229,72,77,0.07)",
-                          border: "1px solid rgba(229,72,77,0.22)",
-                          fontSize: 12, fontFamily: FONT, color: theme.text, lineHeight: 1.45 }}>
-                          {appLanguage === "de"
-                            ? "Telegram nimmt gerade nichts an — meistens wurde der Bot im Chat blockiert. Entblockiere ihn dort und verbinde hier neu."
-                            : "Telegram is refusing delivery — usually the bot was blocked in the chat. Unblock it there and connect again here."}
-                          {tgLink.last_error && (
-                            <div style={{ marginTop: 4, color: theme.textDim }}>{tgLink.last_error}</div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {messengerPrefs(tgLink, patchTgLink)}
 
                   {/* The pairing panel. Two ways in, because the button alone
                       fails on any machine without Telegram installed — that
@@ -49346,6 +49351,23 @@ export default function CircularMenu() {
                     <div style={{ marginTop: 12, fontSize: 12, fontFamily: FONT, color: "#e5484d" }}>{tgErr}</div>
                   )}
 
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Slack's settings, the same card and the same switches as
+                  Telegram's, bound to its own link row. Nothing here is
+                  Slack-specific, which is why it is not written twice. */}
+              {settingsTab === "workspace" && slackReady && session && slackLink && (
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.26, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+                  style={{ marginTop: 14 }}>
+                  <div style={{ borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`, padding: "20px 24px" }}>
+                    <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 4 }}>
+                      Slack
+                    </div>
+                    {messengerPrefs(slackLink, patchSlackLink)}
                   </div>
                 </motion.div>
               )}
