@@ -302,3 +302,38 @@ export const timezoneOf = async (db, userId) => {
   const { data } = await db.from("profiles").select("timezone").eq("id", userId).maybeSingle();
   return data?.timezone || null;
 };
+
+// ── Adding a description afterwards ─────────────────────────────────────────
+// The four questions are taps, and a description is typing, so it comes last
+// and is optional: the task already exists by then, and an answer nobody gives
+// costs nothing.
+//
+// The link between the question and the answer is a LINK. Telegram hands back
+// the message being replied to, but only one level deep, so the bot's question
+// has to carry the task itself. It carries it as a text_link on the title,
+// which is a useful link in its own right, and the id is read back out of the
+// entity rather than out of anything we had to store.
+export const TASK_LINK_RE = /[?&]task=([0-9a-f-]{36})/i;
+export const taskIdFromReply = (replied) => {
+  const entities = replied?.entities || replied?.caption_entities || [];
+  for (const e of entities) {
+    const m = e?.url && TASK_LINK_RE.exec(e.url);
+    if (m) return m[1];
+  }
+  return null;
+};
+
+export const describeTask = async (db, userId, taskId, text) => {
+  const description = String(text || "").trim();
+  if (!description) return { ok: false, reason: "incomplete" };
+  const { data: task } = await db.from("tasks")
+    .select("id, title, org_id, project_id").eq("id", taskId).maybeSingle();
+  if (!task) return { ok: false, reason: "gone" };
+  // The same two gates as every other write from a server.
+  if (!(await mayTouchTask(db, userId, task))) return { ok: false, reason: "denied" };
+  if (await orgIsReadOnly(db, task.org_id)) return { ok: false, reason: "read_only" };
+  const { error } = await db.from("tasks")
+    .update({ description, updated_at: new Date().toISOString() }).eq("id", taskId);
+  if (error) return { ok: false, reason: "failed" };
+  return { ok: true, task };
+};

@@ -21,6 +21,7 @@ import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
   splitDraft, workspacesFor, projectsFor, createTask,
   draftStep, draftDone, PRIORITY_CODES, dueDateFor, timezoneOf,
+  taskIdFromReply, describeTask,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
 } from "../server/messenger.js";
@@ -74,6 +75,10 @@ const T = {
     prio: { h: "Hoch", m: "Mittel", l: "Niedrig" },
     due: { "0": "Keine Frist", t: "Heute", m: "Morgen", f: "Freitag", w: "In einer Woche" },
     forMe: "Für mich",
+    btnDescribe: "Beschreibung hinzufügen",
+    askDescribe: (title) => `Beschreibung für ${title}? Antworte einfach auf diese Nachricht.`,
+    described: "Beschreibung gespeichert.",
+    describeGone: "Diese Aufgabe gibt es nicht mehr.",
     newDenied: "Auf diesen Workspace hast du keinen Zugriff.",
     newReadOnly: "Dieses Konto hat keinen aktiven Plan. Zum Anlegen wird einer gebraucht.",
     newFailed: "Konnte nicht angelegt werden. Versuch es in der App.",
@@ -115,6 +120,10 @@ const T = {
     prio: { h: "High", m: "Medium", l: "Low" },
     due: { "0": "No date", t: "Today", m: "Tomorrow", f: "Friday", w: "In a week" },
     forMe: "For me",
+    btnDescribe: "Add a description",
+    askDescribe: (title) => `A description for ${title}? Just reply to this message.`,
+    described: "Description saved.",
+    describeGone: "That task is gone.",
     newDenied: "You do not have access to that workspace.",
     newReadOnly: "This account has no active plan. Creating needs one.",
     newFailed: "Could not create it. Try the app.",
@@ -516,7 +525,7 @@ export default async function handler(req) {
     // n and w belong to a NEW task and carry a workspace id where the others
     // carry a notification id, so they are handled before anything tries to
     // load a notification that was never involved.
-    if (!cbChat || !notifId || !["c", "d", "f", "p", "b", "n", "w"].includes(action)) return answer("");
+    if (!cbChat || !notifId || !["c", "d", "f", "p", "b", "n", "w", "x"].includes(action)) return answer("");
 
     // The chat is the identity. A button is only ever pressed in the chat the
     // message was sent to, so nobody else can reach this task through it.
@@ -524,6 +533,24 @@ export default async function handler(req) {
       .select("user_id, lang, active").eq("provider", "telegram").eq("chat_id", String(cbChat)).maybeSingle();
     const t = T[link?.lang === "en" ? "en" : "de"];
     if (!link?.active || !link.user_id) return answer(t.notLinked, true);
+
+    if (action === "x") {
+      // force_reply puts the keyboard straight into the reply box. The task
+      // travels as a text_link on its own title: Telegram returns the message
+      // being replied to, but only one level deep, so the question has to carry
+      // the task itself, and a link is the one part of a message that survives
+      // the round trip while also being useful.
+      const taskId = parts.slice(1).join(":");
+      const { data: task } = await db.from("tasks").select("id, title").eq("id", taskId).maybeSingle();
+      if (!task) return answer(t.describeGone, true);
+      await api(botToken, "sendMessage", {
+        chat_id: cbChat,
+        text: t.askDescribe(`<a href="${appUrl}/?task=${encodeURIComponent(task.id)}">${esc(task.title || "")}</a>`),
+        parse_mode: "HTML",
+        reply_markup: { force_reply: true, selective: true },
+      });
+      return answer("");
+    }
 
     if (action === "n" || action === "w") {
       // The text was never stored. It is the message this one replies to, which
@@ -614,7 +641,12 @@ export default async function handler(req) {
         chat_id: cbChat, message_id: cb.message.message_id,
         text: `<b>${esc(headLine(org.name, project?.name))}</b>\n${esc(title)}\n\n<i>${esc(t.markMade)}</i>`,
         parse_mode: "HTML",
-        reply_markup: { inline_keyboard: [[{ text: t.open, url: `${appUrl}/?task=${encodeURIComponent(made.task.id)}` }]] },
+        reply_markup: { inline_keyboard: [
+          // Only when the message did not already carry one. A description
+          // typed as line two needs no second asking.
+          ...(description ? [] : [[{ text: t.btnDescribe, callback_data: `x:${made.task.id}` }]]),
+          [{ text: t.open, url: `${appUrl}/?task=${encodeURIComponent(made.task.id)}` }],
+        ] },
       });
       return answer(t.newMade(title));
     }
@@ -781,6 +813,18 @@ export default async function handler(req) {
     if (!link || !link.active) return reply(t.notLinked);
     const wanted = { ...DEFAULT_TYPES, ...(link.types || {}) };
     return reply(t.status(Object.values(wanted).filter(Boolean).length));
+  }
+
+  // A reply to the bot's description question belongs to the task that
+  // question linked to, and is not a new task.
+  const describing = taskIdFromReply(msg.reply_to_message);
+  if (describing) {
+    if (!link?.user_id) return reply(t.notLinked);
+    const done = await describeTask(db, link.user_id, describing, text);
+    return reply(done.ok ? t.described
+      : done.reason === "read_only" ? t.newReadOnly
+      : done.reason === "denied" ? t.newDenied
+      : done.reason === "gone" ? t.describeGone : t.newFailed);
   }
 
   // ── Anything else is a new task ───────────────────────────────────────────
