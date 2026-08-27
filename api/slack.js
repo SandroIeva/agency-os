@@ -19,7 +19,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { notifLines } from "../src/notificationText.js";
 import {
-  MOVE_COLUMNS, COLUMN_LABELS, ID_HINT,
+  MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
 } from "../server/messenger.js";
@@ -119,15 +119,17 @@ const verifySlack = async (signingSecret, sig, ts, raw) => {
 // data, never by disagreeing about the words.
 const buildBlocks = async (db, workspace, n, lang, appUrl, taskId, footer) => {
   const { title, body } = notifLines(n, lang !== "en");
+  // The card is read FIRST: its project belongs in the line above the title,
+  // beside the workspace, and that line cannot be built before we have it.
+  const f = taskId ? await taskFacts(db, taskId, lang) : null;
+  const where = headLine(workspace, f?.project);
   const head = [
-    workspace ? `*${esc(workspace)}*` : null,
+    where ? `*${esc(where)}*` : null,
     `*${esc(title)}*`,
     body ? esc(body) : null,
   ].filter(Boolean).join("\n");
 
   const blocks = [{ type: "section", text: { type: "mrkdwn", text: head } }];
-
-  const f = taskId ? await taskFacts(db, taskId, lang) : null;
   if (f?.description) blocks.push({ type: "section", text: { type: "mrkdwn", text: esc(f.description) } });
   if (f?.facts.length) blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: esc(f.facts.join("  ·  ")) }] });
   if (f?.checklist) {

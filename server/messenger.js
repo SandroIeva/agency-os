@@ -104,11 +104,18 @@ export const displayName = async (db, userId) => {
 // Returned as data, not as a formatted string: one messenger renders it as
 // HTML, the other as Block Kit. Fetched fresh on every send AND on every button
 // press, so a message that gets rewritten shows the checklist as it stands now.
+// The line over the title. The workspace alone was not enough: somebody with
+// one workspace and six clients reads "i7OS" and learns nothing, while the
+// project is the thing that says which pile of work this belongs to. Both, in
+// the order you would say them out loud.
+export const headLine = (workspace, project) => [workspace, project].filter(Boolean).join(" · ");
+
 export const taskFacts = async (db, taskId, lang) => {
   const de = lang !== "en";
   const { data: task } = await db.from("tasks")
-    .select("description, priority, due_date").eq("id", taskId).maybeSingle();
+    .select("description, priority, due_date, project_name").eq("id", taskId).maybeSingle();
   if (!task) return null;
+  const project = task.project_name || "";
 
   const d = String(task.description || "").trim();
   const description = d ? (d.length > DETAIL_MAX ? d.slice(0, DETAIL_MAX).trimEnd() + "…" : d) : "";
@@ -140,7 +147,7 @@ export const taskFacts = async (db, taskId, lang) => {
     moreLabel: (n) => (de ? `und ${n} weitere` : `and ${n} more`),
   } : null;
 
-  return { description, facts, checklist };
+  return { project, description, facts, checklist };
 };
 
 // ── The two things a button actually writes ─────────────────────────────────

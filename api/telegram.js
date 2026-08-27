@@ -18,7 +18,7 @@ import { notifLines } from "../src/notificationText.js";
 // What a button DOES lives in one place, shared with api/slack.js. Only the
 // formatting below is Telegram's: HTML, and an inline_keyboard.
 import {
-  MOVE_COLUMNS, COLUMN_LABELS, ID_HINT,
+  MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
 } from "../server/messenger.js";
@@ -144,7 +144,7 @@ const notifText = (workspace, n, lang, extra) => {
 // server/messenger.js, which Slack reads too; only the HTML is ours.
 const taskBlock = async (db, taskId, lang) => {
   const f = await taskFacts(db, taskId, lang);
-  if (!f) return "";
+  if (!f) return { extra: "", project: "" };
   const blocks = [];
   if (f.description) blocks.push(esc(f.description));
   if (f.facts.length) blocks.push(esc(f.facts.join(" · ")));
@@ -157,7 +157,14 @@ const taskBlock = async (db, taskId, lang) => {
     if (c.more) rows.push(esc(c.moreLabel(c.more)));
     blocks.push(`<b>${esc(c.label)} ${c.done}/${c.total}</b>\n${rows.join("\n")}`);
   }
-  return blocks.join("\n\n");
+  return { extra: blocks.join("\n\n"), project: f.project };
+};
+
+// The exact text the fan-out produced, rebuilt: same head, same card, so a
+// button press edits the message rather than reflowing it.
+const rewritten = async (db, n, taskId, lang) => {
+  const card = await taskBlock(db, taskId, lang);
+  return notifText(headLine(await orgName(db, n.org_id), card.project), n, lang, card.extra);
 };
 
 const orgName = async (db, orgId) => {
@@ -406,10 +413,10 @@ export default async function handler(req) {
     // needs the notification anyway to rebuild this exact message, and one uuid
     // fits Telegram's 64-byte callback_data where two would not.
     const taskId = n.metadata?.task_id;
-    const extra = taskId ? await taskBlock(db, taskId, link.lang) : "";
+    const card = taskId ? await taskBlock(db, taskId, link.lang) : { extra: "", project: "" };
     const res = await api(botToken, "sendMessage", {
       chat_id: link.chat_id,
-      text: notifText(workspace, n, link.lang, extra),
+      text: notifText(headLine(workspace, card.project), n, link.lang, card.extra),
       parse_mode: "HTML",
       disable_web_page_preview: true,
       reply_markup: { inline_keyboard: taskKeyboard(t, appUrl, n, !!taskId) },
@@ -534,7 +541,7 @@ export default async function handler(req) {
       await api(botToken, "editMessageText", {
         chat_id: cbChat,
         message_id: cb.message.message_id,
-        text: `${notifText(await orgName(db, n.org_id), n, link.lang, await taskBlock(db, task.id, link.lang))}\n\n<i>${esc(t.markPassed(target.name))}</i>`,
+        text: `${await rewritten(db, n, task.id, link.lang)}\n\n<i>${esc(t.markPassed(target.name))}</i>`,
         parse_mode: "HTML",
         disable_web_page_preview: true,
         reply_markup: { inline_keyboard: taskKeyboard(t, appUrl, n, true) },
@@ -559,7 +566,7 @@ export default async function handler(req) {
     await api(botToken, "editMessageText", {
       chat_id: cbChat,
       message_id: cb.message.message_id,
-      text: `${notifText(await orgName(db, n.org_id), n, link.lang, await taskBlock(db, task.id, link.lang))}\n\n<i>${esc(t.markMoved(label))}</i>`,
+      text: `${await rewritten(db, n, task.id, link.lang)}\n\n<i>${esc(t.markMoved(label))}</i>`,
       parse_mode: "HTML",
       disable_web_page_preview: true,
       reply_markup: { inline_keyboard: taskKeyboard(t, appUrl, n, true) },
