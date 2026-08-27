@@ -21,6 +21,12 @@ export const NOTIF_TEXT = {
       ? `${m.actor} hat dir "${m.subject}" zugewiesen`
       : `${m.actor} assigned you "${m.subject}"`),
   },
+  task_completed: {
+    title: (de) => (de ? "Aufgabe erledigt" : "Task done"),
+    body: (de, m) => (de
+      ? `${m.actor} hat "${m.subject}" erledigt`
+      : `${m.actor} completed "${m.subject}"`),
+  },
   comment_added: {
     title: (de) => (de ? "Neuer Kommentar" : "New comment"),
     body: (de, m) => (de

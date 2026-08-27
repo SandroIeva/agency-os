@@ -26,6 +26,7 @@ const json = (obj, status = 200) =>
 // day, and image_ready fires while you are already looking at the app.
 const DEFAULT_TYPES = {
   task_assigned: true,
+  task_completed: true,
   comment_mention: true,
   comment_added: true,
   project_added: true,
@@ -576,7 +577,7 @@ export default async function handler(req) {
     if (!taskId) return answer(t.cbGone, true);
 
     const { data: task } = await db.from("tasks")
-      .select("id, org_id, project_id, column_key").eq("id", taskId).maybeSingle();
+      .select("id, title, org_id, project_id, column_key, creator_id").eq("id", taskId).maybeSingle();
     if (!task) return answer(t.cbGone, true);
 
     // Two gates that the database would normally apply and here does not. The
@@ -662,6 +663,24 @@ export default async function handler(req) {
     const { error: upErr } = await db.from("tasks")
       .update({ column_key: target, updated_at: new Date().toISOString() }).eq("id", task.id);
     if (upErr) return answer(t.cbFailed, true);
+
+    // Pressing Erledigt here is the same event as dragging the card there, so
+    // it tells whoever asked for the task the same way the board does. Written
+    // as data, so they read it in THEIR language, not in the language of this
+    // chat. The insert trips the notifications trigger, so if they use Telegram
+    // it reaches them there too.
+    if (target === "done" && task.creator_id && task.creator_id !== link.user_id) {
+      const { data: me } = await db.from("profiles").select("display_name, email").eq("id", link.user_id).maybeSingle();
+      const doneBy = me?.display_name || (me?.email || "").split("@")[0] || "?";
+      await db.from("notifications").insert({
+        user_id: task.creator_id,
+        org_id: task.org_id,
+        type: "task_completed",
+        title: "Aufgabe erledigt",
+        body: `${doneBy} hat "${task.title || ""}" erledigt`,
+        metadata: { task_id: task.id, actor: doneBy, subject: task.title || "" },
+      });
+    }
 
     // The message says where the card stands now, so the chat still reads
     // correctly tomorrow. The buttons stay: a card that went into review can go

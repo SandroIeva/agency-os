@@ -2560,12 +2560,31 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
   const canCreateProjectsK = myKanbanMembership?.role === "admin" || !!myKanbanMembership?.can_create_projects;
   const canManageProjectRow = (p) => canManageProjectsK || p?.owner_id === myUserId;
 
+  // Whoever asked for a task wants to hear that it is finished, and hears it
+  // once: only on the move INTO done, never on a card that was already there,
+  // and never from their own hand.
+  const notifyCompleted = (task, wasColumnKey) => {
+    if (!task || wasColumnKey === "done") return;
+    const owner = task.creator_id;
+    if (!owner || owner === session?.user?.id) return;
+    const myName = session?.user?.user_metadata?.full_name || session?.user?.email?.split("@")[0] || "Jemand";
+    createNotification?.({
+      userId: owner,
+      type: "task_completed",
+      title: "Aufgabe erledigt",
+      body: `${myName} hat "${task.title}" erledigt`,
+      metadata: { task_id: task.id, actor: myName, subject: task.title },
+    });
+  };
+
   // Move task to another column
   const moveTask = async (taskId, newColumnKey) => {
     const task = tasks.find(t => t.id === taskId);
     if (task && !canMoveTask(task)) return; // not allowed to move someone else's card
+    const wasColumnKey = task?.column_key;
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, column_key: newColumnKey } : t));
     await supabase.from("tasks").update({ column_key: newColumnKey, updated_at: new Date().toISOString() }).eq("id", taskId);
+    if (newColumnKey === "done") notifyCompleted(task, wasColumnKey);
   };
 
   // Create new task
@@ -2628,6 +2647,10 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
     };
     setTasks(prev => prev.map(t => t.id === editingTask.id ? { ...t, ...updates } : t));
     await supabase.from("tasks").update(updates).eq("id", editingTask.id);
+    // The column can also be changed from inside the form, not only by dragging.
+    if (updates.column_key === "done") {
+      notifyCompleted({ ...editingTask, title: updates.title }, editingTask.column_key);
+    }
     // Notify if assignee changed to someone else
     if (updates.assignee_id && updates.assignee_id !== session.user.id && updates.assignee_id !== editingTask.assignee_id) {
       const myName = session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "Jemand";
@@ -43105,6 +43128,7 @@ export default function CircularMenu() {
   // two only have to match on what the box LOOKS like when untouched.
   const TG_TYPES = [
     { key: "task_assigned",   de: "Aufgabe zugewiesen",     en: "Task assigned",      def: true },
+    { key: "task_completed",  de: "Aufgabe erledigt",       en: "Task done",          def: true },
     { key: "comment_mention", de: "Erwähnungen",            en: "Mentions",           def: true },
     { key: "comment_added",   de: "Kommentare",             en: "Comments",           def: true },
     { key: "project_added",   de: "Zu Projekt hinzugefügt", en: "Added to a project", def: true },
