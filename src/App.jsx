@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Component, Fragment } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, useId, Component, Fragment } from "react";
 import { createPortal } from "react-dom";
 // Offline QR generator. A hosted QR service would have to be handed the
 // one-time pairing code to draw it, which is the one thing that code must
@@ -284,11 +284,20 @@ function createSoundEngine() {
 const sounds = createSoundEngine();
 
 function DotGrid({ darkMode = true }) {
-  const dots = [];
-  for (let r = 0; r < 28; r++)
-    for (let c = 0; c < 42; c++)
-      dots.push(<circle key={`${r}-${c}`} cx={c * 32 + 16} cy={r * 32 + 16} r={1.2} fill={darkMode ? "#ffffff" : "#000000"} opacity={0.06} />);
-  return <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>{dots}</svg>;
+  // The id has to be unique per instance: three of these can be mounted at
+  // once, and two <pattern> elements sharing an id means the second one is
+  // never the one that paints.
+  const id = useId().replace(/:/g, "");
+  return (
+    <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
+      <defs>
+        <pattern id={`dg-${id}`} width="32" height="32" patternUnits="userSpaceOnUse">
+          <circle cx="16" cy="16" r="1.2" fill={darkMode ? "#ffffff" : "#000000"} opacity={0.06} />
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill={`url(#dg-${id})`} />
+    </svg>
+  );
 }
 
 function AnimatedBlob() {
@@ -46490,11 +46499,6 @@ export default function CircularMenu() {
     }}>
       <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet" />
       <DotGrid darkMode={darkMode} />
-      {/* The glow belongs to the AI orb in the bottom-right corner — it is the
-          light the orb casts. On screens that have no orb (login, onboarding)
-          it is a coloured smudge in an empty corner, explaining nothing. The
-          login screen draws its own; this one is for the app proper. */}
-      {session && !onboardingStep && <AnimatedBlob />}
 
       {/* AUTH LOADING */}
       <AnimatePresence>
@@ -51168,7 +51172,7 @@ export default function CircularMenu() {
         {/* Sphere — right third (stays visible & clickable in document fullscreen) */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "flex-end", pointerEvents: "auto" }}>
           <div style={{ cursor: "pointer" }} onClick={startVoice}>
-            <LiquidOrb size={48} fallback={<AISphere darkMode={darkMode} />} />
+            <LiquidOrb size={58} fallback={<AISphere darkMode={darkMode} />} />
           </div>
         </div>
       </div>
