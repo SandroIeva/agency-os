@@ -19,7 +19,7 @@ import { notifLines } from "../src/notificationText.js";
 // formatting below is Telegram's: HTML, and an inline_keyboard.
 import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
-  splitDraft, workspacesFor, projectsFor, createTask,
+  splitDraft, workspacesFor, projectsFor, createTask, DEFAULT_TYPES, typeWanted,
   draftStep, draftDone, PRIORITY_CODES, dueDateFor, timezoneOf,
   replyTarget, describeTask, addChecklist, commentOnTask,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
@@ -30,21 +30,6 @@ export const config = { runtime: "edge" };
 
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
-
-// Which notifications are worth a phone buzzing. Chat messages are off by
-// default on purpose: one Telegram message per chat line is unbearable after a
-// day, and image_ready fires while you are already looking at the app.
-const DEFAULT_TYPES = {
-  task_assigned: true,
-  task_completed: true,
-  comment_mention: true,
-  comment_added: true,
-  project_added: true,
-  member_joined: true,
-  storage_warning: true,
-  chat_message: false,
-  image_ready: false,
-};
 
 const T = {
   de: {
@@ -456,11 +441,7 @@ export default async function handler(req) {
     if (!link.active) return json({ ok: true, skipped: "inactive" });
     if (n.org_id && (link.muted_orgs || []).includes(n.org_id)) return json({ ok: true, skipped: "muted" });
 
-    const wanted = { ...DEFAULT_TYPES, ...(link.types || {}) };
-    // An unknown type is worth sending: a new notification the app starts
-    // writing should reach people, not be silently dropped until someone
-    // remembers to add it to the table above.
-    if (wanted[n.type] === false) return json({ ok: true, skipped: "type_off" });
+    if (!typeWanted(link, n.type)) return json({ ok: true, skipped: "type_off" });
 
     const workspace = await orgName(db, n.org_id);
     const t = T[link.lang === "en" ? "en" : "de"];

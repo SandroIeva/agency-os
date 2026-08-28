@@ -21,6 +21,7 @@ import { notifLines } from "../src/notificationText.js";
 import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
   splitDraft, workspacesFor, projectsFor, createTask, describeTask, addChecklist, commentOnTask,
+  typeWanted,
   nextQuestion, PRIORITY_CODES, dueDateFor, timezoneOf,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
@@ -445,9 +446,10 @@ export default async function handler(req) {
     if (link.enabled === false) return json({ ok: true, skipped: "disabled" });
     if (!link.active) return json({ ok: true, skipped: "inactive" });
     if (n.org_id && (link.muted_orgs || []).includes(n.org_id)) return json({ ok: true, skipped: "muted" });
-    // An unknown type is worth sending: a notification the app starts writing
-    // should reach people, not be dropped until somebody updates a table.
-    if ((link.types || {})[n.type] === false) return json({ ok: true, skipped: "type_off" });
+    // Through the SHARED rule. This read the row alone and ignored the
+    // defaults, so a type switched off by default reached Slack and not
+    // Telegram, and the settings panel showed it off for both.
+    if (!typeWanted(link, n.type)) return json({ ok: true, skipped: "type_off" });
 
     const { data: inst } = await db.from("slack_installations")
       .select("bot_token").eq("team_id", link.slack_team_id).maybeSingle();

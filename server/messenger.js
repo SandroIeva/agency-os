@@ -425,3 +425,26 @@ export const commentOnTask = async (db, userId, taskId, text) => {
   }
   return { ok: true, told: tell.length };
 };
+
+// ── Which notifications are worth a phone buzzing ───────────────────────────
+// Shared, because a switch that is off in the settings panel and honoured by
+// one messenger but not the other is worse than no switch. Chat messages are
+// off by default on purpose: one push per chat line is unbearable after a day,
+// and image_ready fires while you are already looking at the app.
+//
+// An unknown type is worth sending. A notification the app starts writing
+// should reach people rather than be dropped until somebody remembers to add
+// it here, which is why this asks for an explicit false.
+export const DEFAULT_TYPES = {
+  task_assigned: true,
+  task_completed: true,
+  comment_mention: true,
+  comment_added: true,
+  project_added: true,
+  member_joined: true,
+  storage_warning: true,
+  chat_message: false,
+  image_ready: false,
+};
+export const typeWanted = (link, type) =>
+  ({ ...DEFAULT_TYPES, ...(link?.types || {}) })[type] !== false;
