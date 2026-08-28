@@ -49365,7 +49365,12 @@ export default function CircularMenu() {
               </div>
 
               {/* Integrations section */}
-              {settingsTab === "workspace" && (
+              {/* Integrations live under Account, not under Workspace. Every
+                  row here is a link between a PERSON and a service: their
+                  Google login, their Slack, their Telegram. A messenger link
+                  belongs to the person and survives changing workspace, and
+                  looking for it under Workspace is looking in the wrong place. */}
+              {settingsTab === "account" && (
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -49526,7 +49531,7 @@ export default function CircularMenu() {
                   and any error. They belong to the row above rather than to a
                   section of their own, and they only appear once there is
                   something to say. */}
-              {settingsTab === "workspace" && TELEGRAM_BOT && session && (tgLink || tgConnect || tgErr) && (
+              {settingsTab === "account" && TELEGRAM_BOT && session && (tgLink || tgConnect || tgErr) && (
                 <motion.div
                   initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.24, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
@@ -49573,7 +49578,7 @@ export default function CircularMenu() {
               {/* Slack's settings, the same card and the same switches as
                   Telegram's, bound to its own link row. Nothing here is
                   Slack-specific, which is why it is not written twice. */}
-              {settingsTab === "workspace" && slackReady && session && slackLink && (
+              {settingsTab === "account" && slackReady && session && slackLink && (
                 <motion.div
                   initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.26, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}

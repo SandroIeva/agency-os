@@ -62,7 +62,7 @@ const T = {
     lang: "de",
     linked: (name) => `✅ Verbunden. Du bekommst deine i7OS-Benachrichtigungen ab jetzt hier${name ? `, ${name}` : ""}.`,
     already: "Du bist bereits verbunden. /stop trennt die Verbindung.",
-    expired: "Dieser Link ist abgelaufen. Öffne i7OS → Einstellungen → Konto und verbinde noch einmal.",
+    expired: "Dieser Link ist abgelaufen. Öffne i7OS → Einstellungen → Account und verbinde noch einmal.",
     stopped: "Verbindung getrennt. Du bekommst hier keine Benachrichtigungen mehr.",
     notLinked: "Hier ist nichts verbunden.",
     status: (n) => `Verbunden. Aktive Benachrichtigungen: ${n}.`,
@@ -465,7 +465,7 @@ export default async function handler(req) {
     }))?.ok || false;
     brand.aboutDe = (await api(botToken, "setMyDescription", {
       language_code: "de",
-      description: "i7OS ist das Workspace-Betriebssystem für Kreativagenturen. Verbinde diesen Bot in der App unter Einstellungen, Konto, dann kommen deine Benachrichtigungen hier an. Aufgaben lassen sich direkt aus dem Chat erledigen.",
+      description: "i7OS ist das Workspace-Betriebssystem für Kreativagenturen. Verbinde diesen Bot in der App unter Einstellungen, Account, dann kommen deine Benachrichtigungen hier an. Aufgaben lassen sich direkt aus dem Chat erledigen.",
     }))?.ok || false;
     brand.commands = (await api(botToken, "setMyCommands", { commands: COMMANDS.en }))?.ok || false;
     brand.commandsDe = (await api(botToken, "setMyCommands",
