@@ -9228,6 +9228,33 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
   );
 }
 
+// ── The switch ───────────────────────────────────────────────────────────────
+// One definition, because there were four and three of them were painted
+// #15151c when ON. That is the colour of a BUTTON in this design system, and on
+// a dark dialog it is very nearly the dialog: all you could see was a white dot
+// floating with no track behind it. The messenger settings had already been
+// fixed once on their own, which is exactly how a fourth copy goes wrong again.
+//
+// On dark, ON inverts the way the nav pill does: light track, anthracite knob.
+function ToggleSwitch({ on, onClick, darkMode, disabled = false, style = {} }) {
+  return (
+    <div onClick={disabled ? undefined : onClick}
+      style={{ width: 44, height: 24, borderRadius: 12, padding: 2, flexShrink: 0,
+        background: on
+          ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c")
+          : (darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.15)"),
+        cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.6 : 1,
+        transition: "background 0.3s ease", display: "flex", alignItems: "center", ...style }}>
+      <motion.div
+        animate={{ x: on ? 20 : 0 }}
+        transition={{ type: "spring", stiffness: 300, damping: 25 }}
+        style={{ width: 20, height: 20, borderRadius: 10,
+          background: (darkMode && on) ? "#15151c" : "#fff",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+    </div>
+  );
+}
+
 function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReLogin, ensureValidToken, theme, darkMode, t, userOrg }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
@@ -10325,13 +10352,8 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             {/* Team Event toggle */}
             {userOrg?.id && (
               <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 14 }}>
-                <div
-                  onClick={() => setEventForm(f => ({ ...f, isTeamEvent: !f.isTeamEvent, withMeet: f.isTeamEvent ? f.withMeet : false }))}
-                  style={{ flexShrink: 0, width: 42, height: 24, borderRadius: 999, cursor: "pointer", padding: 2, background: eventForm.isTeamEvent ? "#15151c" : (darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.14)"), transition: "background 0.25s ease" }}
-                >
-                  <motion.div animate={{ x: eventForm.isTeamEvent ? 18 : 0 }} transition={{ type: "spring", stiffness: 500, damping: 34 }}
-                    style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }} />
-                </div>
+                <ToggleSwitch on={eventForm.isTeamEvent} darkMode={darkMode}
+                  onClick={() => setEventForm(f => ({ ...f, isTeamEvent: !f.isTeamEvent, withMeet: f.isTeamEvent ? f.withMeet : false }))} />
                 <span style={{ fontSize: 14, fontFamily: FONT, color: theme.text }}>Team-Termin</span>
                 <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{eventForm.isTeamEvent ? "Sichtbar für alle" : "Nur Google Calendar"}</span>
               </div>
@@ -10341,26 +10363,17 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             <div style={{ display: "flex", alignItems: "center", gap: 22, marginBottom: 14 }}>
               {/* All day toggle */}
               <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-                <div
-                  onClick={() => setEventForm(f => ({ ...f, allDay: !f.allDay }))}
-                  style={{ flexShrink: 0, width: 42, height: 24, borderRadius: 999, cursor: "pointer", padding: 2, background: eventForm.allDay ? "#15151c" : (darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.14)"), transition: "background 0.25s ease" }}
-                >
-                  <motion.div animate={{ x: eventForm.allDay ? 18 : 0 }} transition={{ type: "spring", stiffness: 500, damping: 34 }}
-                    style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }} />
-                </div>
+                <ToggleSwitch on={eventForm.allDay} darkMode={darkMode}
+                  onClick={() => setEventForm(f => ({ ...f, allDay: !f.allDay }))} />
                 <span style={{ fontSize: 14, fontFamily: FONT, color: theme.text }}>Ganztägig</span>
               </div>
 
               {/* Google Meet toggle (only for Google events) */}
               {!eventForm.isTeamEvent && (
               <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-                <div
-                  onClick={() => toggleMeet(!eventForm.withMeet)}
-                  style={{ flexShrink: 0, width: 42, height: 24, borderRadius: 999, cursor: meetLoading ? "wait" : "pointer", padding: 2, background: eventForm.withMeet ? "#15151c" : (darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.14)"), transition: "background 0.25s ease" }}
-                >
-                  <motion.div animate={{ x: eventForm.withMeet ? 18 : 0 }} transition={{ type: "spring", stiffness: 500, damping: 34 }}
-                    style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }} />
-                </div>
+                <ToggleSwitch on={eventForm.withMeet} darkMode={darkMode}
+                  style={{ cursor: meetLoading ? "wait" : "pointer" }}
+                  onClick={() => toggleMeet(!eventForm.withMeet)} />
                 <span style={{ fontSize: 14, fontFamily: FONT, color: theme.text }}>Google Meet</span>
                 {meetLoading && <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>Erstelle Link...</span>}
               </div>
@@ -16175,12 +16188,9 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                     <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Als Brand definieren</div>
                     <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginTop: 3 }}>Öffnet dieses Projekt mit der vollen Brand-Struktur (Strategie, Identität, Designsystem …) — eigene Inhalte pro Projekt.</div>
                   </div>
-                  <div onClick={() => canManageThisProject && setForm(prev => ({ ...prev, is_brand: !prev.is_brand }))}
-                    style={{ flexShrink: 0, width: 42, height: 24, borderRadius: 999, cursor: canManageThisProject ? "pointer" : "default", padding: 2, marginTop: 1,
-                      background: form.is_brand ? "#15151c" : (darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.14)"), transition: "background 0.25s ease", opacity: canManageThisProject ? 1 : 0.6 }}>
-                    <motion.div animate={{ x: form.is_brand ? 18 : 0 }} transition={{ type: "spring", stiffness: 500, damping: 34 }}
-                      style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }} />
-                  </div>
+                  <ToggleSwitch on={form.is_brand} darkMode={darkMode} disabled={!canManageThisProject}
+                    style={{ marginTop: 1 }}
+                    onClick={() => setForm(prev => ({ ...prev, is_brand: !prev.is_brand }))} />
                 </div>
 
                 {/* Members section — only when editing an existing project */}
@@ -37030,7 +37040,7 @@ const VALUES_INSPIRATIONAL = [
   "Freedom","Growth","Impact","Innovation","Inspiration","Originality","Passion","Purpose","Resilience","Vision",
 ];
 
-function BrandValues({ value, onChange, accent, theme, darkMode, editing, onEditingChange }) {
+function BrandValues({ value, onChange, theme, darkMode, editing, onEditingChange }) {
   const saved = Array.isArray(value) ? value : [];
   const hasData = saved.length > 0;
   // We're in the pick/describe flow when the header "Bearbeiten" is active OR there's no data yet (onboarding).
@@ -37082,7 +37092,9 @@ function BrandValues({ value, onChange, accent, theme, darkMode, editing, onEdit
           <div style={{ display: "flex", gap: 10, alignItems: "stretch" }}>
             <div style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", minHeight: 48, padding: "8px 12px", borderRadius: 13, background: fieldBg, border: `1px solid ${theme.borderFaint}`, boxSizing: "border-box" }}>
               {picked.map(name => (
-                <span key={name} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 6px 5px 11px", borderRadius: 8, background: accent + "1f", color: accent, fontSize: 13, fontFamily: FONT, fontWeight: 600 }}>
+                <span key={name} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 6px 5px 11px", borderRadius: 8,
+                  background: darkMode ? "rgba(244,244,247,0.95)" : "#15151c", color: darkMode ? "#15151c" : "#fff",
+                  fontSize: 13, fontFamily: FONT, fontWeight: 600 }}>
                   {name}
                   <span onClick={() => removeValue(name)} style={{ cursor: "pointer", width: 16, height: 16, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, lineHeight: 1 }}>×</span>
                 </span>
@@ -37095,7 +37107,9 @@ function BrandValues({ value, onChange, accent, theme, darkMode, editing, onEdit
             </div>
             {full ? (
               <motion.button whileTap={{ scale: 0.97 }} onClick={goDescribe}
-                style={{ padding: "0 22px", borderRadius: 13, border: "none", cursor: "pointer", background: accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>Speichern</motion.button>
+                style={{ padding: "0 22px", borderRadius: 13, border: "none", cursor: "pointer",
+                  background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
+                  fontSize: 13, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>Speichern</motion.button>
             ) : (
               <motion.button whileTap={{ scale: 0.95 }} onClick={() => { addValue(input); setInput(""); }} disabled={!input.trim()}
                 title="Hinzufügen"
@@ -37113,7 +37127,8 @@ function BrandValues({ value, onChange, accent, theme, darkMode, editing, onEdit
               return (
                 <div key={name} onClick={() => sel ? removeValue(name) : addValue(name)}
                   style={{ breakInside: "avoid", padding: "4px 0", fontSize: 14, fontFamily: FONT, lineHeight: 1.5,
-                    color: sel ? accent : (disabled ? theme.textFaint : theme.textSub), fontWeight: sel ? 600 : 400,
+                    color: sel ? (darkMode ? "#fff" : "#15151c") : (disabled ? theme.textDim : theme.text),
+                    fontWeight: sel ? 700 : 400,
                     cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.5 : 1 }}>
                   {name}
                 </div>
@@ -37137,7 +37152,7 @@ function BrandValues({ value, onChange, accent, theme, darkMode, editing, onEdit
           {picked.map((name, i) => (
             <div key={name}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}>
-                <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 700, color: accent }}>{String(i + 1).padStart(2, "0")}</span>
+                <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 700, color: theme.textDim }}>{String(i + 1).padStart(2, "0")}</span>
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{name}</span>
               </div>
               <textarea value={notes[name] || ""} onChange={e => setNotes(n => ({ ...n, [name]: e.target.value }))} rows={5}
@@ -37149,7 +37164,7 @@ function BrandValues({ value, onChange, accent, theme, darkMode, editing, onEdit
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto" }}>
           <button onClick={() => setStep("select")} style={{ width: 150, padding: "12px 0", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer", textAlign: "center" }}>Zurück</button>
           <motion.button whileTap={{ scale: 0.97 }} onClick={finalize}
-            style={{ width: 150, padding: "12px 0", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer", textAlign: "center" }}>Finalisieren</motion.button>
+            style={{ width: 150, padding: "12px 0", borderRadius: 12, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer", textAlign: "center" }}>Finalisieren</motion.button>
         </div>
       </div>
     );
@@ -37161,7 +37176,7 @@ function BrandValues({ value, onChange, accent, theme, darkMode, editing, onEdit
       {saved.map((v, i) => (
         <div key={v.name || i} style={{ padding: "20px 22px", borderRadius: 18, background: panelBg, display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-            <span style={{ fontSize: 19, fontFamily: FONT, fontWeight: 800, color: accent, letterSpacing: -0.5 }}>{String(i + 1).padStart(2, "0")}</span>
+            <span style={{ fontSize: 19, fontFamily: FONT, fontWeight: 800, color: theme.textDim, letterSpacing: -0.5 }}>{String(i + 1).padStart(2, "0")}</span>
             <span style={{ fontSize: 19, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{v.name}</span>
           </div>
           {v.reason && <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6 }}>{v.reason}</div>}
@@ -41973,7 +41988,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                       {/* Brand Values — merged into Brand Core; its picker runs in the core "Bearbeiten" mode */}
                       {k === "identity/core" && (
                         <div style={{ marginTop: 36 }}>{SL("Brand Values")}
-                          <BrandValues value={profile.brand_values} onChange={saveBrandValues} accent={theme.accent} theme={theme} darkMode={darkMode} editing={editingText} onEditingChange={setEditingText} />
+                          <BrandValues value={profile.brand_values} onChange={saveBrandValues} theme={theme} darkMode={darkMode} editing={editingText} onEditingChange={setEditingText} />
                         </div>
                       )}
                     </>
@@ -43674,20 +43689,7 @@ export default function CircularMenu() {
             menu's selected pill does: anthracite on a dark card is a
             switch you cannot see, which is the other half of what was
             wrong with mine. */}
-        <div onClick={() => onPatch({ enabled: !link.enabled })}
-          style={{ width: 44, height: 24, borderRadius: 12, padding: 2, flexShrink: 0,
-            background: link.enabled
-              ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c")
-              : (darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.15)"),
-            cursor: "pointer", transition: "background 0.3s ease",
-            display: "flex", alignItems: "center" }}>
-          <motion.div
-            animate={{ x: link.enabled ? 20 : 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 25 }}
-            style={{ width: 20, height: 20, borderRadius: 10,
-              background: (darkMode && link.enabled) ? "#15151c" : "#fff",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
-        </div>
+        <ToggleSwitch on={link.enabled} darkMode={darkMode} onClick={() => onPatch({ enabled: !link.enabled })} />
       </div>
 
       {link.enabled && (
@@ -49166,21 +49168,8 @@ export default function CircularMenu() {
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Appearance</div>
                       <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{darkMode ? t("settings.darkMode") : t("settings.lightMode")}</div>
                     </div>
-                    <div onClick={(e) => { e.stopPropagation(); setDarkMode(!darkMode); }} style={{
-                      width: 44, height: 24, borderRadius: 12, padding: 2,
-                      background: darkMode ? "rgba(139,122,255,0.5)" : "rgba(0,0,0,0.15)",
-                      cursor: "pointer", transition: "background 0.3s ease",
-                      display: "flex", alignItems: "center",
-                    }}>
-                      <motion.div
-                        animate={{ x: darkMode ? 20 : 0 }}
-                        transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                        style={{
-                          width: 20, height: 20, borderRadius: 10,
-                          background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-                        }}
-                      />
-                    </div>
+                    <ToggleSwitch on={darkMode} darkMode={darkMode}
+                      onClick={(e) => { e.stopPropagation(); setDarkMode(!darkMode); }} />
                   </motion.div>
 
                   {/* Language */}
@@ -49448,22 +49437,7 @@ export default function CircularMenu() {
                           : "Generated images go straight into your Files view."}
                       </div>
                     </div>
-                    {/* iOS-style switch */}
-                    <div style={{
-                      width: 42, height: 24, borderRadius: 12, position: "relative", flexShrink: 0,
-                      background: autoSaveAiImages ? theme.accent : (darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.18)"),
-                      transition: "background 0.2s",
-                    }}>
-                      <motion.div
-                        animate={{ x: autoSaveAiImages ? 20 : 2 }}
-                        transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                        style={{
-                          position: "absolute", top: 2, width: 20, height: 20,
-                          borderRadius: "50%", background: "#fff",
-                          boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-                        }}
-                      />
-                    </div>
+                    <ToggleSwitch on={autoSaveAiImages} darkMode={darkMode} />
                   </motion.div>
 
                   {/* Provider cards */}
