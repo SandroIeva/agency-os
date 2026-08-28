@@ -2354,19 +2354,22 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
     }).select("*, profile:profiles!task_comments_user_id_fkey_profiles(display_name, avatar_url, initials)").single();
     if (data) {
       setTaskComments(prev => [...prev, data]);
-      // Notify task assignee about the comment (if it's someone else)
-      if (editingTask.assignee_id && editingTask.assignee_id !== session.user.id) {
-        const myName = session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "Jemand";
-        createNotification?.({
-          userId: editingTask.assignee_id,
-          type: "comment_added",
-          title: "Neuer Kommentar",
-          body: `${myName} hat "${editingTask.title}" kommentiert`,
-          // title and body stay for anything still reading them; actor and
-          // subject are what notifLines renders from, in the READER's language.
-          metadata: { task_id: editingTask.id, comment_id: data.id, actor: myName, subject: editingTask.title },
-        });
-      }
+      // Everybody involved hears about it except whoever wrote it: the
+      // assignee AND the person who asked for the task. Only the assignee was
+      // told before, so somebody who delegated a task never heard back on it.
+      // The messengers already do it this way; this is the app catching up.
+      const myName = session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "Jemand";
+      const tell = [...new Set([editingTask.assignee_id, editingTask.creator_id])]
+        .filter(uid => uid && uid !== session.user.id);
+      tell.forEach(uid => createNotification?.({
+        userId: uid,
+        type: "comment_added",
+        title: "Neuer Kommentar",
+        body: `${myName} hat "${editingTask.title}" kommentiert`,
+        // title and body stay for anything still reading them; actor and
+        // subject are what notifLines renders from, in the READER's language.
+        metadata: { task_id: editingTask.id, comment_id: data.id, actor: myName, subject: editingTask.title },
+      }));
     }
     setCommentText("");
   };
