@@ -45551,15 +45551,19 @@ export default function CircularMenu() {
     });
   };
 
-  // The corner is empty for as long as the voice UI is, and for the 300ms that
-  // UI takes to fade out on top of that. Releasing it the instant voiceMode
-  // flips brought the small orb back up while the big one was still on screen
-  // fading, which is the same "one ball in two places" as before, just shorter.
+  // The corner stays empty for the WHOLE conversation, and there are two
+  // overlays in one: voiceMode is the listening half, and the moment somebody
+  // stops talking it is set false and aiSpeaking takes over for the answer.
+  // Watching only the first one released the corner halfway through, which is
+  // what kept putting the small orb back while the big one was still there.
+  //
+  // The delay outlasts the answer overlay's spring exit, so the corner is
+  // filled after the big orb has gone rather than beside it.
   useEffect(() => {
-    if (voiceMode) return;
-    const id = setTimeout(() => setOrbLeaving(false), 360);
+    if (voiceMode || aiSpeaking) return;
+    const id = setTimeout(() => setOrbLeaving(false), 520);
     return () => clearTimeout(id);
-  }, [voiceMode]);
+  }, [voiceMode, aiSpeaking]);
 
   const startVoice = () => {
     setMenuOpen(false);
@@ -51250,7 +51254,7 @@ export default function CircularMenu() {
               keeps it from reading as two separate events. */}
           <div style={{ cursor: "pointer" }}
             onClick={() => { setOrbLeaving(true); setTimeout(startVoice, 380); }}>
-            <LiquidOrb size={64} leaving={orbLeaving || voiceMode} fallback={<AISphere darkMode={darkMode} />} />
+            <LiquidOrb size={64} leaving={orbLeaving || voiceMode || aiSpeaking} fallback={<AISphere darkMode={darkMode} />} />
           </div>
         </div>
       </div>
