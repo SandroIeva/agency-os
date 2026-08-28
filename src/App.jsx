@@ -11,6 +11,9 @@ import { buildSystemPrompt } from "./systemPrompt";
 import { getTranslation } from "./translations";
 import { openGooglePicker, openGoogleFolderPicker } from "./googlePicker";
 import BillingSettings from "./BillingSettings";
+// The liquid-glass orb's shader. Raw, so the file stays WGSL and can be
+// diffed against the source it was taken from.
+import ORB_WGSL from "./liquidOrb.wgsl?raw";
 import { PLAN_ENTITLEMENTS, PLAN_NAMES, PLAN_PRICES, STORAGE_GB, limitsFor, planFeatures } from "./entitlements";
 import { useCreateBlockNote, getDefaultReactSlashMenuItems, SuggestionMenuController, createReactBlockSpec, FormattingToolbar, FormattingToolbarController, getFormattingToolbarItems, useComponentsContext } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
@@ -345,6 +348,137 @@ function SegmentedRing({ count, activeIndex, radius = 95, stroke = 2, gap = 5, d
         );
       })}
     </svg>
+  );
+}
+
+// ── The liquid-glass orb ─────────────────────────────────────────────────────
+// A WebGPU fragment shader, one full-screen triangle, the fluid drawn
+// analytically. The WGSL lives in src/liquidOrb.wgsl and is imported raw, both
+// because 980 lines of shader inside a JSX file helps nobody and because that
+// file is the artefact somebody would diff against the source it came from.
+//
+// The 128 floats are its uniform block, in the order the struct declares:
+// size, then the scalars, then the colour vec4s. Copied verbatim, so the orb
+// looks like the thing it was taken from rather than like our guess at it.
+//
+// ONE device for the whole page. Each orb has its own canvas, its own uniform
+// buffer and its own frame loop, but they share the adapter, the device, the
+// shader module and the pipeline: a second orb costs a buffer, not a driver.
+const ORB_UNIFORMS = [
+  1, 1, 0, 1.5, 0.7200000286102295, 0.30000001192092896, 2.799999952316284, 0.36000001430511475, 2,
+  0.10000000149011612, 0.30000001192092896, 0.25999999046325684, 0.20000000298023224,
+  0.20000000298023224, 1.1200000047683716, 13, 0.004999999888241291, 0, 0, 1, 0.3799999952316284,
+  0, 2, 0.41999998688697815, 0.7699999809265137, 0.23000000417232513, 65, 0, 0, 1,
+  0.2199999988079071, 0.25, 1, 0.9647058844566345, 0.9098039269447327, 1, 0.4313725531101227,
+  0.9490196108818054, 0.8117647171020508, 1, 0.6431372761726379, 0.8156862854957581,
+  0.8352941274642944, 1, 0.23529411852359772, 0.18039216101169586, 0.9803921580314636, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 0.8039215803146362, 0.8980392217636108, 1, 1, 0.8509804010391235,
+  0.7843137383460999, 1, 1, 0.9176470637321472, 0.95686274766922, 1, 1, 0.8627451062202454,
+  0.9176470637321472, 1, 1, 0.027450980618596077, 0.0313725508749485, 0.05098039284348488, 1,
+  0.6196078658103943, 0.5490196347236633, 1, 1, 0.9686274528503418, 0.9843137264251709, 1, 1,
+  0.9372549057006836, 0.9647058844566345, 0.9921568632125854, 1, 0.8784313797950745,
+  0.9333333373069763, 0.9764705896377563, 1, 0.8313725590705872, 0.9019607901573181,
+  0.9686274528503418, 1, 0.7333333492279053, 0.8352941274642944, 0.9529411792755127, 1,
+  0.6509804129600525, 0.7803921699523926, 0.9411764740943909, 1, 0.529411792755127,
+  0.6901960968971252, 0.9215686321258545, 1, 0.43529412150382996, 0.6196078658103943,
+  0.9098039269447327, 1, 0.43529412150382996, 0.6196078658103943, 0.9098039269447327, 1,
+  0.43529412150382996, 0.6196078658103943, 0.9098039269447327, 1, 0.43529412150382996,
+  0.6196078658103943, 0.9098039269447327, 1, 0.43529412150382996, 0.6196078658103943,
+  0.9098039269447327, 1,
+];
+
+let orbGpu = null;   // Promise of { device, pipeline, format }, or null
+function orbDevice() {
+  if (orbGpu) return orbGpu;
+  orbGpu = (async () => {
+    if (typeof navigator === "undefined" || !navigator.gpu) throw new Error("no webgpu");
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) throw new Error("no adapter");
+    const device = await adapter.requestDevice();
+    const module = device.createShaderModule({ code: ORB_WGSL });
+    // Compilation errors are reported, not thrown: without this a mistyped
+    // shader is a blank canvas and no explanation anywhere.
+    const info = await module.getCompilationInfo?.();
+    const errors = (info?.messages || []).filter(m => m.type === "error");
+    if (errors.length) throw new Error(errors.map(m => `${m.lineNum}:${m.linePos} ${m.message}`).join("\n"));
+    const format = navigator.gpu.getPreferredCanvasFormat();
+    const pipeline = device.createRenderPipeline({
+      layout: "auto",
+      vertex: { module, entryPoint: "vs_main" },
+      fragment: { module, entryPoint: "fs_main", targets: [{ format }] },
+      primitive: { topology: "triangle-list" },
+    });
+    return { device, pipeline, format };
+  })();
+  // A failed device must not be cached as a permanent no: a lost device can
+  // come back, and the next mount should be allowed to try again.
+  orbGpu.catch(() => { orbGpu = null; });
+  return orbGpu;
+}
+
+// `fallback` is what stands here when WebGPU is missing or the device is lost.
+// Not a blank hole: this orb is the only thing in that corner.
+function LiquidOrb({ size = 48, speed = 1.5, fallback = null }) {
+  const canvasRef = useRef(null);
+  const [failed, setFailed] = useState(false);
+  const speedRef = useRef(speed);
+  speedRef.current = speed;
+
+  useEffect(() => {
+    let raf = 0, alive = true;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    orbDevice().then(({ device, pipeline, format }) => {
+      if (!alive) return;
+      const ctx = canvas.getContext("webgpu");
+      if (!ctx) { setFailed(true); return; }
+      ctx.configure({ device, format, alphaMode: "premultiplied" });
+      const values = new Float32Array(ORB_UNIFORMS);
+      const buf = device.createBuffer({
+        size: values.byteLength,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+      const bind = device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [{ binding: 0, resource: { buffer: buf } }],
+      });
+      const started = performance.now();
+      const frame = (now) => {
+        if (!alive) return;
+        // Two device pixels per CSS pixel is where this stops being visible and
+        // starts being a bigger render for nothing.
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const px = Math.max(1, Math.round(size * dpr));
+        if (canvas.width !== px || canvas.height !== px) { canvas.width = px; canvas.height = px; }
+        values[0] = px;
+        values[1] = px;
+        values[2] = (now - started) / 1000;
+        values[3] = speedRef.current;
+        device.queue.writeBuffer(buf, 0, values);
+        const enc = device.createCommandEncoder();
+        const pass = enc.beginRenderPass({
+          colorAttachments: [{
+            view: ctx.getCurrentTexture().createView(),
+            clearValue: { r: 0, g: 0, b: 0, a: 0 },
+            loadOp: "clear", storeOp: "store",
+          }],
+        });
+        pass.setPipeline(pipeline);
+        pass.setBindGroup(0, bind);
+        pass.draw(3);
+        pass.end();
+        device.queue.submit([enc.finish()]);
+        raf = requestAnimationFrame(frame);
+      };
+      raf = requestAnimationFrame(frame);
+    }).catch(() => { if (alive) setFailed(true); });
+    return () => { alive = false; if (raf) cancelAnimationFrame(raf); };
+  }, [size]);
+
+  if (failed) return fallback;
+  return (
+    <canvas ref={canvasRef}
+      style={{ width: size, height: size, display: "block", borderRadius: "50%" }} />
   );
 }
 
@@ -51034,7 +51168,7 @@ export default function CircularMenu() {
         {/* Sphere — right third (stays visible & clickable in document fullscreen) */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "flex-end", pointerEvents: "auto" }}>
           <div style={{ cursor: "pointer" }} onClick={startVoice}>
-            <AISphere darkMode={darkMode} />
+            <LiquidOrb size={48} fallback={<AISphere darkMode={darkMode} />} />
           </div>
         </div>
       </div>
