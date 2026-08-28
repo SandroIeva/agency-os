@@ -11162,7 +11162,12 @@ function TokenUsageBar({ orgId, theme, darkMode, appLanguage = "de" }) {
                 <span>{formatTokens(val)} · {pct}%</span>
               </div>
               <div style={{ height: 6, borderRadius: 999, background: theme.borderFaint, overflow: "hidden" }}>
-                <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: "#15151c", transition: "width .4s ease" }} />
+                {/* theme.text, not the anthracite pill colour. #15151c is what
+                    a BUTTON is painted with, and on a dark card it is very
+                    nearly the card: these bars were invisible in dark mode.
+                    The credits and storage bars beneath already read the
+                    theme, which is why they were fine. */}
+                <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: theme.text, transition: "width .4s ease" }} />
               </div>
             </div>
           );
