@@ -179,6 +179,10 @@ const translations = {
   "plus.concept": { de: "Konzept", en: "Concept" },
 
   // ── Kanban Columns ───────────────────────────
+  // The bucket a task falls into when it belongs to no project. "Kein Projekt"
+  // named the absence; this names the place, and the messengers offer the same
+  // word so the chat and the board agree.
+  "kanban.general": { de: "Allgemein", en: "General" },
   "kanban.todo": { de: "To Do", en: "To Do" },
   "kanban.inProgress": { de: "In Arbeit", en: "In Progress" },
   "kanban.review": { de: "Review", en: "Review" },

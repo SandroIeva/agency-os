@@ -2783,13 +2783,13 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                       value={taskForm.project_name}
                       onChange={v => setTaskForm(p => ({ ...p, project_name: v }))}
                       options={[
-                        { value: "", label: "Kein Projekt" },
+                        { value: "", label: t("kanban.general") },
                         ...projects.map(p => ({ value: p.name, label: p.name,
                           icon: p.logo_url
                             ? <img src={p.logo_url} alt="" style={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover" }} />
                             : <span style={{ width: 18, height: 18, borderRadius: "50%", background: (p.color || "#64748B") + "30", color: p.color || "#64748B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700 }}>{(p.name || "?")[0]}</span> })),
                       ]}
-                      placeholder="Kein Projekt" theme={theme} darkMode={darkMode} align="right" minWidth={190} maxTriggerWidth={170}
+                      placeholder={t("kanban.general")} theme={theme} darkMode={darkMode} align="right" minWidth={190} maxTriggerWidth={170}
                     />
                   ) : taskForm.project_name ? (
                     <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textSub, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", padding: "7px 12px", borderRadius: 999, whiteSpace: "nowrap" }}>
@@ -5108,6 +5108,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
       <AnimatePresence>
         {(creating || selectedItem) && (
           <TimelineItemModal
+            t={t}
             // The key forces a REMOUNT whenever the modal's subject changes — the
             // modal seeds all its state from props in useState initializers, which
             // only run on mount. Without the key, "Nächsten Sprint verketten"
@@ -5173,7 +5174,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
   );
 }
 
-function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, defaultProjectId = null, defaultPredecessorId = null, defaultGroupId = null, defaultStartDate = null, defaultEndDate = null, projects, sprintGroups = [], orgMembers = [], tasks = [], allItems = [], initialAssigneeIds = [], initialLinkedTaskIds = [], initialChecklist = [], onOpenTask, onChainNext, theme, darkMode, onClose, onSave, onDelete }) {
+function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14, defaultProjectId = null, defaultPredecessorId = null, defaultGroupId = null, defaultStartDate = null, defaultEndDate = null, projects, sprintGroups = [], orgMembers = [], tasks = [], allItems = [], initialAssigneeIds = [], initialLinkedTaskIds = [], initialChecklist = [], onOpenTask, onChainNext, theme, darkMode, onClose, onSave, onDelete }) {
   const today = tlIsoDate(new Date());
   const defaultEnd = tlIsoDate(tlAddDays(new Date(), sprintDays - 1));
   const [title, setTitle] = useState(item?.title || "");
@@ -5348,13 +5349,13 @@ function TimelineItemModal({ item, creating, canEdit = true, sprintDays = 14, de
             value={projectId}
             onChange={v => setProjectId(v)}
             options={[
-              { value: "", label: "Kein Projekt" },
+              { value: "", label: t("kanban.general") },
               ...projects.map(p => ({ value: p.id, label: p.name,
                 icon: p.logo_url
                   ? <img src={p.logo_url} alt="" style={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover" }} />
                   : <span style={{ width: 18, height: 18, borderRadius: "50%", background: (p.color || "#64748B") + "30", color: p.color || "#64748B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700 }}>{(p.name || "?")[0]}</span> })),
             ]}
-            placeholder="Kein Projekt" theme={theme} darkMode={darkMode} minWidth={280}
+            placeholder={t("kanban.general")} theme={theme} darkMode={darkMode} minWidth={280}
             triggerStyle={{ width: "100%", justifyContent: "space-between", borderRadius: 10, padding: "10px 14px", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}
           />
         </div>
