@@ -21,7 +21,7 @@ import { notifLines } from "../src/notificationText.js";
 import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
   splitDraft, workspacesFor, projectsFor, createTask, describeTask, addChecklist, commentOnTask,
-  typeWanted, attachedImage,
+  typeWanted, attachedImage, linkify,
   nextQuestion, PRIORITY_CODES, dueDateFor, timezoneOf,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
@@ -177,6 +177,10 @@ const verifySlack = async (signingSecret, sig, ts, raw) => {
 // The same message Telegram builds, in Slack's shape. Both read notifLines and
 // taskFacts, so the two can say different things only by being given different
 // data, never by disagreeing about the words.
+// esc, then linkify: the escaping is what makes the text safe, and the links
+// are put back deliberately on top of it.
+const link = (s) => linkify(esc(s), "slack");
+
 const buildBlocks = async (db, workspace, n, lang, appUrl, taskId, footer) => {
   const { title, body } = notifLines(n, lang !== "en");
   // The card is read FIRST: its project belongs in the line above the title,
@@ -186,15 +190,15 @@ const buildBlocks = async (db, workspace, n, lang, appUrl, taskId, footer) => {
   const head = [
     where ? `*${esc(where)}*` : null,
     `*${esc(title)}*`,
-    body ? esc(body) : null,
+    body ? link(body) : null,
   ].filter(Boolean).join("\n");
 
   const blocks = [{ type: "section", text: { type: "mrkdwn", text: head } }];
-  if (f?.description) blocks.push({ type: "section", text: { type: "mrkdwn", text: esc(f.description) } });
+  if (f?.description) blocks.push({ type: "section", text: { type: "mrkdwn", text: link(f.description) } });
   if (f?.facts.length) blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: esc(f.facts.join("  ·  ")) }] });
   if (f?.checklist) {
     const c = f.checklist;
-    const rows = c.shown.map(i => `${i.checked ? "[x]" : "[ ]"} ${esc(i.text)}`);
+    const rows = c.shown.map(i => `${i.checked ? "[x]" : "[ ]"} ${link(i.text)}`);
     if (c.more) rows.push(esc(c.moreLabel(c.more)));
     blocks.push({ type: "section", text: { type: "mrkdwn", text: `*${esc(c.label)} ${c.done}/${c.total}*\n${rows.join("\n")}` } });
   }

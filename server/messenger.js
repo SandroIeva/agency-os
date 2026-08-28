@@ -462,3 +462,27 @@ export const attachedImage = (n) => {
     : IMAGE_EXT.test(m.attachment_url);
   return looksRight ? { url: m.attachment_url, name: m.attachment_name || "" } : null;
 };
+
+// ── Links people wrote ──────────────────────────────────────────────────────
+// Everything a person typed is escaped before it goes out, which is what stops
+// a task title from injecting markup. That same escaping is why a url in a
+// description cannot be left to luck: it is turned into a link here, on
+// purpose, in whichever form the messenger reads.
+//
+// Runs on ALREADY-ESCAPED text. An "&" is "&amp;" by then, which is correct
+// inside an HTML href and is what Slack expects too, so the url survives its
+// own query string.
+//
+// Trailing punctuation is left out of the link: people write "see https://x.com."
+// and mean the sentence to end, not the url.
+const URL_IN_TEXT = /https?:\/\/[^\s<>"']+/g;
+const TRAILING = /[.,;:!?)\]}»"']+$/;
+export const linkify = (escaped, flavour) => String(escaped || "").replace(URL_IN_TEXT, (raw) => {
+  const trail = (raw.match(TRAILING) || [""])[0];
+  const url = trail ? raw.slice(0, -trail.length) : raw;
+  if (!url) return raw;
+  // Slack's own syntax. Telegram wants an anchor. Both keep the url visible,
+  // because a link whose text is the url is a link people trust.
+  const linked = flavour === "slack" ? `<${url}>` : `<a href="${url}">${url}</a>`;
+  return linked + trail;
+});

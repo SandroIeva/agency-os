@@ -19,7 +19,7 @@ import { notifLines } from "../src/notificationText.js";
 // formatting below is Telegram's: HTML, and an inline_keyboard.
 import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
-  splitDraft, workspacesFor, projectsFor, createTask, DEFAULT_TYPES, typeWanted, attachedImage,
+  splitDraft, workspacesFor, projectsFor, createTask, DEFAULT_TYPES, typeWanted, attachedImage, linkify,
   draftStep, draftDone, PRIORITY_CODES, dueDateFor, timezoneOf,
   replyTarget, describeTask, addChecklist, commentOnTask,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
@@ -170,12 +170,16 @@ const deepLink = (appUrl, n) => {
 // description arrived here as a title and nothing else.
 // `extra` is already-escaped HTML built by taskBlock. It is NOT escaped again
 // here, which is the whole reason it is built in one place.
+// esc, then linkify: the escaping is what makes the text safe, and the links
+// are put back deliberately on top of it.
+const link = (s) => linkify(esc(s), "telegram");
+
 const notifText = (workspace, n, lang, extra) => {
   const { title, body } = notifLines(n, lang !== "en");
   return [
     workspace ? `<b>${esc(workspace)}</b>` : null,
     `<b>${esc(title)}</b>`,
-    body ? esc(body) : null,
+    body ? link(body) : null,
     extra ? "\n" + extra : null,
   ].filter(Boolean).join("\n");
 };
@@ -186,14 +190,14 @@ const taskBlock = async (db, taskId, lang) => {
   const f = await taskFacts(db, taskId, lang);
   if (!f) return { extra: "", project: "" };
   const blocks = [];
-  if (f.description) blocks.push(esc(f.description));
+  if (f.description) blocks.push(link(f.description));
   if (f.facts.length) blocks.push(esc(f.facts.join(" · ")));
   if (f.checklist) {
     const c = f.checklist;
     // [x] and [ ], not a tick character: this is a surface where we cannot draw
     // an icon, and a tick is a coloured emoji on some clients and a thin glyph
     // on others.
-    const rows = c.shown.map(i => `${i.checked ? "[x]" : "[ ]"} ${esc(i.text)}`);
+    const rows = c.shown.map(i => `${i.checked ? "[x]" : "[ ]"} ${link(i.text)}`);
     if (c.more) rows.push(esc(c.moreLabel(c.more)));
     blocks.push(`<b>${esc(c.label)} ${c.done}/${c.total}</b>\n${rows.join("\n")}`);
   }
