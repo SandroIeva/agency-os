@@ -45551,9 +45551,15 @@ export default function CircularMenu() {
     });
   };
 
-  // The corner is empty for as long as the voice UI is; when that closes the
-  // orb rises back into it.
-  useEffect(() => { if (!voiceMode) setOrbLeaving(false); }, [voiceMode]);
+  // The corner is empty for as long as the voice UI is, and for the 300ms that
+  // UI takes to fade out on top of that. Releasing it the instant voiceMode
+  // flips brought the small orb back up while the big one was still on screen
+  // fading, which is the same "one ball in two places" as before, just shorter.
+  useEffect(() => {
+    if (voiceMode) return;
+    const id = setTimeout(() => setOrbLeaving(false), 360);
+    return () => clearTimeout(id);
+  }, [voiceMode]);
 
   const startVoice = () => {
     setMenuOpen(false);
