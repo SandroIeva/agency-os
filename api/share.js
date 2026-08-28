@@ -180,12 +180,15 @@ export default async function handler(req) {
   }
   const db = createClient(supaUrl, serviceKey, { auth: { persistSession: false } });
 
-  const { data: share } = await db.from("public_shares")
-    .select("token, kind, target_id, org_id, created_at, revoked_at")
-    .eq("token", token).maybeSingle();
+  // Looking the link up and counting the view are one statement, because a
+  // call nobody waits for does not survive an edge function's response: the
+  // counter sat at 0 when this was a second, fire-and-forget call.
+  //
   // A revoked link and a link that never existed answer the same way. Which of
   // the two it is, is nobody's business who holds neither.
-  if (!share || share.revoked_at || share.kind !== "moodboard") return notFound(format);
+  const { data: rows } = await db.rpc("public_share_open", { p_token: token });
+  const share = Array.isArray(rows) ? rows[0] : rows;
+  if (!share || share.kind !== "moodboard") return notFound(format);
 
   const { data: board } = await db.from("moodboards")
     .select("id, title, description, color_palette, updated_at, archived, org_id")
@@ -196,9 +199,6 @@ export default async function handler(req) {
     .select("url, name, note, tags, colors, position, type")
     .eq("board_id", board.id).eq("type", "image")
     .order("position", { ascending: true });
-
-  // Counting a view is not worth making anybody wait for.
-  db.rpc("public_share_viewed", { p_token: token }).then(() => {}, () => {});
 
   const p = payloadOf(share, board, items || []);
   const json = JSON.stringify(p);
