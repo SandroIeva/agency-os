@@ -319,6 +319,11 @@ export default async function handler(req) {
       webhook_points_here: (info?.result?.url || "") === `${appUrl}/api/telegram`,
       pending: info?.result?.pending_update_count ?? null,
       failing: !!info?.result?.last_error_message,
+      // Telegram's own words about OUR endpoint. I withheld this to keep the
+      // check free of error strings, and then spent a round guessing at a 500
+      // that Telegram had been describing the whole time. It says nothing
+      // secret and it is the fastest thing in the response.
+      last_error: info?.result?.last_error_message || null,
     });
   }
 
@@ -905,10 +910,6 @@ export default async function handler(req) {
   const text = (msg?.text || "").trim();
   // Everything else — edits to old messages, joins, stickers — is acknowledged
   // and ignored. Telegram retries anything that is not a 200.
-  if (!chatId || (!text && !sent)) return json({ ok: true });
-
-  const firstName = msg?.from?.first_name || "";
-
   // The largest of the sizes Telegram offers, or a document that is an image.
   // A document keeps its own name; a photo has none, so it gets a dated one.
   const sent = (() => {
@@ -923,6 +924,9 @@ export default async function handler(req) {
     }
     return null;
   })();
+  if (!chatId || (!text && !sent)) return json({ ok: true });
+
+  const firstName = msg?.from?.first_name || "";
   const reply = (body, lang = "de") => api(botToken, "sendMessage", {
     chat_id: chatId, text: body, parse_mode: "HTML", disable_web_page_preview: true,
   }).then(() => json({ ok: true }));
