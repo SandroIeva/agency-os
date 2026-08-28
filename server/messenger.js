@@ -617,3 +617,56 @@ export const humanSize = (bytes) => {
   if (n >= 1024 * 1024) return Math.round(n / 1048576) + " MB";
   return Math.max(1, Math.round(n / 1024)) + " KB";
 };
+
+// ── Moodboards ──────────────────────────────────────────────────────────────
+// A moodboard image lives in brand-assets, which is public, and its row holds
+// the url directly. That is the app's own arrangement and the reason this is
+// not simply addAssetFile with a different table: Assets is the private bucket
+// with a signed url, a moodboard is the public one with a plain one.
+export const moodboardsFor = async (db, userId, orgId) => {
+  if (!userId || !orgId) return [];
+  const { data } = await db.from("moodboards")
+    .select("id, title, project_id").eq("org_id", orgId).eq("archived", false)
+    .order("updated_at", { ascending: false }).limit(20);
+  return (data || []).map(b => ({ id: b.id, name: b.title || "Moodboard" }));
+};
+
+export const addMoodboardImage = async (db, { userId, orgId, boardId, name, contentType, bytes }) => {
+  if (!userId || !orgId || !boardId || !bytes?.byteLength) return { ok: false, reason: "incomplete" };
+  const { data: board } = await db.from("moodboards")
+    .select("id, title, org_id").eq("id", boardId).eq("org_id", orgId).maybeSingle();
+  if (!board) return { ok: false, reason: "gone" };
+
+  const size = bytes.byteLength;
+  const room = await storageRoomFor(db, orgId, size);
+  if (!room.ok) return { ok: false, reason: "no_room", room };
+  if (await orgIsReadOnly(db, orgId)) return { ok: false, reason: "read_only" };
+  const { data: member } = await db.from("org_members").select("id")
+    .eq("org_id", orgId).eq("user_id", userId).maybeSingle();
+  if (!member) return { ok: false, reason: "denied" };
+
+  const ext = (/\.([a-z0-9]{1,5})$/i.exec(name || "") || [, "jpg"])[1].toLowerCase();
+  const path = `moodboards/${boardId}/${crypto.randomUUID()}.${ext}`;
+  const put = await uploadTracked(db, {
+    bucket: "brand-assets", path, body: bytes, contentType, orgId, userId, sizeBytes: size,
+  });
+  if (!put.ok) return { ok: false, reason: "failed" };
+  const { data: pub } = db.storage.from("brand-assets").getPublicUrl(path);
+
+  // After whatever is already on the board, and laid out the way the app lays
+  // out an upload: five to a row, 240 wide.
+  const { data: last } = await db.from("moodboard_items")
+    .select("position").eq("board_id", boardId).order("position", { ascending: false }).limit(1);
+  const pos = (last?.[0]?.position ?? -1) + 1;
+  const { error } = await db.from("moodboard_items").insert({
+    board_id: boardId, org_id: orgId, created_by: userId,
+    type: "image", url: pub?.publicUrl || null, source: "upload",
+    // The app reads a palette off the picture with a canvas, which a server has
+    // no business emulating. The board recomputes its palette from its items.
+    colors: [],
+    position: pos, x: 40 + (pos % 5) * 60, y: 40 + Math.floor(pos / 5) * 60, w: 240,
+    name: name || null,
+  });
+  if (error) return { ok: false, reason: "failed" };
+  return { ok: true, board: { id: board.id, name: board.title || "Moodboard" }, size };
+};

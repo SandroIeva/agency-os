@@ -22,6 +22,7 @@ import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
   splitDraft, workspacesFor, projectsFor, createTask, describeTask, addChecklist, commentOnTask,
   typeWanted, attachedImage, linkify, createNote, addAssetFile, humanSize,
+  moodboardsFor, addMoodboardImage,
   nextQuestion, PRIORITY_CODES, dueDateFor, timezoneOf,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
@@ -76,12 +77,20 @@ const T = {
     noteMade: "Notiz gespeichert.",
     noteEmpty: "Schreib dazu, was du dir merken willst: /i7os notiz Preise anheben",
     noteTitle: "Neue Notiz",
-    notePrivate: "Privat",
+    notePrivate: "Allgemein",
     fileAsk: "Wohin in den Assets?",
-    filePrivate: "Ohne Projekt",
+    filePrivate: "Allgemein",
     fileSaved: (name, size) => `${name} liegt in den Assets (${size}).`,
     fileNoRoom: (used, limit) => `Der Speicher ist voll (${used} von ${limit}).`,
     fileGone: "Diese Datei ist weg. Schick sie noch einmal.",
+    fileWhat: "Wohin damit?",
+    fileToAssets: "In die Assets",
+    fileToMood: "Auf ein Moodboard",
+    fileNoBoards: "Es gibt noch kein Moodboard.",
+    moodAsk: "Auf welches Moodboard?",
+    moodSaved: (board, size) => `Auf "${board}" gelegt (${size}).`,
+    cancel: "Abbrechen",
+    cancelled: "Abgebrochen.",
     newMade: "Angelegt.",
     newDenied: "Auf diesen Workspace hast du keinen Zugriff.",
     newReadOnly: "Dieses Konto hat keinen aktiven Plan. Zum Anlegen wird einer gebraucht.",
@@ -130,12 +139,20 @@ const T = {
     noteMade: "Note saved.",
     noteEmpty: "Say what you want to remember: /i7os note raise the prices",
     noteTitle: "New note",
-    notePrivate: "Private",
+    notePrivate: "General",
     fileAsk: "Where in Assets?",
-    filePrivate: "No project",
+    filePrivate: "General",
     fileSaved: (name, size) => `${name} is in Assets (${size}).`,
     fileNoRoom: (used, limit) => `Storage is full (${used} of ${limit}).`,
     fileGone: "That file is gone. Send it again.",
+    fileWhat: "Where to?",
+    fileToAssets: "Into Assets",
+    fileToMood: "Onto a moodboard",
+    fileNoBoards: "There is no moodboard yet.",
+    moodAsk: "Which moodboard?",
+    moodSaved: (board, size) => `Added to "${board}" (${size}).`,
+    cancel: "Cancel",
+    cancelled: "Cancelled.",
     newMade: "Created.",
     newDenied: "You do not have access to that workspace.",
     newReadOnly: "This account has no active plan. Creating needs one.",
@@ -570,15 +587,17 @@ export default async function handler(req) {
       const orgs = await workspacesFor(db, link.user_id);
       if (!orgs.length) return drop("no workspaces", link.user_id);
       const one = orgs.length === 1;
-      const projects = one ? await projectsFor(db, link.user_id, orgs[0].id) : [];
+      // Assets and a moodboard are two different places, and which one is meant
+      // is the first thing to ask rather than something to guess.
       const st = { f: f.id, n: f.name || "bild", ...(one ? { o: orgs[0].id.slice(0, ID_HINT) } : {}) };
-      const options = one
-        ? [{ key: "p", label: t.filePrivate, set: { p: "-" } },
-           ...projects.map(pr => ({ key: "p", label: pr.name, set: { p: pr.id.slice(0, ID_HINT) } }))]
-        : orgs.map(o => ({ key: "o", label: o.name, set: { o: o.id.slice(0, ID_HINT) } }));
+      const options = [
+        { key: "d", label: t.fileToAssets, set: { d: "a" } },
+        { key: "d", label: t.fileToMood, set: { d: "m" } },
+        { key: "x", label: t.cancel, set: { x: 1 } },
+      ];
       // The question goes to the person's own chat with the bot, because that
       // is where a file they sent it belongs.
-      const blocks = draftBlocks(t, { t: f.name || "", ...st, chosen: one ? orgs[0].name : "" }, t.fileAsk, options)
+      const blocks = draftBlocks(t, { t: f.name || "", ...st, chosen: one ? orgs[0].name : "" }, t.fileWhat, options)
         .map(b => (b.type === "actions"
           ? { ...b, elements: b.elements.map(e => ({ ...e, action_id: e.action_id.replace("draft_", "asset_") })) }
           : b));
@@ -746,12 +765,41 @@ export default async function handler(req) {
       body: JSON.stringify({ replace_original: true, text, ...(blocks ? { blocks } : {}) }),
     }).then(() => json({ ok: true }));
 
+    // Nothing has been written at any point before an answer, so cancelling is
+    // only a question being taken away.
+    if (st.x) return replace(t.cancelled);
+
     const orgs = await workspacesFor(db, link.user_id);
+    if (!orgs.length) return replace(t.newNoWorkspace);
+    const asAsset = (blocks) => blocks.map(b => b.type === "actions"
+      ? { ...b, elements: b.elements.map(e => ({ ...e, action_id: e.action_id.replace("draft_", "asset_") })) } : b);
+    const cancel = { key: "x", label: t.cancel, set: { x: 1 } };
+
+    // Which workspace, when there is more than one.
+    if (!st.o) {
+      return replace(t.fileWhat, asAsset(draftBlocks(t, st, t.fileWhat,
+        [...orgs.map(o => ({ key: "o", label: o.name, set: { o: o.id.slice(0, ID_HINT) } })), cancel])));
+    }
     const org = resolveHint(orgs, st.o);
     if (!org) return replace(t.newDenied);
     const projects = await projectsFor(db, link.user_id, org.id);
 
-    if (st.p === undefined) {
+    // Assets or a moodboard, then the list for whichever was chosen.
+    if (!st.d) {
+      return replace(t.fileWhat, asAsset(draftBlocks(t, { ...st, chosen: org.name }, t.fileWhat, [
+        { key: "d", label: t.fileToAssets, set: { d: "a" } },
+        { key: "d", label: t.fileToMood, set: { d: "m" } },
+        cancel,
+      ])));
+    }
+    if (st.d === "m" && !st.b) {
+      const boards = await moodboardsFor(db, link.user_id, org.id);
+      if (!boards.length) return replace(t.fileNoBoards);
+      return replace(t.moodAsk, asAsset(draftBlocks(t, { ...st, chosen: org.name }, t.moodAsk,
+        [...boards.map(b => ({ key: "b", label: b.name, set: { b: b.id.slice(0, ID_HINT) } })), cancel])));
+    }
+
+    if (st.d === "a" && st.p === undefined) {
       const blocks = draftBlocks(t, { ...st, chosen: org.name }, t.fileAsk, [
         { key: "p", label: t.filePrivate, set: { p: "-" } },
         ...projects.map(pr => ({ key: "p", label: pr.name, set: { p: pr.id.slice(0, ID_HINT) } })),
@@ -761,7 +809,9 @@ export default async function handler(req) {
       return replace(t.fileAsk, blocks);
     }
 
-    const project = st.p !== "-" ? resolveHint(projects, st.p) : null;
+    const project = st.p && st.p !== "-" ? resolveHint(projects, st.p) : null;
+    const board = st.b ? resolveHint(await moodboardsFor(db, link.user_id, org.id), st.b) : null;
+    if (st.d === "m" && !board) return replace(t.fileGone);
     const info = await slackForm(inst.bot_token, "files.info", { file: st.f });
     const url = info?.ok ? info.file?.url_private_download || info.file?.url_private : null;
     if (!url) return replace(t.fileGone);
@@ -771,17 +821,20 @@ export default async function handler(req) {
     if (!res.ok) return replace(t.fileGone);
     const bytes = new Uint8Array(await res.arrayBuffer());
 
-    const saved = await addAssetFile(db, {
-      userId: link.user_id, orgId: org.id, projectId: project?.id || null,
-      name: st.n, contentType: info.file?.mimetype || "image/jpeg", bytes,
-    });
+    const saved = board
+      ? await addMoodboardImage(db, { userId: link.user_id, orgId: org.id, boardId: board.id,
+                                      name: st.n, contentType: info.file?.mimetype || "image/jpeg", bytes })
+      : await addAssetFile(db, { userId: link.user_id, orgId: org.id, projectId: project?.id || null,
+                                 name: st.n, contentType: info.file?.mimetype || "image/jpeg", bytes });
     if (!saved.ok) {
       return replace(saved.reason === "read_only" ? t.newReadOnly
         : saved.reason === "denied" ? t.newDenied
         : saved.reason === "no_room" ? t.fileNoRoom(humanSize(saved.room.used), humanSize(saved.room.limit))
         : t.newFailed);
     }
-    return replace(`${headLine(org.name, project?.name || t.filePrivate)} — ${t.fileSaved(saved.file?.name || st.n, humanSize(saved.size))}`);
+    return replace(board
+      ? `${headLine(org.name, board.name)} — ${t.moodSaved(board.name, humanSize(saved.size))}`
+      : `${headLine(org.name, project?.name || t.filePrivate)} — ${t.fileSaved(saved.file?.name || st.n, humanSize(saved.size))}`);
   }
 
   // ── A step of the new-task wizard ─────────────────────────────────────────

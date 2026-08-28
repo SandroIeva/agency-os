@@ -20,6 +20,7 @@ import { notifLines } from "../src/notificationText.js";
 import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
   splitDraft, workspacesFor, projectsFor, createTask, DEFAULT_TYPES, typeWanted, attachedImage, linkify, createNote, addAssetFile, humanSize,
+  moodboardsFor, addMoodboardImage,
   draftStep, draftDone, PRIORITY_CODES, dueDateFor, timezoneOf,
   replyTarget, describeTask, addChecklist, commentOnTask,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
@@ -90,13 +91,21 @@ const T = {
     noteEmpty: "Schreib dazu, was du dir merken willst: /notiz Preise anheben",
     newEmptyTask: "Schreib dazu, was zu tun ist: /aufgabe Angebot schreiben",
     noteAsk: (body) => `<b>Neue Notiz</b>\n${body}\n\nWohin?`,
-    notePrivate: "Privat",
+    notePrivate: "Allgemein",
     fileAsk: (name) => `<b>${name}</b>\n\nWohin in den Assets?`,
-    filePrivate: "Ohne Projekt",
+    filePrivate: "Allgemein",
     fileSaved: (name, size) => `${name} liegt in den Assets (${size}).`,
     fileNoRoom: (used, limit) => `Der Speicher ist voll (${used} von ${limit}). Räum auf oder hol dir mehr Platz.`,
     fileTooBig: "Diese Datei ist zu groß für Telegram-Bots. Lad sie in der App hoch.",
     fileGone: "Diese Datei ist weg. Schick sie noch einmal.",
+    fileWhat: (name) => `<b>${name}</b>\n\nWohin damit?`,
+    fileToAssets: "In die Assets",
+    fileToMood: "Auf ein Moodboard",
+    fileNoBoards: "Es gibt noch kein Moodboard.",
+    moodAsk: "Auf welches Moodboard?",
+    moodSaved: (board, size) => `Auf "${board}" gelegt (${size}).`,
+    cancel: "Abbrechen",
+    cancelled: "Abgebrochen.",
     askChecklist: (title) => `Checkliste für ${title}? Eine Zeile pro Punkt, als Antwort auf diese Nachricht.`,
     listed: (n) => `${n} ${n === 1 ? "Punkt" : "Punkte"} hinzugefügt.`,
     askDescribe: (title) => `Beschreibung für ${title}? Antworte einfach auf diese Nachricht.`,
@@ -152,13 +161,21 @@ const T = {
     noteEmpty: "Say what you want to remember: /note raise the prices",
     newEmptyTask: "Say what needs doing: /task write the proposal",
     noteAsk: (body) => `<b>New note</b>\n${body}\n\nWhere?`,
-    notePrivate: "Private",
+    notePrivate: "General",
     fileAsk: (name) => `<b>${name}</b>\n\nWhere in Assets?`,
-    filePrivate: "No project",
+    filePrivate: "General",
     fileSaved: (name, size) => `${name} is in Assets (${size}).`,
     fileNoRoom: (used, limit) => `Storage is full (${used} of ${limit}). Clear some space or get more.`,
     fileTooBig: "That file is too big for Telegram bots. Upload it in the app.",
     fileGone: "That file is gone. Send it again.",
+    fileWhat: (name) => `<b>${name}</b>\n\nWhere to?`,
+    fileToAssets: "Into Assets",
+    fileToMood: "Onto a moodboard",
+    fileNoBoards: "There is no moodboard yet.",
+    moodAsk: "Which moodboard?",
+    moodSaved: (board, size) => `Added to "${board}" (${size}).`,
+    cancel: "Cancel",
+    cancelled: "Cancelled.",
     askChecklist: (title) => `A checklist for ${title}? One line per item, as a reply to this message.`,
     listed: (n) => `${n} ${n === 1 ? "item" : "items"} added.`,
     askDescribe: (title) => `A description for ${title}? Just reply to this message.`,
@@ -585,7 +602,7 @@ export default async function handler(req) {
     // n and w belong to a NEW task and carry a workspace id where the others
     // carry a notification id, so they are handled before anything tries to
     // load a notification that was never involved.
-    if (!cbChat || !notifId || !["c", "d", "f", "p", "b", "n", "w", "x", "y", "z", "q", "v", "u", "s"].includes(action)) return answer("");
+    if (!cbChat || !notifId || !["c", "d", "f", "p", "b", "n", "w", "x", "y", "z", "q", "v", "u", "s", "k", "m", "j"].includes(action)) return answer("");
 
     // The chat is the identity. A button is only ever pressed in the chat the
     // message was sent to, so nobody else can reach this task through it.
@@ -616,7 +633,17 @@ export default async function handler(req) {
       return answer("");
     }
 
-    if (action === "u" || action === "s") {
+    // Cancel, from any screen. Nothing has been written at any point before an
+    // answer, so there is nothing to undo, only a question to take away.
+    if (action === "k" && notifId === "x") {
+      await api(botToken, "editMessageText", {
+        chat_id: cbChat, message_id: cb.message.message_id,
+        text: `<i>${esc(t.cancelled)}</i>`, parse_mode: "HTML",
+      });
+      return answer(t.cancelled);
+    }
+
+    if (action === "k" || action === "u" || action === "s" || action === "m" || action === "j") {
       // The picture is on the message this one replies to, so nothing had to be
       // held anywhere between the question and the answer.
       const src = cb.message?.reply_to_message;
@@ -629,9 +656,60 @@ export default async function handler(req) {
       if (!file) return answer(t.fileGone, true);
 
       const orgs = await workspacesFor(db, link.user_id);
+      if (!orgs.length) return answer(t.newNoWorkspace, true);
+      const one = orgs.length === 1 ? orgs[0] : null;
+      const cancelRow = [{ text: t.cancel, callback_data: "k:x" }];
+
+      // "k" is the answer to the first question. From here the two paths part.
+      if (action === "k") {
+        const wantsMood = notifId === "m";
+        if (!one) {
+          return api(botToken, "editMessageReplyMarkup", {
+            chat_id: cbChat, message_id: cb.message.message_id,
+            reply_markup: { inline_keyboard: [
+              ...orgs.map(o => [{ text: o.name.slice(0, 60), callback_data: `${wantsMood ? "j" : "s"}:${o.id.slice(0, ID_HINT)}` }]),
+              cancelRow,
+            ] },
+          }).then(() => answer(""));
+        }
+        if (wantsMood) {
+          const boards = await moodboardsFor(db, link.user_id, one.id);
+          if (!boards.length) return answer(t.fileNoBoards, true);
+          return api(botToken, "editMessageReplyMarkup", {
+            chat_id: cbChat, message_id: cb.message.message_id,
+            reply_markup: { inline_keyboard: [
+              ...boards.map(b => [{ text: b.name.slice(0, 60), callback_data: `m:${one.id.slice(0, ID_HINT)}:${b.id.slice(0, ID_HINT)}` }]),
+              cancelRow,
+            ] },
+          }).then(() => answer(t.moodAsk));
+        }
+        const projects = await projectsFor(db, link.user_id, one.id);
+        return api(botToken, "editMessageReplyMarkup", {
+          chat_id: cbChat, message_id: cb.message.message_id,
+          reply_markup: { inline_keyboard: [
+            [{ text: t.filePrivate, callback_data: `u:${one.id.slice(0, ID_HINT)}:-` }],
+            ...projects.map(pr => [{ text: pr.name.slice(0, 60), callback_data: `u:${one.id.slice(0, ID_HINT)}:${pr.id.slice(0, ID_HINT)}` }]),
+            cancelRow,
+          ] },
+        }).then(() => answer(t.fileAsk));
+      }
+
       const org = resolveHint(orgs, notifId);
       if (!org) return answer(t.newDenied, true);
       const projects = await projectsFor(db, link.user_id, org.id);
+
+      // The workspace is chosen; now which moodboard.
+      if (action === "j") {
+        const boards = await moodboardsFor(db, link.user_id, org.id);
+        if (!boards.length) return answer(t.fileNoBoards, true);
+        return api(botToken, "editMessageReplyMarkup", {
+          chat_id: cbChat, message_id: cb.message.message_id,
+          reply_markup: { inline_keyboard: [
+            ...boards.map(b => [{ text: b.name.slice(0, 60), callback_data: `m:${org.id.slice(0, ID_HINT)}:${b.id.slice(0, ID_HINT)}` }]),
+            cancelRow,
+          ] },
+        }).then(() => answer(t.moodAsk));
+      }
 
       if (action === "s") {
         await api(botToken, "editMessageReplyMarkup", {
@@ -645,6 +723,8 @@ export default async function handler(req) {
       }
 
       const project = hint && hint !== "-" ? resolveHint(projects, hint) : null;
+      const board = action === "m" ? resolveHint(await moodboardsFor(db, link.user_id, org.id), hint) : null;
+      if (action === "m" && !board) return answer(t.fileGone, true);
       // Telegram only hands a bot files up to 20 MB, and says so with an error
       // rather than a truncated download.
       const info = await api(botToken, "getFile", { file_id: file.id });
@@ -653,10 +733,11 @@ export default async function handler(req) {
       if (!res.ok) return answer(t.fileGone, true);
       const bytes = new Uint8Array(await res.arrayBuffer());
 
-      const saved = await addAssetFile(db, {
-        userId: link.user_id, orgId: org.id, projectId: project?.id || null,
-        name: file.name, contentType: file.type, bytes,
-      });
+      const saved = board
+        ? await addMoodboardImage(db, { userId: link.user_id, orgId: org.id, boardId: board.id,
+                                        name: file.name, contentType: file.type, bytes })
+        : await addAssetFile(db, { userId: link.user_id, orgId: org.id, projectId: project?.id || null,
+                                   name: file.name, contentType: file.type, bytes });
       if (!saved.ok) {
         return answer(saved.reason === "read_only" ? t.newReadOnly
           : saved.reason === "denied" ? t.newDenied
@@ -665,10 +746,13 @@ export default async function handler(req) {
       }
       await api(botToken, "editMessageText", {
         chat_id: cbChat, message_id: cb.message.message_id,
-        text: `<b>${esc(headLine(org.name, project?.name || t.filePrivate))}</b>\n<i>${esc(t.fileSaved(saved.file?.name || file.name, humanSize(saved.size)))}</i>`,
+        text: board
+          ? `<b>${esc(headLine(org.name, board.name))}</b>\n<i>${esc(t.moodSaved(board.name, humanSize(saved.size)))}</i>`
+          : `<b>${esc(headLine(org.name, project?.name || t.filePrivate))}</b>\n<i>${esc(t.fileSaved(saved.file?.name || file.name, humanSize(saved.size)))}</i>`,
         parse_mode: "HTML",
       });
-      return answer(t.fileSaved(file.name, humanSize(saved.size)));
+      return answer(board ? t.moodSaved(board.name, humanSize(saved.size))
+                          : t.fileSaved(file.name, humanSize(saved.size)));
     }
 
     if (action === "q" || action === "v") {
@@ -1036,15 +1120,16 @@ export default async function handler(req) {
     if (!link?.user_id) return reply(t.notLinked);
     const orgs = await workspacesFor(db, link.user_id);
     if (!orgs.length) return reply(t.newNoWorkspace);
-    const org = orgs[0];
-    const projects = orgs.length === 1 ? await projectsFor(db, link.user_id, org.id) : [];
-    const rows = orgs.length === 1
-      ? [[{ text: t.filePrivate, callback_data: `u:${org.id.slice(0, ID_HINT)}:-` }],
-         ...projects.map(pr => [{ text: pr.name.slice(0, 60), callback_data: `u:${org.id.slice(0, ID_HINT)}:${pr.id.slice(0, ID_HINT)}` }])]
-      : orgs.map(o => [{ text: o.name.slice(0, 60), callback_data: `s:${o.id.slice(0, ID_HINT)}` }]);
+    // Assets and a moodboard are two different places, and which one is meant
+    // is the first thing to ask, not something to guess from the picture.
     return api(botToken, "sendMessage", {
-      chat_id: chatId, text: t.fileAsk(esc(sent.name)), parse_mode: "HTML",
-      reply_to_message_id: msg.message_id, reply_markup: { inline_keyboard: rows },
+      chat_id: chatId, text: t.fileWhat(esc(sent.name)), parse_mode: "HTML",
+      reply_to_message_id: msg.message_id,
+      reply_markup: { inline_keyboard: [
+        [{ text: t.fileToAssets, callback_data: "k:a" }],
+        [{ text: t.fileToMood, callback_data: "k:m" }],
+        [{ text: t.cancel, callback_data: "k:x" }],
+      ] },
     }).then(() => json({ ok: true }));
   }
 
