@@ -529,24 +529,34 @@ export default async function handler(req) {
   if (raw.startsWith("{")) {
     let evt; try { evt = JSON.parse(raw); } catch { evt = null; }
     if (evt?.type === "url_verification") return new Response(evt.challenge, { status: 200 });
+    // Every way out of this branch says why. It answered 200 and did nothing,
+    // which from outside is indistinguishable from not having been called.
+    const drop = (why, extra) => { console.error("[Slack] file_shared skipped:", why, extra || ""); return json({ ok: true }); };
     if (evt?.type === "event_callback" && evt.event?.type === "file_shared") {
+      console.error("[Slack] file_shared:", JSON.stringify({
+        user_id: evt.event?.user_id, file_id: evt.event?.file_id,
+        channel: evt.event?.channel_id, team: evt.team_id,
+      }));
       const teamId = evt.team_id;
       const { data: link } = await db.from("messenger_links")
         .select("user_id, lang, chat_id").eq("provider", "slack")
         .eq("slack_team_id", teamId).eq("slack_user_id", evt.event.user_id).maybeSingle();
       const { data: inst } = await db.from("slack_installations")
         .select("bot_token").eq("team_id", teamId).maybeSingle();
-      if (!link?.user_id || !inst?.bot_token) return json({ ok: true });
+      if (!link?.user_id) return drop("no link for that slack user", evt.event?.user_id);
+      if (!inst?.bot_token) return drop("no installation for that team", evt.team_id);
       const t = T[link.lang === "en" ? "en" : "de"];
 
       const info = await slack(inst.bot_token, "files.info", { file: evt.event.file_id });
       const f = info?.ok ? info.file : null;
       // Only pictures. Everything else is a link in Slack already and would be
       // a silent, quota-consuming surprise in Assets.
-      if (!f || !/^image\//i.test(f.mimetype || "")) return json({ ok: true });
+      if (!info?.ok) return drop("files.info failed", info?.error);
+      if (!f) return drop("files.info returned no file");
+      if (!/^image\//i.test(f.mimetype || "")) return drop("not an image", f.mimetype);
 
       const orgs = await workspacesFor(db, link.user_id);
-      if (!orgs.length) return json({ ok: true });
+      if (!orgs.length) return drop("no workspaces", link.user_id);
       const one = orgs.length === 1;
       const projects = one ? await projectsFor(db, link.user_id, orgs[0].id) : [];
       const st = { f: f.id, n: f.name || "bild", ...(one ? { o: orgs[0].id.slice(0, ID_HINT) } : {}) };
@@ -560,10 +570,12 @@ export default async function handler(req) {
         .map(b => (b.type === "actions"
           ? { ...b, elements: b.elements.map(e => ({ ...e, action_id: e.action_id.replace("draft_", "asset_") })) }
           : b));
-      await slack(inst.bot_token, "chat.postMessage",
+      const asked = await slack(inst.bot_token, "chat.postMessage",
         { channel: link.chat_id, text: t.fileAsk, blocks });
+      if (!asked?.ok) return drop("chat.postMessage failed", asked?.error);
       return json({ ok: true });
     }
+    if (evt?.type === "event_callback") return drop("event type we do not handle", evt.event?.type);
     return json({ ok: true });
   }
 
