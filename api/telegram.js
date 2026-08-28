@@ -31,6 +31,27 @@ export const config = { runtime: "edge" };
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
 
+// What Telegram offers when somebody types a slash. Making a task and writing
+// a note are the two things people come here to DO, so they belong in the menu
+// rather than being folklore. Telegram picks the list by the READER's Telegram
+// language, so both exist and the handler answers to either name.
+const COMMANDS = {
+  de: [
+    { command: "aufgabe", description: "Neue Aufgabe anlegen" },
+    { command: "notiz", description: "Notiz aufschreiben" },
+    { command: "status", description: "Verbindung anzeigen" },
+    { command: "stop", description: "Verbindung trennen" },
+    { command: "help", description: "Was der Bot kann" },
+  ],
+  en: [
+    { command: "task", description: "Create a task" },
+    { command: "note", description: "Write a note" },
+    { command: "status", description: "Show the connection" },
+    { command: "stop", description: "Disconnect" },
+    { command: "help", description: "What this bot does" },
+  ],
+};
+
 const T = {
   de: {
     lang: "de",
@@ -67,6 +88,7 @@ const T = {
     commented: "Kommentar gespeichert.",
     noteMade: "Notiz gespeichert.",
     noteEmpty: "Schreib dazu, was du dir merken willst: /notiz Preise anheben",
+    newEmptyTask: "Schreib dazu, was zu tun ist: /aufgabe Angebot schreiben",
     askChecklist: (title) => `Checkliste für ${title}? Eine Zeile pro Punkt, als Antwort auf diese Nachricht.`,
     listed: (n) => `${n} ${n === 1 ? "Punkt" : "Punkte"} hinzugefügt.`,
     askDescribe: (title) => `Beschreibung für ${title}? Antworte einfach auf diese Nachricht.`,
@@ -120,6 +142,7 @@ const T = {
     commented: "Comment saved.",
     noteMade: "Note saved.",
     noteEmpty: "Say what you want to remember: /note raise the prices",
+    newEmptyTask: "Say what needs doing: /task write the proposal",
     askChecklist: (title) => `A checklist for ${title}? One line per item, as a reply to this message.`,
     listed: (n) => `${n} ${n === 1 ? "item" : "items"} added.`,
     askDescribe: (title) => `A description for ${title}? Just reply to this message.`,
@@ -298,12 +321,16 @@ export default async function handler(req) {
     if (!process.env.TELEGRAM_WEBHOOK_SECRET) {
       return json({ error: "TELEGRAM_WEBHOOK_SECRET is not set on this deployment", code: "not_configured" }, 503);
     }
+    // The command menu is refreshed every time, because it is a constant in
+    // this file and keeping it current is exactly what this verb is for.
+    const menu = (await api(botToken, "setMyCommands", { commands: COMMANDS.en }))?.ok
+      && (await api(botToken, "setMyCommands", { language_code: "de", commands: COMMANDS.de }))?.ok;
     const before = await api(botToken, "getWebhookInfo", {});
     const allowed = before?.result?.allowed_updates;
     const pointsHere = (before?.result?.url || "") === `${appUrl}/api/telegram`;
     const takesButtons = !allowed?.length || allowed.includes("callback_query");
     if (pointsHere && takesButtons) {
-      return json({ changed: false, reason: "already wired", buttons_delivered: true });
+      return json({ changed: false, reason: "already wired", buttons_delivered: true, menu: !!menu });
     }
     const set = await api(botToken, "setWebhook", {
       url: `${appUrl}/api/telegram`,
@@ -390,18 +417,9 @@ export default async function handler(req) {
       language_code: "de",
       description: "i7OS ist das Workspace-Betriebssystem für Kreativagenturen. Verbinde diesen Bot in der App unter Einstellungen, Konto, dann kommen deine Benachrichtigungen hier an. Aufgaben lassen sich direkt aus dem Chat erledigen.",
     }))?.ok || false;
-    const cmds = (list) => [
-      { command: "status", description: list[0] },
-      { command: "stop", description: list[1] },
-      { command: "help", description: list[2] },
-    ];
-    brand.commands = (await api(botToken, "setMyCommands", {
-      commands: cmds(["Show the connection", "Disconnect", "What this bot does"]),
-    }))?.ok || false;
-    brand.commandsDe = (await api(botToken, "setMyCommands", {
-      language_code: "de",
-      commands: cmds(["Verbindung anzeigen", "Verbindung trennen", "Was der Bot kann"]),
-    }))?.ok || false;
+    brand.commands = (await api(botToken, "setMyCommands", { commands: COMMANDS.en }))?.ok || false;
+    brand.commandsDe = (await api(botToken, "setMyCommands",
+      { language_code: "de", commands: COMMANDS.de }))?.ok || false;
 
     const info = await api(botToken, "getWebhookInfo", {});
     const me = await api(botToken, "getMe", {});
@@ -886,8 +904,17 @@ export default async function handler(req) {
   // message.
   if (!link || !link.active) return reply(t.notLinked);
 
-  const { title } = splitDraft(text);
-  if (!title) return reply(t.help);
+  // /aufgabe and /task are the menu's way of saying the same thing as plain
+  // text. Both names, whatever the reader's Telegram language happens to be.
+  const asTask = /^\/(aufgabe|task)(@\S+)?\s*/i.exec(text);
+
+  // Anything else beginning with a slash is a command, and an unknown command
+  // is a question, not a task. Without this /help became a task called "/help",
+  // which is what free text quietly did to every command it did not recognise.
+  if (!asTask && text.startsWith("/")) return reply(t.help);
+  const draft = asTask ? text.slice(asTask[0].length) : text;
+  const { title } = splitDraft(draft);
+  if (!title) return reply(asTask ? t.newEmptyTask : t.help);
 
   const orgs = await workspacesFor(db, link.user_id);
   if (!orgs.length) return reply(t.newNoWorkspace);
