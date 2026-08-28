@@ -568,7 +568,16 @@ export default async function handler(req) {
       type: "button", action_id: "describe", value: made.task.id,
       text: { type: "plain_text", text: t.btnDescribe },
     }] });
-    await slack(inst.bot_token, "chat.postMessage", { channel: link.chat_id || channel, ...built });
+    // The result is READ. Ignoring it is how a message that never arrived looked
+    // like a missing button for two rounds of guessing: the wizard reports
+    // success either way, because it answers through response_url.
+    const sent = await slack(inst.bot_token, "chat.postMessage", { channel: link.chat_id || channel, ...built });
+    if (!sent?.ok) {
+      console.error("[Slack] chat.postMessage failed:", sent?.error);
+      await db.from("messenger_links")
+        .update({ last_error: String(sent?.error || "post failed").slice(0, 200) })
+        .eq("provider", "slack").eq("user_id", link.user_id);
+    }
     return replace(t.newMade);
   }
 
