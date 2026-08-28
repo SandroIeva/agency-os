@@ -374,26 +374,18 @@ function SegmentedRing({ count, activeIndex, radius = 95, stroke = 2, gap = 5, d
 // buffer and its own frame loop, but they share the adapter, the device, the
 // shader module and the pipeline: a second orb costs a buffer, not a driver.
 const ORB_UNIFORMS = [
-  1, 1, 0, 1.5, 0.7200000286102295, 0.30000001192092896, 2.799999952316284, 0.36000001430511475, 2,
-  0.10000000149011612, 0.30000001192092896, 0.25999999046325684, 0.20000000298023224,
-  0.20000000298023224, 1.1200000047683716, 13, 0.004999999888241291, 0, 0, 1, 0.3799999952316284,
-  0, 2, 0.41999998688697815, 0.7699999809265137, 0.23000000417232513, 65, 0, 0, 1,
-  0.2199999988079071, 0.25, 1, 0.9647058844566345, 0.9098039269447327, 1, 0.4313725531101227,
-  0.9490196108818054, 0.8117647171020508, 1, 0.6431372761726379, 0.8156862854957581,
-  0.8352941274642944, 1, 0.23529411852359772, 0.18039216101169586, 0.9803921580314636, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 0.8039215803146362, 0.8980392217636108, 1, 1, 0.8509804010391235,
-  0.7843137383460999, 1, 1, 0.9176470637321472, 0.95686274766922, 1, 1, 0.8627451062202454,
-  0.9176470637321472, 1, 1, 0.027450980618596077, 0.0313725508749485, 0.05098039284348488, 1,
-  0.6196078658103943, 0.5490196347236633, 1, 1, 0.9686274528503418, 0.9843137264251709, 1, 1,
-  0.9372549057006836, 0.9647058844566345, 0.9921568632125854, 1, 0.8784313797950745,
-  0.9333333373069763, 0.9764705896377563, 1, 0.8313725590705872, 0.9019607901573181,
-  0.9686274528503418, 1, 0.7333333492279053, 0.8352941274642944, 0.9529411792755127, 1,
-  0.6509804129600525, 0.7803921699523926, 0.9411764740943909, 1, 0.529411792755127,
-  0.6901960968971252, 0.9215686321258545, 1, 0.43529412150382996, 0.6196078658103943,
-  0.9098039269447327, 1, 0.43529412150382996, 0.6196078658103943, 0.9098039269447327, 1,
-  0.43529412150382996, 0.6196078658103943, 0.9098039269447327, 1, 0.43529412150382996,
-  0.6196078658103943, 0.9098039269447327, 1, 0.43529412150382996, 0.6196078658103943,
-  0.9098039269447327, 1,
+  1, 1, 0, 1.5, 0.720000029, 0.300000012, 2.79999995, 0.360000014, 2, 0.100000001, 0.300000012,
+  0.25999999, 0.200000003, 0.200000003, 1.08, 13, 0.00499999989, 0, 0, 1, 0.379999995, 0, 2,
+  0.419999987, 0.769999981, 0.230000004, 65, 0, 0, 1, 0.219999999, 0.25, 0.949, 0.973, 1, 1, 0.157,
+  0.686, 0.949, 1, 0.18, 0.298, 0.78, 1, 0.043, 0.039, 0.216, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  0.80392158, 0.898039222, 1, 1, 0.850980401, 0.784313738, 1, 1, 0.917647064, 0.956862748, 1, 1,
+  0.862745106, 0.917647064, 1, 1, 0.0274509806, 0.0313725509, 0.0509803928, 1, 0.486, 0.549, 1, 1,
+  0.968627453, 0.984313726, 1, 1, 0.937254906, 0.964705884, 0.992156863, 1, 0.87843138,
+  0.933333337, 0.97647059, 1, 0.831372559, 0.90196079, 0.968627453, 1, 0.733333349, 0.835294127,
+  0.952941179, 1, 0.650980413, 0.78039217, 0.941176474, 1, 0.529411793, 0.690196097, 0.921568632,
+  1, 0.435294122, 0.619607866, 0.909803927, 1, 0.435294122, 0.619607866, 0.909803927, 1,
+  0.435294122, 0.619607866, 0.909803927, 1, 0.435294122, 0.619607866, 0.909803927, 1, 0.435294122,
+  0.619607866, 0.909803927, 1
 ];
 
 let orbGpu = null;   // Promise of { device, pipeline, format }, or null
@@ -432,7 +424,10 @@ function orbDevice() {
 // leans a few pixels toward the cursor, its glow comes up, and the fluid runs
 // faster. It is a 70px ball in the corner of a quiet screen; anything louder
 // reads as a bug rather than as an invitation.
-function LiquidOrb({ size = 58, speed = 1.5, hoverSpeed = 2.6, fallback = null }) {
+// `leaving` sends it down into the corner and out. The caller owns that flag,
+// because what happens next (the voice UI opening) is the caller's business,
+// and an orb that decided on its own when to vanish would be two truths.
+function LiquidOrb({ size = 58, speed = 1.5, hoverSpeed = 2.6, leaving = false, fallback = null }) {
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   const [failed, setFailed] = useState(false);
@@ -528,8 +523,12 @@ function LiquidOrb({ size = 58, speed = 1.5, hoverSpeed = 2.6, fallback = null }
       onPointerEnter={() => setHover(true)}
       onPointerMove={onMove}
       onPointerLeave={() => { setHover(false); setPull({ x: 0, y: 0 }); }}
-      animate={{ x: pull.x, y: pull.y }}
-      transition={{ type: "spring", stiffness: 210, damping: 17, mass: 0.5 }}
+      animate={leaving
+        ? { x: 0, y: size * 1.6, scale: 0.55, opacity: 0 }
+        : { x: pull.x, y: pull.y, scale: 1, opacity: 1 }}
+      transition={leaving
+        ? { duration: 0.42, ease: [0.4, 0, 0.9, 0.4] }
+        : { type: "spring", stiffness: 210, damping: 17, mass: 0.5 }}
       style={{ width: size, height: size, borderRadius: "50%", position: "relative" }}>
       {/* The glow, on a disc exactly as big as the ball the shader draws, and
           behind it. A glow, not a halo: two soft shadows in the orb's own
@@ -539,8 +538,8 @@ function LiquidOrb({ size = 58, speed = 1.5, hoverSpeed = 2.6, fallback = null }
         width: ball, height: ball, marginLeft: -ball / 2, marginTop: -ball / 2,
         borderRadius: "50%", pointerEvents: "none",
         boxShadow: hover
-          ? `0 0 ${ball * 0.62}px rgba(139,122,255,0.38), 0 0 ${ball * 0.26}px rgba(180,200,255,0.26)`
-          : `0 0 ${ball * 0.40}px rgba(139,122,255,0.18), 0 0 ${ball * 0.16}px rgba(180,200,255,0.12)`,
+          ? `0 0 ${ball * 0.62}px rgba(110,140,255,0.40), 0 0 ${ball * 0.26}px rgba(150,190,255,0.26)`
+          : `0 0 ${ball * 0.40}px rgba(110,140,255,0.20), 0 0 ${ball * 0.16}px rgba(150,190,255,0.12)`,
         transition: "box-shadow 0.5s cubic-bezier(0.22, 1, 0.36, 1)" }} />
       <canvas ref={canvasRef}
         style={{ position: "relative", width: size, height: size, display: "block" }} />
@@ -45082,6 +45081,8 @@ export default function CircularMenu() {
     return t("greet.night");
   };
   const [voiceMode, setVoiceMode] = useState(false);
+  // The corner orb's exit. Set on click, cleared once the voice UI has it.
+  const [orbLeaving, setOrbLeaving] = useState(false);
   const [aiSpeaking, setAiSpeaking] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [aiResponse, setAiResponse] = useState("");
@@ -47945,7 +47946,11 @@ export default function CircularMenu() {
                 whileTap={{ scale: 0.95 }}
                 style={{ borderRadius: "50%", cursor: "pointer" }}
               >
-                <AISpeakingSphere darkMode={darkMode} speaking={aiStatus === "speaking"} audioLevel={audioLevelRef} />
+                {/* The same orb, larger, and it runs faster while the AI talks.
+                    The old sphere is still the fallback where WebGPU is not. */}
+                <LiquidOrb size={200} speed={aiStatus === "speaking" ? 3.4 : 1.5}
+                  hoverSpeed={aiStatus === "speaking" ? 3.8 : 2.6}
+                  fallback={<AISpeakingSphere darkMode={darkMode} speaking={aiStatus === "speaking"} audioLevel={audioLevelRef} />} />
               </motion.div>
               {(aiStatus === "speaking" || aiStatus === "idle") && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}
@@ -51228,8 +51233,12 @@ export default function CircularMenu() {
 
         {/* Sphere — right third (stays visible & clickable in document fullscreen) */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "flex-end", pointerEvents: "auto" }}>
-          <div style={{ cursor: "pointer" }} onClick={startVoice}>
-            <LiquidOrb size={64} fallback={<AISphere darkMode={darkMode} />} />
+          {/* The orb drops out of the corner first, then the voice UI takes
+              over. 380ms is the animation's own 420 less the overlap that
+              keeps it from reading as two separate events. */}
+          <div style={{ cursor: "pointer" }}
+            onClick={() => { setOrbLeaving(true); setTimeout(() => { setOrbLeaving(false); startVoice(); }, 380); }}>
+            <LiquidOrb size={64} leaving={orbLeaving} fallback={<AISphere darkMode={darkMode} />} />
           </div>
         </div>
       </div>
