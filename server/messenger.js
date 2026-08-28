@@ -1,3 +1,5 @@
+import { resolveEntitlements } from "../src/entitlements.js";
+
 // What a messenger button DOES, with no idea which messenger asked.
 //
 // Telegram and Slack disagree about almost everything on the surface: HTML
@@ -522,4 +524,96 @@ export const createNote = async (db, { userId, orgId, content, projectName }) =>
   }).select("id").maybeSingle();
   if (error) return { ok: false, reason: "failed" };
   return { ok: true, note: data };
+};
+
+// ── Room in the workspace's storage ─────────────────────────────────────────
+// The app checks this in the browser against currentEntitlements, which a
+// server does not have, so the same question is asked from the two places that
+// actually know: who owns the workspace, and what the account has used.
+//
+// resolveEntitlements comes from src/entitlements.js, the single source for
+// every limit, which is dependency-free precisely so both runtimes can read it.
+// server/billing.js knows this too but imports the Stripe SDK at its top, which
+// has no business inside an edge function.
+export const storageRoomFor = async (db, orgId, incomingBytes) => {
+  if (!orgId) return { ok: false, reason: "no_workspace" };
+  const { data: org } = await db.from("organizations").select("created_by").eq("id", orgId).maybeSingle();
+  const owner = org?.created_by || null;
+  const { data: account } = owner
+    ? await db.from("billing_accounts").select("*").eq("owner_user_id", owner).maybeSingle()
+    : { data: null };
+  const limit = resolveEntitlements(account)?.limits?.storageBytes || 0;
+  const { data: used } = await db.rpc("account_storage_used", { p_org: orgId });
+  const projected = Number(used || 0) + Number(incomingBytes || 0);
+  return { ok: !!limit && projected <= limit, used: Number(used || 0), limit, projected };
+};
+
+// Storage and the ledger in one call, the way uploadTracked does it in the app.
+// Writing to the bucket without the ledger row is how the accounting drifts,
+// and the ledger is what every quota question is answered from.
+export const uploadTracked = async (db, { bucket, path, body, contentType, orgId, userId, sizeBytes }) => {
+  const { error } = await db.storage.from(bucket).upload(path, body, { contentType, upsert: false });
+  if (error) return { ok: false, reason: "failed" };
+  await db.from("workspace_files").upsert({
+    org_id: orgId, bucket, path,
+    size_bytes: Math.max(0, Math.round(sizeBytes || 0)), created_by: userId || null,
+  }, { onConflict: "bucket,path" });
+  return { ok: true };
+};
+
+// ── Putting a file into Assets ──────────────────────────────────────────────
+// Everything the app's own uploader does, in the order it does it: check the
+// room, write the object, record it in the ledger, sign a url, then the row.
+// A year is the app's own expiry, and it has machinery that renews one before
+// it dies; a shorter one here would be a picture that goes dark on its own.
+export const SIGNED_URL_YEAR = 60 * 60 * 24 * 365;
+
+export const addAssetFile = async (db, { userId, orgId, projectId, name, contentType, bytes }) => {
+  if (!userId || !orgId || !bytes?.byteLength) return { ok: false, reason: "incomplete" };
+  const size = bytes.byteLength;
+
+  const room = await storageRoomFor(db, orgId, size);
+  if (!room.ok) return { ok: false, reason: "no_room", room };
+  if (await orgIsReadOnly(db, orgId)) return { ok: false, reason: "read_only" };
+  const { data: member } = await db.from("org_members").select("id")
+    .eq("org_id", orgId).eq("user_id", userId).maybeSingle();
+  if (!member) return { ok: false, reason: "denied" };
+
+  // Slashes become underscores, so nothing can escape the folder, and runs of
+  // dots collapse, so no ".." survives to confuse anything downstream. The last
+  // 80 characters rather than the first, because that is the end with the
+  // extension on it.
+  const safe = String(name || "datei")
+    .replace(/[^\w.\-]+/g, "_")
+    .replace(/\.{2,}/g, ".")
+    .replace(/^[.\-]+/, "")
+    .slice(-80) || "datei";
+  const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`;
+  const put = await uploadTracked(db, {
+    bucket: "user-files", path, body: bytes, contentType,
+    orgId, userId, sizeBytes: size,
+  });
+  if (!put.ok) return { ok: false, reason: "failed" };
+
+  const { data: signed } = await db.storage.from("user-files").createSignedUrl(path, SIGNED_URL_YEAR);
+  const { data: row, error } = await db.from("user_files").insert({
+    user_id: userId,
+    org_id: orgId,
+    name: safe,
+    mime_type: contentType || null,
+    size_bytes: size,
+    storage_path: path,
+    storage_provider: "supabase",
+    public_url: signed?.signedUrl || null,
+    project_id: projectId || null,
+  }).select("id, name").maybeSingle();
+  if (error) return { ok: false, reason: "failed" };
+  return { ok: true, file: row, size };
+};
+
+export const humanSize = (bytes) => {
+  const n = Number(bytes || 0);
+  if (n >= 1024 * 1024 * 1024) return (n / 1073741824).toFixed(1) + " GB";
+  if (n >= 1024 * 1024) return Math.round(n / 1048576) + " MB";
+  return Math.max(1, Math.round(n / 1024)) + " KB";
 };

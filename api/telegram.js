@@ -19,7 +19,7 @@ import { notifLines } from "../src/notificationText.js";
 // formatting below is Telegram's: HTML, and an inline_keyboard.
 import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
-  splitDraft, workspacesFor, projectsFor, createTask, DEFAULT_TYPES, typeWanted, attachedImage, linkify, createNote,
+  splitDraft, workspacesFor, projectsFor, createTask, DEFAULT_TYPES, typeWanted, attachedImage, linkify, createNote, addAssetFile, humanSize,
   draftStep, draftDone, PRIORITY_CODES, dueDateFor, timezoneOf,
   replyTarget, describeTask, addChecklist, commentOnTask,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
@@ -91,6 +91,12 @@ const T = {
     newEmptyTask: "Schreib dazu, was zu tun ist: /aufgabe Angebot schreiben",
     noteAsk: (body) => `<b>Neue Notiz</b>\n${body}\n\nWohin?`,
     notePrivate: "Privat",
+    fileAsk: (name) => `<b>${name}</b>\n\nWohin in den Assets?`,
+    filePrivate: "Ohne Projekt",
+    fileSaved: (name, size) => `${name} liegt in den Assets (${size}).`,
+    fileNoRoom: (used, limit) => `Der Speicher ist voll (${used} von ${limit}). Räum auf oder hol dir mehr Platz.`,
+    fileTooBig: "Diese Datei ist zu groß für Telegram-Bots. Lad sie in der App hoch.",
+    fileGone: "Diese Datei ist weg. Schick sie noch einmal.",
     askChecklist: (title) => `Checkliste für ${title}? Eine Zeile pro Punkt, als Antwort auf diese Nachricht.`,
     listed: (n) => `${n} ${n === 1 ? "Punkt" : "Punkte"} hinzugefügt.`,
     askDescribe: (title) => `Beschreibung für ${title}? Antworte einfach auf diese Nachricht.`,
@@ -147,6 +153,12 @@ const T = {
     newEmptyTask: "Say what needs doing: /task write the proposal",
     noteAsk: (body) => `<b>New note</b>\n${body}\n\nWhere?`,
     notePrivate: "Private",
+    fileAsk: (name) => `<b>${name}</b>\n\nWhere in Assets?`,
+    filePrivate: "No project",
+    fileSaved: (name, size) => `${name} is in Assets (${size}).`,
+    fileNoRoom: (used, limit) => `Storage is full (${used} of ${limit}). Clear some space or get more.`,
+    fileTooBig: "That file is too big for Telegram bots. Upload it in the app.",
+    fileGone: "That file is gone. Send it again.",
     askChecklist: (title) => `A checklist for ${title}? One line per item, as a reply to this message.`,
     listed: (n) => `${n} ${n === 1 ? "item" : "items"} added.`,
     askDescribe: (title) => `A description for ${title}? Just reply to this message.`,
@@ -560,7 +572,7 @@ export default async function handler(req) {
     // n and w belong to a NEW task and carry a workspace id where the others
     // carry a notification id, so they are handled before anything tries to
     // load a notification that was never involved.
-    if (!cbChat || !notifId || !["c", "d", "f", "p", "b", "n", "w", "x", "y", "z", "q", "v"].includes(action)) return answer("");
+    if (!cbChat || !notifId || !["c", "d", "f", "p", "b", "n", "w", "x", "y", "z", "q", "v", "u", "s"].includes(action)) return answer("");
 
     // The chat is the identity. A button is only ever pressed in the chat the
     // message was sent to, so nobody else can reach this task through it.
@@ -589,6 +601,61 @@ export default async function handler(req) {
         reply_markup: { force_reply: true, selective: true },
       });
       return answer("");
+    }
+
+    if (action === "u" || action === "s") {
+      // The picture is on the message this one replies to, so nothing had to be
+      // held anywhere between the question and the answer.
+      const src = cb.message?.reply_to_message;
+      const doc = src?.document;
+      const photo = Array.isArray(src?.photo) ? src.photo[src.photo.length - 1] : null;
+      const file = doc && /^image\//i.test(doc.mime_type || "")
+        ? { id: doc.file_id, name: doc.file_name || "bild.jpg", type: doc.mime_type }
+        : photo ? { id: photo.file_id, name: `foto-${new Date().toISOString().slice(0, 10)}.jpg`, type: "image/jpeg" }
+        : null;
+      if (!file) return answer(t.fileGone, true);
+
+      const orgs = await workspacesFor(db, link.user_id);
+      const org = resolveHint(orgs, notifId);
+      if (!org) return answer(t.newDenied, true);
+      const projects = await projectsFor(db, link.user_id, org.id);
+
+      if (action === "s") {
+        await api(botToken, "editMessageReplyMarkup", {
+          chat_id: cbChat, message_id: cb.message.message_id,
+          reply_markup: { inline_keyboard: [
+            [{ text: t.filePrivate, callback_data: `u:${org.id.slice(0, ID_HINT)}:-` }],
+            ...projects.map(pr => [{ text: pr.name.slice(0, 60), callback_data: `u:${org.id.slice(0, ID_HINT)}:${pr.id.slice(0, ID_HINT)}` }]),
+          ] },
+        });
+        return answer("");
+      }
+
+      const project = hint && hint !== "-" ? resolveHint(projects, hint) : null;
+      // Telegram only hands a bot files up to 20 MB, and says so with an error
+      // rather than a truncated download.
+      const info = await api(botToken, "getFile", { file_id: file.id });
+      if (!info?.ok || !info.result?.file_path) return answer(t.fileTooBig, true);
+      const res = await fetch(`https://api.telegram.org/file/bot${botToken}/${info.result.file_path}`);
+      if (!res.ok) return answer(t.fileGone, true);
+      const bytes = new Uint8Array(await res.arrayBuffer());
+
+      const saved = await addAssetFile(db, {
+        userId: link.user_id, orgId: org.id, projectId: project?.id || null,
+        name: file.name, contentType: file.type, bytes,
+      });
+      if (!saved.ok) {
+        return answer(saved.reason === "read_only" ? t.newReadOnly
+          : saved.reason === "denied" ? t.newDenied
+          : saved.reason === "no_room" ? t.fileNoRoom(humanSize(saved.room.used), humanSize(saved.room.limit))
+          : t.newFailed, true);
+      }
+      await api(botToken, "editMessageText", {
+        chat_id: cbChat, message_id: cb.message.message_id,
+        text: `<b>${esc(headLine(org.name, project?.name || t.filePrivate))}</b>\n<i>${esc(t.fileSaved(saved.file?.name || file.name, humanSize(saved.size)))}</i>`,
+        parse_mode: "HTML",
+      });
+      return answer(t.fileSaved(file.name, humanSize(saved.size)));
     }
 
     if (action === "q" || action === "v") {
@@ -838,9 +905,24 @@ export default async function handler(req) {
   const text = (msg?.text || "").trim();
   // Everything else — edits to old messages, joins, stickers — is acknowledged
   // and ignored. Telegram retries anything that is not a 200.
-  if (!chatId || !text) return json({ ok: true });
+  if (!chatId || (!text && !sent)) return json({ ok: true });
 
   const firstName = msg?.from?.first_name || "";
+
+  // The largest of the sizes Telegram offers, or a document that is an image.
+  // A document keeps its own name; a photo has none, so it gets a dated one.
+  const sent = (() => {
+    const doc = msg?.document;
+    if (doc && /^image\//i.test(doc.mime_type || "")) {
+      return { id: doc.file_id, name: doc.file_name || "bild.jpg", type: doc.mime_type, size: doc.file_size };
+    }
+    const photo = Array.isArray(msg?.photo) ? msg.photo[msg.photo.length - 1] : null;
+    if (photo) {
+      return { id: photo.file_id, name: `foto-${new Date().toISOString().slice(0, 10)}.jpg`,
+               type: "image/jpeg", size: photo.file_size };
+    }
+    return null;
+  })();
   const reply = (body, lang = "de") => api(botToken, "sendMessage", {
     chat_id: chatId, text: body, parse_mode: "HTML", disable_web_page_preview: true,
   }).then(() => json({ ok: true }));
@@ -935,6 +1017,25 @@ export default async function handler(req) {
 
   // A reply to the bot's description question belongs to the task that
   // question linked to, and is not a new task.
+  // A picture sent to the bot goes into Assets, and asks where first. The
+  // file itself is not stored anywhere in the meantime: the question REPLIES to
+  // the message carrying it, so Telegram hands it back with the answer.
+  if (sent) {
+    if (!link?.user_id) return reply(t.notLinked);
+    const orgs = await workspacesFor(db, link.user_id);
+    if (!orgs.length) return reply(t.newNoWorkspace);
+    const org = orgs[0];
+    const projects = orgs.length === 1 ? await projectsFor(db, link.user_id, org.id) : [];
+    const rows = orgs.length === 1
+      ? [[{ text: t.filePrivate, callback_data: `u:${org.id.slice(0, ID_HINT)}:-` }],
+         ...projects.map(pr => [{ text: pr.name.slice(0, 60), callback_data: `u:${org.id.slice(0, ID_HINT)}:${pr.id.slice(0, ID_HINT)}` }])]
+      : orgs.map(o => [{ text: o.name.slice(0, 60), callback_data: `s:${o.id.slice(0, ID_HINT)}` }]);
+    return api(botToken, "sendMessage", {
+      chat_id: chatId, text: t.fileAsk(esc(sent.name)), parse_mode: "HTML",
+      reply_to_message_id: msg.message_id, reply_markup: { inline_keyboard: rows },
+    }).then(() => json({ ok: true }));
+  }
+
   const answering = replyTarget(msg.reply_to_message);
   if (answering) {
     if (!link?.user_id) return reply(t.notLinked);
