@@ -160,6 +160,18 @@ const T = {
 const esc = (s) => String(s ?? "")
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+// The older Web API methods do not read a JSON body and answer
+// invalid_arguments to one. files.info is one of them, which is what made a
+// picture in Slack do nothing at all: the event arrived, the lookup was
+// refused, and refusing quietly looks exactly like never being called.
+const slackForm = (token, method, params) =>
+  fetch(`https://slack.com/api/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
+               Authorization: `Bearer ${token}` },
+    body: new URLSearchParams(params).toString(),
+  }).then(r => r.json().catch(() => ({ ok: false })));
+
 const slack = (token, method, body) =>
   fetch(`https://slack.com/api/${method}`, {
     method: "POST",
@@ -547,7 +559,7 @@ export default async function handler(req) {
       if (!inst?.bot_token) return drop("no installation for that team", evt.team_id);
       const t = T[link.lang === "en" ? "en" : "de"];
 
-      const info = await slack(inst.bot_token, "files.info", { file: evt.event.file_id });
+      const info = await slackForm(inst.bot_token, "files.info", { file: evt.event.file_id });
       const f = info?.ok ? info.file : null;
       // Only pictures. Everything else is a link in Slack already and would be
       // a silent, quota-consuming surprise in Assets.
@@ -750,7 +762,7 @@ export default async function handler(req) {
     }
 
     const project = st.p !== "-" ? resolveHint(projects, st.p) : null;
-    const info = await slack(inst.bot_token, "files.info", { file: st.f });
+    const info = await slackForm(inst.bot_token, "files.info", { file: st.f });
     const url = info?.ok ? info.file?.url_private_download || info.file?.url_private : null;
     if (!url) return replace(t.fileGone);
     // A private Slack url needs the bot token as a bearer, which is the whole
