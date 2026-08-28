@@ -717,6 +717,7 @@ export default async function handler(req) {
           reply_markup: { inline_keyboard: [
             [{ text: t.filePrivate, callback_data: `u:${org.id.slice(0, ID_HINT)}:-` }],
             ...projects.map(pr => [{ text: pr.name.slice(0, 60), callback_data: `u:${org.id.slice(0, ID_HINT)}:${pr.id.slice(0, ID_HINT)}` }]),
+            cancelRow,
           ] },
         });
         return answer("");
