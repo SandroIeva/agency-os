@@ -307,6 +307,8 @@ export default async function handler(req) {
     const me = await api(botToken, "getMe", {});
     const info = await api(botToken, "getWebhookInfo", {});
     const allowed = info?.result?.allowed_updates;
+    const errAt = info?.result?.last_error_date;
+    const errorAgeMin = errAt ? Math.round((Date.now() / 1000 - errAt) / 60) : null;
     return json({
       // Which commit is actually answering. Vercel sets this on every build, so
       // "is my fix live yet" stops being a guess: compare it with git log.
@@ -318,7 +320,13 @@ export default async function handler(req) {
       buttons_delivered: !allowed?.length || allowed.includes("callback_query"),
       webhook_points_here: (info?.result?.url || "") === `${appUrl}/api/telegram`,
       pending: info?.result?.pending_update_count ?? null,
-      failing: !!info?.result?.last_error_message,
+      // Telegram keeps the last error forever, so its mere presence says
+      // nothing about now: this called a webhook "failing" that had just
+      // delivered its whole backlog. Anything older than a quarter of an hour
+      // is history, and the age is reported so it can be read rather than
+      // trusted.
+      failing: errorAgeMin !== null && errorAgeMin < 15,
+      last_error_minutes_ago: errorAgeMin,
       // Telegram's own words about OUR endpoint. I withheld this to keep the
       // check free of error strings, and then spent a round guessing at a 500
       // that Telegram had been describing the whole time. It says nothing
