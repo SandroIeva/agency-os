@@ -30649,7 +30649,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
       // Not "Assets": that is what we call the table, not what somebody is
       // looking for. And not "Creations" either, which is a Brand section of
       // its own now, and one word cannot mean two places.
-      { id: "creations",    label: "Media Files" },
+      { id: "creations",    label: "Media" },
       { id: "docs",         label: t("assets.docs") || "Docs" },
       { id: "links",        label: "Links" },
     ];
@@ -34471,13 +34471,15 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-      <div style={{ padding: "14px 26px 0", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <div style={{ flex: 1, maxWidth: 340, display: "flex", alignItems: "center", gap: 7, padding: "0 12px", height: 34,
-          borderRadius: 10, border: `1px solid ${theme.borderFaint}` }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.9" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder={de ? "Suchen…" : "Search…"}
-            style={{ flex: 1, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }} />
+      {/* The Media toolbar's search box, part for part. */}
+      <div style={{ padding: "16px 26px 4px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10,
+          background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "none", maxWidth: 340 }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder={de ? "Link eingeben" : "Search links"}
+            style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }} />
         </div>
+        <div style={{ flex: 1 }} />
       </div>
 
       <div style={{ padding: "12px 26px 0", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -34502,7 +34504,12 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
         {rows == null ? (
           <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{t("common.loading") || "Lädt…"}</div>
         ) : shown.length === 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", textAlign: "center", gap: 9, color: theme.textDim }}>
+          /* Bottom padding, not a transform: the box keeps its height, the
+             centred content rises by half of what is added, and nothing lands
+             above the scroll origin where scrolling cannot reach it. A JSX
+             comment cannot stand here: this is a ternary branch, and one of
+             those holds one expression, not a comment and an element. */
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", textAlign: "center", gap: 9, color: theme.textDim, paddingBottom: 120, boxSizing: "border-box" }}>
             <div style={{ width: 52, height: 52, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.text, marginBottom: 4 }}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
@@ -35351,7 +35358,9 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
     );
   };
   return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
+    // 16 at the top, not 26: that is where the Media toolbar starts, and
+    // a search box that moves when you change tab is the jump.
+    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "16px 26px 26px" }}>
       {/* Lives in the LIST view because that is where the add menu triggers it;
           in the open-document view there is nothing to upload from. */}
       <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" style={{ display: "none" }}
@@ -35368,8 +35377,9 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
           {de ? "PDF wird hochgeladen …" : "Uploading PDF …"}
         </div>
       )}
-      {/* Toolbar: search · sort · view toggle */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+      {/* Toolbar: search · sort · view toggle. The same row as Media's,
+          down to the gap and the space under it. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "none", maxWidth: 340 }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Dokument eingeben"
