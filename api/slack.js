@@ -75,6 +75,9 @@ const T = {
     newFailed: "Konnte nicht angelegt werden. Versuch es in der App.",
     notConnected: "Verbinde Slack zuerst in i7OS unter Einstellungen, Workspace, Integrationen.",
     btnDescribe: "Beschreibung hinzufügen",
+    askDescribe: "Noch eine Beschreibung?",
+    btnWrite: "Schreiben",
+    btnSkip: "Ohne",
     describeTitle: "Beschreibung",
     describeLabel: "Was ist zu tun?",
     described: "Beschreibung gespeichert.",
@@ -113,6 +116,9 @@ const T = {
     newFailed: "Could not create it. Try the app.",
     notConnected: "Connect Slack first in i7OS under Settings, Workspace, Integrations.",
     btnDescribe: "Add a description",
+    askDescribe: "Add a description?",
+    btnWrite: "Write one",
+    btnSkip: "Skip",
     describeTitle: "Description",
     describeLabel: "What needs doing?",
     described: "Description saved.",
@@ -223,6 +229,56 @@ const draftBlocks = (t, st, question, options) => ([
     value: JSON.stringify({ ...st, chosen: undefined, ...o.set }).slice(0, 1990),
   })) },
 ]);
+
+// Finishing a draft: resolve what the hints point at, write the task, and send
+// the message that can actually be acted on. Two callers reach here now, the
+// last wizard button and the description modal coming back, and a task created
+// two slightly different ways would be the worst kind of bug to chase.
+const finishTask = async (db, botToken, link, t, appUrl, st, fallbackChannel) => {
+  const orgs = await workspacesFor(db, link.user_id);
+  const org = resolveHint(orgs, st.o);
+  if (!org) return { ok: false, msg: t.newDenied };
+  const projects = await projectsFor(db, link.user_id, org.id);
+  const project = st.p && st.p !== "-" ? resolveHint(projects, st.p) : null;
+
+  let assigneeId = link.user_id;
+  if (st.a && st.a !== "-") {
+    const person = resolveHint(
+      await handoverCandidates(db, { org_id: org.id, project_id: null }, link.user_id), st.a);
+    if (!person) return { ok: false, msg: t.cbGone };
+    assigneeId = person.id;
+  }
+
+  const made = await createTask(db, {
+    userId: link.user_id, orgId: org.id, projectName: project?.name || null,
+    title: st.t, description: st.d && st.d !== "-" ? st.d : null,
+    priority: PRIORITY_CODES[st.r] || "medium",
+    dueDate: dueDateFor(st.u, await timezoneOf(db, link.user_id)),
+    assigneeId,
+  });
+  if (!made.ok) {
+    return { ok: false, msg: made.reason === "read_only" ? t.newReadOnly
+      : made.reason === "denied" ? t.newDenied : t.newFailed };
+  }
+
+  // A real message, not the ephemeral form: only a real one can be edited
+  // later, which is what makes its buttons work like every other card's.
+  const asTask = { id: made.task.id, org_id: org.id, type: "task_created",
+                   title: st.t, body: null, metadata: { task_id: made.task.id } };
+  // org.name alone: buildBlocks reads the card and adds the project itself.
+  const built = await buildBlocks(db, org.name, asTask, link.lang, appUrl, made.task.id, null);
+  // The result is READ. Discarding it is how a message that never arrived
+  // looked like a missing button.
+  const sent = await slack(botToken, "chat.postMessage",
+    { channel: link.chat_id || fallbackChannel, ...built });
+  if (!sent?.ok) {
+    console.error("[Slack] chat.postMessage failed:", sent?.error);
+    await db.from("messenger_links")
+      .update({ last_error: String(sent?.error || "post failed").slice(0, 200) })
+      .eq("provider", "slack").eq("user_id", link.user_id);
+  }
+  return { ok: true, task: made.task };
+};
 
 export default async function handler(req) {
   const url = new URL(req.url);
@@ -463,19 +519,32 @@ export default async function handler(req) {
   // trick is needed here: the task travels with the view.
   if (p?.type === "view_submission") {
     const { data: mlink } = await db.from("messenger_links")
-      .select("user_id, lang").eq("provider", "slack")
+      .select("user_id, lang, chat_id").eq("provider", "slack")
       .eq("slack_team_id", p.team?.id).eq("slack_user_id", p.user?.id).maybeSingle();
     const mt = T[mlink?.lang === "en" ? "en" : "de"];
-    const text = Object.values(p.view?.state?.values || {})[0];
-    const value = text ? Object.values(text)[0]?.value : "";
-    const done = await describeTask(db, mlink?.user_id, p.view?.private_metadata, value);
+    const field = Object.values(p.view?.state?.values || {})[0];
+    const typed = field ? Object.values(field)[0]?.value : "";
+    const blockId = Object.keys(p.view?.state?.values || { d: 1 })[0];
     // An empty response closes the modal. An error string puts the message
     // under the field instead, which is where somebody is already looking.
+    const fail = (msg) => json({ response_action: "errors", errors: { [blockId]: msg } });
+    if (!mlink?.user_id) return fail(mt.notConnected);
+
+    // Two modals arrive here. One finishes a draft, and carries it; the other
+    // describes a task that already exists, and carries its id.
+    if (p.view?.callback_id === "new_task") {
+      let st; try { st = JSON.parse(p.view.private_metadata || "{}"); } catch { return fail(mt.newFailed); }
+      const { data: inst2 } = await db.from("slack_installations")
+        .select("bot_token").eq("team_id", p.team?.id).maybeSingle();
+      if (!inst2?.bot_token) return fail(mt.newFailed);
+      const done = await finishTask(db, inst2.bot_token, mlink, mt, appUrl, { ...st, d: typed || "-" }, null);
+      return done.ok ? new Response("", { status: 200 }) : fail(done.msg);
+    }
+
+    const done = await describeTask(db, mlink.user_id, p.view?.private_metadata, typed);
     if (done.ok) return new Response("", { status: 200 });
-    return json({ response_action: "errors", errors: {
-      [Object.keys(p.view?.state?.values || { d: 1 })[0]]:
-        done.reason === "read_only" ? mt.newReadOnly : done.reason === "denied" ? mt.newDenied : mt.newFailed,
-    } });
+    return fail(done.reason === "read_only" ? mt.newReadOnly
+      : done.reason === "denied" ? mt.newDenied : mt.newFailed);
   }
 
   const action = p?.actions?.[0];
@@ -539,46 +608,38 @@ export default async function handler(req) {
       ]));
     }
 
-    let assigneeId = link.user_id;
-    if (st.a && st.a !== "-") {
-      const person = resolveHint(await handoverCandidates(db, { org_id: org.id, project_id: null }, link.user_id), st.a);
-      if (!person) return replace(t.cbGone);
-      assigneeId = person.id;
+    // The description is asked HERE, not after the task exists. Sending people
+    // to the bot's own chat to type one means leaving the channel they are
+    // already standing in, which is the wrong shape for a thing you are in the
+    // middle of. A modal opens over whatever is on screen.
+    if (st.d === undefined) {
+      return replace(t.newTask, draftBlocks(t, st, t.askDescribe, [
+        { key: "d", label: t.btnWrite, set: { d: "!" } },
+        { key: "d", label: t.btnSkip, set: { d: "-" } },
+      ]));
     }
-    const made = await createTask(db, {
-      userId: link.user_id, orgId: org.id, projectName: project?.name || null,
-      title: st.t, description: null,
-      priority: PRIORITY_CODES[st.r] || "medium",
-      dueDate: dueDateFor(st.u, await timezoneOf(db, link.user_id)),
-      assigneeId,
-    });
-    if (!made.ok) {
-      return replace(made.reason === "read_only" ? t.newReadOnly
-        : made.reason === "denied" ? t.newDenied : t.newFailed);
+    if (st.d === "!") {
+      // The whole draft rides in private_metadata, which Slack hands back with
+      // the submission. Nothing is written until it comes back.
+      await slack(inst.bot_token, "views.open", {
+        trigger_id: p.trigger_id,
+        view: {
+          type: "modal", callback_id: "new_task",
+          private_metadata: JSON.stringify({ ...st, d: undefined }).slice(0, 2900),
+          title: { type: "plain_text", text: t.describeTitle.slice(0, 24) },
+          submit: { type: "plain_text", text: "OK" },
+          blocks: [{
+            type: "input", block_id: "d", optional: true,
+            label: { type: "plain_text", text: t.describeLabel.slice(0, 2000) },
+            element: { type: "plain_text_input", action_id: "v", multiline: true },
+          }],
+        },
+      });
+      return json({ ok: true });
     }
 
-    // The ephemeral message is a form and disappears with the answer. What the
-    // task deserves is a real message, because a real message can be edited,
-    // and its buttons therefore work like every other card's.
-    const asTask = { id: made.task.id, org_id: org.id, type: "task_created",
-                     title: st.t, body: null, metadata: { task_id: made.task.id } };
-    // org.name alone: buildBlocks reads the card and adds the project itself.
-    const built = await buildBlocks(db, org.name, asTask, link.lang, appUrl, made.task.id, null);
-    built.blocks.splice(built.blocks.length - 1, 0, { type: "actions", elements: [{
-      type: "button", action_id: "describe", value: made.task.id,
-      text: { type: "plain_text", text: t.btnDescribe },
-    }] });
-    // The result is READ. Ignoring it is how a message that never arrived looked
-    // like a missing button for two rounds of guessing: the wizard reports
-    // success either way, because it answers through response_url.
-    const sent = await slack(inst.bot_token, "chat.postMessage", { channel: link.chat_id || channel, ...built });
-    if (!sent?.ok) {
-      console.error("[Slack] chat.postMessage failed:", sent?.error);
-      await db.from("messenger_links")
-        .update({ last_error: String(sent?.error || "post failed").slice(0, 200) })
-        .eq("provider", "slack").eq("user_id", link.user_id);
-    }
-    return replace(t.newMade);
+    const done = await finishTask(db, inst.bot_token, link, t, appUrl, st, channel);
+    return replace(done.ok ? t.newMade : done.msg);
   }
 
   // ── The description button on a created task ──────────────────────────────
