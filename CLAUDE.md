@@ -85,6 +85,7 @@ not be created from the UI at all.
 | **Calendar event** | `createTeamEvent` | App.jsx |
 | **Chat conversation** | `startConversation` (1:1) and the group-creation modal | App.jsx |
 | **Public share link** | `createShare` in `AssetsView` (moodboard header, link icon) | App.jsx |
+| **Link (bookmark)** | `save` in `LinksTab` (file manager → Links) | App.jsx |
 | **File upload** | always through `uploadTracked` — never call `supabase.storage.upload` directly, or the storage ledger drifts | App.jsx |
 
 ⚠ **Two things are created from MORE than one place**: workspaces (3) and
@@ -151,7 +152,7 @@ Multi-tenant: nearly every row carries `org_id` (workspace) and often `project_i
   doc on every change, 20 deep, written by a `before update` trigger;
   readable through RLS by whoever may read the canvas, never writable from
   the browser)
-- **Misc:** `notifications`, `reminders`, `calendar_events`, `notes`, `push_subscriptions`, `short_links`, `os_visuals`
+- **Misc:** `notifications`, `reminders`, `calendar_events`, `notes`, `push_subscriptions`, `short_links`, `os_visuals`, `workspace_links` (the Links tab of the file manager: url, title, note and a free-text `category` shown as filter chips, org- and project-scoped like everything else)
 - **Messenger bridge:** `messenger_links` (a link belongs to a PERSON, not a
   workspace — `provider` is `telegram` or `slack`; the Slack rows also carry
   `slack_team_id` and `slack_user_id`, and `chat_id` is the DM channel),

@@ -30171,6 +30171,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     return () => window.removeEventListener("keydown", onKey);
   }, [boardFullscreen]);
   const docsCreate = useRef(null); // DocsTab registers its "new document" fn here
+  const linksAdd = useRef(null); // LinksTab registers its "add link" fn here
   const docsUploadPdf = useRef(null); // …and its "upload PDF" fn here
   const docsNewFolder = useRef(null); // DocsTab registers its "create folder" fn here
   const [boards, setBoards] = useState([]);
@@ -30641,6 +30642,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
       // its own now, and one word cannot mean two places.
       { id: "creations",    label: "Media Files" },
       { id: "docs",         label: t("assets.docs") || "Docs" },
+      { id: "links",        label: "Links" },
     ];
     const headerActions = (<>
             {tab === "moodboards" && (
@@ -30708,6 +30710,13 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                   )}
                 </AnimatePresence>
               </div>
+            )}
+            {tab === "links" && (
+              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => linksAdd.current?.()}
+                style={{ ...iconBtn, background: "#23232b", color: "#fff", border: "none" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                {appLanguage === "de" ? "Link hinzufügen" : "Add a link"}
+              </motion.div>
             )}
             {tab === "docs" && (
               <div style={{ position: "relative" }}>
@@ -30858,6 +30867,12 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           {/* ── DOCS tab ── */}
           {tab === "docs" && (
             <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} orgMembers={orgMembers} createNotification={createNotification} projectId={projectId} deepLink={docDeepLink} fullscreen={docFullscreen} setFullscreen={setDocFullscreen} createRef={docsCreate} uploadPdfRef={docsUploadPdf} importRef={docsImport} onImportingChange={setDocsImporting} skillsRef={docsSkills} newFolderRef={docsNewFolder} llmProvider={llmProvider} llmKeys={llmKeys} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} onOpenChange={setDocOpen} />
+          )}
+
+          {/* ── LINKS tab ── */}
+          {tab === "links" && (
+            <LinksTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t}
+              appLanguage={appLanguage} projectId={projectId} addRef={linksAdd} />
           )}
 
           {/* ── MOODBOARDS tab (boards grid) ── */}
@@ -34375,6 +34390,227 @@ const DOC_SKILLS = [
 
 // Docs tab — Google-Docs-style: a list of workspace documents + a rich-text
 // editor. Documents are stored in brand_documents (org-scoped).
+// ── Links ────────────────────────────────────────────────────────────────────
+// The things a workspace keeps that are not ours: a skill written up somewhere,
+// a tool the team uses, a reference worth finding again. They are not files and
+// not documents, so they had nowhere to live.
+//
+// Categories are chips, not folders. A folder means "put it in one place and
+// look for it there"; these are ten or twenty links and the useful question is
+// "show me the tools", which is a filter. The chips are built from what is
+// actually saved, plus the three names most workspaces reach for first, so the
+// row is never empty and never a list of empty drawers.
+const LINK_CATEGORY_SUGGESTIONS = ["Skills", "Tools", "Inspiration"];
+// The bit of a url a person recognises. Fails soft: something that is not a url
+// yet is shown as typed rather than as an error.
+const linkHost = (url) => {
+  try { return new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`).hostname.replace(/^www\./, ""); }
+  catch { return (url || "").replace(/^https?:\/\//i, "").split("/")[0]; }
+};
+const linkHref = (url) => (/^https?:\/\//i.test(url) ? url : `https://${url}`);
+
+function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", projectId = null, addRef, canEdit = true }) {
+  const de = appLanguage === "de";
+  const [rows, setRows] = useState(null);          // null = loading
+  const [cat, setCat] = useState("*");             // "*" = all
+  const [q, setQ] = useState("");
+  const [editing, setEditing] = useState(null);    // { id?, url, title, category, note }
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const load = async () => {
+    if (!userOrg?.id) { setRows([]); return; }
+    let sel = supabase.from("workspace_links").select("*").eq("org_id", userOrg.id);
+    sel = projectId ? sel.eq("project_id", projectId) : sel.is("project_id", null);
+    const { data } = await sel.order("created_at", { ascending: false });
+    setRows(data || []);
+  };
+  useEffect(() => { load(); }, [userOrg?.id, projectId]); // eslint-disable-line
+
+  const blank = { url: "", title: "", category: LINK_CATEGORY_SUGGESTIONS[0], note: "" };
+  useEffect(() => { if (addRef) addRef.current = () => { setErr(""); setEditing({ ...blank }); }; },
+    [addRef]); // eslint-disable-line
+
+  const save = async () => {
+    const url = (editing?.url || "").trim();
+    if (!url || busy) return;
+    setBusy(true); setErr("");
+    const payload = {
+      url, title: (editing.title || "").trim() || linkHost(url),
+      category: (editing.category || "").trim() || LINK_CATEGORY_SUGGESTIONS[0],
+      note: (editing.note || "").trim() || null,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = editing.id
+      ? await supabase.from("workspace_links").update(payload).eq("id", editing.id)
+      : await supabase.from("workspace_links").insert({
+          ...payload, org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id || null });
+    setBusy(false);
+    // planLimitError turns the trigger's own word into the sentence the rest of
+    // the app uses; showing "i7os_read_only" is showing somebody a symptom.
+    if (error) { setErr(planLimitError(error, de) || error.message); return; }
+    setEditing(null); load();
+  };
+  const remove = async (row) => {
+    setRows(list => (list || []).filter(r => r.id !== row.id));
+    await supabase.from("workspace_links").delete().eq("id", row.id);
+  };
+
+  const all = rows || [];
+  const cats = [...new Set([...LINK_CATEGORY_SUGGESTIONS, ...all.map(r => r.category).filter(Boolean)])];
+  const needle = q.trim().toLowerCase();
+  const shown = all.filter(r =>
+    (cat === "*" || r.category === cat) &&
+    (!needle || [r.title, r.url, r.note, r.category].some(v => (v || "").toLowerCase().includes(needle))));
+
+  const field = { width: "100%", boxSizing: "border-box", padding: "10px 13px", borderRadius: 11,
+    border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff",
+    color: theme.text, fontSize: 13.5, fontFamily: FONT, outline: "none" };
+
+  return (
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <div style={{ padding: "14px 26px 0", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, maxWidth: 340, display: "flex", alignItems: "center", gap: 7, padding: "0 12px", height: 34,
+          borderRadius: 10, border: `1px solid ${theme.borderFaint}` }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.9" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder={de ? "Suchen…" : "Search…"}
+            style={{ flex: 1, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }} />
+        </div>
+      </div>
+
+      <div style={{ padding: "12px 26px 0", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        {[{ key: "*", label: de ? "Alle" : "All" }, ...cats.map(c => ({ key: c, label: c }))].map(c => {
+          const on = cat === c.key;
+          const count = c.key === "*" ? all.length : all.filter(r => r.category === c.key).length;
+          return (
+            <motion.div key={c.key} whileTap={{ scale: 0.97 }} onClick={() => setCat(c.key)}
+              style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "6px 13px", borderRadius: 999, cursor: "pointer",
+                background: on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
+                border: `1px solid ${on ? "transparent" : theme.borderFaint}`,
+                color: on ? (darkMode ? "#15151c" : "#fff") : theme.textDim,
+                fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500 }}>
+              {c.label}
+              <span style={{ fontSize: 11, opacity: 0.7 }}>{count}</span>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
+        {rows == null ? (
+          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{t("common.loading") || "Lädt…"}</div>
+        ) : shown.length === 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", textAlign: "center", gap: 9, color: theme.textDim }}>
+            <div style={{ width: 52, height: 52, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.text, marginBottom: 4 }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+              </svg>
+            </div>
+            <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+              {all.length === 0 ? (de ? "Noch keine Links" : "No links yet") : (de ? "Nichts gefunden" : "Nothing found")}
+            </div>
+            <div style={{ fontSize: 13, fontFamily: FONT, lineHeight: 1.6, maxWidth: 380 }}>
+              {all.length === 0
+                ? (de ? "Sammle hier, was ihr sonst in Lesezeichen verliert: Skills, Tools, Referenzen."
+                      : "Keep what otherwise gets lost in bookmarks: skills, tools, references.")
+                : (de ? "Andere Kategorie oder anderer Suchbegriff." : "Try another category or another word.")}
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
+            {shown.map(r => (
+              <div key={r.id} className="hover-row"
+                style={{ position: "relative", borderRadius: 16, border: `1px solid ${theme.borderFaint}`,
+                  background: theme.cardBg, padding: 16, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
+                  {/* A letter, not a favicon: fetching one would tell a third
+                      party which sites this workspace keeps. */}
+                  <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                    background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", color: theme.text,
+                    fontSize: 15, fontFamily: FONT, fontWeight: 600 }}>
+                    {(r.title || linkHost(r.url) || "?").trim()[0]?.toUpperCase()}
+                  </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <a href={linkHref(r.url)} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text, textDecoration: "none",
+                        display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title || linkHost(r.url)}</a>
+                    <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{linkHost(r.url)}</div>
+                  </div>
+                </div>
+                {r.note && (
+                  <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5,
+                    display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{r.note}</div>
+                )}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: "auto" }}>
+                  <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, padding: "3px 9px", borderRadius: 999,
+                    background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>{r.category}</span>
+                  <div style={{ flex: 1 }} />
+                  {canEdit && (<>
+                    <motion.div whileTap={{ scale: 0.9 }} onClick={() => { setErr(""); setEditing({ ...r }); }}
+                      title={de ? "Bearbeiten" : "Edit"}
+                      style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                    </motion.div>
+                    <motion.div whileTap={{ scale: 0.9 }} onClick={() => remove(r)}
+                      title={de ? "Entfernen" : "Remove"}
+                      style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    </motion.div>
+                  </>)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {editing && createPortal(
+        <div onClick={() => setEditing(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width: "min(460px, 100%)", borderRadius: 20, padding: 24, display: "flex", flexDirection: "column", gap: 12,
+              background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}` }}>
+            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 2 }}>
+              {editing.id ? (de ? "Link bearbeiten" : "Edit link") : (de ? "Link hinzufügen" : "Add a link")}
+            </div>
+            <input autoFocus value={editing.url} onChange={e => setEditing(v => ({ ...v, url: e.target.value }))}
+              placeholder="https://…" style={field} />
+            <input value={editing.title} onChange={e => setEditing(v => ({ ...v, title: e.target.value }))}
+              placeholder={de ? "Titel (optional)" : "Title (optional)"} style={field} />
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {cats.map(c => (
+                <div key={c} onClick={() => setEditing(v => ({ ...v, category: c }))}
+                  style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12.5, fontFamily: FONT,
+                    background: editing.category === c ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
+                    color: editing.category === c ? (darkMode ? "#15151c" : "#fff") : theme.textDim,
+                    border: `1px solid ${editing.category === c ? "transparent" : theme.borderFaint}` }}>{c}</div>
+              ))}
+            </div>
+            <input value={editing.category} onChange={e => setEditing(v => ({ ...v, category: e.target.value }))}
+              placeholder={de ? "Eigene Kategorie" : "Own category"} style={field} />
+            <textarea value={editing.note || ""} onChange={e => setEditing(v => ({ ...v, note: e.target.value }))}
+              rows={3} placeholder={de ? "Notiz (optional)" : "Note (optional)"}
+              style={{ ...field, resize: "vertical", lineHeight: 1.55 }} />
+            {err && <div style={{ fontSize: 12, fontFamily: FONT, color: "#E86767", lineHeight: 1.5 }}>{err}</div>}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
+              <div style={{ flex: 1 }} />
+              <motion.div whileTap={{ scale: 0.97 }} onClick={() => setEditing(null)}
+                style={{ padding: "9px 16px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`,
+                  color: theme.textDim, fontSize: 12.5, fontFamily: FONT }}>{de ? "Abbrechen" : "Cancel"}</motion.div>
+              <motion.div whileTap={{ scale: 0.97 }} onClick={save}
+                style={{ padding: "9px 18px", borderRadius: 999, cursor: editing.url.trim() && !busy ? "pointer" : "default",
+                  opacity: editing.url.trim() && !busy ? 1 : 0.5,
+                  background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
+                  fontSize: 12.5, fontFamily: FONT, fontWeight: 600 }}>{de ? "Speichern" : "Save"}</motion.div>
+            </div>
+          </div>
+        </div>, document.body)}
+    </div>
+  );
+}
+
 function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "de", orgMembers, createNotification, deepLink, fullscreen, setFullscreen, createRef, uploadPdfRef, importRef, onImportingChange, skillsRef, newFolderRef, llmProvider, llmKeys, getProviderToken, ensureValidToken, autoReLogin, onOpenChange, projectId = null }) {
   // Component-level language flag. The three `const de` further down sit inside
   // nested functions, so anything at this level could not see them — which is
