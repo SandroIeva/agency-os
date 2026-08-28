@@ -39868,6 +39868,19 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
     { key: "colors", label: "Brand Colors" }, { key: "typography", label: appLanguage === "de" ? "Typografie" : "Typography" },
     { key: "imagery", label: appLanguage === "de" ? "Bildsprache" : "Imagery" }, { key: "personas", label: "Personas" },
   ];
+  // The brand's name. It is asked for once, in onboarding, and after that
+  // there was nowhere at all to change it: renaming the workspace leaves the
+  // brand called whatever it was called when it was set up, which is right
+  // (a brand is not its workspace) but not if there is no way to correct it.
+  // A project brand is named by its project and is renamed in the project
+  // dialog, so this only offers itself on the workspace's own brand.
+  const [nameEdit, setNameEdit] = useState(null);   // null = not renaming
+  const saveBrandName = async (raw) => {
+    const name = (raw || "").trim();
+    if (!name || !profile?.id || name === profile.name) return;
+    setProfile(pr => ({ ...pr, name }));
+    await supabase.from("brand_profile").update({ name, updated_at: new Date().toISOString() }).eq("id", profile.id);
+  };
   const [pubOpen, setPubOpen] = useState(false);
   const [pillarOpen, setPillarOpen] = useState(false); // project-brand: top-right pillar switcher
   const [projDocFullscreen, setProjDocFullscreen] = useState(false); // embedded Dateien: doc editor fullscreen
@@ -41723,7 +41736,28 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 <div style={{ width: 32, height: 32, borderRadius: 8, background: theme.accent + "22", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{((isProjectBrand ? (projectName || profile.name) : profile.name) || "?")[0]}</div>
               )}
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
-                <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{isProjectBrand ? (projectName || profile.name || "Brand") : profile.name}</span>
+                {(isProjectBrand || nameEdit === null) ? (
+                  <span
+                    onDoubleClick={isProjectBrand || !canEditBrand ? undefined : () => setNameEdit(profile.name || "")}
+                    title={isProjectBrand || !canEditBrand ? undefined : (appLanguage === "de" ? "Doppelklick zum Umbenennen" : "Double-click to rename")}
+                    style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                      cursor: isProjectBrand || !canEditBrand ? "default" : "text", padding: "1px 5px", marginLeft: -5, borderRadius: 6 }}>
+                    {isProjectBrand ? (projectName || profile.name || "Brand") : profile.name}
+                  </span>
+                ) : (
+                  <input autoFocus value={nameEdit}
+                    onChange={e => setNameEdit(e.target.value)}
+                    onFocus={e => e.target.select()}
+                    onBlur={() => { const v = nameEdit; setNameEdit(null); saveBrandName(v); }}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                      if (e.key === "Escape") { setNameEdit(null); e.currentTarget.blur(); }
+                    }}
+                    style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, minWidth: 0, maxWidth: 260,
+                      padding: "1px 5px", marginLeft: -5, borderRadius: 6,
+                      background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)",
+                      border: `1px solid ${theme.borderFaint}`, outline: "none" }} />
+                )}
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{BRAND_SUBVIEW_LABELS[brandTab] || ""}</span>
               </div>
               <div style={{ flex: 1 }} />
