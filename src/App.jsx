@@ -15990,7 +15990,9 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
           <motion.div whileTap={{ scale: 0.96 }} onClick={() => setSortMode(m => m === "updated" ? "name" : m === "name" ? "creator" : "updated")}
             style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, whiteSpace: "nowrap" }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
-            {sortMode === "name" ? "Name" : sortMode === "creator" ? "Ersteller" : "Zuletzt geändert"}
+            {sortMode === "name" ? "Name"
+            : sortMode === "creator" ? (appLanguage === "de" ? "Ersteller" : "Created by")
+            : (appLanguage === "de" ? "Zuletzt geändert" : "Last edited")}
           </motion.div>
         </motion.div>
 
@@ -32201,11 +32203,11 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
         // ── Flat view: all media together + toolbar (search · type filter · sort · view) ──
         <>
           {allFiles.length > 0 && (
-            <div style={{ padding: "16px 26px 4px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "none", maxWidth: 340 }}>
+            <div style={{ padding: "16px 26px 4px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minHeight: TAB_SEARCH_H + 20 }}>
+              <div style={tabSearchBox(theme, darkMode)}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder={appLanguage === "de" ? "Asset eingeben" : "Search assets"}
-                  style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }} />
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder={appLanguage === "de" ? "Medien suchen" : "Search media"}
+                  style={tabSearchInput(theme)} />
               </div>
               <div style={{ flex: 1 }} />
               {/* Type filter: Alle · Bilder · Videos */}
@@ -32220,8 +32222,8 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                 {sortMode === "name" ? "Name" : (appLanguage === "de" ? "Zuletzt hinzugefügt" : "Recently added")}
               </motion.div>
               <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
-                {viewBtn("grid", "Kachelansicht", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>)}
-                {viewBtn("list", "Listenansicht", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>)}
+                {viewBtn("grid", appLanguage === "de" ? "Kachelansicht" : "Grid view", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>)}
+                {viewBtn("list", appLanguage === "de" ? "Listenansicht" : "List view", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>)}
               </div>
             </div>
           )}
@@ -34402,6 +34404,20 @@ const DOC_SKILLS = [
 // "show me the tools", which is a filter. The chips are built from what is
 // actually saved, plus the three names most workspaces reach for first, so the
 // row is never empty and never a list of empty drawers.
+// The search box of a file-manager tab. Height and width are stated, not
+// inherited: the row's other controls are 36 tall, and a box that only fills
+// its padding sits two pixels higher in a row that has none of them.
+const TAB_SEARCH_H = 36;
+const tabSearchBox = (theme, darkMode) => ({
+  display: "flex", alignItems: "center", gap: 8, flexShrink: 1,
+  width: 340, maxWidth: "100%", height: TAB_SEARCH_H, boxSizing: "border-box", padding: "0 12px",
+  borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "none",
+});
+const tabSearchInput = (theme) => ({
+  flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
+  color: theme.text, fontSize: 13, fontFamily: FONT,
+});
+
 const LINK_CATEGORY_SUGGESTIONS = ["Skills", "Tools", "Inspiration"];
 // The bit of a url a person recognises. Fails soft: something that is not a url
 // yet is shown as typed rather than as an error.
@@ -34472,12 +34488,11 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       {/* The Media toolbar's search box, part for part. */}
-      <div style={{ padding: "16px 26px 4px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10,
-          background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "none", maxWidth: 340 }}>
+      <div style={{ padding: "16px 26px 4px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minHeight: TAB_SEARCH_H + 20 }}>
+        <div style={tabSearchBox(theme, darkMode)}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder={de ? "Link eingeben" : "Search links"}
-            style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }} />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder={de ? "Links suchen" : "Search links"}
+            style={tabSearchInput(theme)} />
         </div>
         <div style={{ flex: 1 }} />
       </div>
@@ -35379,21 +35394,23 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
       )}
       {/* Toolbar: search · sort · view toggle. The same row as Media's,
           down to the gap and the space under it. */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "none", maxWidth: 340 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap", minHeight: TAB_SEARCH_H }}>
+        <div style={tabSearchBox(theme, darkMode)}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Dokument eingeben"
-            style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={de ? "Dokumente suchen" : "Search documents"}
+            style={tabSearchInput(theme)} />
         </div>
         <div style={{ flex: 1 }} />
         <motion.div whileTap={{ scale: 0.96 }} onClick={() => setSortMode(m => m === "updated" ? "name" : m === "name" ? "creator" : "updated")}
           style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, whiteSpace: "nowrap" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
-          {sortMode === "name" ? "Name" : sortMode === "creator" ? "Ersteller" : "Zuletzt geändert"}
+          {sortMode === "name" ? "Name"
+            : sortMode === "creator" ? (de ? "Ersteller" : "Created by")
+            : (de ? "Zuletzt geändert" : "Last edited")}
         </motion.div>
         <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
-          {viewBtn("grid", "Kachelansicht", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>)}
-          {viewBtn("list", "Listenansicht", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>)}
+          {viewBtn("grid", appLanguage === "de" ? "Kachelansicht" : "Grid view", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>)}
+          {viewBtn("list", appLanguage === "de" ? "Listenansicht" : "List view", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>)}
         </div>
       </div>
 
