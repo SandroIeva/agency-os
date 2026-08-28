@@ -39875,6 +39875,27 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
   // A project brand is named by its project and is renamed in the project
   // dialog, so this only offers itself on the workspace's own brand.
   const [nameEdit, setNameEdit] = useState(null);   // null = not renaming
+  // The logo has the same story as the name: it is uploaded once, in the
+  // onboarding wizard, and that wizard is only reachable while there is no
+  // profile yet (isOnboarding = !profile || editMode, and nothing ever sets
+  // editMode). So the picture in the header could not be changed at all.
+  const headerLogoRef = useRef(null);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const replaceHeaderLogo = async (file) => {
+    if (!file || !profile?.id) return;
+    setLogoBusy(true);
+    try {
+      const r = await uploadFile(file, "logo-primary");
+      // "primary" is the slot the header reads, and logo_url is kept in step
+      // with it because half the app still reads that instead.
+      const logos = [...(profile.logos || []).filter(l => l.key !== "primary"),
+                     { key: "primary", label: "Primary", url: r.url, name: r.name, format: r.type || "" }];
+      setProfile(pr => ({ ...pr, logos, logo_url: r.url }));
+      await supabase.from("brand_profile")
+        .update({ logos, logo_url: r.url, updated_at: new Date().toISOString() }).eq("id", profile.id);
+    } catch (e) { console.error("[brand] logo replace failed", e); }
+    setLogoBusy(false);
+  };
   const saveBrandName = async (raw) => {
     const name = (raw || "").trim();
     if (!name || !profile?.id || name === profile.name) return;
@@ -41730,11 +41751,21 @@ If you don't know a field, infer a plausible value. Write all text values in the
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
                 </motion.div>
               )}
-              {(profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url) ? (
-                <img src={profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
-              ) : (
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: theme.accent + "22", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{((isProjectBrand ? (projectName || profile.name) : profile.name) || "?")[0]}</div>
-              )}
+              <>
+                <input ref={headerLogoRef} type="file" accept="image/*,image/svg+xml" style={{ display: "none" }}
+                  onChange={e => { replaceHeaderLogo(e.target.files?.[0]); e.target.value = ""; }} />
+                <div onClick={canEditBrand ? () => headerLogoRef.current?.click() : undefined}
+                  title={canEditBrand ? (appLanguage === "de" ? "Logo austauschen" : "Replace the logo") : undefined}
+                  style={{ position: "relative", width: 32, height: 32, flexShrink: 0,
+                    cursor: canEditBrand ? "pointer" : "default", opacity: logoBusy ? 0.5 : 1 }}>
+                  {(profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url) ? (
+                    <img src={profile.logos?.find(l => l.key === "primary")?.url || profile.logo_url} alt=""
+                      style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", display: "block" }} />
+                  ) : (
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", color: theme.text, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: FONT, fontWeight: 600 }}>{((isProjectBrand ? (projectName || profile.name) : profile.name) || "?")[0]}</div>
+                  )}
+                </div>
+              </>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
                 {(isProjectBrand || nameEdit === null) ? (
                   <span
