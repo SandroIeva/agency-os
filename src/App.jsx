@@ -19115,7 +19115,7 @@ const cvSame = (a, b) => cvStableStr(a) === cvStableStr(b);
 
 function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, userOrg,
                         theme, darkMode, appLanguage, onUpload, onDone, onAutoSave, onPublish, onClose,
-                        canvasRow = null, onRename = null }) {
+                        canvasRow = null, onRename = null, onSnapshot = null }) {
   const de = appLanguage === "de";
   // ── Sharing ────────────────────────────────────────────────────────────────
   // Only when the editor is standing on a saved canvas: the same editor is also
@@ -20114,7 +20114,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         return;
       }
       if (editing) return;
-      if (e.key === "Escape") { sel ? setSel(null) : onClose(); }
+      if (e.key === "Escape") { sel ? setSel(null) : leave(); }
       // Was guarded on `sel` alone, so a marquee or a group — which leave
       // several picked and no single selection — could not be deleted at all.
       if ((e.key === "Backspace" || e.key === "Delete") && (sel || pick.length)) deleteSel();
@@ -21631,6 +21631,40 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setBusy(""); setDoneMenu(false);
   };
 
+  // ── The picture the artboard leaves behind ────────────────────────────────
+  // Everything outside this editor wants an image of the artboard: the card in
+  // the list, and the post composer, which offers artboards as a visual. There
+  // was none, and the two columns meant to hold one (thumb_url, export_url)
+  // were empty on every row, because a canvas only ever became a picture here,
+  // in exportBlob, at the moment somebody asked for a download.
+  //
+  // So leaving writes one. At most 1440px wide as a JPEG: the frame itself can
+  // be 3508px, which nothing outside needs and a social post least of all. The
+  // path is fixed per artboard, so the file replaces itself instead of piling
+  // up, and the ledger upserts on (bucket, path) so the quota does not drift.
+  const shrink = async (blob, maxW) => {
+    const bmp = await createImageBitmap(blob);
+    if (bmp.width <= maxW) return blob;
+    const scale = maxW / bmp.width;
+    const cv = document.createElement("canvas");
+    cv.width = Math.round(bmp.width * scale);
+    cv.height = Math.round(bmp.height * scale);
+    const cx = cv.getContext("2d");
+    cx.imageSmoothingQuality = "high";
+    cx.drawImage(bmp, 0, 0, cv.width, cv.height);
+    return await new Promise(res => cv.toBlob(res, "image/jpeg", 0.9));
+  };
+  // Not awaited by the caller: closing must not wait for a render and an
+  // upload. The closure outlives the unmount, and nothing here sets state.
+  const snapshotOnExit = async () => {
+    if (!onSnapshot || !items.length) return;
+    try {
+      const small = await shrink(await exportBlob("image/jpeg"), 1440);
+      if (small) await onSnapshot(new File([small], "board.jpg", { type: "image/jpeg" }));
+    } catch (_) { /* a preview is a nicety; it must never hold the door shut */ }
+  };
+  const leave = () => { void snapshotOnExit(); onClose(); };
+
   // Publishing hands the finished image to the post composer rather than
   // rebuilding account picking, character limits and scheduling here.
   const publish = async () => {
@@ -22892,7 +22926,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 52, display: "flex",
         alignItems: "center", gap: 12, padding: "0 14px", background: panel,
         borderBottom: `1px solid ${line}` }}>
-        <motion.div whileTap={{ scale: 0.94 }} onClick={onClose} title={de ? "Schließen" : "Close"}
+        <motion.div whileTap={{ scale: 0.94 }} onClick={leave} title={de ? "Schließen" : "Close"}
           style={{ width: 32, height: 32, borderRadius: 9, cursor: "pointer", display: "flex",
             alignItems: "center", justifyContent: "center", color: theme.text }}>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -27469,8 +27503,44 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const imageFileRef = useRef(null);
   const [overlays, setOverlays] = useState([]);     // [{ id, text, x, y, size, color, bold }] — x/y/size relative to image
   const [selOverlay, setSelOverlay] = useState(null);
+  // Dictation for the caption, the same SpeechRecognition the notes and the
+  // person sheet use. Above the field and right-aligned, which is where every
+  // other one in the app sits, and it keeps the bottom-right corner free: the
+  // character count already lives there.
+  const [dictating, setDictating] = useState(false);
+  const dictRef = useRef(null);
+  useEffect(() => () => { try { dictRef.current?.stop(); } catch (_) {} }, []);
+  const toggleDictation = () => {
+    const SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (!SR) { setError(new Error(de ? "Spracherkennung wird in diesem Browser nicht unterstützt." : "Speech recognition is not supported in this browser.")); return; }
+    if (dictating) { try { dictRef.current?.stop(); } catch (_) {} return; }
+    const rec = new SR();
+    rec.lang = de ? "de-DE" : "en-US";
+    rec.continuous = true; rec.interimResults = true;
+    // base is what was already written; the interim result is appended to it
+    // rather than replacing it, or every pause would eat the sentence before.
+    let base = text; let needsSpace = base.length > 0 && !base.endsWith(" ");
+    rec.onresult = (event) => {
+      let working = base;
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const tr = event.results[i][0].transcript;
+        if (event.results[i].isFinal) { working += (needsSpace ? " " : "") + tr.trim(); base = working; needsSpace = true; }
+        else { working = base + (needsSpace ? " " : "") + tr; }
+        setText(working);
+      }
+    };
+    rec.onerror = (e) => { if (e.error !== "no-speech") console.error("[post dictation]", e.error); };
+    rec.onend = () => { setDictating(false); dictRef.current = null; };
+    rec.start(); dictRef.current = rec; setDictating(true);
+  };
   const [assetOpen, setAssetOpen] = useState(false);   // the shared asset browser
   const [assetBusy, setAssetBusy] = useState(false);
+  // Artboards (Creations → Artboards). An artboard is a document, not a
+  // picture, so what is offered here is the picture it leaves behind when its
+  // editor is closed. One that has never been opened since this existed has
+  // none yet, and says so rather than being silently missing.
+  const [boardsOpen, setBoardsOpen] = useState(false);
+  const [boards, setBoards] = useState(null);          // null = loading
   const [stageW, setStageW] = useState(0);
   const stageRef = useRef(null);
   const overlayDragRef = useRef(null);
@@ -27519,6 +27589,15 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     img.onload = () => setVisual({ url, w: img.naturalWidth, h: img.naturalHeight });
     img.src = url;
   }, [incomingVisual?.ts]);
+
+  useEffect(() => {
+    if (!boardsOpen || !orgId || boards) return;
+    supabase.from("brand_canvases")
+      .select("id, name, w, h, thumb_url, export_url, updated_at")
+      .eq("org_id", orgId).eq("is_template", false)
+      .order("updated_at", { ascending: false }).limit(60)
+      .then(({ data }) => setBoards(data || []));
+  }, [boardsOpen, orgId]); // eslint-disable-line
 
   const onPickImage = (e) => {
     const f = e.target.files?.[0];
@@ -27649,14 +27728,17 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     </div>
   );
   const label = { fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 10 };
-  const nextBtn = (labelText) => (
-    <motion.button whileTap={{ scale: 0.97 }} onClick={() => setStepIdx(i => Math.min(LAST, i + 1))}
-      style={{ marginTop: 22, padding: "11px 24px", borderRadius: 999, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer", alignSelf: "flex-start" }}>
-      {labelText || (de ? "Weiter" : "Next")}
-    </motion.button>
-  );
+  // Every footer button is this shape. Height is stated rather than left to
+  // padding and line box, which is how the draft button ended up looking a
+  // little shorter than the one beside it.
+  const footBtn = { height: 42, padding: "0 24px", borderRadius: 999, fontSize: 12.5, fontFamily: FONT,
+    fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
   const statusLabel = (s) => ({ published: de ? "Veröffentlicht" : "Published", scheduled: de ? "Geplant" : "Scheduled", draft: de ? "Entwurf" : "Draft", pending: de ? "In Arbeit" : "Pending", failed: de ? "Fehlgeschlagen" : "Failed" }[s] || s);
   const selectedOverlayObj = overlays.find(o => o.id === selOverlay) || null;
+  // Everything on the last step that only makes sense with an account behind
+  // it: the preview, the schedule, the two publish buttons, and the second
+  // column they live in.
+  const canPublish = stepIdx === LAST && (accounts || []).length > 0;
 
   // ── Live preview card (right column, constant across steps) ──
   const previewCard = (
@@ -27711,7 +27793,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
           <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim }}>Social Media Post</span>
         </div>
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 30 }}>
+        <div style={{ flex: 1, minHeight: 0, padding: 30, display: "flex", flexDirection: "column" }}>
           {error && (
             <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 12, background: "rgba(232,103,103,.08)", border: "1px solid rgba(232,103,103,.16)", color: "#E86767", fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>
               {zernioErrorText(error, de)}
@@ -27737,25 +27819,51 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
             })}
           </div>
 
-          {/* Grey box. Text and Visual get the whole width; the last step
-              splits it, because that is where a preview means something. */}
-          <div style={{ background: darkMode ? "rgba(255,255,255,0.03)" : "#f3f3f5", borderRadius: 22, padding: 30 }}>
-            <div style={{ display: "grid", gap: 30, alignItems: "start",
-              gridTemplateColumns: stepIdx === LAST ? "minmax(0, 1fr) minmax(0, 0.7fr)" : "minmax(0, 1fr)" }}>
-              <div style={{ display: "flex", flexDirection: "column" }}>
+          {/* Grey box. It fills what is left of the panel, so it is the same
+              height on every step and the buttons in its footer are always in
+              the same place. Text and Visual get the whole width; the last
+              step splits it, because that is where a preview means something. */}
+          <div style={{ flex: 1, minHeight: 0, background: darkMode ? "rgba(255,255,255,0.03)" : "#f3f3f5", borderRadius: 22,
+            padding: 30, display: "flex", flexDirection: "column" }}>
+            {/* stretch, not start: the step's column is meant to fill this
+                box so the caption field can grow into it. With alignItems
+                start the column stayed as tall as its content and the box
+                scrolled around a field that could have been taller. */}
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "grid", gap: 30, alignItems: "stretch",
+              gridTemplateColumns: canPublish ? "minmax(0, 1fr) minmax(0, 0.7fr)" : "minmax(0, 1fr)" }}>
+              <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
 
                 {/* ── 03 Kanäle, and publishing ── */}
                 {stepIdx === 2 && (<>
-                  {stepHead(de ? "Kanäle" : "Channels", de ? "Wohin soll der Post? Rechts siehst du, wie er ankommt." : "Where should this post go? On the right you see how it arrives.")}
+                  {(accounts || []).length > 0 && stepHead(de ? "Kanäle" : "Channels",
+                    de ? "Wohin soll der Post? Rechts siehst du, wie er ankommt." : "Where should this post go? On the right you see how it arrives.")}
                   {accounts == null ? (
                     <div style={{ color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{de ? "Lädt…" : "Loading…"}</div>
                   ) : accounts.length === 0 ? (
-                    <div style={{ padding: "22px 18px", borderRadius: 16, border: `1.5px dashed ${theme.borderFaint}`, textAlign: "center" }}>
-                      <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 4 }}>{de ? "Noch keine Accounts verbunden" : "No accounts connected yet"}</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 12 }}>{de ? "Verbinde deine Social-Media-Kanäle unter Audience → Analytics." : "Connect your social channels under Audience → Analytics."}</div>
+                    /* Nothing connected, so nothing else on this screen: no
+                       preview of a post that cannot be sent, no scheduling for
+                       it either. One thing to do, in the middle. */
+                    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: 10, padding: "20px 0" }}>
+                      <div style={{ width: 56, height: 56, borderRadius: 18, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.text, marginBottom: 4 }}>
+                        {/* Broadcast, not a chain link: the chain is the share
+                            link's glyph and means "a url", which is not what
+                            connecting a channel is. */}
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="2.2"/>
+                          <path d="M8.6 8.6a4.8 4.8 0 000 6.8M15.4 15.4a4.8 4.8 0 000-6.8"/>
+                          <path d="M5.8 5.8a8.8 8.8 0 000 12.4M18.2 18.2a8.8 8.8 0 000-12.4"/>
+                        </svg>
+                      </div>
+                      <div style={{ fontSize: 19, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.2 }}>
+                        {de ? "Noch kein Kanal verbunden" : "No channel connected yet"}
+                      </div>
+                      <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 420 }}>
+                        {de ? "Dein Text und dein Visual sind gespeichert. Verbinde einen Kanal, dann erscheinen hier die Accounts, der Zeitpunkt und die Vorschau."
+                            : "Your text and visual are kept. Connect a channel and the accounts, the timing and the preview appear here."}
+                      </div>
                       <motion.button whileTap={{ scale: 0.97 }} onClick={onOpenAudience}
-                        style={{ padding: "9px 18px", borderRadius: 999, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
-                        {de ? "Accounts verbinden" : "Connect accounts"}
+                        style={{ ...footBtn, marginTop: 15, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff" }}>
+                        {de ? "Kanal verbinden" : "Connect a channel"}
                       </motion.button>
                     </div>
                   ) : (<>
@@ -27783,10 +27891,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 
                 {/* ── 02 Visual — mini creator: image + draggable text overlays ── */}
                 {stepIdx === 1 && (<>
-                  {stepHead("Visual", de ? "Ein Bild hochladen oder eines aus den Assets nehmen. Text lässt sich direkt darauf platzieren, beim Posten wird beides als ein Bild gerendert." : "Upload an image or take one from Assets. Text can go right on it, and both are rendered as one image when you post.")}
+                  {stepHead("Visual", de ? "Woher kommt das Bild?" : "Where does the picture come from?")}
                   <input ref={fileRef} type="file" accept="image/*" onChange={onPickImage} style={{ display: "none" }} />
                   {!visual ? (
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
                       {[
                         { key: "upload", label: de ? "Bild hochladen" : "Upload image",
                           sub: de ? "PNG oder JPG von diesem Rechner" : "PNG or JPG from this machine",
@@ -27796,9 +27904,13 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           sub: de ? "Was in diesem Workspace schon liegt" : "What this workspace already has",
                           icon: <><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4l2 2.5h7A2.5 2.5 0 0 1 21 10v7a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17z"/></>,
                           onClick: () => setAssetOpen(true) },
+                        { key: "boards", label: "Artboards",
+                          sub: de ? "Was du in Creations gebaut hast" : "What you built in Creations",
+                          icon: <><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></>,
+                          onClick: () => setBoardsOpen(true) },
                       ].map(o => (
                         <motion.div key={o.key} whileHover={{ y: -2 }} whileTap={{ scale: 0.99 }} onClick={o.onClick}
-                          style={{ padding: "44px 22px", borderRadius: 18, border: `1.5px dashed ${theme.borderFaint}`, textAlign: "center", cursor: assetBusy ? "wait" : "pointer", opacity: assetBusy ? 0.6 : 1 }}>
+                          style={{ padding: "53px 22px", borderRadius: 18, border: `1.5px dashed ${theme.borderFaint}`, textAlign: "center", cursor: assetBusy ? "wait" : "pointer", opacity: assetBusy ? 0.6 : 1 }}>
                           <div style={{ width: 46, height: 46, borderRadius: 14, margin: "0 auto 12px", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.text }}>
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{o.icon}</svg>
                           </div>
@@ -27806,9 +27918,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 4 }}>{o.sub}</div>
                         </motion.div>
                       ))}
-                      <div style={{ gridColumn: "1 / -1", fontSize: 12, fontFamily: FONT, color: theme.textDim, textAlign: "center" }}>
-                        {de ? "Oder ohne Visual weiter, dann wird es ein reiner Textpost." : "Or continue without one, and it stays a text post."}
-                      </div>
                     </div>
                   ) : (<>
                     {/* Editor stage — overlays are draggable; click empty space deselects */}
@@ -27863,34 +27972,52 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       </div>
                     )}
                   </>)}
-                  {nextBtn()}
                 </>)}
 
                 {/* ── 01 Text ── */}
                 {stepIdx === 0 && (<>
                   {stepHead(de ? "Text" : "Text", de ? "Schreib, was du teilen willst. Die Kanäle kommen zum Schluss, dann steht auch das Zeichenlimit fest." : "Write what you want to share. Channels come last, and so does the character limit.")}
-                  <div style={{ position: "relative" }}>
+                  {/* The field takes the height that is there. It used to be a
+                      fixed 320 inside a box that fills the panel, which left
+                      the box scrolling around a half-empty field. */}
+                  <div style={{ position: "relative", flex: 1, minHeight: 220, display: "flex" }}>
                     <textarea value={text} onChange={e => setText(e.target.value)} autoFocus
                       placeholder={de ? "Was möchtest du teilen?" : "What do you want to share?"}
-                      style={{ width: "100%", minHeight: 320, boxSizing: "border-box", padding: "18px 20px 40px", borderRadius: 18,
+                      style={{ width: "100%", flex: 1, boxSizing: "border-box", padding: "18px 20px 40px", borderRadius: 18,
                         border: `1px solid ${overLimit ? "#E86767" : theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.6)",
-                        color: theme.text, fontSize: 15, fontFamily: FONT, lineHeight: 1.65, outline: "none", resize: "vertical", caretColor: theme.text }} />
-                    {/* Before a channel is chosen there is no limit to be over,
+                        color: theme.text, fontSize: 15, fontFamily: FONT, lineHeight: 1.65, outline: "none", resize: "none", caretColor: theme.text }} />
+                    <motion.div whileTap={{ scale: 0.96 }} onClick={toggleDictation}
+                      title={dictating ? (de ? "Diktat stoppen" : "Stop dictation") : (de ? "Diktieren" : "Dictate")}
+                      style={{ position: "absolute", left: 20, bottom: 17, display: "inline-flex", alignItems: "center", gap: 6,
+                        cursor: "pointer", fontSize: 11.5, fontFamily: FONT, fontWeight: 500, color: dictating ? "#EF4444" : theme.textFaint }}>
+                      {/* The glyph's own baseline sits low against 11.5px text,
+                          so it is lifted rather than the row being re-aligned. */}
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"
+                        style={{ position: "relative", top: -2 }}>
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                        <line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" />
+                      </svg>
+                      {dictating ? "Stopp" : (de ? "Diktieren" : "Dictate")}
+                    </motion.div>
+                    {/* Same distance from its own edge as the mic is from the
+                        left one, and the same size, so the two read as one line
+                        along the bottom of the field.
+
+                        Before a channel is chosen there is no limit to be over,
                         so the number is a count and says so, rather than
                         measuring against a 3000 nobody picked. */}
-                    <div style={{ position: "absolute", right: 18, bottom: 14, fontSize: 11.5, fontFamily: FONT, color: overLimit ? "#E86767" : theme.textFaint }}>
+                    <div style={{ position: "absolute", right: 20, bottom: 17, fontSize: 11.5, fontFamily: FONT, color: overLimit ? "#E86767" : theme.textFaint }}>
                       {selected.length
                         ? `${text.length} / ${charLimit}`
                         : `${text.length} ${de ? "Zeichen" : "characters"}`}
                     </div>
                   </div>
-                  {nextBtn()}
                 </>)}
 
                 {/* ── Publishing, on the same screen as the channels: they are
                        one decision, and splitting them made a step out of a
                        tick box. ── */}
-                {stepIdx === 2 && (<>
+                {canPublish && (<>
                   {/* Over the limit is only knowable once the channels are
                       chosen, which is here, so it is said here. */}
                   {overLimit && (
@@ -27912,16 +28039,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       {de ? "Geplant für" : "Scheduled for"} {new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(schedule))}
                     </div>
                   )}
-                  <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
-                    <motion.button whileTap={{ scale: 0.97 }} onClick={() => submit("post")} disabled={Boolean(busy)}
-                      style={{ padding: "11px 24px", borderRadius: 999, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 }}>
-                      {busy === "post" ? (de ? "Wird gesendet…" : "Sending…") : schedule ? (de ? "Planen" : "Schedule") : (de ? "Posten" : "Post")}
-                    </motion.button>
-                    <motion.button whileTap={{ scale: 0.97 }} onClick={() => submit("draft")} disabled={Boolean(busy)}
-                      style={{ padding: "11px 18px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text, fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1 }}>
-                      {busy === "draft" ? "…" : (de ? "Entwurf speichern" : "Save draft")}
-                    </motion.button>
-                  </div>
                   {result && (
                     <div style={{ marginTop: 18, borderRadius: 16, border: `1px solid ${theme.borderFaint}`, background: theme.cardBg, padding: 16 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: (result.platforms || []).length ? 10 : 0 }}>
@@ -27941,8 +28058,36 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                 </>)}
               </div>
 
-              {/* The preview, on the step that publishes */}
-              {stepIdx === LAST && previewCard}
+              {/* The preview, on the step that publishes, once there is
+                  somewhere to publish to */}
+              {canPublish && previewCard}
+            </div>
+
+            {/* One footer for all three steps. The buttons had been sitting
+                under whatever the step happened to end with, so they moved
+                as the content did. Left is the way out of the flow, right is
+                the way on, and both are the same height. */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, paddingTop: 22 }}>
+              {canPublish && (
+                <motion.button whileTap={{ scale: 0.97 }} onClick={() => submit("draft")} disabled={Boolean(busy)}
+                  style={{ ...footBtn, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text,
+                    cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1 }}>
+                  {busy === "draft" ? "…" : (de ? "Entwurf speichern" : "Save draft")}
+                </motion.button>
+              )}
+              <div style={{ flex: 1 }} />
+              {canPublish ? (
+                <motion.button whileTap={{ scale: 0.97 }} onClick={() => submit("post")} disabled={Boolean(busy)}
+                  style={{ ...footBtn, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
+                    cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 }}>
+                  {busy === "post" ? (de ? "Wird gesendet…" : "Sending…") : schedule ? (de ? "Planen" : "Schedule") : (de ? "Posten" : "Post")}
+                </motion.button>
+              ) : stepIdx < LAST ? (
+                <motion.button whileTap={{ scale: 0.97 }} onClick={() => setStepIdx(i => Math.min(LAST, i + 1))}
+                  style={{ ...footBtn, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff" }}>
+                  {de ? "Weiter" : "Next"}
+                </motion.button>
+              ) : null}
             </div>
           </div>
         </div>
@@ -27952,6 +28097,62 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
           a url; adoptAssetUrl turns that into the File the rest of this view
           already knows how to handle. Its own upload tab is answered with an
           object url for the same reason: one path in, one path out. */}
+      {/* Artboards, as a sheet of their own. The shared image browser lists
+          user_files, and an artboard is not one of those: it is a document
+          whose picture lives beside it. */}
+      {boardsOpen && createPortal(
+        <div onClick={() => setBoardsOpen(false)}
+          style={{ position: "fixed", inset: 0, zIndex: 100010, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 30 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width: "min(860px, 100%)", maxHeight: "80vh", overflowY: "auto", borderRadius: 22, padding: 26,
+              background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}` }}>
+            <div style={{ display: "flex", alignItems: "center", marginBottom: 18 }}>
+              <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Artboards</div>
+              <div style={{ flex: 1 }} />
+              <motion.div whileTap={{ scale: 0.92 }} onClick={() => setBoardsOpen(false)}
+                style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </motion.div>
+            </div>
+            {boards == null ? (
+              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Lädt…" : "Loading…"}</div>
+            ) : boards.length === 0 ? (
+              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+                {de ? "Noch keine Artboards. Unter Creations → Artboards entsteht das erste."
+                    : "No artboards yet. The first one is made under Creations → Artboards."}
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 }}>
+                {boards.map(b => {
+                  const pic = b.export_url || b.thumb_url || null;
+                  return (
+                    <motion.div key={b.id} whileHover={pic ? { y: -3 } : undefined} whileTap={pic ? { scale: 0.98 } : undefined}
+                      onClick={() => { if (pic) { setBoardsOpen(false); adoptAssetUrl(pic); } }}
+                      style={{ borderRadius: 16, overflow: "hidden", border: `1px solid ${theme.borderFaint}`,
+                        cursor: pic ? "pointer" : "default", opacity: pic ? 1 : 0.65, background: theme.cardBg }}>
+                      <div style={{ aspectRatio: "4/3", background: darkMode ? "#111117" : "#f3f3f5",
+                        backgroundImage: pic ? `url(${pic})` : "none", backgroundSize: "contain",
+                        backgroundPosition: "center", backgroundRepeat: "no-repeat" }} />
+                      <div style={{ padding: "10px 12px" }}>
+                        <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text,
+                          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name || "Artboard"}</div>
+                        <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                          {pic ? `${b.w} × ${b.h}` : (de ? "Einmal öffnen und schließen" : "Open and close it once")}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+            <div style={{ marginTop: 16, fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
+              {de ? "Ein Artboard bekommt sein Bild, sobald sein Editor einmal geschlossen wurde."
+                  : "An artboard gets its picture the first time its editor is closed."}
+            </div>
+          </div>
+        </div>, document.body)}
+
       {assetOpen && (
         <ImageInsertModal
           orgId={orgId} session={session} userOrg={userOrg} appLanguage={appLanguage}
@@ -28919,6 +29120,24 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
           brand={brand} orgId={userOrg?.id} session={session} userOrg={userOrg}
           theme={theme} darkMode={darkMode} appLanguage={appLanguage}
           onUpload={(file) => upload(file, "export")}
+          // The picture the editor leaves behind, on a path of its own per
+          // artboard so it replaces itself. The ledger upserts on
+          // (bucket, path), so a hundred edits are still one file's worth of
+          // quota. It fills the two columns that were empty on every row:
+          // the card in this list reads thumb_url, and the post composer
+          // offers artboards as a visual.
+          onSnapshot={async (file) => {
+            const path = `creations/${userOrg.id}/board-${editing.id}.jpg`;
+            const { error } = await uploadTracked({ bucket: "brand-assets", path, file,
+              orgId: userOrg.id, userId: session?.user?.id || null, contentType: "image/jpeg", upsert: true });
+            if (error) return;
+            // Cache-busted: the url never changes, so without this the browser
+            // would keep showing the first picture the artboard ever had.
+            const base = supabase.storage.from("brand-assets").getPublicUrl(path).data.publicUrl;
+            const url = `${base}?v=${Date.now()}`;
+            setRows(list => (list || []).map(r => r.id === editing.id ? { ...r, thumb_url: url, export_url: url } : r));
+            await supabase.from("brand_canvases").update({ thumb_url: url, export_url: url }).eq("id", editing.id);
+          }}
           onAutoSave={(docOut) => saveCanvas(editing, docOut)}
           onPublish={(file) => { setEditing(null); onPublish?.(file); }}
           onClose={() => setEditing(null)} />
