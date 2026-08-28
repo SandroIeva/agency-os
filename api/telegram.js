@@ -19,7 +19,7 @@ import { notifLines } from "../src/notificationText.js";
 // formatting below is Telegram's: HTML, and an inline_keyboard.
 import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
-  splitDraft, workspacesFor, projectsFor, createTask, DEFAULT_TYPES, typeWanted, attachedImage, linkify,
+  splitDraft, workspacesFor, projectsFor, createTask, DEFAULT_TYPES, typeWanted, attachedImage, linkify, createNote,
   draftStep, draftDone, PRIORITY_CODES, dueDateFor, timezoneOf,
   replyTarget, describeTask, addChecklist, commentOnTask,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
@@ -65,6 +65,8 @@ const T = {
     btnComment: "Kommentieren",
     askComment: (title) => `Kommentar zu ${title}? Antworte einfach auf diese Nachricht.`,
     commented: "Kommentar gespeichert.",
+    noteMade: "Notiz gespeichert.",
+    noteEmpty: "Schreib dazu, was du dir merken willst: /notiz Preise anheben",
     askChecklist: (title) => `Checkliste für ${title}? Eine Zeile pro Punkt, als Antwort auf diese Nachricht.`,
     listed: (n) => `${n} ${n === 1 ? "Punkt" : "Punkte"} hinzugefügt.`,
     askDescribe: (title) => `Beschreibung für ${title}? Antworte einfach auf diese Nachricht.`,
@@ -116,6 +118,8 @@ const T = {
     btnComment: "Comment",
     askComment: (title) => `A comment on ${title}? Just reply to this message.`,
     commented: "Comment saved.",
+    noteMade: "Note saved.",
+    noteEmpty: "Say what you want to remember: /note raise the prices",
     askChecklist: (title) => `A checklist for ${title}? One line per item, as a reply to this message.`,
     listed: (n) => `${n} ${n === 1 ? "item" : "items"} added.`,
     askDescribe: (title) => `A description for ${title}? Just reply to this message.`,
@@ -835,6 +839,20 @@ export default async function handler(req) {
     // of the person behind on our side either.
     await db.from("messenger_links").delete().eq("id", link.id);
     return reply(t.stopped);
+  }
+
+  // /notiz, or /note. A note needs no wizard: the RLS policies on notes are all
+  // "own notes", so there is nobody to ask about and nothing to choose. That is
+  // why this is a command and a task is a conversation.
+  if (text.startsWith("/notiz") || text.startsWith("/note")) {
+    if (!link?.user_id) return reply(t.notLinked);
+    const body = text.replace(/^\/(notiz|note)(@\S+)?\s*/i, "");
+    if (!body.trim()) return reply(t.noteEmpty);
+    const orgs = await workspacesFor(db, link.user_id);
+    const made = await createNote(db, { userId: link.user_id, orgId: orgs[0]?.id || null, content: body });
+    return reply(made.ok ? t.noteMade
+      : made.reason === "read_only" ? t.newReadOnly
+      : made.reason === "denied" ? t.newDenied : t.newFailed);
   }
 
   if (text.startsWith("/status")) {

@@ -21,7 +21,7 @@ import { notifLines } from "../src/notificationText.js";
 import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
   splitDraft, workspacesFor, projectsFor, createTask, describeTask, addChecklist, commentOnTask,
-  typeWanted, attachedImage, linkify,
+  typeWanted, attachedImage, linkify, createNote,
   nextQuestion, PRIORITY_CODES, dueDateFor, timezoneOf,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
@@ -70,6 +70,8 @@ const T = {
     newTask: "Neue Aufgabe",
     newNoWorkspace: "Du bist in keinem Workspace.",
     newEmpty: "Schreib dazu, was zu tun ist: /i7os Angebot schreiben",
+    noteMade: "Notiz gespeichert.",
+    noteEmpty: "Schreib dazu, was du dir merken willst: /i7os notiz Preise anheben",
     newMade: "Angelegt.",
     newDenied: "Auf diesen Workspace hast du keinen Zugriff.",
     newReadOnly: "Dieses Konto hat keinen aktiven Plan. Zum Anlegen wird einer gebraucht.",
@@ -115,6 +117,8 @@ const T = {
     newTask: "New task",
     newNoWorkspace: "You are not in any workspace.",
     newEmpty: "Say what needs doing: /i7os write the proposal",
+    noteMade: "Note saved.",
+    noteEmpty: "Say what you want to remember: /i7os note raise the prices",
     newMade: "Created.",
     newDenied: "You do not have access to that workspace.",
     newReadOnly: "This account has no active plan. Creating needs one.",
@@ -510,7 +514,23 @@ export default async function handler(req) {
       json({ response_type: "ephemeral", text, ...(blocks ? { blocks } : {}) });
     if (!link?.user_id) return ephemeral(t.notConnected);
 
-    const { title } = splitDraft(params.get("text") || "");
+    const said = params.get("text") || "";
+
+    // "notiz …" or "note …" as the first word. A subcommand rather than a
+    // second slash command, which would mean a new manifest, a new scope
+    // prompt, and every existing install having to approve it again.
+    const asNote = /^\s*(notiz|note)\b\s*/i.exec(said);
+    if (asNote) {
+      const body = said.slice(asNote[0].length);
+      if (!body.trim()) return ephemeral(t.noteEmpty);
+      const orgs = await workspacesFor(db, link.user_id);
+      const made = await createNote(db, { userId: link.user_id, orgId: orgs[0]?.id || null, content: body });
+      return ephemeral(made.ok ? t.noteMade
+        : made.reason === "read_only" ? t.newReadOnly
+        : made.reason === "denied" ? t.newDenied : t.newFailed);
+    }
+
+    const { title } = splitDraft(said);
     if (!title) return ephemeral(t.newEmpty);
 
     const orgs = await workspacesFor(db, link.user_id);

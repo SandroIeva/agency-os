@@ -486,3 +486,37 @@ export const linkify = (escaped, flavour) => String(escaped || "").replace(URL_I
   const linked = flavour === "slack" ? `<${url}>` : `<a href="${url}">${url}</a>`;
   return linked + trail;
 });
+
+// ── Notes ───────────────────────────────────────────────────────────────────
+// A note belongs to a PERSON, not to a workspace: the RLS policies on notes
+// are all "own notes", so there is nobody to ask about and nothing to choose.
+// That is the whole reason this needs no wizard while a task does.
+//
+// org_id is still set, because the app's note board filters by workspace and a
+// note without one would only ever show under "privat".
+// The board's own eight, from NOTE_COLORS in src/App.jsx. A colour that is not
+// in that map renders as nothing, and I got this list wrong on the first pass,
+// so a test now reads the app's and compares.
+export const NOTE_COLOURS = ["sand", "rose", "mint", "sky", "lavender", "peach", "sage", "stone"];
+
+export const createNote = async (db, { userId, orgId, content }) => {
+  const body = String(content || "").trim().slice(0, 8000);
+  if (!userId || !body) return { ok: false, reason: "incomplete" };
+  if (orgId) {
+    const { data: member } = await db.from("org_members").select("id")
+      .eq("org_id", orgId).eq("user_id", userId).maybeSingle();
+    if (!member) return { ok: false, reason: "denied" };
+    if (await orgIsReadOnly(db, orgId)) return { ok: false, reason: "read_only" };
+  }
+  const { data, error } = await db.from("notes").insert({
+    user_id: userId,
+    org_id: orgId || null,
+    content: body,
+    // The board picks a colour at random for a new note; a note arriving from a
+    // chat should not be the one that always looks the same.
+    color: NOTE_COLOURS[Math.floor(Math.random() * NOTE_COLOURS.length)],
+    pinned: false,
+  }).select("id").maybeSingle();
+  if (error) return { ok: false, reason: "failed" };
+  return { ok: true, note: data };
+};
