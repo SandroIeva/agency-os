@@ -30629,6 +30629,15 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     padding: "8px 14px", borderRadius: 999, fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
     border: `1px solid ${theme.borderFaint}`, color: theme.text, background: "transparent",
   };
+  // The primary button of a tab. The same one Creations draws, stated once so
+  // the two headers cannot drift apart again: they had #23232b against
+  // anthracite, 8px of padding against 9 and weight 500 against 600, which is
+  // what made the header jump between sections.
+  const primaryBtn = {
+    display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer",
+    padding: "9px 18px", borderRadius: 999, background: "#15151c", color: "#fff",
+    fontFamily: FONT, fontSize: 12.5, fontWeight: 600, border: "none",
+  };
 
   // ════════════════════════ ASSETS (tabbed: Moodboards / Creations / Inspirations) ════════════════════════
   if (!activeBoard) {
@@ -30646,19 +30655,15 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     ];
     const headerActions = (<>
             {tab === "moodboards" && (
-              <motion.div whileTap={{ scale: 0.96 }} onClick={() => setCreating(true)}
-                style={{ display: "inline-flex", alignItems: "center", gap: 7,
-                  padding: "9px 18px", borderRadius: 999, background: "#15151c", color: "#fff",
-                  fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+              <motion.div whileTap={{ scale: 0.96 }} onClick={() => setCreating(true)} style={primaryBtn}>
                 {appLanguage === "de" ? "Neu erstellen" : "Create new"}
               </motion.div>
             )}
             {tab === "creations" && (
               <div style={{ position: "relative" }}>
                 <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setAddMenuOpen(o => !o)}
-                  style={{ ...iconBtn, background: "#23232b", color: "#fff", border: "none", opacity: creationsUploading ? 0.6 : 1 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  {creationsUploading ? (t("common.loading") || "Lädt…") : (appLanguage === "de" ? "Hinzufügen" : "Add")}
+                  style={{ ...primaryBtn, opacity: creationsUploading ? 0.6 : 1 }}>
+                  {creationsUploading ? (t("common.loading") || "Lädt…") : (appLanguage === "de" ? "Neu erstellen" : "Create new")}
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 1, opacity: 0.8 }}><polyline points="6 9 12 15 18 9"/></svg>
                 </motion.div>
                 <AnimatePresence>
@@ -30712,18 +30717,15 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
               </div>
             )}
             {tab === "links" && (
-              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => linksAdd.current?.()}
-                style={{ ...iconBtn, background: "#23232b", color: "#fff", border: "none" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                {appLanguage === "de" ? "Link hinzufügen" : "Add a link"}
+              <motion.div whileTap={{ scale: 0.96 }} onClick={() => linksAdd.current?.()} style={primaryBtn}>
+                {appLanguage === "de" ? "Neu erstellen" : "Create new"}
               </motion.div>
             )}
             {tab === "docs" && (
               <div style={{ position: "relative" }}>
                 <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setDocsAddOpen(o => !o)}
-                  style={{ ...iconBtn, background: "#23232b", color: "#fff", border: "none", opacity: docsImporting ? 0.6 : 1 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  {docsImporting ? (appLanguage === "de" ? "Importiert…" : "Importing…") : (appLanguage === "de" ? "Hinzufügen" : "Add")}
+                  style={{ ...primaryBtn, opacity: docsImporting ? 0.6 : 1 }}>
+                  {docsImporting ? (appLanguage === "de" ? "Importiert…" : "Importing…") : (appLanguage === "de" ? "Neu erstellen" : "Create new")}
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 1, opacity: 0.8 }}><polyline points="6 9 12 15 18 9"/></svg>
                 </motion.div>
                 <AnimatePresence>
