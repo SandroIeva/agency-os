@@ -32,7 +32,8 @@
       "bot": [
         "chat:write",
         "im:write",
-        "commands"
+        "commands",
+        "files:read"
       ]
     }
   },
@@ -43,6 +44,12 @@
     },
     "org_deploy_enabled": false,
     "socket_mode_enabled": false,
-    "token_rotation_enabled": false
+    "token_rotation_enabled": false,
+    "event_subscriptions": {
+      "request_url": "https://app.i7os.com/api/slack",
+      "bot_events": [
+        "file_shared"
+      ]
+    }
   }
 }

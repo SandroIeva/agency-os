@@ -21,7 +21,7 @@ import { notifLines } from "../src/notificationText.js";
 import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
   splitDraft, workspacesFor, projectsFor, createTask, describeTask, addChecklist, commentOnTask,
-  typeWanted, attachedImage, linkify, createNote,
+  typeWanted, attachedImage, linkify, createNote, addAssetFile, humanSize,
   nextQuestion, PRIORITY_CODES, dueDateFor, timezoneOf,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
@@ -39,7 +39,10 @@ const json = (obj, status = 200) =>
 // commands is what a slash command needs. Reading direct messages instead
 // would mean im:history, and an app that asks to read every DM sent to it is
 // an app a Slack admin declines.
-const SCOPES = "chat:write,im:write,commands";
+// files:read is the narrowest way to receive a picture at all. The alternative
+// is im:history, which asks to read every direct message sent to the app, and
+// that is the permission a Slack admin declines.
+const SCOPES = "chat:write,im:write,commands,files:read";
 
 const T = {
   de: {
@@ -74,6 +77,11 @@ const T = {
     noteEmpty: "Schreib dazu, was du dir merken willst: /i7os notiz Preise anheben",
     noteTitle: "Neue Notiz",
     notePrivate: "Privat",
+    fileAsk: "Wohin in den Assets?",
+    filePrivate: "Ohne Projekt",
+    fileSaved: (name, size) => `${name} liegt in den Assets (${size}).`,
+    fileNoRoom: (used, limit) => `Der Speicher ist voll (${used} von ${limit}).`,
+    fileGone: "Diese Datei ist weg. Schick sie noch einmal.",
     newMade: "Angelegt.",
     newDenied: "Auf diesen Workspace hast du keinen Zugriff.",
     newReadOnly: "Dieses Konto hat keinen aktiven Plan. Zum Anlegen wird einer gebraucht.",
@@ -123,6 +131,11 @@ const T = {
     noteEmpty: "Say what you want to remember: /i7os note raise the prices",
     noteTitle: "New note",
     notePrivate: "Private",
+    fileAsk: "Where in Assets?",
+    filePrivate: "No project",
+    fileSaved: (name, size) => `${name} is in Assets (${size}).`,
+    fileNoRoom: (used, limit) => `Storage is full (${used} of ${limit}).`,
+    fileGone: "That file is gone. Send it again.",
     newMade: "Created.",
     newDenied: "You do not have access to that workspace.",
     newReadOnly: "This account has no active plan. Creating needs one.",
@@ -501,6 +514,51 @@ export default async function handler(req) {
     req.headers.get("x-slack-signature"), req.headers.get("x-slack-request-timestamp"), raw);
   if (!okSig) return json({ error: "Unauthorized" }, 401);
 
+  // ── Slack's Events API ────────────────────────────────────────────────────
+  // Events arrive as JSON, not as a form, so they are recognised before the
+  // form parsing below. Slack expects an answer within three seconds and
+  // retries anything else, so this acknowledges first and works after.
+  if (raw.startsWith("{")) {
+    let evt; try { evt = JSON.parse(raw); } catch { evt = null; }
+    if (evt?.type === "url_verification") return new Response(evt.challenge, { status: 200 });
+    if (evt?.type === "event_callback" && evt.event?.type === "file_shared") {
+      const teamId = evt.team_id;
+      const { data: link } = await db.from("messenger_links")
+        .select("user_id, lang, chat_id").eq("provider", "slack")
+        .eq("slack_team_id", teamId).eq("slack_user_id", evt.event.user_id).maybeSingle();
+      const { data: inst } = await db.from("slack_installations")
+        .select("bot_token").eq("team_id", teamId).maybeSingle();
+      if (!link?.user_id || !inst?.bot_token) return json({ ok: true });
+      const t = T[link.lang === "en" ? "en" : "de"];
+
+      const info = await slack(inst.bot_token, "files.info", { file: evt.event.file_id });
+      const f = info?.ok ? info.file : null;
+      // Only pictures. Everything else is a link in Slack already and would be
+      // a silent, quota-consuming surprise in Assets.
+      if (!f || !/^image\//i.test(f.mimetype || "")) return json({ ok: true });
+
+      const orgs = await workspacesFor(db, link.user_id);
+      if (!orgs.length) return json({ ok: true });
+      const one = orgs.length === 1;
+      const projects = one ? await projectsFor(db, link.user_id, orgs[0].id) : [];
+      const st = { f: f.id, n: f.name || "bild", ...(one ? { o: orgs[0].id.slice(0, ID_HINT) } : {}) };
+      const options = one
+        ? [{ key: "p", label: t.filePrivate, set: { p: "-" } },
+           ...projects.map(pr => ({ key: "p", label: pr.name, set: { p: pr.id.slice(0, ID_HINT) } }))]
+        : orgs.map(o => ({ key: "o", label: o.name, set: { o: o.id.slice(0, ID_HINT) } }));
+      // The question goes to the person's own chat with the bot, because that
+      // is where a file they sent it belongs.
+      const blocks = draftBlocks(t, { t: f.name || "", ...st, chosen: one ? orgs[0].name : "" }, t.fileAsk, options)
+        .map(b => (b.type === "actions"
+          ? { ...b, elements: b.elements.map(e => ({ ...e, action_id: e.action_id.replace("draft_", "asset_") })) }
+          : b));
+      await slack(inst.bot_token, "chat.postMessage",
+        { channel: link.chat_id, text: t.fileAsk, blocks });
+      return json({ ok: true });
+    }
+    return json({ ok: true });
+  }
+
   const params = new URLSearchParams(raw);
 
   // ── /i7os <what needs doing> ──────────────────────────────────────────────
@@ -647,6 +705,52 @@ export default async function handler(req) {
   // channel the way a second message would.
   const say = (msg) => slack(inst.bot_token, "chat.postEphemeral", { channel, user: slackUserId, text: msg })
     .then(() => json({ ok: true }));
+
+  // ── Where a picture should go in Assets ───────────────────────────────────
+  if (action.action_id.startsWith("asset_")) {
+    let st; try { st = JSON.parse(action.value); } catch { return json({ ok: true }); }
+    const replace = (text, blocks) => fetch(p.response_url, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ replace_original: true, text, ...(blocks ? { blocks } : {}) }),
+    }).then(() => json({ ok: true }));
+
+    const orgs = await workspacesFor(db, link.user_id);
+    const org = resolveHint(orgs, st.o);
+    if (!org) return replace(t.newDenied);
+    const projects = await projectsFor(db, link.user_id, org.id);
+
+    if (st.p === undefined) {
+      const blocks = draftBlocks(t, { ...st, chosen: org.name }, t.fileAsk, [
+        { key: "p", label: t.filePrivate, set: { p: "-" } },
+        ...projects.map(pr => ({ key: "p", label: pr.name, set: { p: pr.id.slice(0, ID_HINT) } })),
+      ]).map(b => (b.type === "actions"
+        ? { ...b, elements: b.elements.map(e => ({ ...e, action_id: e.action_id.replace("draft_", "asset_") })) }
+        : b));
+      return replace(t.fileAsk, blocks);
+    }
+
+    const project = st.p !== "-" ? resolveHint(projects, st.p) : null;
+    const info = await slack(inst.bot_token, "files.info", { file: st.f });
+    const url = info?.ok ? info.file?.url_private_download || info.file?.url_private : null;
+    if (!url) return replace(t.fileGone);
+    // A private Slack url needs the bot token as a bearer, which is the whole
+    // reason files:read had to be asked for.
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${inst.bot_token}` } });
+    if (!res.ok) return replace(t.fileGone);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+
+    const saved = await addAssetFile(db, {
+      userId: link.user_id, orgId: org.id, projectId: project?.id || null,
+      name: st.n, contentType: info.file?.mimetype || "image/jpeg", bytes,
+    });
+    if (!saved.ok) {
+      return replace(saved.reason === "read_only" ? t.newReadOnly
+        : saved.reason === "denied" ? t.newDenied
+        : saved.reason === "no_room" ? t.fileNoRoom(humanSize(saved.room.used), humanSize(saved.room.limit))
+        : t.newFailed);
+    }
+    return replace(`${headLine(org.name, project?.name || t.filePrivate)} — ${t.fileSaved(saved.file?.name || st.n, humanSize(saved.size))}`);
+  }
 
   // ── A step of the new-task wizard ─────────────────────────────────────────
   if (action.action_id.startsWith("draft_")) {
