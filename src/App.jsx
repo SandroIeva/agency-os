@@ -37090,7 +37090,7 @@ function BrandValues({ value, onChange, theme, darkMode, editing, onEditingChang
         <div style={{ width: "100%", maxWidth: 760, borderRadius: 20, background: panelBg, padding: 20, textAlign: "left", boxSizing: "border-box" }}>
           {/* Chips + input + action — equal height via align-items: stretch */}
           <div style={{ display: "flex", gap: 10, alignItems: "stretch" }}>
-            <div style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", minHeight: 48, padding: "8px 12px", borderRadius: 13, background: fieldBg, border: `1px solid ${theme.borderFaint}`, boxSizing: "border-box" }}>
+            <div style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", minHeight: 44, padding: "6px 12px", borderRadius: 13, background: fieldBg, border: `1px solid ${theme.borderFaint}`, boxSizing: "border-box" }}>
               {picked.map(name => (
                 <span key={name} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 6px 5px 11px", borderRadius: 8,
                   background: darkMode ? "rgba(244,244,247,0.95)" : "#15151c", color: darkMode ? "#15151c" : "#fff",
@@ -37127,9 +37127,9 @@ function BrandValues({ value, onChange, theme, darkMode, editing, onEditingChang
               return (
                 <div key={name} onClick={() => sel ? removeValue(name) : addValue(name)}
                   style={{ breakInside: "avoid", padding: "4px 0", fontSize: 14, fontFamily: FONT, lineHeight: 1.5,
-                    color: sel ? (darkMode ? "#fff" : "#15151c") : (disabled ? theme.textDim : theme.text),
+                    color: sel ? (darkMode ? "#fff" : "#15151c") : (disabled ? theme.textSub : theme.text),
                     fontWeight: sel ? 700 : 400,
-                    cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.5 : 1 }}>
+                    cursor: disabled ? "default" : "pointer" }}>
                   {name}
                 </div>
               );
@@ -39418,20 +39418,26 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
             initial={{ scale: 1.06 }} animate={{ scale: 1 }} exit={{ scale: 1.04 }}
             transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
             style={{ position: "relative", width: `min(${panelW}px, 94vw)`, borderRadius: 24, padding: 34,
-              background: "rgba(255,255,255,0.25)", backdropFilter: "blur(30px) saturate(1.4)", WebkitBackdropFilter: "blur(30px) saturate(1.4)",
-              boxShadow: "0 24px 70px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)",
-              border: "1px solid rgba(255,255,255,0.45)", isolation: "isolate", willChange: "transform", WebkitBackfaceVisibility: "hidden" }}>
+              background: darkMode ? "rgba(24,24,32,0.82)" : "rgba(255,255,255,0.25)",
+              backdropFilter: "blur(30px) saturate(1.4)", WebkitBackdropFilter: "blur(30px) saturate(1.4)",
+              boxShadow: darkMode
+                ? "0 24px 70px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06), inset 0 1px 0 rgba(255,255,255,0.08)"
+                : "0 24px 70px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)",
+              border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.45)"}`,
+              isolation: "isolate", willChange: "transform", WebkitBackfaceVisibility: "hidden" }}>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.32, ease: "easeOut", delay: 0.04 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 30 }}>
-                <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, letterSpacing: -0.2, color: "#1c1c24" }}>{title}</div>
-                <div onClick={onClose} className="ov-close ov-close-light" style={{ width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: "1px solid rgba(255,255,255,0.25)" }}>
+                <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, letterSpacing: -0.2, color: darkMode ? theme.text : "#1c1c24" }}>{title}</div>
+                <div onClick={onClose} className={"ov-close " + (darkMode ? "ov-close-dark" : "ov-close-light")}
+                  style={{ width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.25)"}` }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </div>
               </div>
               {body}
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 32 }}>
                 <motion.div whileTap={{ scale: 0.97 }} onClick={onConfirm}
-                  style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "11px 26px", borderRadius: 12, cursor: "pointer", background: "#15151c", color: "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 500 }}>
+                  style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "11px 26px", borderRadius: 12, cursor: "pointer",
+                    background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontSize: 13.5, fontFamily: FONT, fontWeight: 500 }}>
                   {de ? "Bestätigen" : "Confirm"}
                 </motion.div>
               </div>
@@ -39595,7 +39601,12 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
         onFocus={() => setStoryFocus(true)} onBlur={() => setStoryFocus(false)}
         placeholder={de ? "Erzähl die Story deines Brand-Avatars…" : "Tell your brand avatar's story…"}
         style={{ ...inputStyle, width: "100%", fontSize: 14, lineHeight: 1.6, resize: "vertical", minHeight: 220, outline: "none",
-          background: storyFocus ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.28)", border: `1px solid ${storyFocus ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.4)"}`,
+          background: darkMode
+            ? (storyFocus ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.06)")
+            : (storyFocus ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.28)"),
+          border: `1px solid ${darkMode
+            ? (storyFocus ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.14)")
+            : (storyFocus ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.4)")}`,
           transition: "background 0.5s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.5s cubic-bezier(0.22, 1, 0.36, 1)" }} />
     </div>,
     () => { update({ story: storyDraft }); setStoryOpen(false); }, 560);
