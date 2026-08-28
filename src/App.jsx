@@ -45081,7 +45081,9 @@ export default function CircularMenu() {
     return t("greet.night");
   };
   const [voiceMode, setVoiceMode] = useState(false);
-  // The corner orb's exit. Set on click, cleared once the voice UI has it.
+  // The corner orb's exit. Set on click and held until the voice UI closes:
+  // clearing it any earlier put the orb back in the corner while its big
+  // self was on screen, which is one ball in two places.
   const [orbLeaving, setOrbLeaving] = useState(false);
   const [aiSpeaking, setAiSpeaking] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -45548,6 +45550,10 @@ export default function CircularMenu() {
       return word;
     });
   };
+
+  // The corner is empty for as long as the voice UI is; when that closes the
+  // orb rises back into it.
+  useEffect(() => { if (!voiceMode) setOrbLeaving(false); }, [voiceMode]);
 
   const startVoice = () => {
     setMenuOpen(false);
@@ -51237,8 +51243,8 @@ export default function CircularMenu() {
               over. 380ms is the animation's own 420 less the overlap that
               keeps it from reading as two separate events. */}
           <div style={{ cursor: "pointer" }}
-            onClick={() => { setOrbLeaving(true); setTimeout(() => { setOrbLeaving(false); startVoice(); }, 380); }}>
-            <LiquidOrb size={64} leaving={orbLeaving} fallback={<AISphere darkMode={darkMode} />} />
+            onClick={() => { setOrbLeaving(true); setTimeout(startVoice, 380); }}>
+            <LiquidOrb size={64} leaving={orbLeaving || voiceMode} fallback={<AISphere darkMode={darkMode} />} />
           </div>
         </div>
       </div>
