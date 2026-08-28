@@ -321,7 +321,10 @@ export const replyTarget = (replied) => {
   const entities = replied?.entities || replied?.caption_entities || [];
   for (const e of entities) {
     const m = e?.url && TASK_LINK_RE.exec(e.url);
-    if (m) return { taskId: m[1], checklist: /[?&]list=1/.test(e.url) };
+    if (!m) continue;
+    const kind = /[?&]list=1/.test(e.url) ? "checklist"
+      : /[?&]note=1/.test(e.url) ? "comment" : "description";
+    return { taskId: m[1], kind, checklist: kind === "checklist" };
   }
   return null;
 };
@@ -384,4 +387,41 @@ export const addChecklist = async (db, userId, taskId, text) => {
     items.map((t, i) => ({ task_id: taskId, text: t, checked: false, position: from + i })));
   if (error) return { ok: false, reason: "failed" };
   return { ok: true, added: items.length };
+};
+
+// ── Comments ────────────────────────────────────────────────────────────────
+// Who may: any member who may touch the task. That is what the RLS policy on
+// task_comments says ("Org members can insert task comments"), and a bot that
+// is stricter than the app it speaks for would be its own kind of bug.
+//
+// Who hears about it: everybody involved except whoever wrote it, which means
+// the assignee AND the person who asked for the task. The app notifies only the
+// assignee today, so a creator who delegated something never heard back on it.
+export const commentOnTask = async (db, userId, taskId, text) => {
+  const body = String(text || "").trim().slice(0, 4000);
+  if (!body) return { ok: false, reason: "incomplete" };
+  const { data: task } = await db.from("tasks")
+    .select("id, title, org_id, project_id, creator_id, assignee_id").eq("id", taskId).maybeSingle();
+  if (!task) return { ok: false, reason: "gone" };
+  if (!(await mayTouchTask(db, userId, task))) return { ok: false, reason: "denied" };
+  if (await orgIsReadOnly(db, task.org_id)) return { ok: false, reason: "read_only" };
+
+  const { data: comment, error } = await db.from("task_comments")
+    .insert({ task_id: taskId, user_id: userId, text: body })
+    .select("id").maybeSingle();
+  if (error) return { ok: false, reason: "failed" };
+
+  const actor = await displayName(db, userId);
+  const tell = [...new Set([task.assignee_id, task.creator_id])].filter(id => id && id !== userId);
+  for (const uid of tell) {
+    await db.from("notifications").insert({
+      user_id: uid,
+      org_id: task.org_id,
+      type: "comment_added",
+      title: "Neuer Kommentar",
+      body: `${actor} hat "${task.title || ""}" kommentiert`,
+      metadata: { task_id: taskId, comment_id: comment?.id, actor, subject: task.title || "" },
+    });
+  }
+  return { ok: true, told: tell.length };
 };

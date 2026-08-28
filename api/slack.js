@@ -20,7 +20,7 @@ import { createClient } from "@supabase/supabase-js";
 import { notifLines } from "../src/notificationText.js";
 import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
-  splitDraft, workspacesFor, projectsFor, createTask, describeTask, addChecklist,
+  splitDraft, workspacesFor, projectsFor, createTask, describeTask, addChecklist, commentOnTask,
   nextQuestion, PRIORITY_CODES, dueDateFor, timezoneOf,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
@@ -81,6 +81,9 @@ const T = {
     describeTitle: "Beschreibung",
     describeLabel: "Was ist zu tun?",
     checklistLabel: "Checkliste, eine Zeile pro Punkt",
+    btnComment: "Kommentieren",
+    commentTitle: "Kommentar",
+    commentLabel: "Dein Kommentar",
     described: "Beschreibung gespeichert.",
   },
   en: {
@@ -123,6 +126,9 @@ const T = {
     describeTitle: "Description",
     describeLabel: "What needs doing?",
     checklistLabel: "Checklist, one line per item",
+    btnComment: "Comment",
+    commentTitle: "Comment",
+    commentLabel: "Your comment",
     described: "Description saved.",
   },
 };
@@ -205,6 +211,11 @@ const buildBlocks = async (db, workspace, n, lang, appUrl, taskId, footer) => {
       ...(taskId ? [{
         type: "button", action_id: "hand_over",
         text: { type: "plain_text", text: t.btnPass }, value: `${n.id}`,
+      }, {
+        // Addresses the TASK, not the notification, which for a real
+        // notification are two different ids.
+        type: "button", action_id: "comment",
+        text: { type: "plain_text", text: t.btnComment }, value: taskId,
       }] : []),
       { type: "button", action_id: "open_app", url: deepLink(appUrl, n), text: { type: "plain_text", text: t.open } },
     ],
@@ -552,6 +563,12 @@ export default async function handler(req) {
     }
 
     const taskId = p.view?.private_metadata;
+    if (p.view?.callback_id === "comment_task") {
+      const said = await commentOnTask(db, mlink.user_id, taskId, fieldOf("n"));
+      return said.ok ? new Response("", { status: 200 })
+        : fail(said.reason === "read_only" ? mt.newReadOnly
+          : said.reason === "denied" ? mt.newDenied : mt.newFailed);
+    }
     const done = typed
       ? await describeTask(db, mlink.user_id, taskId, typed)
       : { ok: true };
@@ -667,6 +684,23 @@ export default async function handler(req) {
   }
 
   // ── The description button on a created task ──────────────────────────────
+  if (action.action_id === "comment") {
+    await slack(inst.bot_token, "views.open", {
+      trigger_id: p.trigger_id,
+      view: {
+        type: "modal", callback_id: "comment_task", private_metadata: action.value,
+        title: { type: "plain_text", text: t.commentTitle.slice(0, 24) },
+        submit: { type: "plain_text", text: "OK" },
+        blocks: [{
+          type: "input", block_id: "n",
+          label: { type: "plain_text", text: t.commentLabel.slice(0, 2000) },
+          element: { type: "plain_text_input", action_id: "v", multiline: true },
+        }],
+      },
+    });
+    return json({ ok: true });
+  }
+
   if (action.action_id === "describe") {
     await slack(inst.bot_token, "views.open", {
       trigger_id: p.trigger_id,

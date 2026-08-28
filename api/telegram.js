@@ -21,7 +21,7 @@ import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
   splitDraft, workspacesFor, projectsFor, createTask,
   draftStep, draftDone, PRIORITY_CODES, dueDateFor, timezoneOf,
-  replyTarget, describeTask, addChecklist,
+  replyTarget, describeTask, addChecklist, commentOnTask,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
 } from "../server/messenger.js";
@@ -77,6 +77,9 @@ const T = {
     forMe: "Für mich",
     btnDescribe: "Beschreibung hinzufügen",
     btnChecklist: "Checkliste hinzufügen",
+    btnComment: "Kommentieren",
+    askComment: (title) => `Kommentar zu ${title}? Antworte einfach auf diese Nachricht.`,
+    commented: "Kommentar gespeichert.",
     askChecklist: (title) => `Checkliste für ${title}? Eine Zeile pro Punkt, als Antwort auf diese Nachricht.`,
     listed: (n) => `${n} ${n === 1 ? "Punkt" : "Punkte"} hinzugefügt.`,
     askDescribe: (title) => `Beschreibung für ${title}? Antworte einfach auf diese Nachricht.`,
@@ -125,6 +128,9 @@ const T = {
     forMe: "For me",
     btnDescribe: "Add a description",
     btnChecklist: "Add a checklist",
+    btnComment: "Comment",
+    askComment: (title) => `A comment on ${title}? Just reply to this message.`,
+    commented: "Comment saved.",
     askChecklist: (title) => `A checklist for ${title}? One line per item, as a reply to this message.`,
     listed: (n) => `${n} ${n === 1 ? "item" : "items"} added.`,
     askDescribe: (title) => `A description for ${title}? Just reply to this message.`,
@@ -229,7 +235,10 @@ const orgName = async (db, orgId) => {
 const taskKeyboard = (t, appUrl, n, hasTask) => [
   ...(hasTask ? [
     MOVE_COLUMNS.map(key => ({ text: COLUMN_LABELS[t.lang][key], callback_data: `c:${n.id}:${key}` })),
-    [{ text: t.btnPass, callback_data: `f:${n.id}` }],
+    // Commenting addresses the TASK, not the notification, so it carries the
+    // task id rather than n.id, which for a real notification are different.
+    [{ text: t.btnPass, callback_data: `f:${n.id}` },
+     ...(n.metadata?.task_id ? [{ text: t.btnComment, callback_data: `z:${n.metadata.task_id}` }] : [])],
   ] : []),
   [{ text: t.open, url: deepLink(appUrl, n) }],
 ];
@@ -531,7 +540,7 @@ export default async function handler(req) {
     // n and w belong to a NEW task and carry a workspace id where the others
     // carry a notification id, so they are handled before anything tries to
     // load a notification that was never involved.
-    if (!cbChat || !notifId || !["c", "d", "f", "p", "b", "n", "w", "x", "y"].includes(action)) return answer("");
+    if (!cbChat || !notifId || !["c", "d", "f", "p", "b", "n", "w", "x", "y", "z"].includes(action)) return answer("");
 
     // The chat is the identity. A button is only ever pressed in the chat the
     // message was sent to, so nobody else can reach this task through it.
@@ -540,8 +549,8 @@ export default async function handler(req) {
     const t = T[link?.lang === "en" ? "en" : "de"];
     if (!link?.active || !link.user_id) return answer(t.notLinked, true);
 
-    if (action === "x" || action === "y") {
-      const wantsList = action === "y";
+    if (action === "x" || action === "y" || action === "z") {
+      const kind = action === "y" ? "list" : action === "z" ? "note" : "";
       // force_reply puts the keyboard straight into the reply box. The task
       // travels as a text_link on its own title: Telegram returns the message
       // being replied to, but only one level deep, so the question has to carry
@@ -554,8 +563,8 @@ export default async function handler(req) {
         chat_id: cbChat,
         // list=1 rides in the link, which is how the reply that comes back
         // says which of the two questions it is answering.
-        text: (wantsList ? t.askChecklist : t.askDescribe)(
-          `<a href="${appUrl}/?task=${encodeURIComponent(task.id)}${wantsList ? "&list=1" : ""}">${esc(task.title || "")}</a>`),
+        text: (kind === "list" ? t.askChecklist : kind === "note" ? t.askComment : t.askDescribe)(
+          `<a href="${appUrl}/?task=${encodeURIComponent(task.id)}${kind ? `&${kind}=1` : ""}">${esc(task.title || "")}</a>`),
         parse_mode: "HTML",
         reply_markup: { force_reply: true, selective: true },
       });
@@ -658,7 +667,8 @@ export default async function handler(req) {
           // Only when the message did not already carry one. A description
           // typed as line two needs no second asking.
           ...(description ? [] : [[{ text: t.btnDescribe, callback_data: `x:${made.task.id}` }]]),
-          [{ text: t.btnChecklist, callback_data: `y:${made.task.id}` }],
+          [{ text: t.btnChecklist, callback_data: `y:${made.task.id}` },
+           { text: t.btnComment, callback_data: `z:${made.task.id}` }],
           ...taskKeyboard(t, appUrl, { id: made.task.id, metadata: { task_id: made.task.id } }, true),
         ] },
       });
@@ -844,10 +854,14 @@ export default async function handler(req) {
   const answering = replyTarget(msg.reply_to_message);
   if (answering) {
     if (!link?.user_id) return reply(t.notLinked);
-    const done = answering.checklist
+    const done = answering.kind === "checklist"
       ? await addChecklist(db, link.user_id, answering.taskId, text)
+      : answering.kind === "comment"
+      ? await commentOnTask(db, link.user_id, answering.taskId, text)
       : await describeTask(db, link.user_id, answering.taskId, text);
-    return reply(done.ok ? (answering.checklist ? t.listed(done.added) : t.described)
+    return reply(done.ok
+      ? (answering.kind === "checklist" ? t.listed(done.added)
+         : answering.kind === "comment" ? t.commented : t.described)
       : done.reason === "read_only" ? t.newReadOnly
       : done.reason === "denied" ? t.newDenied
       : done.reason === "gone" ? t.describeGone : t.newFailed);
